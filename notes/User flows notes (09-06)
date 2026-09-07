@@ -1,0 +1,17 @@
+User Flows
+USER:
+•	Login in password, put in code
+•	You’re in lobby
+•	Quiz happens
+•	Leaderboard presentation on screen, on device, general score, ranking, list of questions wrong or right.
+•	click away, back to home page, results logged 
+PRESENTER:
+•	Home page
+•	Create a quiz page: add other collaborators ?
+•	Quiz created, exists in the home page somewhere, either presentable or modifiable, delete
+•	Presentation flow:
+•	Code for session + lobby
+•	Click on Start Questions
+•	Goes from question to question
+•	Leaderboard presentation
+•	Then in homepage the presentation still exists but now there is another button to check results.
