@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Made — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* Gettysburg College palette (brand guide) */
+  :root {
+    --navy: #043371;      /* Gettysburg blue */
+    --orange: #CC4E00;    /* Gettysburg orange */
+    --sky: #8fdbff;       /* Sky Blue */
+    --sand: #f3ebe2;      /* Sand */
+    --ink: #222222;       /* Black */
+    --white: #ffffff;
+    --gray: #747474;
+    --sapphire: #043B82;
+    --cornflower: #84BAFF;
+    --alabaster: #F5F5F5;
+    --b: 3px solid var(--ink);
+    --shadow: 6px 6px 0 var(--ink);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    background: var(--sand);
+    color: var(--ink);
+    display: flex; flex-direction: column;
+    padding: 20px 24px 26px;
+    gap: 18px;
+  }
+
+  /* Header */
+  header.top { display: flex; justify-content: space-between; align-items: center; }
+  .logo {
+    font-family: "Archivo Black", sans-serif; font-size: 22px;
+    background: var(--navy); color: var(--white); padding: 6px 14px;
+    border: var(--b); box-shadow: 4px 4px 0 var(--orange);
+    transform: rotate(-1.5deg);
+  }
+  .logo span { color: var(--sky); }
+  .user { display: flex; align-items: center; gap: 12px; font-weight: 700; }
+  .avatar {
+    width: 44px; height: 44px; border: var(--b); background: var(--orange); color: var(--white);
+    display: grid; place-items: center; font-weight: 700; box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  /* Main frame fills remaining height */
+  .frame {
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column;
+    border: var(--b); background: var(--white); box-shadow: var(--shadow);
+  }
+
+  /* Tab bar: Present | Participate | + | Join */
+  .tabs { display: grid; grid-template-columns: 1fr 1fr auto auto; border-bottom: var(--b); }
+  .tabs button {
+    font: inherit; border: none; border-right: var(--b); background: var(--white); color: var(--ink);
+    padding: 20px 14px; cursor: pointer; font-family: "Archivo Black", sans-serif;
+    font-size: clamp(16px, 2.2vw, 28px); text-transform: uppercase; letter-spacing: .5px;
+  }
+  .tabs button:last-child { border-right: none; }
+  .tabs .tab[aria-selected="true"] {
+    background: var(--orange); color: var(--white);
+    text-decoration: underline; text-decoration-thickness: 4px; text-underline-offset: 7px;
+  }
+  .tabs .tab[aria-selected="true"][data-tab="participate"] { background: var(--sapphire); }
+  .tabs .tab:not([aria-selected="true"]):hover { background: var(--alabaster); }
+  .tabs .plus { background: var(--sky); color: var(--navy); width: 96px; font-size: 34px; }
+  .tabs .join { background: var(--navy); color: var(--white); padding: 20px 36px; }
+  .tabs .plus:hover { background: var(--cornflower); }
+  .tabs .join:hover { background: var(--sapphire); }
+  .tabs .plus:active, .tabs .join:active { transform: translate(2px,2px); }
+
+  /* Join panel */
+  .join-panel { display: none; padding: 14px 16px; border-bottom: var(--b); background: var(--navy); gap: 12px; align-items: center; flex-wrap: wrap; }
+  .join-panel.open { display: flex; }
+  .join-panel span { color: var(--white); font-family: "Archivo Black"; }
+  .join-input { font: inherit; font-weight: 700; border: var(--b); background: var(--white); padding: 8px 12px; text-transform: uppercase; letter-spacing: 4px; width: 180px; }
+  .btn { font: inherit; font-weight: 700; border: var(--b); background: var(--orange); color: var(--white); padding: 8px 18px; box-shadow: 3px 3px 0 var(--sky); cursor: pointer; }
+
+  /* Toolbar — variant C: striped strip led by a big search box; Show + Sort tuck into a
+     "Filter" popover so the strip stays one clean line (also on phones). */
+  .toolbar {
+    display: flex; gap: 12px; padding: 12px 16px; border-bottom: var(--b);
+    align-items: stretch;
+    background: repeating-linear-gradient(45deg, var(--white), var(--white) 10px, var(--alabaster) 10px, var(--alabaster) 20px);
+  }
+  .search { flex: 1; min-width: 0; display: flex; align-items: center; border: var(--b); background: var(--white); box-shadow: 3px 3px 0 var(--orange); }
+  .search span { padding: 0 10px 0 14px; font-size: 20px; font-weight: 700; color: var(--navy); }
+  .search input { flex: 1; min-width: 0; font: inherit; font-weight: 700; font-size: 16px; border: none; outline: none; padding: 10px 10px 10px 0; background: transparent; color: var(--ink); }
+  .filter-wrap { position: relative; display: flex; }
+  .filterbtn {
+    font: inherit; font-weight: 700; font-size: 14px; text-transform: uppercase; white-space: nowrap;
+    border: var(--b); background: var(--sky); color: var(--navy); padding: 0 16px; cursor: pointer; box-shadow: 3px 3px 0 var(--orange);
+  }
+  .filterbtn .dot { display: inline-block; width: 9px; height: 9px; background: var(--orange); border: 2px solid var(--ink); margin-left: 6px; }
+  .filterbtn.open { background: var(--orange); color: var(--white); }
+  .filterbtn.open .dot { background: var(--white); }
+  .pop { position: absolute; right: 0; top: calc(100% + 10px); z-index: 15; width: 290px; padding: 14px; background: var(--white); border: var(--b); box-shadow: var(--shadow); display: none; }
+  .pop.open { display: block; }
+  .pop h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); margin-bottom: 8px; }
+  .pop .opts + h4 { margin-top: 14px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .opt { font: inherit; font-weight: 700; border: 2px solid var(--ink); background: var(--white); color: var(--ink); padding: 5px 10px; cursor: pointer; }
+  .opt.on { background: var(--navy); color: var(--white); }
+  .opt:not(.on):hover { background: var(--sky); }
+  select {
+    font: inherit; font-weight: 700; border: var(--b); background: var(--white); color: var(--ink); padding: 8px 12px;
+    box-shadow: 3px 3px 0 var(--navy); cursor: pointer;
+  }
+  .toolbar label { font-weight: 700; font-size: 13px; text-transform: uppercase; }
+  .field { display: flex; align-items: center; gap: 8px; }
+  .count {
+    margin-left: auto; display: flex; align-items: baseline; gap: 6px;
+    font-weight: 700; text-transform: uppercase; background: var(--orange); color: var(--white); padding: 5px 12px;
+  }
+  .toolbar .count { align-items: center; border: var(--b); }
+  .count b { font-family: "Archivo Black"; font-weight: 400; }
+
+  /* Column headers + rows share one grid */
+  .list { flex: 1; overflow-y: auto; }
+  .present .row, .present .head { grid-template-columns: 150px minmax(240px, 1fr) 230px 220px 80px 140px 84px; }
+  .participate .row, .participate .head { grid-template-columns: 150px minmax(240px, 1fr) 190px 140px 150px 84px; }
+  .row, .head { display: grid; border-bottom: var(--b); }
+  .head {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--ink); color: var(--white); font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px; border-bottom: none;
+  }
+  .head > div { padding: 9px 16px; }
+  .row { min-height: 72px; }
+  .row:hover .title strong { text-decoration: underline; text-decoration-color: var(--orange); text-decoration-thickness: 3px; }
+  .cell { padding: 12px 16px; display: flex; align-items: center; font-weight: 500; }
+  .cell.dim { color: var(--gray); font-weight: 700; }
+  .status {
+    border-right: var(--b); display: grid; place-items: center; text-align: center;
+    font-weight: 700; text-transform: uppercase; font-size: 13px; letter-spacing: 1px;
+  }
+  .status.draft { background: var(--sky); color: var(--navy); }
+  .status.published { background: var(--navy); color: var(--white); }
+  .status.rank { background: var(--orange); color: var(--white); line-height: 1.2; }
+  .status.rank b { font-family: "Archivo Black"; font-size: 22px; font-weight: 400; }
+  .title { padding: 12px 18px; display: flex; flex-direction: column; justify-content: center; }
+  .title strong { font-family: "Archivo Black", sans-serif; font-size: 20px; font-weight: 400; }
+  .meta { font-size: 13px; color: var(--gray); margin-top: 2px; display: none; }
+  .tag { white-space: nowrap; display: inline-block; border: 2px solid var(--ink); padding: 1px 7px; font-size: 12px; font-weight: 700; background: var(--orange); color: var(--white); }
+  .tag.me { background: var(--alabaster); color: var(--ink); }
+  .cls { font-weight: 700; color: var(--navy); }
+  .cls.none { color: var(--gray); font-weight: 500; font-style: italic; }
+  .kebab-wrap { position: relative; display: grid; place-items: center; }
+  .kebab {
+    font: inherit; font-weight: 700; border: var(--b); background: var(--white); width: 50px; height: 38px;
+    cursor: pointer; box-shadow: 3px 3px 0 var(--navy); font-size: 20px; line-height: 1;
+  }
+  .kebab:hover { background: var(--sky); }
+  .kebab:active { transform: translate(3px,3px); box-shadow: none; }
+  .score { font-family: "Archivo Black"; font-size: 22px; }
+  .score small { font-family: "Space Grotesk"; font-size: 12px; font-weight: 700; color: var(--gray); margin-left: 6px; }
+  .bar { flex: 1; height: 12px; border: 2px solid var(--ink); margin-left: 12px; background: var(--white); max-width: 70px; }
+  .bar i { display: block; height: 100%; background: var(--orange); }
+
+  .menu {
+    position: absolute; right: 14px; top: calc(100% - 8px); z-index: 10;
+    background: var(--white); border: var(--b); box-shadow: var(--shadow); min-width: 240px; display: none;
+  }
+  .menu.open { display: block; }
+  .menu button, .menu .sub-label {
+    display: block; width: 100%; text-align: left; font: inherit; font-weight: 700;
+    border: none; border-bottom: 2px solid var(--ink); background: var(--white); color: var(--ink); padding: 11px 14px; cursor: pointer;
+  }
+  .menu button:hover { background: var(--sky); }
+  .menu .sub-label { background: var(--navy); color: var(--white); cursor: default; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  .menu .class-opt { padding-left: 28px; font-weight: 500; }
+  .menu .class-opt:hover { background: var(--orange); color: var(--white); }
+  .menu button:last-child { border-bottom: none; }
+
+  .empty { padding: 60px; text-align: center; font-weight: 700; font-size: 18px; }
+  .empty b { color: var(--orange); }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, calc(100% + 60px));
+    background: var(--navy); color: var(--white); font-weight: 700; padding: 12px 20px;
+    border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--orange); transition: transform .2s; z-index: 99;
+  }
+  .toast.show { transform: translate(-50%, 0); }
+
+  /* Narrower screens: drop extra columns, show meta line under title */
+  @media (max-width: 1150px) {
+    .present .row, .present .head { grid-template-columns: 130px 1fr 170px 80px; }
+    .participate .row, .participate .head { grid-template-columns: 130px 1fr 150px 80px; }
+    .wide { display: none !important; }
+    .meta { display: block; }
+  }
+  @media (max-width: 640px) {
+    body { padding: 12px 10px 14px; gap: 12px; }
+    .present .row, .participate .row { grid-template-columns: 92px 1fr 70px; }
+    .head, .mid { display: none !important; }
+    .status { font-size: 11px; }
+    .title strong { font-size: 17px; }
+    .tabs .join { padding: 14px; }
+    .tabs button { padding: 16px 6px; font-size: 13px; letter-spacing: 0; min-width: 0; }
+    .tabs .plus { width: 44px; font-size: 24px; }
+    .frame { min-width: 0; }
+    /* toolbar: Show / Sort side by side with labels stacked on top, count as a compact stacked badge */
+    .toolbar { flex-wrap: nowrap; align-items: stretch; gap: 10px; padding: 10px; }
+    .field { flex-direction: column; align-items: stretch; gap: 4px; flex: 1; min-width: 0; }
+    .field select { width: 100%; padding: 7px 8px; }
+    .field:has(select[onchange^="sort"]) { flex: 1.5; }
+    .toolbar label { font-size: 11px; }
+    .count { margin-left: 0; flex-direction: column; justify-content: center; align-items: center; gap: 0; padding: 4px 10px; line-height: 1.05; }
+    .count b { font-size: 22px; }
+    .count span { font-size: 10px; letter-spacing: .5px; }
+    /* variant C on phones: search · filter · count stay on one line */
+    .search span { padding: 0 6px 0 10px; }
+    .search input { font-size: 15px; }
+    .filterbtn { padding: 0 10px; font-size: 12px; }
+    /* popover spans the toolbar instead of hanging off the button */
+    .toolbar { position: relative; }
+    .filter-wrap { position: static; }
+    .pop { left: 10px; right: 10px; width: auto; top: calc(100% + 6px); }
+    .user .name { display: none; }
+  }
+</style>
+</head>
+<body>
+  <header class="top">
+    <div class="logo">QUIZ<span>.</span>PLATFORM</div>
+    <div class="user"><span class="name">Taha Sabir</span><div class="avatar">TS</div></div>
+  </header>
+
+  <div class="frame">
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-tab="present">Present</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="participate">Participate</button>
+      <button class="plus" title="New quiz" onclick="toast('New quiz → opens editor (private draft)')">+</button>
+      <button class="join" onclick="toggleJoin()">Join</button>
+    </nav>
+
+    <div class="join-panel" id="joinPanel">
+      <span>SESSION CODE</span>
+      <input class="join-input" maxlength="6" placeholder="ABC123" id="joinCode">
+      <button class="btn" onclick="toast('Joining lobby ' + (joinCode.value || '…'))">GO →</button>
+    </div>
+
+    <div class="toolbar" id="toolbar"></div>
+    <div class="list" id="list"></div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script>
+const CLASSES = ["CS 440 · Fall 26", "CS 216 · Data Structures", "CS 111 · Intro"];
+const MADE = [
+  { title: "Quiz 1 — Big-O Warmup", status: "draft", owner: "owned", qs: 8, edited: "2026-09-26" },
+  { title: "Quiz 2 — Recursion Check", status: "published", owner: "owned", qs: 12, edited: "2026-09-22", cls: "CS 216 · Data Structures" },
+  { title: "Quiz 3 — SQL Joins", status: "published", owner: "shared", qs: 10, edited: "2026-09-18", cls: "CS 440 · Fall 26", by: "N. Pinto" },
+  { title: "Sorting Speedrun", status: "draft", owner: "shared", qs: 6, edited: "2026-09-12", by: "A. Majumder" },
+];
+const PART = [
+  { title: "Git Basics Pop Quiz", host: "Prof. Kim", date: "2026-09-25", correct: 9, total: 10, rank: 2, of: 31 },
+  { title: "HTTP & REST", host: "Prof. Kim", date: "2026-09-18", correct: 6, total: 10, rank: 14, of: 29 },
+  { title: "Agile Vocab", host: "U. Khairulla", date: "2026-09-10", correct: 7, total: 8, rank: 1, of: 6 },
+];
+let tab = "present", filter = "all", sort = "recent", query = "", popOpen = false;
+const matches = q => q.title.toLowerCase().includes(query.trim().toLowerCase());
+const esc = s => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+function toolbarHTML() {
+  const sorts = tab === "present"
+    ? [["recent","Last edited"],["az","A → Z"],["status","Status"]]
+    : [["recent","Most recent"],["score","Best score"],["az","A → Z"]];
+  const changed = filter !== "all" || sort !== "recent";
+  const opt = (on, click, label) => `<button class="opt ${on?"on":""}" onclick="${click};render()">${label}</button>`;
+  return `
+    <div class="search"><span>⌕</span><input id="q" placeholder="Search quizzes…" value="${esc(query)}" oninput="query=this.value;renderList()"></div>
+    <div class="filter-wrap">
+      <button class="filterbtn ${popOpen?"open":""}" onclick="event.stopPropagation();popOpen=!popOpen;render()">Filter${changed?'<span class="dot"></span>':""} ▾</button>
+      <div class="pop ${popOpen?"open":""}" onclick="event.stopPropagation()">
+        ${tab === "present" ? `<h4>Show</h4><div class="opts">${["all","owned","shared"].map(f => opt(filter===f, `filter='${f}'`, f[0].toUpperCase()+f.slice(1))).join("")}</div>` : ""}
+        <h4>Sort by</h4><div class="opts">${sorts.map(([v,l]) => opt(sort===v, `sort='${v}'`, l)).join("")}</div>
+      </div>
+    </div>
+    <span class="count" id="count"></span>`;
+}
+
+function render() { document.getElementById("toolbar").innerHTML = toolbarHTML(); renderList(); }
+function renderList() {
+  const list = document.getElementById("list");
+  list.className = "list " + tab;
+  if (tab === "present") {
+    let rows = MADE.filter(q => (filter === "all" || q.owner === filter) && matches(q));
+    rows = [...rows].sort((a,b) => sort==="az" ? a.title.localeCompare(b.title) : sort==="status" ? a.status.localeCompare(b.status) : b.edited.localeCompare(a.edited));
+    document.getElementById("count").innerHTML = `<b>${rows.length}</b><span>quizzes</span>`;
+    const head = `<div class="head"><div>Status</div><div>Quiz</div><div class="mid">Class</div><div class="wide">Owner</div><div class="wide">Qs</div><div class="wide">Edited</div><div></div></div>`;
+    list.innerHTML = rows.length ? head + rows.map((q,i) => `
+      <div class="row">
+        <div class="status ${q.status}">${q.status}</div>
+        <div class="title"><strong>${q.title}</strong>
+          <span class="meta">${q.qs} questions · edited ${q.edited}${q.by?' · shared by '+q.by:''}</span></div>
+        <div class="cell mid">${q.cls ? `<span class="cls">${q.cls}</span>` : `<span class="cls none">Not published</span>`}</div>
+        <div class="cell wide">${q.owner==="shared" ? `<span class="tag">SHARED · ${q.by}</span>` : `<span class="tag me">ME</span>`}</div>
+        <div class="cell wide dim">${q.qs}</div>
+        <div class="cell wide dim">${q.edited}</div>
+        <div class="kebab-wrap">
+          <button class="kebab" onclick="openMenu(event,${i})">⋯</button>
+          <div class="menu" id="menu${i}">
+            <button onclick="toast('Edit → ${q.title}')">✎ Edit</button>
+            <button onclick="toast('Share link copied')">⇪ Share</button>
+            <div class="sub-label">Publish to…</div>
+            ${CLASSES.map(c=>`<button class="class-opt" onclick="toast('Published to ${c}')">${c}</button>`).join("")}
+          </div>
+        </div>
+      </div>`).join("") : `<div class="empty">${query ? `No quizzes match “${esc(query)}”.` : "Nothing here. Hit <b>+</b> to make a quiz."}</div>`;
+  } else {
+    let rows = PART.filter(matches).sort((a,b) => sort==="score" ? b.correct/b.total - a.correct/a.total : sort==="az" ? a.title.localeCompare(b.title) : b.date.localeCompare(a.date));
+    document.getElementById("count").innerHTML = `<b>${rows.length}</b><span>taken</span>`;
+    const head = `<div class="head"><div>Rank</div><div>Quiz</div><div class="mid">Score</div><div class="wide">Host</div><div class="wide">Date</div><div></div></div>`;
+    list.innerHTML = head + rows.map(q => `
+      <div class="row" style="cursor:pointer" onclick="toast('Review answers → ${q.title}')">
+        <div class="status rank"><div><b>#${q.rank}</b><br>of ${q.of}</div></div>
+        <div class="title"><strong>${q.title}</strong><span class="meta">Hosted by ${q.host} · ${q.date}</span></div>
+        <div class="cell mid"><span class="score">${q.correct}/${q.total}</span><span class="bar wide"><i style="width:${q.correct/q.total*100}%"></i></span></div>
+        <div class="cell wide">${q.host}</div>
+        <div class="cell wide dim">${q.date}</div>
+        <div class="kebab-wrap"><button class="kebab" title="Review">→</button></div>
+      </div>`).join("") + (rows.length ? "" : `<div class="empty">No quizzes match “${esc(query)}”.</div>`);
+  }
+}
+function openMenu(e, i) {
+  e.stopPropagation();
+  const m = document.getElementById("menu"+i), was = m.classList.contains("open");
+  document.querySelectorAll(".menu").forEach(x => x.classList.remove("open"));
+  if (!was) {
+    m.classList.add("open");
+    // fixed positioning so the menu is never clipped by the scrolling list
+    const r = e.currentTarget.getBoundingClientRect(), h = m.offsetHeight;
+    m.style.position = "fixed";
+    m.style.right = (window.innerWidth - r.right) + "px";
+    m.style.top = (r.bottom + h + 12 > window.innerHeight ? r.top - h - 8 : r.bottom + 8) + "px";
+  }
+}
+document.getElementById("list").addEventListener("scroll", () => document.querySelectorAll(".menu").forEach(x => x.classList.remove("open")));
+document.addEventListener("click", () => {
+  document.querySelectorAll(".menu").forEach(x => x.classList.remove("open"));
+  if (popOpen) { popOpen = false; render(); }
+});
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
+  tab = b.dataset.tab; sort = "recent"; popOpen = false;
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", t === b));
+  render();
+});
+function toggleJoin() { joinPanel.classList.toggle("open"); if (joinPanel.classList.contains("open")) joinCode.focus(); }
+let tt; function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(()=>t.classList.remove("show"), 1800); }
+render();
+if (location.hash === "#participate") document.querySelector('[data-tab=participate]').click();
+</script>
+</body>
+</html>
