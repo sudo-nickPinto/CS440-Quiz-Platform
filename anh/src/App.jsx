@@ -22,56 +22,99 @@ function App() {
   };
 
   return (
-    <div className="app">
-      <div className="demo-toolbar">
-        <div className="view-switcher">
+    <div className="app-shell">
+      <header className="top">
+        <div className="brand-logo">
+          QUIZ<span>.</span>PLATFORM
+        </div>
+        <div className="user">
+          <span className="name">Anh Nguyen</span>
+          <div className="avatar" aria-hidden="true">AN</div>
+        </div>
+      </header>
+
+      <div className="mockup-frame">
+        <nav className="demo-toolbar" aria-label="Mockup screens">
+          <div className="view-switcher" role="tablist" aria-label="Quiz mode">
           <button
-            className={view === "host" ? "active" : ""}
+            type="button"
+            role="tab"
+            aria-selected={view === "host"}
             onClick={() => setView("host")}
           >
-            Host
+            Presenter
           </button>
 
           <button
-            className={view === "participant" ? "active" : ""}
+            type="button"
+            role="tab"
+            aria-selected={view === "participant"}
             onClick={() => setView("participant")}
           >
             Participant
           </button>
-        </div>
+          </div>
 
-        {view === "host" ? (
-          <div className="screen-switcher">
-            <button onClick={() => setHostPage("question")}>
+          {view === "host" ? (
+            <div className="screen-switcher" aria-label="Presenter screen">
+            <button
+              type="button"
+              className={hostPage === "question" ? "active" : ""}
+              onClick={() => setHostPage("question")}
+            >
               Question
             </button>
-            <button onClick={() => setHostPage("results")}>
+            <button
+              type="button"
+              className={hostPage === "results" ? "active" : ""}
+              onClick={() => setHostPage("results")}
+            >
               Answer Results
             </button>
-            <button onClick={() => setHostPage("leaderboard")}>
+            <button
+              type="button"
+              className={hostPage === "leaderboard" ? "active" : ""}
+              onClick={() => setHostPage("leaderboard")}
+            >
               Leaderboard
             </button>
-          </div>
-        ) : (
-          <div className="screen-switcher">
-            <button onClick={() => setParticipantPage("question")}>
+            </div>
+          ) : (
+            <div className="screen-switcher" aria-label="Participant screen">
+            <button
+              type="button"
+              className={participantPage === "question" ? "active" : ""}
+              onClick={() => setParticipantPage("question")}
+            >
               Question
             </button>
-            <button onClick={() => setParticipantPage("submitted")}>
+            <button
+              type="button"
+              className={participantPage === "submitted" ? "active" : ""}
+              onClick={() => setParticipantPage("submitted")}
+            >
               Submitted
             </button>
-            <button onClick={() => setParticipantPage("feedback")}>
+            <button
+              type="button"
+              className={participantPage === "feedback" ? "active" : ""}
+              onClick={() => setParticipantPage("feedback")}
+            >
               Feedback
             </button>
-            <button onClick={() => setParticipantPage("results")}>
+            <button
+              type="button"
+              className={participantPage === "results" ? "active" : ""}
+              onClick={() => setParticipantPage("results")}
+            >
               Final Results
             </button>
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </nav>
 
-      {view === "host" && (
-        <div className="host-view">
+        {view === "host" && (
+          <div className="host-view">
           {hostPage === "question" && <HostQuestionPage />}
 
           {hostPage === "results" && (
@@ -81,11 +124,11 @@ function App() {
           )}
 
           {hostPage === "leaderboard" && <HostLeaderboardPage />}
-        </div>
-      )}
+          </div>
+        )}
 
-      {view === "participant" && (
-        <div className="participant-view">
+        {view === "participant" && (
+          <div className="participant-view">
           <div className="phone">
             <div className="phone-screen">
               {participantPage === "question" && (
@@ -109,8 +152,9 @@ function App() {
               )}
             </div>
           </div>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

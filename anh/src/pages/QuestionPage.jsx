@@ -3,7 +3,6 @@ import ProgressBar from "../components/ProgressBar";
 import AnswerChoice from "../components/AnswerChoice";
 
 function QuestionPage({
-  selectedAnswer,
   setSelectedAnswer,
   onSubmit,
 }) {
