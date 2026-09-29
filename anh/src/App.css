@@ -750,15 +750,6 @@ button:focus-visible {
   font-size: 31px;
 }
 
-.participant-explanation {
-  margin: 0;
-  padding: 15px;
-  border: var(--b);
-  background: var(--white);
-  box-shadow: 4px 4px 0 var(--navy);
-  line-height: 1.45;
-}
-
 .feedback-stats,
 .final-result-stats {
   width: 100%;

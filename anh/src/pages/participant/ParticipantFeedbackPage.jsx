@@ -9,11 +9,6 @@ function ParticipantFeedbackPage() {
         +847
       </div>
 
-      <p className="participant-explanation">
-        Queue follows FIFO ordering: the first item
-        added is the first item removed.
-      </p>
-
       <div className="feedback-stats">
         <div>
           <span>Score</span>
