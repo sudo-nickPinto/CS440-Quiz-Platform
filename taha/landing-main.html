@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiz Platform — Welcome</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* Landing — final + inline sign-in. Sign in makes the headline scale down toward the
+     left and the sign-in card glide into the space on the right. Closed layout is the
+     same as landing-final (the card is absolutely positioned and takes no space).
+     Motion is transform/opacity only; reduced motion switches instantly. Phones swap
+     the lede/CTA for the card below the headline. Identifier-first username field;
+     Auth0 hands off to Google for the password. Base notes from landing-final follow. */
+  /* Landing — final: A3's story layout (headline over a projector + phone pair, then
+     four chapters with a sticky rail that tracks your scroll). Pale sky stays the main
+     fill; apricot and deep orange from Landing D are mixed in (alternate chapters, the
+     chapter number, small accents). The dashboard's black appears only on small title
+     bars; sections are still split by the thin 3px line. */
+  :root {
+    --navy: #043371; --orange: #CC4E00; --sky: #8fdbff; --ink: #222222;
+    --sand: #ecdfd0; --paper: #fcf9f4; --sky-soft: #c2e6f8; --apricot: #f6d2b6;
+    --orange-deep: #bf4c0c; --gray: #666666;
+    --b: 3px solid var(--ink); --b-thin: 2px solid var(--ink);
+    --shadow: 6px 6px 0 var(--ink);
+    --head-h: 78px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: "Space Grotesk", system-ui, sans-serif; background: var(--sand); color: var(--ink); padding: 0 24px 26px; }
+  :focus-visible { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+
+  header.top { position: sticky; top: 0; z-index: 20; background: var(--sand); display: flex; align-items: center; gap: 16px; height: var(--head-h); }
+  .nav { display: flex; gap: 6px; margin-left: auto; }
+  .nav a { font-weight: 700; font-size: 14px; color: var(--ink); text-decoration: none; padding: 8px 10px; border: 2px solid transparent; }
+  .nav a:hover { border-color: var(--ink); background: var(--paper); }
+  .logo { font-family: "Archivo Black", sans-serif; font-size: 22px; background: var(--navy); color: var(--paper); padding: 6px 14px; border: var(--b); box-shadow: 4px 4px 0 var(--ink); transform: rotate(-1.5deg); text-decoration: none; }
+  .logo span { color: var(--sky); }
+  .signin-top { font: inherit; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; font-size: 14px; border: var(--b); background: var(--paper); color: var(--navy); padding: 10px 18px; box-shadow: 3px 3px 0 var(--ink); cursor: pointer; }
+  .signin-top:hover { background: var(--sky-soft); }
+  .signin-top:active { transform: translate(3px,3px); box-shadow: none; }
+
+  .frame { border: var(--b); background: var(--paper); box-shadow: var(--shadow); }
+  .frame > section + section { border-top: var(--b); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: clamp(40px, 6vw, 84px) clamp(18px, 4vw, 48px); }
+  .eyebrow { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--navy); }
+  h2 { font-family: "Archivo Black", sans-serif; font-weight: 400; font-size: clamp(28px, 3.6vw, 46px); line-height: 1.1; letter-spacing: -.5px; margin: 10px 0 14px; }
+  .btn { font: inherit; font-weight: 700; font-size: 17px; border: var(--b); background: var(--orange-deep); color: var(--paper); padding: 14px 22px; box-shadow: 4px 4px 0 var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 12px; }
+  .btn:hover { background: var(--orange); }
+  .btn:active { transform: translate(4px,4px); box-shadow: none; }
+  .btn .g { width: 26px; height: 26px; background: var(--paper); color: var(--navy); border: var(--b-thin); display: grid; place-items: center; font-family: "Archivo Black"; font-size: 14px; }
+  .fine { font-size: 13px; color: var(--gray); font-weight: 500; }
+  .fine b { color: var(--ink); }
+
+  /* 1 — Hero */
+  .hero .wrap { padding-bottom: 0; }
+  .hero-top { display: flex; flex-direction: column; gap: 28px; }
+  h1 { font-family: "Archivo Black", sans-serif; font-weight: 400; line-height: 1.22; font-size: clamp(38px, 5.4vw, 76px); letter-spacing: -1.5px; }
+  h1 .hl { background: var(--sky-soft); color: var(--navy); padding: 0 8px; border: var(--b); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+  .hero-top h1 { margin-top: 14px; }
+  .hero-side { display: grid; grid-template-columns: minmax(0, 520px) auto; gap: 16px 40px; align-items: center; justify-content: space-between; }
+  .hero-side .fine { grid-column: 2; margin-top: -6px; }
+  .lede { font-size: 18px; font-weight: 500; line-height: 1.5; }
+  /* devices */
+  .devices { margin-top: clamp(36px, 5vw, 60px); background: var(--sky-soft); border-top: var(--b); padding: clamp(28px, 4vw, 48px) clamp(18px, 4vw, 48px) 0; display: flex; justify-content: center; align-items: flex-end; gap: clamp(16px, 3vw, 40px); overflow: hidden; }
+  .screen { flex: 1; max-width: 640px; border: var(--b); border-bottom: none; background: var(--paper); }
+  .scr-top { display: flex; justify-content: space-between; align-items: center; background: var(--ink); color: var(--paper); padding: 8px 8px 8px 14px; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  .scr-top .t { background: var(--orange-deep); color: var(--paper); font-family: "Archivo Black"; font-size: 16px; letter-spacing: 0; padding: 3px 10px; }
+  .scr-body { padding: 22px 22px 28px; }
+  .scr-body h3 { font-family: "Archivo Black"; font-weight: 400; font-size: clamp(18px, 2.2vw, 26px); line-height: 1.2; margin-bottom: 18px; }
+  .scr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .scr-grid div { border: var(--b-thin); padding: 12px; font-weight: 700; background: var(--paper); display: flex; justify-content: space-between; }
+  .scr-grid div em { font-style: normal; color: var(--gray); font-size: 13px; }
+  .scr-foot { margin-top: 16px; font-weight: 700; font-size: 13px; color: var(--gray); display: flex; gap: 8px; align-items: center; }
+  .scr-foot b { font-family: "Archivo Black"; font-weight: 400; color: var(--navy); font-size: 18px; }
+  .phone { width: 200px; flex-shrink: 0; border: var(--b); border-bottom: none; background: var(--paper); padding: 12px 12px 24px; }
+  .phone .notch { width: 56px; height: 7px; background: var(--ink); margin: 0 auto 12px; }
+  .phone .pq { font-family: "Archivo Black"; font-size: 14px; line-height: 1.25; margin-bottom: 10px; }
+  .phone .pa { border: var(--b-thin); padding: 8px; font-weight: 700; font-size: 13px; margin-bottom: 7px; }
+  .phone .pa.pick { background: var(--navy); color: var(--paper); }
+
+  /* 2 — Chapters with sticky rail */
+  .chapters { display: grid; grid-template-columns: 260px 1fr; }
+  .rail { border-right: var(--b); background: var(--sand); }
+  .rail-inner { position: sticky; top: var(--head-h); padding: 40px 28px; display: flex; flex-direction: column; gap: 22px; }
+  .big-n { font-family: "Archivo Black"; font-size: 96px; line-height: .9; color: var(--orange-deep); }
+  .rail-title { font-family: "Archivo Black"; font-size: 22px; }
+  .rail ol { list-style: none; padding: 0; display: grid; gap: 8px; }
+  .rail a { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); font-weight: 700; font-size: 15px; padding: 6px 8px; border: 2px solid transparent; }
+  .rail a i { width: 16px; height: 16px; border: var(--b-thin); background: var(--paper); flex-shrink: 0; }
+  .rail a:hover { border-color: var(--ink); background: var(--paper); }
+  .rail a.on i { background: var(--orange-deep); }
+  .rail a.done i { background: var(--ink); }
+  .rail a.on { text-decoration: underline; text-decoration-thickness: 3px; text-decoration-color: var(--orange-deep); text-underline-offset: 4px; }
+
+  .chapter { display: grid; grid-template-columns: 1fr 1.1fr; gap: 40px; align-items: center; padding: clamp(48px, 7vw, 96px) clamp(18px, 4vw, 48px); min-height: 70vh; scroll-margin-top: var(--head-h); }
+  .chapter + .chapter { border-top: var(--b-thin); }
+  .chapter:nth-child(even) { background: var(--apricot); }
+  .chapter .eyebrow { color: var(--gray); }
+  .chapter h2 { font-size: clamp(26px, 3vw, 38px); }
+  .chapter p { font-size: 17px; line-height: 1.55; font-weight: 500; max-width: 440px; }
+  .panel { border: var(--b); background: var(--paper); box-shadow: var(--shadow); }
+  .panel-top { padding: 9px 14px; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; background: var(--ink); color: var(--paper); display: flex; justify-content: space-between; gap: 12px; }
+  .panel-top span:last-child { color: var(--apricot); }
+  .panel-body { padding: 16px; display: grid; gap: 10px; }
+  /* build */
+  .field { border: var(--b-thin); padding: 10px 12px; font-weight: 700; background: var(--paper); }
+  .field small { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); margin-bottom: 2px; }
+  .opt-row { display: flex; align-items: center; gap: 10px; border: var(--b-thin); padding: 8px 12px; font-weight: 700; }
+  .opt-row i { width: 16px; height: 16px; border: var(--b-thin); flex-shrink: 0; }
+  .opt-row.ok { background: var(--sky-soft); }
+  .opt-row.ok i { background: var(--navy); }
+  .opt-row em { margin-left: auto; font-style: normal; font-size: 12px; font-weight: 700; color: var(--orange-deep); }
+  .timer-pick { display: flex; gap: 6px; flex-wrap: wrap; }
+  .timer-pick span { border: var(--b-thin); padding: 5px 10px; font-weight: 700; font-size: 13px; }
+  .timer-pick span.on { background: var(--navy); color: var(--paper); }
+  /* publish */
+  .cls { display: flex; justify-content: space-between; align-items: center; gap: 4px 12px; flex-wrap: wrap; border: var(--b-thin); padding: 12px; font-weight: 700; }
+  .cls span { font-size: 13px; color: var(--gray); font-weight: 500; }
+  .cls.on { background: var(--navy); color: var(--paper); }
+  .cls.on span { color: var(--sky-soft); }
+  .status-row { display: flex; gap: 8px; align-items: center; font-weight: 700; font-size: 13px; }
+  .pill { border: var(--b-thin); padding: 3px 9px; text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
+  .pill.draft { background: var(--sky-soft); color: var(--navy); }
+  .pill.pub { background: var(--navy); color: var(--paper); }
+  /* present */
+  .code { display: flex; justify-content: space-between; align-items: center; border: var(--b-thin); padding: 12px 14px; }
+  .code b { font-family: "Archivo Black"; font-weight: 400; font-size: 26px; letter-spacing: 6px; color: var(--navy); }
+  .code small { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); }
+  .joined { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+  .joined span { aspect-ratio: 1; border: var(--b-thin); display: grid; place-items: center; font-size: 11px; font-weight: 700; background: var(--paper); }
+  .joined span.in { background: var(--sky-soft); }
+  .go { display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
+  .go button { font: inherit; font-weight: 700; border: var(--b); background: var(--orange-deep); color: var(--paper); padding: 8px 16px; box-shadow: 3px 3px 0 var(--ink); cursor: pointer; }
+  /* review */
+  .rrow { display: grid; grid-template-columns: 70px 1fr auto; border: var(--b-thin); align-items: stretch; }
+  .rrow .rk { background: var(--orange-deep); color: var(--paper); display: grid; place-items: center; font-family: "Archivo Black"; font-size: 20px; border-right: var(--b-thin); }
+  .rrow .nm { padding: 10px 12px; font-weight: 700; display: flex; flex-direction: column; justify-content: center; }
+  .rrow .nm small { font-size: 12px; color: var(--gray); font-weight: 500; }
+  .rrow .sc { padding: 10px 14px; font-family: "Archivo Black"; font-size: 20px; display: flex; align-items: center; gap: 10px; }
+  .rrow .sc i { display: block; width: 60px; height: 10px; border: var(--b-thin); background: var(--paper); }
+  .rrow .sc i b { display: block; height: 100%; background: var(--navy); }
+  .rrow.dim .rk { background: var(--sand); color: var(--ink); }
+
+  /* 3 — Who it's for */
+  .who { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 32px; }
+  .who-card { border: var(--b); box-shadow: var(--shadow); background: var(--paper); }
+  .who-card h3 { font-family: "Archivo Black"; font-weight: 400; font-size: 24px; padding: 16px 20px; border-bottom: var(--b-thin); background: var(--apricot); }
+  .who-card:nth-child(2) h3 { background: var(--sky-soft); }
+  .who-card ul { padding: 16px 20px 20px 38px; display: grid; gap: 10px; font-weight: 500; font-size: 16px; line-height: 1.45; }
+
+  .cta { background: var(--sky-soft); }
+  .cta .wrap { display: grid; grid-template-columns: 1.3fr 1fr; gap: 32px; align-items: center; }
+  .cta h2 { margin: 0; }
+  .cta-box { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+
+
+  /* ---------- Inline sign-in ---------- */
+  :root { --ease-out: cubic-bezier(.22, 1, .36, 1); --card-w: 400px; }
+  .hero-top { position: relative; }
+  /* Taller desktop hero (matches the earlier inline draft Taha preferred): the hero is
+     held at 490px and the spare room is shared above the headline, between headline
+     and lede, and below the CTA. */
+  @media (min-width: 1151px) {
+    .hero-top { display: grid; grid-template-rows: auto auto; row-gap: 28px; min-height: 490px; }
+    .hero-top > :first-child { align-self: center; }
+    .hero-top .hero-side { align-self: start; }
+  }
+  .hero-top .eyebrow, .hero-top h1 { transform-origin: 0 0; transition: transform .6s var(--ease-out); }
+  .eyebrow .swap { display: inline-block; transition: opacity .2s ease; }
+  .hero-side { transition: opacity .3s ease .1s, transform .45s var(--ease-out) .1s, visibility 0s linear 0s; }
+  .login-card {
+    position: absolute; right: 0; top: 50%; width: var(--card-w);
+    border: var(--b); background: var(--paper); box-shadow: 8px 8px 0 var(--ink);
+    opacity: 0; visibility: hidden; transform: translate(40px, -50%);
+    transition: opacity .2s ease, transform .35s ease, visibility 0s linear .35s;
+  }
+  .login-top { background: var(--ink); color: var(--paper); padding: 8px 8px 8px 14px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 12px; }
+  .login-top em { font-style: normal; color: var(--apricot); margin-left: auto; }
+  .login-top button { font: inherit; font-size: 15px; line-height: 1; background: none; border: 2px solid var(--paper); color: var(--paper); width: 26px; height: 26px; cursor: pointer; flex-shrink: 0; }
+  .login-top button:hover { background: var(--paper); color: var(--ink); }
+  .login-form { padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .login-form > * { opacity: 0; transform: translateY(8px); transition: opacity .2s ease, transform .3s var(--ease-out); }
+  .login-form h2 { margin: 0 0 2px; font-size: 28px; }
+  .login-form h2 span { color: var(--orange-deep); }
+  .lbl { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 6px; }
+  .user-field { display: flex; border: var(--b); background: var(--paper); box-shadow: 3px 3px 0 var(--ink); }
+  .user-field:focus-within { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+  .user-field input { flex: 1; min-width: 0; width: 100%; font: inherit; font-weight: 700; font-size: 17px; border: none; outline: none; padding: 11px 12px; background: transparent; color: var(--ink); }
+  .user-field span { display: grid; place-items: center; padding: 0 12px; border-left: var(--b-thin); background: var(--sky-soft); color: var(--navy); font-weight: 700; font-size: 14px; white-space: nowrap; }
+  .user-field.bad { box-shadow: 3px 3px 0 var(--orange-deep); }
+  .err { display: none; font-size: 13px; font-weight: 700; color: var(--orange-deep); margin-top: 8px; }
+  .err.show { display: block; }
+  .go-btn { font: inherit; font-weight: 700; font-size: 17px; border: var(--b); background: var(--orange-deep); color: var(--paper); padding: 12px 16px; box-shadow: 4px 4px 0 var(--ink); cursor: pointer; display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
+  .go-btn:hover { background: var(--orange); }
+  .go-btn:active, .go-btn[aria-busy="true"] { transform: translate(4px,4px); box-shadow: none; }
+  .alt-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .g-link { font: inherit; font-weight: 700; font-size: 14px; background: none; border: none; color: var(--navy); cursor: pointer; padding: 2px 0; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+  .g-link:hover { text-decoration-color: var(--orange-deep); }
+  .login-form .fine { font-size: 12px; line-height: 1.45; }
+  .signin-top[aria-expanded="true"] { background: var(--ink); color: var(--paper); transform: translate(3px,3px); box-shadow: none; }
+
+  /* open */
+  .hero-top.open .eyebrow { transform: translateY(var(--ty, 0px)); }
+  .hero-top.open h1 { transform: translateY(var(--ty, 0px)) scale(var(--s, 1)); }
+  .hero-top.open .hero-side { opacity: 0; transform: translateY(16px); visibility: hidden; pointer-events: none; transition: opacity .18s ease, transform .3s ease, visibility 0s linear .3s; }
+  .hero-top.open .login-card { opacity: 1; visibility: visible; transform: translate(0, -50%); transition: opacity .3s ease .12s, transform .6s var(--ease-out) .08s, visibility 0s; }
+  .hero-top.open .login-form > * { opacity: 1; transform: none; }
+  .hero-top.open .login-form > :nth-child(1) { transition-delay: .26s; }
+  .hero-top.open .login-form > :nth-child(2) { transition-delay: .31s; }
+  .hero-top.open .login-form > :nth-child(3) { transition-delay: .36s; }
+  .hero-top.open .login-form > :nth-child(4) { transition-delay: .41s; }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  @media (max-width: 1150px) {
+    .hero-top.open .eyebrow, .hero-top.open h1 { transform: none; }
+    .login-card { position: static; width: auto; max-width: 520px; transform: none; display: none; margin: 0 10px 8px 0; }
+    .hero-top.open .login-card { display: block; transform: none; animation: rise .4s var(--ease-out); }
+    .hero-top.open .hero-side { display: none; }
+    .login-form > * { opacity: 1; transform: none; }
+  }
+  @media (max-width: 640px) {
+    .login-form { padding: 16px; }
+    .login-top em { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hero-top .eyebrow, .hero-top h1, .hero-side, .login-card, .login-form > *, .eyebrow .swap { transition: none !important; animation: none !important; }
+  }
+  footer { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 18px 4px 0; font-size: 13px; font-weight: 700; color: var(--gray); }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, calc(100% + 60px)); background: var(--navy); color: var(--paper); font-weight: 700; padding: 12px 20px; border: var(--b); box-shadow: 4px 4px 0 var(--ink); transition: transform .2s; z-index: 99; }
+  .toast.show { transform: translate(-50%, 0); }
+
+  @media (max-width: 1150px) {
+    .nav { display: none; }
+    .signin-top { margin-left: auto; }
+    .hero-side { grid-template-columns: 1fr; justify-items: start; }
+    .hero-side .fine { grid-column: auto; margin-top: 0; }
+    .chapters { grid-template-columns: 1fr; }
+    .rail { border-right: none; border-bottom: var(--b); position: sticky; top: var(--head-h); z-index: 5; }
+    .rail-inner { position: static; padding: 10px 14px; flex-direction: row; align-items: center; gap: 14px; }
+    .big-n { font-size: 32px; }
+    .rail-title { display: none; }
+    .rail ol { grid-auto-flow: column; gap: 4px; flex: 1; justify-content: end; }
+    .rail a { font-size: 13px; padding: 4px 6px; }
+    .chapter { grid-template-columns: 1fr; gap: 24px; min-height: 0; scroll-margin-top: calc(var(--head-h) + 60px); }
+    .cta .wrap { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    :root { --head-h: 64px; }
+    body { padding: 0 10px 14px; }
+    .logo { font-size: 18px; }
+    .signin-top { padding: 9px 12px; font-size: 12px; }
+    .lede, .chapter p { font-size: 16px; }
+    .btn { width: 100%; justify-content: center; font-size: 16px; padding: 12px 14px; white-space: nowrap; }
+    .screen { display: none; }
+    .phone { width: 240px; }
+    .rail a span { display: none; }
+    .rail a { padding: 6px; }
+    .joined { grid-template-columns: repeat(6, 1fr); }
+    .who { grid-template-columns: 1fr; }
+    .rrow { grid-template-columns: 54px 1fr auto; }
+    .rrow .sc i { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .toast { transition: none; } }
+</style>
+</head>
+<body>
+  <header class="top">
+    <a class="logo" href="#top">QUIZ<span>.</span>PLATFORM</a>
+    <nav class="nav" aria-label="Page sections"><a href="#how">How it works</a><a href="#who">Who it's for</a></nav>
+    <button class="signin-top" data-signin aria-controls="loginCard" aria-expanded="false">Sign in</button>
+  </header>
+
+  <main class="frame" id="top">
+    <section class="hero">
+      <div class="wrap">
+        <div class="hero-top" id="heroTop">
+          <div>
+            <div class="eyebrow"><span class="swap" id="eyebrow">Gettysburg College · Live class quizzes</span></div>
+            <h1 id="heroTitle">Ask the room.<br><span class="hl">Everyone answers.</span></h1>
+          </div>
+          <div class="hero-side">
+            <p class="lede">The question goes up on the big screen. Everyone answers on their phone. Results land the second it's over.</p>
+            <button class="btn" data-signin aria-controls="loginCard" aria-expanded="false"><span class="g" aria-hidden="true">G</span>Sign in with Gettysburg</button>
+            <p class="fine">Use your <b>@gettysburg.edu</b> Google account. No new password.</p>
+          </div>
+          <section class="login-card" id="loginCard" aria-labelledby="loginTitle" inert>
+            <div class="login-top"><span>Sign in</span><em>Gettysburg only</em><button type="button" id="closeLogin" aria-label="Close sign-in">×</button></div>
+            <form class="login-form" id="loginForm" novalidate>
+              <h2 id="loginTitle">Pull up a <span>seat.</span></h2>
+              <div>
+                <label class="lbl" for="user">Gettysburg username</label>
+                <div class="user-field" id="userField"><input id="user" name="username" autocomplete="username" placeholder="yourname" spellcheck="false" autocapitalize="none"><span>@gettysburg.edu</span></div>
+                <p class="err" id="err" role="alert"></p>
+              </div>
+              <button class="go-btn" type="submit" id="goBtn"><span id="goLabel">Continue</span><span aria-hidden="true">→</span></button>
+              <div class="alt-row">
+                <button class="g-link" type="button" id="pickBtn">Or pick a Google account</button>
+                <p class="fine">Google asks for your password.</p>
+              </div>
+            </form>
+          </section>
+        </div>
+      </div>
+      <div class="devices" aria-hidden="true">
+        <div class="screen">
+          <div class="scr-top"><span>CS 216 · Question 3 of 8</span><span class="t">0:12</span></div>
+          <div class="scr-body">
+            <h3>What is the worst-case time of binary search?</h3>
+            <div class="scr-grid"><div>A · O(n)</div><div>B · O(log n)</div><div>C · O(1)</div><div>D · O(n log n)</div></div>
+            <div class="scr-foot"><b>19</b> of 24 answered</div>
+          </div>
+        </div>
+        <div class="phone">
+          <div class="notch"></div>
+          <p class="pq">Worst-case time of binary search?</p>
+          <div class="pa">A · O(n)</div><div class="pa pick">B · O(log n)</div><div class="pa">C · O(1)</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="chapters" id="how" aria-label="How it works">
+      <aside class="rail">
+        <div class="rail-inner">
+          <div class="big-n" id="bigN">01</div>
+          <div class="rail-title" id="railTitle">Build</div>
+          <nav aria-label="Chapters">
+            <ol>
+              <li><a href="#build" class="on"><i></i><span>Build</span></a></li>
+              <li><a href="#publish"><i></i><span>Publish</span></a></li>
+              <li><a href="#present"><i></i><span>Present</span></a></li>
+              <li><a href="#review"><i></i><span>Review</span></a></li>
+            </ol>
+          </nav>
+        </div>
+      </aside>
+
+      <div>
+        <article class="chapter" id="build" data-n="01" data-t="Build">
+          <div>
+            <div class="eyebrow">Chapter 01</div>
+            <h2>Write it like a slide.</h2>
+            <p>Type the question, list the choices, mark the right one, and pick how long people get. It saves as a private draft, so nobody sees it until you say so.</p>
+          </div>
+          <div class="panel" aria-hidden="true">
+            <div class="panel-top"><span>Quiz 2 · Recursion Check</span><span>Draft</span></div>
+            <div class="panel-body">
+              <div class="field"><small>Question 4</small>What does a recursive function need to stop?</div>
+              <div class="opt-row ok"><i></i>A base case<em>correct</em></div>
+              <div class="opt-row"><i></i>A global variable</div>
+              <div class="opt-row"><i></i>A while loop</div>
+              <div class="timer-pick"><span>10s</span><span class="on">20s</span><span>30s</span><span>60s</span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="chapter" id="publish" data-n="02" data-t="Publish">
+          <div>
+            <div class="eyebrow">Chapter 02</div>
+            <h2>Pick the class. That's the guest list.</h2>
+            <p>Publishing ties the quiz to one of your classes. Only students in that class can join when you go live, so no one wanders in.</p>
+          </div>
+          <div class="panel" aria-hidden="true">
+            <div class="panel-top"><span>Publish to…</span><span>3 classes</span></div>
+            <div class="panel-body">
+              <div class="cls">CS 111 · Intro <span>42 students</span></div>
+              <div class="cls on">CS 216 · Data Structures <span>24 students</span></div>
+              <div class="cls">CS 440 · Fall 26 <span>18 students</span></div>
+              <div class="status-row"><span class="pill draft">Draft</span>→<span class="pill pub">Published</span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="chapter" id="present" data-n="03" data-t="Present">
+          <div>
+            <div class="eyebrow">Chapter 03</div>
+            <h2>Open the lobby. Hit go.</h2>
+            <p>Watch the room fill up, then start. You set the pace from the front; the right answer and explanation go up on the big screen after each question.</p>
+          </div>
+          <div class="panel" aria-hidden="true">
+            <div class="panel-top"><span>Lobby · CS 216</span><span>Waiting</span></div>
+            <div class="panel-body">
+              <div class="code"><small>Session code</small><b>4K9QX2</b></div>
+              <div class="joined"><span class="in">AM</span><span class="in">NP</span><span class="in">UK</span><span class="in">PD</span><span class="in">TS</span><span class="in">JL</span><span class="in">RB</span><span class="in">KW</span><span class="in">EO</span><span class="in">MG</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span></div>
+              <div class="go"><span>10 of 24 here</span><button tabindex="-1">Start →</button></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="chapter" id="review" data-n="04" data-t="Review">
+          <div>
+            <div class="eyebrow">Chapter 04</div>
+            <h2>See how everyone did.</h2>
+            <p>Students see their own score and rank. Professors see the whole class and can export it. Results are locked to the quiz as it was played, so later edits don't change them.</p>
+          </div>
+          <div class="panel" aria-hidden="true">
+            <div class="panel-top"><span>Results · Recursion Check</span><span>24 played</span></div>
+            <div class="panel-body">
+              <div class="rrow"><span class="rk">1</span><span class="nm">You<small>Sep 22 · CS 216</small></span><span class="sc">12/12<i><b style="width:100%"></b></i></span></div>
+              <div class="rrow dim"><span class="rk">2</span><span class="nm">Classmate<small>Sep 22 · CS 216</small></span><span class="sc">11/12<i><b style="width:92%"></b></i></span></div>
+              <div class="rrow dim"><span class="rk">3</span><span class="nm">Classmate<small>Sep 22 · CS 216</small></span><span class="sc">10/12<i><b style="width:83%"></b></i></span></div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="who">
+      <div class="wrap">
+        <div class="eyebrow">Who it's for</div>
+        <h2>Same app, both sides of the room.</h2>
+        <div class="who">
+          <div class="who-card">
+            <h3>Students</h3>
+            <ul>
+              <li>Join live quizzes for your classes from any device.</li>
+              <li>See your own scores and ranks from past quizzes.</li>
+              <li>Make and present your own quizzes too, like for a study group.</li>
+            </ul>
+          </div>
+          <div class="who-card">
+            <h3>Professors</h3>
+            <ul>
+              <li>Build, publish, and run quizzes for each class.</li>
+              <li>See every student's results, per quiz and across the semester.</li>
+              <li>Export results when you need them.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta">
+      <div class="wrap">
+        <h2>Start with one question. See what the room thinks.</h2>
+        <div class="cta-box">
+          <button class="btn" data-signin aria-controls="loginCard" aria-expanded="false"><span class="g" aria-hidden="true">G</span>Sign in with Gettysburg</button>
+          <p class="fine">Everyone signs in the same way. Your classes show up automatically.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer><span>QUIZ.PLATFORM · Gettysburg College</span><span>Built by the CS 440 team · Fall 2026</span></footer>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+  function toast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.classList.add("show");
+    clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1800);
+  }
+  const heroTop = document.getElementById("heroTop"), card = document.getElementById("loginCard");
+  const title = document.getElementById("heroTitle"), eyebrow = document.getElementById("eyebrow");
+  const triggers = [...document.querySelectorAll("[data-signin]")], headerBtn = document.querySelector(".signin-top");
+  const user = document.getElementById("user"), err = document.getElementById("err"), field = document.getElementById("userField");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const EYEBROW = ["Gettysburg College · Live class quizzes", "Sign in · Gettysburg accounts only"];
+  let isOpen = false, returnTo = null;
+
+  // Work out how far to shrink and drop the headline so it sits left-center beside the card.
+  function fit() {
+    if (innerWidth <= 1150) { heroTop.style.removeProperty("--s"); heroTop.style.removeProperty("--ty"); return; }
+    const r = document.createRange(); r.selectNodeContents(title);
+    const textW = r.getBoundingClientRect().width / (isOpen ? parseFloat(heroTop.style.getPropertyValue("--s") || 1) : 1);
+    const avail = heroTop.clientWidth - card.offsetWidth - 56;
+    const sc = Math.max(.45, Math.min(.82, avail / textW));
+    const eyeTop = eyebrow.parentElement.offsetTop;       // where the eyebrow + headline group starts
+    const groupH = (title.offsetTop - eyeTop) + title.offsetHeight * sc;
+    const ty = (heroTop.offsetHeight - groupH) / 2 - eyeTop;
+    heroTop.style.setProperty("--s", sc.toFixed(3));
+    heroTop.style.setProperty("--ty", ty.toFixed(1) + "px");
+  }
+  function swapEyebrow(i) {
+    if (reduce) { eyebrow.textContent = EYEBROW[i]; return; }
+    eyebrow.style.opacity = 0;
+    setTimeout(() => { eyebrow.textContent = EYEBROW[i]; eyebrow.style.opacity = 1; }, 200);
+  }
+  function openLogin(from) {
+    if (isOpen) return;
+    returnTo = from || headerBtn;
+    const go = () => {
+      fit(); isOpen = true;
+      heroTop.classList.add("open"); card.inert = false;
+      triggers.forEach(t => t.setAttribute("aria-expanded", "true"));
+      swapEyebrow(1);
+      history.replaceState(null, "", "#signin");
+      setTimeout(() => user.focus({ preventScroll: true }), reduce ? 0 : 450);
+    };
+    if (scrollY > 40) { scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" }); setTimeout(go, reduce ? 0 : 420); }
+    else go();
+  }
+  function closeLogin() {
+    if (!isOpen) return;
+    isOpen = false;
+    heroTop.classList.remove("open"); card.inert = true;
+    triggers.forEach(t => t.setAttribute("aria-expanded", "false"));
+    showErr(""); swapEyebrow(0);
+    history.replaceState(null, "", location.pathname);
+    (returnTo && returnTo.offsetParent ? returnTo : headerBtn).focus({ preventScroll: true });
+  }
+  triggers.forEach(t => t.addEventListener("click", () => isOpen ? closeLogin() : openLogin(t)));
+  document.getElementById("closeLogin").addEventListener("click", closeLogin);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && isOpen) closeLogin(); });
+  addEventListener("resize", () => { if (isOpen) fit(); });
+
+  function showErr(msg) { err.textContent = msg; err.classList.toggle("show", !!msg); field.classList.toggle("bad", !!msg); }
+  function toGoogle(hint) {
+    const b = document.getElementById("goBtn");
+    b.setAttribute("aria-busy", "true"); document.getElementById("goLabel").textContent = "Opening Google…";
+    toast(hint ? "Auth0 → Google (login hint: " + hint + ")" : "Auth0 → Google account picker");
+    setTimeout(() => { b.removeAttribute("aria-busy"); document.getElementById("goLabel").textContent = "Continue"; }, 2000);
+  }
+  document.getElementById("loginForm").addEventListener("submit", e => {
+    e.preventDefault();
+    let v = user.value.trim().toLowerCase();
+    if (v.includes("@")) {
+      const [name, domain] = v.split("@");
+      if (domain !== "gettysburg.edu") return showErr("Use your @gettysburg.edu account, not " + domain + ".");
+      v = name; user.value = name;
+    }
+    if (!v) return showErr("Type your username, the part before @gettysburg.edu.");
+    if (!/^[a-z0-9._-]+$/.test(v)) return showErr("Usernames only use letters, numbers, dots, and dashes.");
+    showErr(""); toGoogle(v + "@gettysburg.edu");
+  });
+  user.addEventListener("input", () => showErr(""));
+  document.getElementById("pickBtn").addEventListener("click", () => toGoogle(""));
+  document.fonts.addEventListener("loadingdone", () => { if (isOpen) fit(); });
+  if (location.hash === "#signin") addEventListener("load", () => document.fonts.load('400 76px "Archivo Black"').then(() => openLogin()));
+
+  // Sticky rail follows whichever chapter is in the middle of the screen.
+  const chapters = [...document.querySelectorAll(".chapter")];
+  const links = [...document.querySelectorAll(".rail a")];
+  function setActive(i) {
+    links.forEach((a, j) => { a.classList.toggle("on", j === i); a.classList.toggle("done", j < i); a.toggleAttribute("aria-current", j === i); });
+    document.getElementById("bigN").textContent = chapters[i].dataset.n;
+    document.getElementById("railTitle").textContent = chapters[i].dataset.t;
+  }
+  let cur = -1;
+  function onScroll() {
+    const mid = innerHeight * 0.5;
+    let i = 0;
+    chapters.forEach((c, j) => { if (c.getBoundingClientRect().top < mid) i = j; });
+    if (i !== cur) { cur = i; setActive(i); }
+  }
+  addEventListener("scroll", onScroll, { passive: true });
+  addEventListener("resize", onScroll);
+  onScroll();
+</script>
+</body>
+</html>
