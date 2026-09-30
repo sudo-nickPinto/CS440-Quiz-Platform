@@ -1,23 +1,20 @@
 :root {
   font-family: "Space Grotesk", system-ui, sans-serif;
-  color: #222222;
-  background: #f3ebe2;
+  color: var(--ink);
+  background: var(--sand);
 
   --navy: #043371;
-  --orange: #cc4e00;
+  --orange: #CC4E00;
+  --orange-deep: #bf4c0c;
   --sky: #8fdbff;
-  --sand: #f3ebe2;
+  --sky-soft: #c2e6f8;
+  --apricot: #f6d2b6;
+  --sand: #ecdfd0;
+  --paper: #fcf9f4;
   --ink: #222222;
-  --white: #ffffff;
-  --gray: #747474;
-  --sapphire: #043b82;
-  --cornflower: #84baff;
-  --alabaster: #f5f5f5;
-  --red: #c92b35;
-  --blue: #1368ce;
-  --yellow: #e4b400;
-  --green: #26730d;
+  --gray: #666666;
   --b: 3px solid var(--ink);
+  --b-thin: 2px solid var(--ink);
   --shadow: 6px 6px 0 var(--ink);
 }
 
@@ -43,8 +40,8 @@ button {
 }
 
 button:focus-visible {
-  outline: 4px solid var(--sky);
-  outline-offset: 3px;
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 2px;
 }
 
 .app-shell {
@@ -66,8 +63,8 @@ button:focus-visible {
   padding: 6px 14px;
   border: var(--b);
   background: var(--navy);
-  box-shadow: 4px 4px 0 var(--orange);
-  color: var(--white);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--paper);
   font-family: "Archivo Black", sans-serif;
   font-size: 22px;
   font-weight: 400;
@@ -91,38 +88,41 @@ button:focus-visible {
   border: var(--b);
   display: grid;
   place-items: center;
-  background: var(--orange);
+  background: var(--orange-deep);
   box-shadow: 3px 3px 0 var(--ink);
-  color: var(--white);
+  color: var(--paper);
 }
 
 .mockup-frame {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   border: var(--b);
-  background: var(--white);
+  background: var(--paper);
   box-shadow: var(--shadow);
 }
 
 /* Prototype-only navigation, styled as the shared tab + control strip */
 .demo-toolbar {
+  min-width: 0;
   display: flex;
   align-items: stretch;
   justify-content: space-between;
   border-bottom: var(--b);
   background: repeating-linear-gradient(
     45deg,
-    var(--white),
-    var(--white) 10px,
-    var(--alabaster) 10px,
-    var(--alabaster) 20px
+    var(--paper),
+    var(--paper) 10px,
+    var(--sand) 10px,
+    var(--sand) 20px
   );
 }
 
 .view-switcher,
 .screen-switcher {
+  min-width: 0;
   display: flex;
 }
 
@@ -130,7 +130,7 @@ button:focus-visible {
 .screen-switcher button {
   border: 0;
   border-right: var(--b);
-  background: var(--white);
+  background: var(--paper);
   color: var(--ink);
   cursor: pointer;
   font-weight: 700;
@@ -147,15 +147,15 @@ button:focus-visible {
 }
 
 .view-switcher button[aria-selected="true"] {
-  background: var(--orange);
-  color: var(--white);
+  background: var(--orange-deep);
+  color: var(--paper);
   text-decoration: underline;
   text-decoration-thickness: 4px;
   text-underline-offset: 7px;
 }
 
 .view-switcher button[aria-selected="true"]:last-child {
-  background: var(--sapphire);
+  background: var(--navy);
 }
 
 .screen-switcher {
@@ -168,18 +168,18 @@ button:focus-visible {
   min-height: 40px;
   padding: 8px 13px;
   border: 2px solid var(--ink);
-  box-shadow: 3px 3px 0 var(--navy);
+  box-shadow: 3px 3px 0 var(--ink);
   font-size: 13px;
   text-transform: uppercase;
 }
 
 .screen-switcher button:hover,
 .screen-switcher button.active {
-  background: var(--sky);
+  background: var(--sky-soft);
 }
 
 .screen-switcher button.active {
-  box-shadow: 3px 3px 0 var(--orange);
+  box-shadow: 3px 3px 0 var(--ink);
 }
 
 .screen-switcher button:active {
@@ -196,7 +196,7 @@ button:focus-visible {
 
 .host-page {
   min-height: 100%;
-  background: var(--sand);
+  background: var(--paper);
 }
 
 .host-header {
@@ -207,8 +207,8 @@ button:focus-visible {
   justify-content: space-between;
   gap: 16px;
   border-bottom: var(--b);
-  background: var(--navy);
-  color: var(--white);
+  background: var(--ink);
+  color: var(--paper);
 }
 
 .host-header strong {
@@ -234,7 +234,7 @@ button:focus-visible {
 
 .host-question-content {
   border: var(--b);
-  background: var(--white);
+  background: var(--paper);
   box-shadow: var(--shadow);
 }
 
@@ -246,7 +246,7 @@ button:focus-visible {
   align-items: center;
   gap: 24px;
   border-bottom: var(--b);
-  background: var(--white);
+  background: var(--paper);
 }
 
 .host-question-top h1,
@@ -271,9 +271,9 @@ button:focus-visible {
   border: var(--b);
   display: grid;
   place-items: center;
-  background: var(--navy);
-  box-shadow: 5px 5px 0 var(--sky);
-  color: var(--white);
+  background: var(--orange-deep);
+  color: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
   font-family: "Archivo Black", sans-serif;
   font-size: 34px;
 }
@@ -285,9 +285,9 @@ button:focus-visible {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--orange);
-  box-shadow: 5px 5px 0 var(--ink);
-  color: var(--white);
+  background: var(--sky-soft);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--navy);
 }
 
 .answer-count strong {
@@ -308,50 +308,35 @@ button:focus-visible {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
-  background: repeating-linear-gradient(
-    45deg,
-    var(--white),
-    var(--white) 10px,
-    var(--alabaster) 10px,
-    var(--alabaster) 20px
-  );
+  background: var(--sand);
 }
 
 .host-answer {
-  min-height: 120px;
-  padding: 22px 28px;
+  min-height: 112px;
+  padding: 20px 24px;
   border: var(--b);
   display: flex;
   align-items: center;
-  gap: 24px;
-  box-shadow: 5px 5px 0 var(--ink);
-  color: var(--white);
+  gap: 18px;
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--ink);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.answer-index {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border: var(--b-thin);
+  background: var(--sky-soft);
+  color: var(--navy);
   font-family: "Archivo Black", sans-serif;
-  font-size: 24px;
-  font-weight: 400;
-}
-
-.host-shape {
-  width: 60px;
-  font-size: 50px;
-  text-align: center;
-}
-
-.answer-red {
-  background: var(--red);
-}
-
-.answer-blue {
-  background: var(--blue);
-}
-
-.answer-yellow {
-  background: var(--yellow);
-  color: var(--ink) !important;
-}
-
-.answer-green {
-  background: var(--green);
+  font-size: 16px;
 }
 
 /* Answer distribution */
@@ -362,7 +347,7 @@ button:focus-visible {
 .host-eyebrow,
 .result-eyebrow {
   margin: 0;
-  color: var(--orange);
+  color: var(--navy);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 1.5px;
@@ -389,7 +374,7 @@ button:focus-visible {
   grid-template-columns: repeat(4, 1fr);
   align-items: end;
   gap: 14px;
-  background: var(--white);
+  background: var(--paper);
   box-shadow: var(--shadow);
 }
 
@@ -418,8 +403,14 @@ button:focus-visible {
 .distribution-bar {
   width: 70%;
   min-height: 20px;
-  border: 3px solid var(--ink);
+  border: var(--b-thin);
   border-bottom: 0;
+  background: var(--sand);
+}
+
+.distribution-bar.correct {
+  background: var(--sky-soft);
+  border-top: 6px solid var(--navy);
 }
 
 .distribution-label {
@@ -430,8 +421,13 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: var(--white);
+  background: var(--paper);
+  color: var(--ink);
   font-size: 16px;
+}
+
+.distribution-label.correct {
+  background: var(--sky-soft);
 }
 
 .correct-check {
@@ -440,8 +436,8 @@ button:focus-visible {
   border: 2px solid var(--ink);
   display: grid;
   place-items: center;
-  background: var(--white);
-  color: var(--green);
+  background: var(--paper);
+  color: var(--navy);
   font-weight: 900;
 }
 
@@ -450,9 +446,9 @@ button:focus-visible {
   margin-top: 25px;
   padding: 12px 24px;
   border: var(--b);
-  background: var(--orange);
-  box-shadow: 4px 4px 0 var(--sky);
-  color: var(--white);
+    background: var(--orange-deep);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--paper);
   cursor: pointer;
   font-weight: 700;
   text-transform: uppercase;
@@ -464,19 +460,24 @@ button:focus-visible {
   box-shadow: none;
 }
 
+.host-next-button:hover,
+.leaderboard-next-button:hover {
+  background: var(--orange);
+}
+
 /* Leaderboard */
 .leaderboard-host-page {
-  background: var(--navy);
+  background: var(--paper);
 }
 
 .host-leaderboard-content {
   max-width: 760px;
-  color: var(--white);
+  color: var(--ink);
   text-align: center;
 }
 
 .host-eyebrow.light {
-  color: var(--sky);
+  color: var(--navy);
 }
 
 .host-leaderboard-content h1 {
@@ -486,8 +487,8 @@ button:focus-visible {
 
 .host-leaderboard {
   border: var(--b);
-  background: var(--ink);
-  box-shadow: 6px 6px 0 var(--orange);
+  background: var(--paper);
+  box-shadow: var(--shadow);
 }
 
 .host-leaderboard-row {
@@ -497,7 +498,7 @@ button:focus-visible {
   grid-template-columns: 72px 1fr auto;
   align-items: center;
   border-bottom: var(--b);
-  background: var(--white);
+  background: var(--paper);
   color: var(--ink);
   text-align: left;
 }
@@ -511,8 +512,8 @@ button:focus-visible {
   display: grid;
   place-items: center;
   border-right: var(--b);
-  background: var(--orange);
-  color: var(--white);
+  background: var(--orange-deep);
+  color: var(--paper);
   font-family: "Archivo Black", sans-serif;
   font-size: 22px;
 }
@@ -525,9 +526,9 @@ button:focus-visible {
 }
 
 .leaderboard-next-button {
-  background: var(--white);
-  box-shadow: 4px 4px 0 var(--orange);
-  color: var(--navy);
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--ink);
 }
 
 /* Participant device preview */
@@ -539,13 +540,7 @@ button:focus-visible {
   justify-content: center;
   align-items: flex-start;
   overflow: auto;
-  background: repeating-linear-gradient(
-    45deg,
-    var(--white),
-    var(--white) 10px,
-    var(--alabaster) 10px,
-    var(--alabaster) 20px
-  );
+  background: var(--sand);
 }
 
 .phone {
@@ -553,8 +548,8 @@ button:focus-visible {
   height: 700px;
   padding: 9px;
   border: var(--b);
-  background: var(--ink);
-  box-shadow: 8px 8px 0 var(--orange);
+  background: var(--sand);
+  box-shadow: 6px 6px 0 var(--ink);
 }
 
 .phone-screen {
@@ -562,7 +557,7 @@ button:focus-visible {
   height: 100%;
   overflow: hidden;
   border: 2px solid var(--ink);
-  background: var(--white);
+  background: var(--paper);
 }
 
 .participant-page {
@@ -574,7 +569,7 @@ button:focus-visible {
   padding: 18px;
   display: flex;
   flex-direction: column;
-  background: var(--sand);
+  background: var(--paper);
 }
 
 .participant-top {
@@ -594,36 +589,45 @@ button:focus-visible {
   border: var(--b);
   display: grid;
   place-items: center;
-  background: var(--navy);
-  box-shadow: 3px 3px 0 var(--sky);
-  color: var(--white);
+  background: var(--orange-deep);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--paper);
   font-family: "Archivo Black", sans-serif;
   font-size: 17px;
 }
 
-.participant-shapes {
+.participant-answers {
   flex: 1;
+  min-height: 0;
   padding: 14px 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 9px;
 }
 
 .participant-answer {
+  min-height: 0;
+  padding: 8px 12px;
   border: var(--b);
-  box-shadow: 5px 5px 0 var(--ink);
-  color: var(--white);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--ink);
   cursor: pointer;
-  font-size: 60px;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
 }
 
 .participant-answer:hover {
-  outline: 4px solid var(--white);
-  outline-offset: -8px;
+  background: var(--sky-soft);
 }
 
 .participant-answer:active {
-  transform: translate(5px, 5px);
+  transform: translate(3px, 3px);
   box-shadow: none;
 }
 
@@ -642,7 +646,7 @@ button:focus-visible {
   border: 2px solid var(--ink);
   display: flex;
   flex-direction: column;
-  background: var(--white);
+  background: var(--paper);
 }
 
 .participant-bottom > div:last-child {
@@ -677,20 +681,23 @@ button:focus-visible {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--sand);
+  background: var(--paper);
   text-align: center;
 }
 
-.submitted-shape {
-  width: 130px;
-  height: 130px;
-  margin-bottom: 28px;
+.submitted-choice {
+  min-width: 142px;
+  min-height: 54px;
+  margin-bottom: 24px;
+  padding: 10px 18px;
   border: var(--b);
   display: grid;
   place-items: center;
-  box-shadow: 6px 6px 0 var(--ink);
-  color: var(--white);
-  font-size: 68px;
+  background: var(--sky-soft);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--navy);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 18px;
 }
 
 .submitted-page h1 {
@@ -715,12 +722,12 @@ button:focus-visible {
   width: 11px;
   height: 11px;
   border: 2px solid var(--ink);
-  background: var(--orange);
+  background: var(--apricot);
 }
 
 /* Participant feedback */
 .correct-feedback {
-  background: var(--sand);
+  background: var(--paper);
 }
 
 .feedback-check,
@@ -730,22 +737,22 @@ button:focus-visible {
   border: var(--b);
   display: grid;
   place-items: center;
-  background: var(--green);
-  box-shadow: 5px 5px 0 var(--ink);
-  color: var(--white);
+  background: var(--sky-soft);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--navy);
   font-size: 48px;
   font-weight: 900;
 }
 
 .feedback-page h1 {
   margin: 20px 0 4px;
-  color: var(--green);
+  color: var(--navy);
   font-size: 35px;
 }
 
 .points-earned {
   margin: 8px 0 22px;
-  color: var(--orange);
+  color: var(--orange-deep);
   font-family: "Archivo Black", sans-serif;
   font-size: 31px;
 }
@@ -768,7 +775,8 @@ button:focus-visible {
 
 /* Participant final results */
 .trophy {
-  background: var(--navy);
+  background: var(--apricot);
+  color: var(--ink);
   font-size: 42px;
 }
 
@@ -784,13 +792,13 @@ button:focus-visible {
   width: 190px;
   min-height: 150px;
   padding: 18px;
-  border: 6px solid var(--navy);
+  border: var(--b);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--white);
-  box-shadow: 6px 6px 0 var(--orange);
+  background: var(--sky-soft);
+  box-shadow: 4px 4px 0 var(--ink);
 }
 
 .final-score strong {
@@ -813,12 +821,24 @@ button:focus-visible {
 }
 
 @media (max-width: 900px) {
+  .mockup-frame,
+  .demo-toolbar,
+  .screen-switcher {
+    width: 100%;
+    min-width: 0;
+  }
+
   .demo-toolbar {
     flex-direction: column;
   }
 
+  .view-switcher {
+    width: 100%;
+  }
+
   .view-switcher button {
     flex: 1;
+    min-width: 0;
   }
 
   .view-switcher button:last-child {
@@ -827,6 +847,7 @@ button:focus-visible {
 
   .screen-switcher {
     overflow-x: auto;
+    align-self: stretch;
     border-top: var(--b);
   }
 
@@ -948,7 +969,7 @@ button:focus-visible {
 
   .participant-view {
     padding: 0;
-    background: var(--white);
+    background: var(--paper);
   }
 
   .phone {

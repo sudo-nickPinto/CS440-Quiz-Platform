@@ -1,10 +1,10 @@
-function AnswerChoice({ shape, text, colorClass, onClick }) {
+function AnswerChoice({ id, text, onClick }) {
   return (
     <button
-      className={`kahoot-answer ${colorClass}`}
+      className="quiz-answer"
       onClick={onClick}
     >
-      <span className="answer-shape">{shape}</span>
+      <span className="answer-index">{id}</span>
       <span className="answer-text">{text}</span>
     </button>
   );

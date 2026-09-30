@@ -1,29 +1,25 @@
 function HostAnswerResultsPage({ onLeaderboard }) {
   const results = [
     {
-      shape: "▲",
+      label: "A",
       answer: "Stack",
       count: 3,
-      color: "answer-red",
     },
     {
-      shape: "◆",
+      label: "B",
       answer: "Queue",
       count: 12,
-      color: "answer-blue",
       correct: true,
     },
     {
-      shape: "●",
+      label: "C",
       answer: "Binary Tree",
       count: 2,
-      color: "answer-yellow",
     },
     {
-      shape: "■",
+      label: "D",
       answer: "Hash Table",
       count: 1,
-      color: "answer-green",
     },
   ];
 
@@ -50,7 +46,7 @@ function HostAnswerResultsPage({ onLeaderboard }) {
                 <span className="bar-number">{result.count}</span>
 
                 <div
-                  className={`distribution-bar ${result.color}`}
+                  className={`distribution-bar${result.correct ? " correct" : ""}`}
                   style={{
                     height: `${result.count * 18}px`,
                   }}
@@ -58,9 +54,9 @@ function HostAnswerResultsPage({ onLeaderboard }) {
               </div>
 
               <div
-                className={`distribution-label ${result.color}`}
+                className={`distribution-label${result.correct ? " correct" : ""}`}
               >
-                <span>{result.shape}</span>
+                <span className="answer-index">{result.label}</span>
 
                 <strong>{result.answer}</strong>
 
