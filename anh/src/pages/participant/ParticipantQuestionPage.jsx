@@ -14,32 +14,28 @@ function ParticipantQuestionPage({ onAnswer }) {
           className="participant-answer"
           onClick={() => onAnswer("A")}
         >
-          <span className="answer-index">A</span>
-          <span>Stack</span>
+          A
         </button>
 
         <button
           className="participant-answer"
           onClick={() => onAnswer("B")}
         >
-          <span className="answer-index">B</span>
-          <span>Queue</span>
+          B
         </button>
 
         <button
           className="participant-answer"
           onClick={() => onAnswer("C")}
         >
-          <span className="answer-index">C</span>
-          <span>Binary Tree</span>
+          C
         </button>
 
         <button
           className="participant-answer"
           onClick={() => onAnswer("D")}
         >
-          <span className="answer-index">D</span>
-          <span>Hash Table</span>
+          D
         </button>
       </div>
 

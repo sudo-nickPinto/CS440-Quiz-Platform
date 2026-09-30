@@ -1,10 +1,6 @@
-function ParticipantSubmittedPage({ selectedAnswer }) {
+function ParticipantSubmittedPage() {
   return (
     <div className="participant-page submitted-page">
-      <div className="submitted-choice" aria-label={`Answer ${selectedAnswer || "B"} selected`}>
-        Answer {selectedAnswer || "B"}
-      </div>
-
       <h1>Answer submitted!</h1>
 
       <p>

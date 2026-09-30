@@ -2,23 +2,19 @@ function HostAnswerResultsPage({ onLeaderboard }) {
   const results = [
     {
       label: "A",
-      answer: "Stack",
       count: 3,
     },
     {
       label: "B",
-      answer: "Queue",
       count: 12,
       correct: true,
     },
     {
       label: "C",
-      answer: "Binary Tree",
       count: 2,
     },
     {
       label: "D",
-      answer: "Hash Table",
       count: 1,
     },
   ];
@@ -41,7 +37,7 @@ function HostAnswerResultsPage({ onLeaderboard }) {
 
         <div className="distribution">
           {results.map((result) => (
-            <div className="distribution-column" key={result.answer}>
+            <div className="distribution-column" key={result.label}>
               <div className="bar-area">
                 <span className="bar-number">{result.count}</span>
 
@@ -55,10 +51,9 @@ function HostAnswerResultsPage({ onLeaderboard }) {
 
               <div
                 className={`distribution-label${result.correct ? " correct" : ""}`}
+                aria-label={`Answer ${result.label}${result.correct ? ", correct answer" : ""}`}
               >
                 <span className="answer-index">{result.label}</span>
-
-                <strong>{result.answer}</strong>
 
                 {result.correct && (
                   <span className="correct-check">✓</span>
