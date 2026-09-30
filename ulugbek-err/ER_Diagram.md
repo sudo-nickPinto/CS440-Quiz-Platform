@@ -20,7 +20,7 @@ erDiagram
     QUESTION ||--|{ ANSWER_CHOICE : offers
     QUIZ_VERSION ||--o{ LIVE_SESSION : "played as"
     ACCOUNT ||--o{ LIVE_SESSION : hosts
-    COURSE_GROUP |o--o{ LIVE_SESSION : "restricted to"
+    COURSE_GROUP ||--o{ LIVE_SESSION : "restricted to"
     LIVE_SESSION ||--o{ SESSION_PARTICIPANT : admits
     ACCOUNT ||--o{ SESSION_PARTICIPANT : joins
     LIVE_SESSION ||--o{ SESSION_QUESTION : runs
@@ -100,7 +100,7 @@ erDiagram
         int session_id PK
         int quiz_version_id FK "published versions only"
         int host_id FK
-        int group_id FK "nullable (see open questions)"
+        int group_id FK "every session belongs to a group"
         char join_code "unique among LOBBY/ACTIVE sessions"
         enum status "LOBBY, ACTIVE, COMPLETED, CANCELLED"
         int current_question_order "nullable"
@@ -202,7 +202,7 @@ erDiagram
 
 ### Live sessions
 
-- `LIVE_SESSION` now has a `status`, the current question number, a `created_at` time, and an optional group.
+- `LIVE_SESSION` now has a `status`, the current question number, a `created_at` time, and the group it belongs to. Every session has to belong to a group.
 - New `SESSION_PARTICIPANT` table. It saves everyone who joined, even people who never answered anything.
   - It also stops someone from joining twice and lets people rejoin after refreshing the page.
   - Whether someone is currently connected is tracked by the server, not saved in the database. Saving it would mean writing to the database every few seconds.
@@ -224,7 +224,7 @@ erDiagram
 The database can't easily check these, so the backend code has to:
 
 - **Who can host:** only the quiz's author, its collaborators, or the group's professor. The host only presents and doesn't play.
-- **Who can join:** if a session belongs to a group, only students in that group can join.
+- **Who can join:** only students in the session's group can join.
 - **Who can see a quiz:** everyone in the group can see public quizzes. Only the author, collaborators, and the professor can see private ones.
 - **Matching data:** a session can only show questions from the version it's playing, and an answer has to be one of that question's choices.
 - **Published versions:** they can't be edited.
@@ -240,15 +240,14 @@ The database can't easily check these, so the backend code has to:
 - **Editing together:** the student group that made the quiz and their professor can edit it, but only one person per question at a time.
 - **Who sees quizzes:** only people in the quiz's group.
 - **Hosting:** students can host their group's quizzes, and professors can host too. The host doesn't play.
-- **Group sessions:** only group members can join.
+- **Sessions:** every session belongs to a group, and only group members can join.
+- **Adding students:** a teacher can only add a student who already has an account (has logged in at least once). Otherwise the app shows an error. This is for the MVP.
 - **Ties:** same place, and the next place is skipped.
 
 ## Still to decide
 
-1. **Adding students by Gmail.** What if the student hasn't logged in yet, so they don't have an account? One idea is a `GROUP_INVITE` table that saves the email and adds the student to the group when they first log in.
-2. **Sessions without a group.** Can someone run a session with just a join code? For now, a session's group is optional.
-3. **The speed formula.** Kahoot uses `base points × (1 − (time taken ÷ time limit) ÷ 2)`. Any formula works with this database design, but we need to pick one.
-4. **Excel export.** It'll probably show both the number of correct answers and the score for each day. We should check with the client.
+1. **The speed formula.** Kahoot uses `base points × (1 − (time taken ÷ time limit) ÷ 2)`. Any formula works with this database design, but we need to pick one.
+2. **Excel export.** It'll probably show both the number of correct answers and the score for each day. We should check with the client.
 
 ## Concerns
 

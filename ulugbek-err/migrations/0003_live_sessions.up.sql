@@ -4,15 +4,14 @@
 --   * quiz_version_id must point to a published version.
 --   * session_question.question_id must belong to the session's quiz version.
 --   * response.choice_id must belong to the session_question's question.
---   * If group_id is set, only members of that group may join.
+--   * Only members of the session's group may join.
 --   * The host presents only and is never a session_participant.
 
 CREATE TABLE live_session (
     session_id              INT UNSIGNED      NOT NULL AUTO_INCREMENT PRIMARY KEY,
     quiz_version_id         INT UNSIGNED      NOT NULL,
     host_id                 INT UNSIGNED      NOT NULL,
-    -- Nullable until the team decides whether sessions can run without a group.
-    group_id                INT UNSIGNED      NULL,
+    group_id                INT UNSIGNED      NOT NULL,
     join_code               CHAR(6)           NOT NULL,
     status                  ENUM('LOBBY', 'ACTIVE', 'COMPLETED', 'CANCELLED') NOT NULL
                             DEFAULT 'LOBBY',
