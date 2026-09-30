@@ -14,10 +14,8 @@ function App() {
   const [view, setView] = useState("host");
   const [hostPage, setHostPage] = useState("question");
   const [participantPage, setParticipantPage] = useState("question");
-  const [selectedAnswer, setSelectedAnswer] = useState(null);
 
-  const handleParticipantAnswer = (answer) => {
-    setSelectedAnswer(answer);
+  const handleParticipantAnswer = () => {
     setParticipantPage("submitted");
   };
 
@@ -138,9 +136,7 @@ function App() {
               )}
 
               {participantPage === "submitted" && (
-                <ParticipantSubmittedPage
-                  selectedAnswer={selectedAnswer}
-                />
+                <ParticipantSubmittedPage />
               )}
 
               {participantPage === "feedback" && (

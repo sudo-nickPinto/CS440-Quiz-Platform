@@ -25,23 +25,23 @@ function HostQuestionPage() {
         </div>
 
         <div className="host-answers">
-          <div className="host-answer answer-red">
-            <span className="host-shape">▲</span>
+          <div className="host-answer">
+            <span className="answer-index">A</span>
             <span>Stack</span>
           </div>
 
-          <div className="host-answer answer-blue">
-            <span className="host-shape">◆</span>
+          <div className="host-answer">
+            <span className="answer-index">B</span>
             <span>Queue</span>
           </div>
 
-          <div className="host-answer answer-yellow">
-            <span className="host-shape">●</span>
+          <div className="host-answer">
+            <span className="answer-index">C</span>
             <span>Binary Tree</span>
           </div>
 
-          <div className="host-answer answer-green">
-            <span className="host-shape">■</span>
+          <div className="host-answer">
+            <span className="answer-index">D</span>
             <span>Hash Table</span>
           </div>
         </div>

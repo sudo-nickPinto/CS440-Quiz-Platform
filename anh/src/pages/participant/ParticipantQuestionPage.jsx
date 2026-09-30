@@ -9,37 +9,33 @@ function ParticipantQuestionPage({ onAnswer }) {
         </div>
       </div>
 
-      <div className="participant-shapes">
+      <div className="participant-answers">
         <button
-          className="participant-answer answer-red"
+          className="participant-answer"
           onClick={() => onAnswer("A")}
-          aria-label="Red triangle answer"
         >
-          ▲
+          A
         </button>
 
         <button
-          className="participant-answer answer-blue"
+          className="participant-answer"
           onClick={() => onAnswer("B")}
-          aria-label="Blue diamond answer"
         >
-          ◆
+          B
         </button>
 
         <button
-          className="participant-answer answer-yellow"
+          className="participant-answer"
           onClick={() => onAnswer("C")}
-          aria-label="Yellow circle answer"
         >
-          ●
+          C
         </button>
 
         <button
-          className="participant-answer answer-green"
+          className="participant-answer"
           onClick={() => onAnswer("D")}
-          aria-label="Green square answer"
         >
-          ■
+          D
         </button>
       </div>
 

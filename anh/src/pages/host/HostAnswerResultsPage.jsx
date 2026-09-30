@@ -1,29 +1,21 @@
 function HostAnswerResultsPage({ onLeaderboard }) {
   const results = [
     {
-      shape: "▲",
-      answer: "Stack",
+      label: "A",
       count: 3,
-      color: "answer-red",
     },
     {
-      shape: "◆",
-      answer: "Queue",
+      label: "B",
       count: 12,
-      color: "answer-blue",
       correct: true,
     },
     {
-      shape: "●",
-      answer: "Binary Tree",
+      label: "C",
       count: 2,
-      color: "answer-yellow",
     },
     {
-      shape: "■",
-      answer: "Hash Table",
+      label: "D",
       count: 1,
-      color: "answer-green",
     },
   ];
 
@@ -45,12 +37,12 @@ function HostAnswerResultsPage({ onLeaderboard }) {
 
         <div className="distribution">
           {results.map((result) => (
-            <div className="distribution-column" key={result.answer}>
+            <div className="distribution-column" key={result.label}>
               <div className="bar-area">
                 <span className="bar-number">{result.count}</span>
 
                 <div
-                  className={`distribution-bar ${result.color}`}
+                  className={`distribution-bar${result.correct ? " correct" : ""}`}
                   style={{
                     height: `${result.count * 18}px`,
                   }}
@@ -58,11 +50,10 @@ function HostAnswerResultsPage({ onLeaderboard }) {
               </div>
 
               <div
-                className={`distribution-label ${result.color}`}
+                className={`distribution-label${result.correct ? " correct" : ""}`}
+                aria-label={`Answer ${result.label}${result.correct ? ", correct answer" : ""}`}
               >
-                <span>{result.shape}</span>
-
-                <strong>{result.answer}</strong>
+                <span className="answer-index">{result.label}</span>
 
                 {result.correct && (
                   <span className="correct-check">✓</span>
