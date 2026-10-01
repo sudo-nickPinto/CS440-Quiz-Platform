@@ -52,8 +52,12 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
 uvicorn app.main:app --reload
 ```
+
+Edit `backend/.env` with your MySQL credentials. The shared database is
+`f26_cs440_quizdb` on `cray`; do not commit the `.env` file or its password.
 
 The backend will run at:
 
@@ -65,6 +69,12 @@ FastAPI documentation is available at:
 
 ```text
 http://127.0.0.1:8000/docs
+```
+
+The database readiness endpoint is available at:
+
+```text
+http://127.0.0.1:8000/health
 ```
 
 ## Development Workflow
