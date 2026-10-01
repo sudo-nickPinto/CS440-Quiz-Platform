@@ -7,6 +7,7 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0001_accounts_and_groups` | `schema_migrations`, `account`, `course_group`, `group_membership` |
 | `0002_quizzes` | `quiz`, `quiz_collaborator`, `quiz_group`, `quiz_version`, `question`, `answer_choice` |
 | `0003_live_sessions` | `live_session`, `session_participant`, `session_question`, `response`, `result` |
+| `0004_account_identity` | `account_identity` (one account, several Auth0 logins); copies existing `account.auth0_sub` values into it |
 
 Each migration comes in two files:
 

@@ -22,10 +22,11 @@ sequenceDiagram
     B->>F: GET /me, Authorization: Bearer <JWT>
     F->>A: GET /.well-known/jwks.json (public keys, cached)
     F->>F: verify signature, issuer, audience, expiry
-    F->>D: SELECT ... WHERE auth0_sub = sub
-    alt first login
+    F->>D: SELECT account via account_identity WHERE auth0_sub = sub
+    alt first login with this method
         F->>A: GET /userinfo (email, name)
-        F->>D: INSERT account row
+        F->>D: link to account with same email, or INSERT account
+        F->>D: INSERT account_identity row
     end
     F-->>B: {account_id, email, display_name, account_type}
 ```
@@ -55,21 +56,22 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    S([sub from verified token]) --> Q{row with this<br/>auth0_sub?}
+    S([sub from verified token]) --> Q{row in account_identity<br/>with this auth0_sub?}
     Q -- yes --> RET([return account])
     Q -- no --> P[fetch /userinfo from Auth0]
     P --> V{email present and<br/>email_verified?}
     V -- no --> E403([403 email_not_verified])
-    V -- yes --> I[INSERT account<br/>account_type = NULL]
-    I --> OK{insert succeeded?}
-    OK -- yes --> RET
-    OK -- "IntegrityError" --> RB[rollback, look up by sub again]
-    RB --> F{row with this<br/>auth0_sub now?}
-    F -- "yes: parallel request created it" --> RET
-    F -- "no: email is taken by another sub" --> E409([409 email_already_registered])
+    V -- yes --> M{account with<br/>this email?}
+    M -- yes --> L[INSERT account_identity<br/>link this login to it]
+    M -- no --> I[INSERT account, then account_identity<br/>account_type = NULL]
+    L --> RET
+    I --> RET
+    I -. "IntegrityError: parallel request" .-> RB[rollback, look up again]
+    L -. "IntegrityError: parallel request" .-> RB
+    RB --> RET
 ```
 
-The 409 happens when the same email signs in through a different method. Email/password gives `auth0|...` and Google gives `google-oauth2|...`, which are different `sub` values with the same email, and `account.email` is unique. We do not link accounts (see section 9).
+Email/password gives `auth0|...` and Google gives `google-oauth2|...`: different `sub` values for the same person. Each `sub` is a row in `account_identity` (migration `0004`) pointing at one `account`, so a second login method with the same verified email is linked to the existing account instead of failing. Linking requires `email_verified`, otherwise someone could sign up with another person's address and be attached to their account.
 
 ## 4. Where auth sits in the backend layers
 
@@ -186,7 +188,6 @@ Every error has the shape `{"error": {"code": "...", "message": "..."}}`; the fr
 | 401 | `invalid_token` | Bad signature, wrong audience or issuer, expired, or malformed |
 | 500 | `auth_not_configured` | `AUTH0_DOMAIN` or `AUTH0_AUDIENCE` missing on the server |
 | 403 | `email_not_verified` | Auth0 profile has no verified email at first login |
-| 409 | `email_already_registered` | Email already belongs to an account that signed in another way |
 | 502 | `profile_unavailable` | Could not reach Auth0 `/userinfo` at first login |
 
 ## 9. Behaviors worth knowing
@@ -199,7 +200,11 @@ Every error has the shape `{"error": {"code": "...", "message": "..."}}`; the fr
 
 **Duplicate signup message.** Signing up with an existing email shows a message customized in the Auth0 tenant (Universal Login custom text, signup prompt, key `auth0-users-validation`). That setting lives in Auth0, not in this repo.
 
-**Duplicate email across login methods.** See the 409 in section 3 and 8. The user must log in the way they first signed up.
+**Several login methods, one account.** Logging in with Google and with email/password using the same verified email lands on the same `account`. `account.auth0_sub` is only the first login and is not used for lookups.
+
+**Email verification happens once.** Auth0 marks an email verified when the user clicks the link in the verification email, and it stays verified. Users are not asked again. How often they must *log in* is a separate setting (Auth0 session lifetime, tenant settings > Advanced for the SSO session, and the application's refresh-token/absolute lifetime).
+
+**Forgot password.** Auth0's hosted login page has a "Forgot password?" link for the email/password connection and sends the reset email. There is no code for it in this repo.
 
 ## 10. Adding a protected route
 
@@ -223,5 +228,4 @@ Use `current_user` instead if you only need the token's claims and no database r
 ## 11. Open decisions
 
 - **`account_type` is NULL for everyone.** There is no student/professor chooser. Everyone is a host/participant in the lobby. How professor and administrator status get assigned is undecided.
-- **No account linking across login methods.** The same email via Google and via email/password gives a 409. Real linking would need Auth0 account linking or a schema change, since `auth0_sub` is a single column.
 - **Temporary scaffolding:** none remains in the code. The `/me` check is now `AccountGate`.
