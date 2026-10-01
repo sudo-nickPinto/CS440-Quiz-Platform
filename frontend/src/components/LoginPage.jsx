@@ -1,7 +1,11 @@
 import { useAuth0 } from '@auth0/auth0-react'
 
 export default function LoginPage({ headingRef }) {
-  const { loginWithRedirect } = useAuth0()
+  const { loginWithRedirect: redirect } = useAuth0()
+  // replace() instead of the default assign(), so our page isn't left in the
+  // history stack and Back doesn't bounce into Auth0's one-time pages.
+  const loginWithRedirect = (options = {}) =>
+    redirect({ ...options, openUrl: (url) => window.location.replace(url) })
 
   // Email + password: Auth0's hosted login page.
   const logIn = () => loginWithRedirect()
