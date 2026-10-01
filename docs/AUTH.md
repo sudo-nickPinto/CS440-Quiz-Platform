@@ -22,10 +22,11 @@ sequenceDiagram
     B->>F: GET /me, Authorization: Bearer <JWT>
     F->>A: GET /.well-known/jwks.json (public keys, cached)
     F->>F: verify signature, issuer, audience, expiry
-    F->>D: SELECT ... WHERE auth0_sub = sub
-    alt first login
+    F->>D: SELECT account via account_identity WHERE auth0_sub = sub
+    alt first login with this method
         F->>A: GET /userinfo (email, name)
-        F->>D: INSERT account row
+        F->>D: link to account with same email, or INSERT account
+        F->>D: INSERT account_identity row
     end
     F-->>B: {account_id, email, display_name, account_type}
 ```
@@ -42,7 +43,7 @@ flowchart LR
     CA --> G["get_or_create_account<br/>accounts.py"]
     CU -->|claims.sub| G
     DB --> G
-    G -->|SQL via SQLAlchemy text| T[("account table")]
+    G -->|SQL via SQLAlchemy text| T[("account and<br/>account_identity tables")]
     G -.->|first login only| UI["Auth0 /userinfo"]
     CU -.->|APIError 401/500| E["errors.py handler"]
     G -.->|APIError 403/409/502| E
@@ -55,21 +56,22 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    S([sub from verified token]) --> Q{row with this<br/>auth0_sub?}
+    S([sub from verified token]) --> Q{row in account_identity<br/>with this auth0_sub?}
     Q -- yes --> RET([return account])
     Q -- no --> P[fetch /userinfo from Auth0]
     P --> V{email present and<br/>email_verified?}
     V -- no --> E403([403 email_not_verified])
-    V -- yes --> I[INSERT account<br/>account_type = NULL]
-    I --> OK{insert succeeded?}
-    OK -- yes --> RET
-    OK -- "IntegrityError" --> RB[rollback, look up by sub again]
-    RB --> F{row with this<br/>auth0_sub now?}
-    F -- "yes: parallel request created it" --> RET
-    F -- "no: email is taken by another sub" --> E409([409 email_already_registered])
+    V -- yes --> M{account with<br/>this email?}
+    M -- yes --> L[INSERT account_identity<br/>link this login to it]
+    M -- no --> I[INSERT account, then account_identity<br/>account_type = NULL]
+    L --> RET
+    I --> RET
+    I -. "IntegrityError: parallel request" .-> RB[rollback, look up again]
+    L -. "IntegrityError: parallel request" .-> RB
+    RB --> RET
 ```
 
-The 409 happens when the same email signs in through a different method. Email/password gives `auth0|...` and Google gives `google-oauth2|...`, which are different `sub` values with the same email, and `account.email` is unique. We do not link accounts (see section 9).
+Email/password gives `auth0|...` and Google gives `google-oauth2|...`: different `sub` values for the same person. Each `sub` is a row in `account_identity` (migration `0004`) pointing at one `account`, so a second login method with the same verified email is linked to the existing account instead of failing. Linking requires `email_verified`, otherwise someone could sign up with another person's address and be attached to their account.
 
 ## 4. Where auth sits in the backend layers
 
@@ -90,7 +92,7 @@ flowchart TB
         DBL["database.py: Database, get_db (SQLAlchemy Session)"]
         ER["errors.py: APIError + handlers"]
     end
-    DBS[("MySQL: account")]
+    DBS[("MySQL: account, account_identity")]
 
     M --> RT --> H
     RT --> ME
@@ -186,7 +188,6 @@ Every error has the shape `{"error": {"code": "...", "message": "..."}}`; the fr
 | 401 | `invalid_token` | Bad signature, wrong audience or issuer, expired, or malformed |
 | 500 | `auth_not_configured` | `AUTH0_DOMAIN` or `AUTH0_AUDIENCE` missing on the server |
 | 403 | `email_not_verified` | Auth0 profile has no verified email at first login |
-| 409 | `email_already_registered` | Email already belongs to an account that signed in another way |
 | 502 | `profile_unavailable` | Could not reach Auth0 `/userinfo` at first login |
 
 ## 9. Behaviors worth knowing
@@ -199,7 +200,11 @@ Every error has the shape `{"error": {"code": "...", "message": "..."}}`; the fr
 
 **Duplicate signup message.** Signing up with an existing email shows a message customized in the Auth0 tenant (Universal Login custom text, signup prompt, key `auth0-users-validation`). That setting lives in Auth0, not in this repo.
 
-**Duplicate email across login methods.** See the 409 in section 3 and 8. The user must log in the way they first signed up.
+**Several login methods, one account.** Logging in with Google and with email/password using the same verified email lands on the same `account`. `account.auth0_sub` is only the first login and is not used for lookups.
+
+**Email verification happens once.** Auth0 marks an email verified when the user clicks the link in the verification email, and it stays verified. Users are not asked again. How often they must *log in* is a separate setting (Auth0 session lifetime, tenant settings > Advanced for the SSO session, and the application's refresh-token/absolute lifetime).
+
+**Forgot password.** Auth0's hosted login page has a "Forgot password?" link for the email/password connection and sends the reset email. There is no code for it in this repo.
 
 ## 10. Adding a protected route
 
@@ -220,8 +225,34 @@ Then `include_router` it in `app/api/router.py`. For database access add `db: Se
 
 Use `current_user` instead if you only need the token's claims and no database row.
 
-## 11. Open decisions
+## 11. Next steps
 
-- **`account_type` is NULL for everyone.** There is no student/professor chooser. Everyone is a host/participant in the lobby. How professor and administrator status get assigned is undecided.
-- **No account linking across login methods.** The same email via Google and via email/password gives a 409. Real linking would need Auth0 account linking or a schema change, since `auth0_sub` is a single column.
-- **Temporary scaffolding:** none remains in the code. The `/me` check is now `AccountGate`.
+Login, token verification, account creation and linking of login methods all work locally. What is left, in the order we should do it:
+
+**Before deploying to Reclaim**
+1. **Run the migrations on the hosted MySQL**, all four (`0001` to `0004`). `0004` must be applied before this backend version runs, because `/me` reads `account_identity`. The shared school DB needs `0004` too if anyone points at it.
+2. **Set the backend environment** on the host: `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, `DATABASE_URL` (or the `DB_*` values), and `CORS_ORIGINS` set to the deployed frontend URL.
+3. **Add the deployed URL in the Auth0 dashboard** (Applications, our SPA) to Allowed Callback URLs, Allowed Logout URLs and Allowed Web Origins, and set the frontend `VITE_*` variables to the hosted API URL.
+4. **Check the consent screen is gone.** It should not appear on a real domain (section 9). If it does, check "Allow Skipping User Consent" on the API.
+
+**Auth0 tenant settings (dashboard only, nothing in the repo)**
+5. **Require email verification for email/password signups**, and test that an unverified signup gets 403 `email_not_verified`. Account linking trusts `email_verified`, so this is a security requirement, not a nicety.
+6. **Set up a real email sender** (Authentication, then Email Provider). Auth0's built-in sender is rate-limited and meant for development. Verification and password-reset emails both go through it.
+7. **Decide how often people must log in** (the "once a month" idea): the SSO session lifetime and the application's refresh-token lifetime in the Auth0 dashboard. Email verification itself only happens once and never repeats.
+8. **Test "Forgot password?"** once end to end with a real inbox. It is provided by Auth0 and has no code in this repo.
+
+**Product decisions still open**
+9. **Professor and administrator status.** `account_type` is NULL for everyone and there is no chooser. Options from the ER diagram notes: manual assignment by the team, an approval queue, or an allow-list by email domain. Until this is decided, every route should treat all accounts the same.
+10. **Merging login methods you do not own the email for.** Linking only happens for verified emails. If someone changes their email in Auth0 later, the old `account.email` is not updated. Decide whether that matters before launch.
+
+**Cleanup**
+11. Render the mermaid diagrams in this file once on GitHub to confirm they display.
+12. The root README says the backend runs on port 8000, but the frontend `.env.example` expects 8001.
+
+## 12. Done so far
+
+- Auth0 login with Google and email/password, token verified in FastAPI (`auth.py`).
+- First login creates an `account` row; later logins reuse it (`accounts.py`).
+- A second login method with the same verified email links to the same account through `account_identity` (migration `0004`). There is no longer a 409.
+- Student/professor chooser removed; everyone is a host/participant for now.
+- Tests: 17 backend tests, including linking and the unverified-email guard.

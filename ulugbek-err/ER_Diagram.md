@@ -6,6 +6,7 @@ This is the plan for our MySQL database: what tables we have and how they connec
 
 ```mermaid
 erDiagram
+    ACCOUNT ||--o{ ACCOUNT_IDENTITY : "logs in with"
     ACCOUNT ||--o{ COURSE_GROUP : teaches
     ACCOUNT ||--o{ GROUP_MEMBERSHIP : "belongs to"
     COURSE_GROUP ||--o{ GROUP_MEMBERSHIP : has
@@ -32,11 +33,16 @@ erDiagram
 
     ACCOUNT {
         int account_id PK
-        varchar auth0_sub UK "Auth0 subject id"
+        varchar auth0_sub UK "first login only; all logins are in ACCOUNT_IDENTITY"
         varchar email UK "any Gmail"
         varchar display_name
         enum account_type "STUDENT, PROFESSOR, ADMINISTRATOR; NULL until chosen at first login"
         boolean is_active
+        datetime created_at
+    }
+    ACCOUNT_IDENTITY {
+        varchar auth0_sub PK "Auth0 subject id, one per login method"
+        int account_id FK
         datetime created_at
     }
     COURSE_GROUP {
@@ -147,7 +153,8 @@ erDiagram
 
 ## Things that must be unique
 
-- **account:** no two accounts can have the same Auth0 id or the same email.
+- **account:** no two accounts can have the same email.
+- **account_identity:** an Auth0 id belongs to exactly one account, but an account can have several (Google and email/password).
 - **group_membership:** a student can only be in the same group once.
 - **quiz_collaborator:** a person can only be added to the same quiz once.
 - **quiz_group:** a quiz can only be linked to the same group once.
@@ -170,7 +177,7 @@ erDiagram
 
 ### Login
 
-- We use Google login through Auth0, so we don't store usernames or passwords. An account is identified by its Auth0 id and email.
+- We use Auth0 (Google or email/password), so we don't store passwords. An account is identified by its email, and each Auth0 login method it has used is a row in `account_identity`.
 - There are three account types: Student, Professor, and Administrator.
 - When someone logs in for the first time, they pick Student or Professor. Until then, their account type is empty.
 - Administrators are our team. We set that by hand in the database.

@@ -24,6 +24,10 @@ CREATE TABLE account (
     display_name VARCHAR(100) NOT NULL,
     account_type VARCHAR(20) NULL,
     is_active    BOOLEAN NOT NULL DEFAULT 1
+);
+CREATE TABLE account_identity (
+    auth0_sub  VARCHAR(255) NOT NULL PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES account (account_id) ON DELETE CASCADE
 )
 """
 
@@ -48,7 +52,8 @@ def client(monkeypatch):
     )
     with TestClient(app) as test_client:
         with app.state.database.engine.begin() as conn:
-            conn.execute(text(ACCOUNT_DDL))
+            for statement in ACCOUNT_DDL.split(";"):
+                conn.execute(text(statement))
         test_client.profile = profile
         test_client.app_ref = app
         yield test_client
@@ -139,9 +144,32 @@ def test_unverified_email_is_rejected(client):
     assert count_accounts(client) == 0
 
 
-def test_same_email_with_other_login_method_conflicts(client):
-    assert get_me(client, make_token("auth0|abc")).status_code == 200
-    response = get_me(client, make_token("google-oauth2|123"))
-    assert response.status_code == 409
-    assert error_code(response) == "email_already_registered"
+def count_identities(client):
+    with client.app_ref.state.database.engine.connect() as conn:
+        return conn.execute(text("SELECT COUNT(*) FROM account_identity")).scalar()
+
+
+def test_same_email_with_other_login_method_links_to_one_account(client):
+    first = get_me(client, make_token("auth0|abc"))
+    second = get_me(client, make_token("google-oauth2|123"))
+    assert second.status_code == 200
+    assert first.json()["account_id"] == second.json()["account_id"]
     assert count_accounts(client) == 1
+    assert count_identities(client) == 2
+
+
+def test_linked_login_is_reused(client):
+    get_me(client, make_token("auth0|abc"))
+    get_me(client, make_token("google-oauth2|123"))
+    again = get_me(client, make_token("google-oauth2|123"))
+    assert again.status_code == 200
+    assert count_identities(client) == 2
+
+
+def test_unverified_email_is_not_linked(client):
+    get_me(client, make_token("google-oauth2|123"))
+    client.profile["email_verified"] = False
+    response = get_me(client, make_token("auth0|abc"))
+    assert response.status_code == 403
+    assert error_code(response) == "email_not_verified"
+    assert count_identities(client) == 1
