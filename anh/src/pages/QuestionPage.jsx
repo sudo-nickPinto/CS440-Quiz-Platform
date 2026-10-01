@@ -10,26 +10,18 @@ function QuestionPage({
     {
       id: "A",
       text: "Stack",
-      shape: "▲",
-      colorClass: "answer-red",
     },
     {
       id: "B",
       text: "Queue",
-      shape: "◆",
-      colorClass: "answer-blue",
     },
     {
       id: "C",
       text: "Binary Tree",
-      shape: "●",
-      colorClass: "answer-yellow",
     },
     {
       id: "D",
       text: "Hash Table",
-      shape: "■",
-      colorClass: "answer-green",
     },
   ];
 
@@ -52,7 +44,7 @@ function QuestionPage({
       <main className="quiz-content">
         <ProgressBar current={3} total={10} />
 
-        <section className="kahoot-question">
+        <section className="quiz-question">
           <div className="question-top">
             <div className="timer">
               <span>32</span>
@@ -73,13 +65,12 @@ function QuestionPage({
             </div>
           </div>
 
-          <div className="kahoot-answers">
+          <div className="quiz-answers">
             {answers.map((answer) => (
               <AnswerChoice
                 key={answer.id}
-                shape={answer.shape}
+                id={answer.id}
                 text={answer.text}
-                colorClass={answer.colorClass}
                 onClick={() => handleAnswer(answer.id)}
               />
             ))}

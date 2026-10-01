@@ -1,37 +1,40 @@
-import os
+from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPAuthorizationCredentials
 
-from app.accounts import get_or_create_account
-from app.auth import bearer, current_user
-from app.db import get_db
-
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+from app.api.router import api_router
+from app.config import Settings, get_settings
+from app.database import Database
+from app.errors import register_error_handlers
 
 
-@app.get("/")
-def root():
-    return {"message": "Quiz Platform API"}
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """Application factory used by Uvicorn and isolated tests."""
+    settings = settings or get_settings()
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        application.state.database = Database(settings.sqlalchemy_url)
+        yield
+        application.state.database.dispose()
+
+    application = FastAPI(
+        title=settings.app_name,
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+    application.state.settings = settings
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    register_error_handlers(application)
+    application.include_router(api_router)
+    return application
 
 
-def current_account(
-    claims: dict = Depends(current_user),
-    creds: HTTPAuthorizationCredentials = Depends(bearer),
-    db=Depends(get_db),
-) -> dict:
-    return get_or_create_account(db, claims["sub"], creds.credentials)
-
-
-@app.get("/me")
-def me(account: dict = Depends(current_account)):
-    return account
-
+app = create_app()

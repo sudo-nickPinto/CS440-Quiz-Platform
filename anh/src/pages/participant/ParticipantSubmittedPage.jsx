@@ -1,33 +1,6 @@
-function ParticipantSubmittedPage({ selectedAnswer }) {
-  const answers = {
-    A: {
-      shape: "▲",
-      color: "answer-red",
-    },
-    B: {
-      shape: "◆",
-      color: "answer-blue",
-    },
-    C: {
-      shape: "●",
-      color: "answer-yellow",
-    },
-    D: {
-      shape: "■",
-      color: "answer-green",
-    },
-  };
-
-  const selected = answers[selectedAnswer] || answers.B;
-
+function ParticipantSubmittedPage() {
   return (
     <div className="participant-page submitted-page">
-      <div
-        className={`submitted-shape ${selected.color}`}
-      >
-        {selected.shape}
-      </div>
-
       <h1>Answer submitted!</h1>
 
       <p>
