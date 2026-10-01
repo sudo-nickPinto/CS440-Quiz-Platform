@@ -77,6 +77,12 @@ The database readiness endpoint is available at:
 http://127.0.0.1:8000/health
 ```
 
+## Authentication
+
+Login uses Auth0 (email/password and Google). The frontend needs `frontend/.env` (copy `frontend/.env.example`); the backend needs `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` in `backend/.env`. On first login the backend creates the user's row in the `account` table. See [docs/AUTH.md](docs/AUTH.md) for diagrams, local setup with a Docker MySQL, error codes and how to protect a new route.
+
+Note: `frontend/.env.example` points at the backend on port `8001`, so run `uvicorn app.main:app --reload --port 8001`.
+
 ## Development Workflow
 
 Before starting a new feature, update your local `main` branch:

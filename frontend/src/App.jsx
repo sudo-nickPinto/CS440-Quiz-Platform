@@ -18,7 +18,8 @@ export default function App() {
   const heading = useRef(null)
   useEffect(() => { heading.current?.focus() }, [isAuthenticated, isLoading])
 
-  // Tokens are kept in memory only, so a refresh forgets them. If this browser
+  // Outside dev, tokens are kept in memory only (see main.jsx), so a refresh
+  // forgets them. If this browser
   // was signed in, ask Auth0 (prompt=none) whether its own session cookie is
   // still valid; if so we come straight back logged in.
   useEffect(() => {
