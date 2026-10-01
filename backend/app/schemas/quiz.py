@@ -65,3 +65,14 @@ class QuizResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     current_version: QuizVersionResponse
+
+
+class QuizListItem(BaseModel):
+    quiz_id: int
+    author_id: int
+    status: QuizStatus
+    visibility: QuizVisibility
+    title: str
+    version_number: int
+    created_at: datetime
+    updated_at: datetime
