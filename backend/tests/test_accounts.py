@@ -22,7 +22,8 @@ CREATE TABLE account (
     auth0_sub    VARCHAR(255) NOT NULL UNIQUE,
     email        VARCHAR(320) NOT NULL UNIQUE,
     display_name VARCHAR(100) NOT NULL,
-    account_type VARCHAR(20) NULL
+    account_type VARCHAR(20) NULL,
+    is_active    BOOLEAN NOT NULL DEFAULT 1
 );
 CREATE TABLE account_identity (
     auth0_sub  VARCHAR(255) NOT NULL PRIMARY KEY,
