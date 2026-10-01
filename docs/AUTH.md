@@ -245,9 +245,18 @@ Login, token verification, account creation and linking of login methods all wor
 9. **Professor and administrator status.** `account_type` is NULL for everyone and there is no chooser. Options from the ER diagram notes: manual assignment by the team, an approval queue, or an allow-list by email domain. Until this is decided, every route should treat all accounts the same.
 10. **Merging login methods you do not own the email for.** Linking only happens for verified emails. If someone changes their email in Auth0 later, the old `account.email` is not updated. Decide whether that matters before launch.
 
+**Quiz backend: Anh's stacked PRs (#13, #14, #16 to #20)**
+
+Anh's quiz CRUD work was reviewed against this auth code. The code is good, but it cannot merge to `main` yet. It is a stack of 7 PRs, each targeting the previous branch: #13 (ORM models, targets `main`), #14 (create and retrieve), #16 (list and archive), #17 (metadata updates), #18 (question CRUD and reorder), #19 (publish), #20 (immutable versioning). None has a review or CI check. At the top of the stack 28 tests pass and 20 are skipped; the skipped ones are the MySQL integration tests, which have not been run against a real database.
+
+13. **Rebase #13 onto `main`.** It conflicts with the auth work in `backend/app/auth.py` and `backend/.env.example`, because Anh branched before the Auth0 PRs (#21, #22) landed.
+14. **Replace the `get_current_account` stub.** In Anh's `app/auth.py` it always raises 501 `authentication_not_configured` ("implemented by Task 13"), and every quiz route depends on it through `active_account`. Make it a thin wrapper over `current_account` from `routes/me.py` (section 10) that returns Anh's `CurrentAccount(account_id, account_type, is_active)`. Keep the stub's name so Anh's tests that override it keep working.
+15. **Reconcile the account code.** Anh added an ORM `Account` model (`models/account.py`) that maps `account.auth0_sub`. Here `accounts.py` uses raw SQL and looks accounts up through `account_identity` (migration `0004`), not `account.auth0_sub` (section 9). Pick one approach and make sure the ORM model does not treat `auth0_sub` as the lookup key.
+16. **Run the MySQL integration tests** (the 20 skipped ones) against the Docker database from section 7 with all four migrations applied. Then retarget #14 to #20 to `main` one at a time and merge them in order, bottom of the stack first. Merging a PR deletes its branch, which would otherwise leave the next PR without a base.
+
 **Cleanup**
-11. Render the mermaid diagrams in this file once on GitHub to confirm they display.
-12. The root README says the backend runs on port 8000, but the frontend `.env.example` expects 8001.
+17. Render the mermaid diagrams in this file once on GitHub to confirm they display.
+18. The root README says the backend runs on port 8000, but the frontend `.env.example` expects 8001.
 
 ## 12. Done so far
 
