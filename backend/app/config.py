@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     app_env: str = "development"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
+    # Auth0 tenant and API identifier; must match the frontend's VITE_AUTH0_* values.
+    auth0_domain: str = ""
+    auth0_audience: str = ""
+
     # DATABASE_URL can override the individual MySQL fields (useful for tests/CI).
     database_url: str | None = None
     db_host: str = ""

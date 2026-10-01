@@ -1,19 +1,19 @@
-import { useState } from 'react'
-import { DEMO_ACCOUNT } from '../demo'
+import { useAuth0 } from '@auth0/auth0-react'
 
-export default function LoginPage({ onLogin, headingRef }) {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
-  function handleSubmit(event) {
-    event.preventDefault()
-    if (username.trim() !== DEMO_ACCOUNT.username || password !== DEMO_ACCOUNT.password) {
-      setError('Unable to log in. Check your username and password and try again.')
-      return
-    }
-    onLogin({ name: 'Demo User', username: DEMO_ACCOUNT.username })
-  }
+export default function LoginPage({ headingRef }) {
+  const { loginWithRedirect: redirect } = useAuth0()
+  // replace() instead of the default assign(), so our page isn't left in the
+  // history stack and Back doesn't bounce into Auth0's one-time pages.
+  const loginWithRedirect = (options = {}) =>
+    redirect({ ...options, openUrl: (url) => window.location.replace(url) })
+
+  // Email + password: Auth0's hosted login page.
+  const logIn = () => loginWithRedirect()
+  // Same hosted page, opened on the sign-up screen.
+  const signUp = () => loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } })
+  // Skips Auth0's page and goes straight to Google.
+  const google = () => loginWithRedirect({ authorizationParams: { connection: 'google-oauth2' } })
+
   return <div className="login-layout">
     <section className="intro-panel" aria-labelledby="intro-title">
       <p className="eyebrow">GETTYSBURG COLLEGE · CS 440</p>
@@ -24,28 +24,9 @@ export default function LoginPage({ onLogin, headingRef }) {
     <section className="login-form-panel" aria-labelledby="login-title">
       <h1 id="login-title" ref={headingRef} tabIndex={-1}>Ready to play?</h1>
       <p className="muted">Log in to join a quiz or host your own.</p>
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="username">Username</label>
-        <input id="username" name="username" autoComplete="username" required maxLength={80}
-          value={username} onChange={(e) => { setUsername(e.target.value); setError('') }}
-          aria-describedby={error ? 'login-error' : undefined} placeholder="Enter your username" />
-        <label htmlFor="password">Password</label>
-        <div className="password-field">
-          <input id="password" name="password" type={showPassword ? 'text' : 'password'}
-            autoComplete="current-password" required value={password}
-            onChange={(e) => { setPassword(e.target.value); setError('') }}
-            aria-describedby={error ? 'login-error' : undefined} placeholder="Enter your password" />
-          <button type="button" className="text-button" aria-controls="password" aria-pressed={showPassword}
-            onClick={() => setShowPassword(!showPassword)}>{showPassword ? 'Hide' : 'Show'}</button>
-        </div>
-        {error && <p id="login-error" className="error" role="alert">{error}</p>}
-        <button className="primary full-width" type="submit">Log in <span aria-hidden="true">→</span></button>
-      </form>
-      <aside className="demo-note">
-        <strong>Take the mockup for a spin</strong>
-        <p>Username: <code>demo</code> · Password: <code>quiz440</code></p>
-        <p>Use these fictional credentials only. This demo does not create accounts or authenticate with a server.</p>
-      </aside>
+      <button className="primary full-width" type="button" onClick={logIn}>Log in <span aria-hidden="true">→</span></button>
+      <button className="secondary full-width" type="button" onClick={signUp}>Create account</button>
+      <button className="secondary full-width" type="button" onClick={google}>Continue with Google</button>
     </section>
   </div>
 }
