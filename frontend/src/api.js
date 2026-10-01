@@ -1,10 +1,17 @@
 // Calls the FastAPI backend with the user's Auth0 access token attached.
 // getToken is getAccessTokenSilently from useAuth0().
-export async function apiFetch(path, getToken) {
+export async function apiFetch(path, getToken, options = {}) {
   const token = await getToken()
   const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    },
   })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(typeof body.detail === 'string' ? body.detail : `${res.status} ${res.statusText}`)
+  }
   return res.json()
 }

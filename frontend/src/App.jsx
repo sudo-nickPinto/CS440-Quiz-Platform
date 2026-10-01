@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
 import LoginPage from './components/LoginPage'
 import LobbyPage from './components/LobbyPage'
-import BackendCheck from './components/BackendCheck'
+import AccountGate from './components/AccountGate'
 import './App.css'
 
 // Non-secret markers (no tokens). WAS_SIGNED_IN lives across refreshes; TRIED
@@ -55,10 +55,9 @@ export default function App() {
       <button className="primary" onClick={() => loginWithRedirect()}>Try again</button>
     </div>
   } else if (user) {
-    content = <>
-      <BackendCheck />
+    content = <AccountGate>
       <LobbyPage user={user} headingRef={heading} />
-    </>
+    </AccountGate>
   } else {
     content = <LoginPage headingRef={heading} />
   }
