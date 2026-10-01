@@ -43,7 +43,7 @@ flowchart LR
     CA --> G["get_or_create_account<br/>accounts.py"]
     CU -->|claims.sub| G
     DB --> G
-    G -->|SQL via SQLAlchemy text| T[("account table")]
+    G -->|SQL via SQLAlchemy text| T[("account and<br/>account_identity tables")]
     G -.->|first login only| UI["Auth0 /userinfo"]
     CU -.->|APIError 401/500| E["errors.py handler"]
     G -.->|APIError 403/409/502| E
@@ -92,7 +92,7 @@ flowchart TB
         DBL["database.py: Database, get_db (SQLAlchemy Session)"]
         ER["errors.py: APIError + handlers"]
     end
-    DBS[("MySQL: account")]
+    DBS[("MySQL: account, account_identity")]
 
     M --> RT --> H
     RT --> ME
@@ -225,7 +225,34 @@ Then `include_router` it in `app/api/router.py`. For database access add `db: Se
 
 Use `current_user` instead if you only need the token's claims and no database row.
 
-## 11. Open decisions
+## 11. Next steps
 
-- **`account_type` is NULL for everyone.** There is no student/professor chooser. Everyone is a host/participant in the lobby. How professor and administrator status get assigned is undecided.
-- **Temporary scaffolding:** none remains in the code. The `/me` check is now `AccountGate`.
+Login, token verification, account creation and linking of login methods all work locally. What is left, in the order we should do it:
+
+**Before deploying to Reclaim**
+1. **Run the migrations on the hosted MySQL**, all four (`0001` to `0004`). `0004` must be applied before this backend version runs, because `/me` reads `account_identity`. The shared school DB needs `0004` too if anyone points at it.
+2. **Set the backend environment** on the host: `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, `DATABASE_URL` (or the `DB_*` values), and `CORS_ORIGINS` set to the deployed frontend URL.
+3. **Add the deployed URL in the Auth0 dashboard** (Applications, our SPA) to Allowed Callback URLs, Allowed Logout URLs and Allowed Web Origins, and set the frontend `VITE_*` variables to the hosted API URL.
+4. **Check the consent screen is gone.** It should not appear on a real domain (section 9). If it does, check "Allow Skipping User Consent" on the API.
+
+**Auth0 tenant settings (dashboard only, nothing in the repo)**
+5. **Require email verification for email/password signups**, and test that an unverified signup gets 403 `email_not_verified`. Account linking trusts `email_verified`, so this is a security requirement, not a nicety.
+6. **Set up a real email sender** (Authentication, then Email Provider). Auth0's built-in sender is rate-limited and meant for development. Verification and password-reset emails both go through it.
+7. **Decide how often people must log in** (the "once a month" idea): the SSO session lifetime and the application's refresh-token lifetime in the Auth0 dashboard. Email verification itself only happens once and never repeats.
+8. **Test "Forgot password?"** once end to end with a real inbox. It is provided by Auth0 and has no code in this repo.
+
+**Product decisions still open**
+9. **Professor and administrator status.** `account_type` is NULL for everyone and there is no chooser. Options from the ER diagram notes: manual assignment by the team, an approval queue, or an allow-list by email domain. Until this is decided, every route should treat all accounts the same.
+10. **Merging login methods you do not own the email for.** Linking only happens for verified emails. If someone changes their email in Auth0 later, the old `account.email` is not updated. Decide whether that matters before launch.
+
+**Cleanup**
+11. Render the mermaid diagrams in this file once on GitHub to confirm they display.
+12. The root README says the backend runs on port 8000, but the frontend `.env.example` expects 8001.
+
+## 12. Done so far
+
+- Auth0 login with Google and email/password, token verified in FastAPI (`auth.py`).
+- First login creates an `account` row; later logins reuse it (`accounts.py`).
+- A second login method with the same verified email links to the same account through `account_identity` (migration `0004`). There is no longer a 409.
+- Student/professor chooser removed; everyone is a host/participant for now.
+- Tests: 17 backend tests, including linking and the unverified-email guard.
