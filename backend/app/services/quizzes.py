@@ -9,6 +9,7 @@ from app.schemas.quiz import (
     QuizCreate,
     QuizListItem,
     QuizResponse,
+    QuizUpdate,
     QuizVersionResponse,
 )
 
@@ -25,10 +26,14 @@ def _quiz_query(quiz_id: int):
     )
 
 
-def _to_response(quiz: Quiz) -> QuizResponse:
+def _current_version(quiz: Quiz) -> QuizVersion:
     if not quiz.versions:
         raise APIError(500, "invalid_quiz", "The quiz has no versions.")
-    current_version = max(quiz.versions, key=lambda version: version.version_number)
+    return max(quiz.versions, key=lambda version: version.version_number)
+
+
+def _to_response(quiz: Quiz) -> QuizResponse:
+    current_version = _current_version(quiz)
     return QuizResponse(
         quiz_id=quiz.quiz_id,
         author_id=quiz.author_id,
@@ -41,9 +46,7 @@ def _to_response(quiz: Quiz) -> QuizResponse:
 
 
 def _to_list_item(quiz: Quiz) -> QuizListItem:
-    if not quiz.versions:
-        raise APIError(500, "invalid_quiz", "The quiz has no versions.")
-    current_version = max(quiz.versions, key=lambda version: version.version_number)
+    current_version = _current_version(quiz)
     return QuizListItem(
         quiz_id=quiz.quiz_id,
         author_id=quiz.author_id,
@@ -127,6 +130,44 @@ def archive_quiz(
     except SQLAlchemyError as exc:
         db.rollback()
         raise APIError(500, "quiz_archive_failed", "Could not archive the quiz.") from exc
+
+    db.expire_all()
+    return _to_response(_load_quiz(db, quiz_id))
+
+
+def update_quiz(
+    db: Session,
+    account: CurrentAccount,
+    quiz_id: int,
+    payload: QuizUpdate,
+) -> QuizResponse:
+    quiz = _load_quiz(db, quiz_id)
+    if quiz.author_id != account.account_id:
+        raise APIError(403, "quiz_access_denied", "You cannot edit this quiz.")
+    if quiz.status == QuizStatus.ARCHIVED:
+        raise APIError(409, "quiz_archived", "Archived quizzes cannot be edited.")
+
+    current_version = _current_version(quiz)
+    if current_version.published_at is not None:
+        raise APIError(
+            409,
+            "published_version_immutable",
+            "Published quiz versions cannot be edited.",
+        )
+
+    supplied_fields = payload.model_fields_set
+    if "title" in supplied_fields:
+        current_version.title = payload.title
+    if "description" in supplied_fields:
+        current_version.description = payload.description
+    if "visibility" in supplied_fields:
+        quiz.visibility = payload.visibility
+
+    try:
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(500, "quiz_update_failed", "Could not update the quiz.") from exc
 
     db.expire_all()
     return _to_response(_load_quiz(db, quiz_id))
