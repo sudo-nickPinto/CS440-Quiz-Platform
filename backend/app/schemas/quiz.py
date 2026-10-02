@@ -52,6 +52,54 @@ class QuizUpdate(StrictSchema):
         return self
 
 
+class AnswerChoiceWrite(StrictSchema):
+    choice_text: str = Field(min_length=1, max_length=500)
+    is_correct: bool = False
+
+    @field_validator("choice_text")
+    @classmethod
+    def choice_text_must_not_be_blank(cls, value: str) -> str:
+        choice_text = value.strip()
+        if not choice_text:
+            raise ValueError("Choice text must not be blank.")
+        return choice_text
+
+
+class QuestionWrite(StrictSchema):
+    question_text: str
+    explanation: str | None = None
+    time_limit_seconds: int = Field(default=20, gt=0, le=65_535)
+    base_points: int = Field(default=1000, gt=0, le=4_294_967_295)
+    choices: list[AnswerChoiceWrite] = Field(min_length=2, max_length=255)
+
+    @field_validator("question_text")
+    @classmethod
+    def question_text_must_not_be_blank(cls, value: str) -> str:
+        question_text = value.strip()
+        if not question_text:
+            raise ValueError("Question text must not be blank.")
+        return question_text
+
+    @model_validator(mode="after")
+    def at_least_one_choice_must_be_correct(self) -> Self:
+        if not any(choice.is_correct for choice in self.choices):
+            raise ValueError("At least one answer choice must be correct.")
+        return self
+
+
+class QuestionOrderUpdate(StrictSchema):
+    question_ids: list[int] = Field(min_length=1, max_length=65_535)
+
+    @field_validator("question_ids")
+    @classmethod
+    def question_ids_must_be_unique(cls, value: list[int]) -> list[int]:
+        if any(question_id <= 0 for question_id in value):
+            raise ValueError("Question IDs must be positive.")
+        if len(value) != len(set(value)):
+            raise ValueError("Question IDs must not contain duplicates.")
+        return value
+
+
 class AnswerChoiceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
