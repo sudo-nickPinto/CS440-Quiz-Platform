@@ -26,8 +26,8 @@ from app.schemas.quiz import (
 )
 
 
-def _quiz_query(quiz_id: int):
-    return (
+def _quiz_query(quiz_id: int, *, for_update: bool = False):
+    statement = (
         select(Quiz)
         .where(Quiz.quiz_id == quiz_id)
         .options(
@@ -36,6 +36,7 @@ def _quiz_query(quiz_id: int):
             .selectinload(Question.choices)
         )
     )
+    return statement.with_for_update() if for_update else statement
 
 
 def _current_version(quiz: Quiz) -> QuizVersion:
@@ -71,30 +72,73 @@ def _to_list_item(quiz: Quiz) -> QuizListItem:
     )
 
 
-def _load_quiz(db: Session, quiz_id: int) -> Quiz:
-    quiz = db.scalar(_quiz_query(quiz_id))
+def _load_quiz(db: Session, quiz_id: int, *, for_update: bool = False) -> Quiz:
+    quiz = db.scalar(_quiz_query(quiz_id, for_update=for_update))
     if quiz is None:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
     return quiz
 
 
-def _editable_version(
+def _edit_source(
     db: Session, account: CurrentAccount, quiz_id: int
 ) -> tuple[Quiz, QuizVersion]:
-    quiz = _load_quiz(db, quiz_id)
+    quiz = _load_quiz(db, quiz_id, for_update=True)
     if quiz.author_id != account.account_id:
         raise APIError(403, "quiz_access_denied", "You cannot edit this quiz.")
     if quiz.status == QuizStatus.ARCHIVED:
         raise APIError(409, "quiz_archived", "Archived quizzes cannot be edited.")
 
-    version = _current_version(quiz)
-    if version.published_at is not None:
+    return quiz, _current_version(quiz)
+
+
+def _ensure_draft(
+    db: Session, quiz: Quiz, source_version: QuizVersion
+) -> QuizVersion:
+    if source_version.published_at is None:
+        return source_version
+
+    draft = QuizVersion(
+        version_number=source_version.version_number + 1,
+        title=source_version.title,
+        description=source_version.description,
+        questions=[
+            Question(
+                question_order=question.question_order,
+                question_type=question.question_type,
+                question_text=question.question_text,
+                explanation=question.explanation,
+                time_limit_seconds=question.time_limit_seconds,
+                base_points=question.base_points,
+                choices=[
+                    AnswerChoice(
+                        choice_order=choice.choice_order,
+                        choice_text=choice.choice_text,
+                        is_correct=choice.is_correct,
+                    )
+                    for choice in question.choices
+                ],
+            )
+            for question in source_version.questions
+        ],
+    )
+    quiz.versions.append(draft)
+    try:
+        db.flush()
+    except SQLAlchemyError as exc:
+        db.rollback()
         raise APIError(
             409,
-            "published_version_immutable",
-            "Published quiz versions cannot be edited.",
-        )
-    return quiz, version
+            "quiz_version_conflict",
+            "A new quiz version could not be created. Please retry.",
+        ) from exc
+    return draft
+
+
+def _editable_version(
+    db: Session, account: CurrentAccount, quiz_id: int
+) -> tuple[Quiz, QuizVersion, QuizVersion]:
+    quiz, source_version = _edit_source(db, account, quiz_id)
+    return quiz, _ensure_draft(db, quiz, source_version), source_version
 
 
 def publication_errors(version: QuizVersion) -> list[str]:
@@ -143,6 +187,21 @@ def _question_in_version(version: QuizVersion, question_id: int) -> Question:
     if question is None:
         raise APIError(404, "question_not_found", "Question not found in this quiz.")
     return question
+
+
+def _editable_question(
+    editable_version: QuizVersion,
+    source_version: QuizVersion,
+    question_id: int,
+) -> Question:
+    source_question = _question_in_version(source_version, question_id)
+    if editable_version is source_version:
+        return source_question
+    return next(
+        question
+        for question in editable_version.questions
+        if question.question_order == source_question.question_order
+    )
 
 
 def _new_choices(payload: QuestionWrite) -> list[AnswerChoice]:
@@ -245,9 +304,14 @@ def update_quiz(
     quiz_id: int,
     payload: QuizUpdate,
 ) -> QuizResponse:
-    quiz, current_version = _editable_version(db, account, quiz_id)
-
     supplied_fields = payload.model_fields_set
+    quiz, source_version = _edit_source(db, account, quiz_id)
+    versioned_fields = {"title", "description"}
+    current_version = (
+        _ensure_draft(db, quiz, source_version)
+        if supplied_fields & versioned_fields
+        else source_version
+    )
     if "title" in supplied_fields:
         current_version.title = payload.title
     if "description" in supplied_fields:
@@ -271,7 +335,7 @@ def create_question(
     quiz_id: int,
     payload: QuestionWrite,
 ) -> QuestionResponse:
-    _, version = _editable_version(db, account, quiz_id)
+    _, version, _ = _editable_version(db, account, quiz_id)
     next_order = max(
         (question.question_order for question in version.questions), default=0
     ) + 1
@@ -308,13 +372,20 @@ def update_question(
     question_id: int,
     payload: QuestionWrite,
 ) -> QuestionResponse:
-    _, version = _editable_version(db, account, quiz_id)
-    question = _question_in_version(version, question_id)
+    quiz, source_version = _edit_source(db, account, quiz_id)
+    source_question = _question_in_version(source_version, question_id)
+    version = _ensure_draft(db, quiz, source_version)
+    question = (
+        source_question
+        if version is source_version
+        else _editable_question(version, source_version, question_id)
+    )
     question.question_text = payload.question_text
     question.explanation = payload.explanation
     question.time_limit_seconds = payload.time_limit_seconds
     question.base_points = payload.base_points
     question.choices = _new_choices(payload)
+    updated_question_id = question.question_id
 
     try:
         db.commit()
@@ -327,7 +398,7 @@ def update_question(
     db.expire_all()
     refreshed_version = _current_version(_load_quiz(db, quiz_id))
     return QuestionResponse.model_validate(
-        _question_in_version(refreshed_version, question_id)
+        _question_in_version(refreshed_version, updated_question_id)
     )
 
 
@@ -337,8 +408,14 @@ def delete_question(
     quiz_id: int,
     question_id: int,
 ) -> None:
-    _, version = _editable_version(db, account, quiz_id)
-    question = _question_in_version(version, question_id)
+    quiz, source_version = _edit_source(db, account, quiz_id)
+    source_question = _question_in_version(source_version, question_id)
+    version = _ensure_draft(db, quiz, source_version)
+    question = (
+        source_question
+        if version is source_version
+        else _editable_question(version, source_version, question_id)
+    )
     version.questions.remove(question)
 
     try:
@@ -359,21 +436,35 @@ def reorder_questions(
     quiz_id: int,
     payload: QuestionOrderUpdate,
 ) -> list[QuestionResponse]:
-    _, version = _editable_version(db, account, quiz_id)
-    questions_by_id = {
-        question.question_id: question for question in version.questions
+    quiz, source_version = _edit_source(db, account, quiz_id)
+    source_questions_by_id = {
+        question.question_id: question for question in source_version.questions
     }
-    if set(payload.question_ids) != set(questions_by_id):
+    if set(payload.question_ids) != set(source_questions_by_id):
         raise APIError(
             422,
             "invalid_question_order",
             "Question order must include every question exactly once.",
         )
 
+    version = _ensure_draft(db, quiz, source_version)
+
     try:
-        ordered_questions = [
-            questions_by_id[question_id] for question_id in payload.question_ids
-        ]
+        if version is source_version:
+            ordered_questions = [
+                source_questions_by_id[question_id]
+                for question_id in payload.question_ids
+            ]
+        else:
+            draft_by_original_order = {
+                question.question_order: question for question in version.questions
+            }
+            ordered_questions = [
+                draft_by_original_order[
+                    source_questions_by_id[question_id].question_order
+                ]
+                for question_id in payload.question_ids
+            ]
         _apply_question_order(db, ordered_questions)
         db.commit()
     except SQLAlchemyError as exc:
