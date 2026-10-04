@@ -1,0 +1,405 @@
+/*
+ * Apply the surrounding page treatment only while LoginPage is present.
+ * This overrides the existing purple background, header, and footer.
+ */
+body:has(.login-page) {
+  background: var(--sand);
+  color: var(--ink);
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-weight: 500;
+}
+
+body:has(.login-page)::before,
+body:has(.login-page)::after {
+  content: none;
+}
+
+body:has(.login-page) #main {
+  display: grid;
+  place-items: center;
+  padding: 36px 28px 48px;
+}
+
+body:has(.login-page) .site-header {
+  padding: 22px 28px;
+  background: var(--sand);
+  color: var(--ink);
+  border: 0;
+}
+
+body:has(.login-page) .brand {
+  padding: 9px 14px;
+  border: var(--b);
+  background: var(--navy);
+  color: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  transform: rotate(-1.5deg);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: -0.5px;
+}
+
+/* The existing text wordmark is enough for this treatment. */
+body:has(.login-page) .brand-mark {
+  display: none;
+}
+
+body:has(.login-page) .brand-light {
+  font-weight: 400;
+}
+
+body:has(.login-page) footer {
+  padding: 20px 28px;
+  color: var(--gray);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+body:has(.login-page) .skip-link {
+  background: var(--paper);
+  color: var(--navy);
+  border: var(--b);
+}
+
+body:has(.login-page) :is(a, button):focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 4px;
+}
+
+/* Main two-column layout, based on the anindo mockup. */
+.login-page {
+  width: min(100%, 1040px);
+  min-width: 0;
+}
+
+.login-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.login-intro,
+.login-card {
+  min-width: 0;
+}
+
+/* Introductory panel. */
+.login-intro {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(28px, 4vw, 52px);
+  border-right: var(--b);
+  background: var(--sky-soft);
+}
+
+.login-page .login-eyebrow {
+  margin: 0 0 20px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.login-intro h2 {
+  margin: 0 0 28px;
+  color: var(--ink);
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(36px, 4.2vw, 56px);
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -1.5px;
+}
+
+.login-highlight {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 0 10px 4px;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--navy);
+}
+
+.login-lede {
+  max-width: 34ch;
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.65;
+}
+
+.login-detail {
+  margin: 28px 0 0;
+  padding-top: 22px;
+  border-top: var(--b-thin);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.login-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 26px;
+}
+
+.login-tags span {
+  padding: 6px 9px;
+  border: var(--b-thin);
+  background: var(--paper);
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+
+/* Sign-in panel. */
+.login-card {
+  background: var(--paper);
+}
+
+.login-card-top {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 10px 18px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.login-card-top span:last-child {
+  color: var(--apricot);
+}
+
+.login-card-body {
+  padding: clamp(24px, 3.5vw, 42px);
+}
+
+.login-card-body .login-eyebrow {
+  margin-bottom: 12px;
+}
+
+.login-card h1 {
+  margin: 0 0 14px;
+  color: var(--ink);
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(30px, 3.2vw, 40px);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -1px;
+}
+
+.login-card h1 span {
+  color: var(--orange-deep);
+}
+
+.login-description {
+  margin: 0;
+  color: var(--gray);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.login-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 30px;
+}
+
+/* Buttons. */
+.login-page .login-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 13px 16px;
+  border: var(--b);
+  border-radius: 0;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+
+.login-page .login-button-primary {
+  justify-content: space-between;
+  background: var(--orange-deep);
+  color: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.login-page .login-button-primary:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.login-page .login-button-primary:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+.login-page .login-button-secondary {
+  background: var(--paper);
+  color: var(--navy);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.login-page .login-button-secondary:hover:not(:disabled) {
+  background: var(--sky-soft);
+}
+
+.login-page .login-button-secondary:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+.login-page button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+/* Alternative sign-in and registration. */
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--gray);
+  font-size: 13px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  border-top: var(--b-thin);
+}
+
+.login-signup {
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+}
+
+.login-page .login-text-button {
+  min-height: 44px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--navy);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.login-page .login-text-button:hover:not(:disabled) {
+  text-decoration-color: var(--orange-deep);
+}
+
+.login-status {
+  margin: 14px 0 0;
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.login-status:empty {
+  margin: 0;
+}
+
+.login-error {
+  margin: 16px 0 0;
+  padding: 12px;
+  border: var(--b-thin);
+  background: var(--apricot);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.login-note {
+  margin: 24px 0 0;
+  padding-top: 18px;
+  border-top: var(--b-thin);
+  color: var(--gray);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Stack the panels on tablets and phones. */
+@media (max-width: 800px) {
+  .login-page {
+    max-width: 580px;
+  }
+
+  .login-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .login-intro {
+    border-right: 0;
+    border-bottom: var(--b);
+  }
+
+  .login-intro h2 {
+    font-size: clamp(36px, 7vw, 48px);
+  }
+
+  .login-lede {
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  body:has(.login-page) #main {
+    padding: 16px 16px 32px;
+  }
+
+  body:has(.login-page) .site-header {
+    padding: 18px 16px;
+  }
+
+  body:has(.login-page) .brand {
+    font-size: 17px;
+  }
+
+  body:has(.login-page) footer {
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 18px 16px;
+    text-align: center;
+  }
+
+  .login-intro,
+  .login-card-body {
+    padding: 24px;
+  }
+
+  .login-card-top {
+    padding: 10px 14px;
+  }
+
+  .login-tags {
+    gap: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-page button {
+    transition: none;
+  }
+}

@@ -1,0 +1,16 @@
+:root {
+  --paper: #fcf9f4;
+  --sand: #ecdfd0;
+  --sky-soft: #c2e6f8;
+  --apricot: #f6d2b6;
+  --navy: #043371;
+  --orange-deep: #bf4c0c;
+  --orange: #cc4e00;
+  --ink: #222222;
+  --gray: #666666;
+  --sky: #8fdbff;
+
+  --b: 3px solid var(--ink);
+  --b-thin: 2px solid var(--ink);
+  --shadow: 6px 6px 0 var(--ink);
+}
