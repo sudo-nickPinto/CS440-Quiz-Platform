@@ -5,25 +5,13 @@ from app.auth import CurrentAccount, get_current_account
 from app.database import get_db
 from app.errors import APIError
 from app.models import QuizStatus
-from app.schemas.quiz import (
-    QuestionOrderUpdate,
-    QuestionResponse,
-    QuestionWrite,
-    QuizCreate,
-    QuizListItem,
-    QuizResponse,
-    QuizUpdate,
-)
+from app.schemas.quiz import QuizCreate, QuizListItem, QuizResponse, QuizUpdate
 from app.services.quizzes import (
     archive_quiz,
-    create_question,
     create_quiz,
-    delete_question,
     get_quiz,
     list_quizzes,
-    reorder_questions,
     update_quiz,
-    update_question,
 )
 
 router = APIRouter(prefix="/quizzes", tags=["quizzes"])
@@ -81,54 +69,3 @@ def archive_quiz_route(
     account: CurrentAccount = Depends(active_account),
 ) -> QuizResponse:
     return archive_quiz(db, account, quiz_id)
-
-
-@router.post(
-    "/{quiz_id}/questions",
-    response_model=QuestionResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_question_route(
-    quiz_id: int,
-    payload: QuestionWrite,
-    db: Session = Depends(get_db),
-    account: CurrentAccount = Depends(active_account),
-) -> QuestionResponse:
-    return create_question(db, account, quiz_id, payload)
-
-
-@router.put(
-    "/{quiz_id}/questions/{question_id}", response_model=QuestionResponse
-)
-def update_question_route(
-    quiz_id: int,
-    question_id: int,
-    payload: QuestionWrite,
-    db: Session = Depends(get_db),
-    account: CurrentAccount = Depends(active_account),
-) -> QuestionResponse:
-    return update_question(db, account, quiz_id, question_id, payload)
-
-
-@router.delete(
-    "/{quiz_id}/questions/{question_id}", status_code=status.HTTP_204_NO_CONTENT
-)
-def delete_question_route(
-    quiz_id: int,
-    question_id: int,
-    db: Session = Depends(get_db),
-    account: CurrentAccount = Depends(active_account),
-) -> None:
-    delete_question(db, account, quiz_id, question_id)
-
-
-@router.patch(
-    "/{quiz_id}/questions/order", response_model=list[QuestionResponse]
-)
-def reorder_questions_route(
-    quiz_id: int,
-    payload: QuestionOrderUpdate,
-    db: Session = Depends(get_db),
-    account: CurrentAccount = Depends(active_account),
-) -> list[QuestionResponse]:
-    return reorder_questions(db, account, quiz_id, payload)
