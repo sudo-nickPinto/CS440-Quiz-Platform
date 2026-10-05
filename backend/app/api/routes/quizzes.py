@@ -5,14 +5,8 @@ from app.auth import CurrentAccount, get_current_account
 from app.database import get_db
 from app.errors import APIError
 from app.models import QuizStatus
-from app.schemas.quiz import QuizCreate, QuizListItem, QuizResponse, QuizUpdate
-from app.services.quizzes import (
-    archive_quiz,
-    create_quiz,
-    get_quiz,
-    list_quizzes,
-    update_quiz,
-)
+from app.schemas.quiz import QuizCreate, QuizListItem, QuizResponse
+from app.services.quizzes import archive_quiz, create_quiz, get_quiz, list_quizzes
 
 router = APIRouter(prefix="/quizzes", tags=["quizzes"])
 
@@ -50,16 +44,6 @@ def get_quiz_route(
     account: CurrentAccount = Depends(active_account),
 ) -> QuizResponse:
     return get_quiz(db, account, quiz_id)
-
-
-@router.patch("/{quiz_id}", response_model=QuizResponse)
-def update_quiz_route(
-    quiz_id: int,
-    payload: QuizUpdate,
-    db: Session = Depends(get_db),
-    account: CurrentAccount = Depends(active_account),
-) -> QuizResponse:
-    return update_quiz(db, account, quiz_id, payload)
 
 
 @router.patch("/{quiz_id}/archive", response_model=QuizResponse)
