@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select, update
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models import QuizVersion
@@ -48,7 +48,7 @@ def test_archived_quiz_cannot_be_updated(mysql_client: TestClient) -> None:
     assert response.json()["error"]["code"] == "quiz_archived"
 
 
-def test_editing_published_version_creates_new_draft(
+def test_published_version_cannot_be_modified_directly(
     mysql_client: TestClient, mysql_session: Session
 ) -> None:
     quiz = create_quiz(mysql_client)
@@ -64,17 +64,5 @@ def test_editing_published_version_creates_new_draft(
         f"/quizzes/{quiz['quiz_id']}", json={"title": "New title"}
     )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["current_version"]["version_number"] == 2
-    assert body["current_version"]["published_at"] is None
-    assert body["current_version"]["title"] == "New title"
-
-    versions = mysql_session.scalars(
-        select(QuizVersion)
-        .where(QuizVersion.quiz_id == quiz["quiz_id"])
-        .order_by(QuizVersion.version_number)
-    ).all()
-    assert len(versions) == 2
-    assert versions[0].title == "Original"
-    assert versions[0].published_at is not None
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "published_version_immutable"

@@ -21,9 +21,7 @@ def add_question(client: TestClient, quiz_id: int) -> None:
     assert response.status_code == 201
 
 
-def test_publish_complete_quiz_and_start_new_draft_on_edit(
-    mysql_client: TestClient,
-) -> None:
+def test_publish_complete_quiz_and_lock_version(mysql_client: TestClient) -> None:
     quiz_id = create_quiz(mysql_client)
     add_question(mysql_client, quiz_id)
 
@@ -35,11 +33,10 @@ def test_publish_complete_quiz_and_start_new_draft_on_edit(
     assert body["current_version"]["published_at"] is not None
 
     edit = mysql_client.patch(
-        f"/quizzes/{quiz_id}", json={"title": "Next version"}
+        f"/quizzes/{quiz_id}", json={"title": "Forbidden edit"}
     )
-    assert edit.status_code == 200
-    assert edit.json()["current_version"]["version_number"] == 2
-    assert edit.json()["current_version"]["published_at"] is None
+    assert edit.status_code == 409
+    assert edit.json()["error"]["code"] == "published_version_immutable"
 
 
 def test_incomplete_quiz_cannot_be_published(mysql_client: TestClient) -> None:
