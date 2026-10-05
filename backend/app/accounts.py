@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.errors import APIError
 
-COLUMNS = "account_id, email, display_name, account_type, is_active"
+COLUMNS = "account_id, email, display_name, account_type"
 
 
 def _fetch_profile(domain: str, token: str) -> dict:
