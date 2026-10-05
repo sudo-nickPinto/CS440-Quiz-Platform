@@ -1,19 +1,10 @@
-from datetime import UTC, datetime
-
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
-from app.models import (
-    AnswerChoice,
-    Question,
-    QuestionType,
-    Quiz,
-    QuizStatus,
-    QuizVersion,
-)
+from app.models import AnswerChoice, Question, Quiz, QuizStatus, QuizVersion
 from app.schemas.quiz import (
     QuestionOrderUpdate,
     QuestionResponse,
@@ -95,45 +86,6 @@ def _editable_version(
             "Published quiz versions cannot be edited.",
         )
     return quiz, version
-
-
-def publication_errors(version: QuizVersion) -> list[str]:
-    """Return every reason a draft cannot be published."""
-    errors: list[str] = []
-    if not version.title.strip():
-        errors.append("The quiz title must not be blank.")
-    if not version.questions:
-        errors.append("The quiz must contain at least one question.")
-
-    expected_question_order = list(range(1, len(version.questions) + 1))
-    actual_question_order = sorted(
-        question.question_order for question in version.questions
-    )
-    if actual_question_order != expected_question_order:
-        errors.append("Question positions must be consecutive and start at 1.")
-
-    for question in version.questions:
-        label = f"Question {question.question_order}"
-        if question.question_type != QuestionType.MULTIPLE_CHOICE:
-            errors.append(f"{label} must be multiple choice.")
-        if not question.question_text.strip():
-            errors.append(f"{label} text must not be blank.")
-        if question.time_limit_seconds <= 0:
-            errors.append(f"{label} must have a positive time limit.")
-        if question.base_points <= 0:
-            errors.append(f"{label} must have positive base points.")
-        if len(question.choices) < 2:
-            errors.append(f"{label} must have at least two choices.")
-        if not any(choice.is_correct for choice in question.choices):
-            errors.append(f"{label} must have at least one correct choice.")
-        if any(not choice.choice_text.strip() for choice in question.choices):
-            errors.append(f"{label} choices must not be blank.")
-
-        expected_choice_order = list(range(1, len(question.choices) + 1))
-        actual_choice_order = sorted(choice.choice_order for choice in question.choices)
-        if actual_choice_order != expected_choice_order:
-            errors.append(f"{label} choice positions must be consecutive and start at 1.")
-    return errors
 
 
 def _question_in_version(version: QuizVersion, question_id: int) -> Question:
@@ -388,37 +340,3 @@ def reorder_questions(
         QuestionResponse.model_validate(question)
         for question in refreshed_version.questions
     ]
-
-
-def publish_quiz(
-    db: Session, account: CurrentAccount, quiz_id: int
-) -> QuizResponse:
-    quiz = _load_quiz(db, quiz_id)
-    if quiz.author_id != account.account_id:
-        raise APIError(403, "quiz_access_denied", "You cannot publish this quiz.")
-    if quiz.status == QuizStatus.ARCHIVED:
-        raise APIError(409, "quiz_archived", "Archived quizzes cannot be published.")
-
-    version = _current_version(quiz)
-    if version.published_at is not None:
-        raise APIError(409, "quiz_already_published", "This version is already published.")
-
-    errors = publication_errors(version)
-    if errors:
-        raise APIError(
-            422,
-            "quiz_not_publishable",
-            "The quiz is not ready to publish.",
-            errors,
-        )
-
-    version.published_at = datetime.now(UTC).replace(tzinfo=None)
-    quiz.status = QuizStatus.PUBLISHED
-    try:
-        db.commit()
-    except SQLAlchemyError as exc:
-        db.rollback()
-        raise APIError(500, "quiz_publish_failed", "Could not publish the quiz.") from exc
-
-    db.expire_all()
-    return _to_response(_load_quiz(db, quiz_id))
