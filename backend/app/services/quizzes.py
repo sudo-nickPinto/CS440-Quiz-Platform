@@ -4,8 +4,11 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
-from app.models import Question, Quiz, QuizStatus, QuizVersion
+from app.models import AnswerChoice, Question, Quiz, QuizStatus, QuizVersion
 from app.schemas.quiz import (
+    QuestionOrderUpdate,
+    QuestionResponse,
+    QuestionWrite,
     QuizCreate,
     QuizListItem,
     QuizResponse,
@@ -64,6 +67,59 @@ def _load_quiz(db: Session, quiz_id: int) -> Quiz:
     if quiz is None:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
     return quiz
+
+
+def _editable_version(
+    db: Session, account: CurrentAccount, quiz_id: int
+) -> tuple[Quiz, QuizVersion]:
+    quiz = _load_quiz(db, quiz_id)
+    if quiz.author_id != account.account_id:
+        raise APIError(403, "quiz_access_denied", "You cannot edit this quiz.")
+    if quiz.status == QuizStatus.ARCHIVED:
+        raise APIError(409, "quiz_archived", "Archived quizzes cannot be edited.")
+
+    version = _current_version(quiz)
+    if version.published_at is not None:
+        raise APIError(
+            409,
+            "published_version_immutable",
+            "Published quiz versions cannot be edited.",
+        )
+    return quiz, version
+
+
+def _question_in_version(version: QuizVersion, question_id: int) -> Question:
+    question = next(
+        (item for item in version.questions if item.question_id == question_id), None
+    )
+    if question is None:
+        raise APIError(404, "question_not_found", "Question not found in this quiz.")
+    return question
+
+
+def _new_choices(payload: QuestionWrite) -> list[AnswerChoice]:
+    return [
+        AnswerChoice(
+            choice_order=position,
+            choice_text=choice.choice_text,
+            is_correct=choice.is_correct,
+        )
+        for position, choice in enumerate(payload.choices, start=1)
+    ]
+
+
+def _apply_question_order(db: Session, questions: list[Question]) -> None:
+    temporary_start = max(
+        (question.question_order for question in questions), default=0
+    ) + 1
+    if temporary_start + len(questions) - 1 > 65_535:
+        raise APIError(409, "question_order_exhausted", "Questions cannot be reordered.")
+
+    for offset, question in enumerate(questions):
+        question.question_order = temporary_start + offset
+    db.flush()
+    for position, question in enumerate(questions, start=1):
+        question.question_order = position
 
 
 def create_quiz(
@@ -141,19 +197,7 @@ def update_quiz(
     quiz_id: int,
     payload: QuizUpdate,
 ) -> QuizResponse:
-    quiz = _load_quiz(db, quiz_id)
-    if quiz.author_id != account.account_id:
-        raise APIError(403, "quiz_access_denied", "You cannot edit this quiz.")
-    if quiz.status == QuizStatus.ARCHIVED:
-        raise APIError(409, "quiz_archived", "Archived quizzes cannot be edited.")
-
-    current_version = _current_version(quiz)
-    if current_version.published_at is not None:
-        raise APIError(
-            409,
-            "published_version_immutable",
-            "Published quiz versions cannot be edited.",
-        )
+    quiz, current_version = _editable_version(db, account, quiz_id)
 
     supplied_fields = payload.model_fields_set
     if "title" in supplied_fields:
@@ -171,3 +215,128 @@ def update_quiz(
 
     db.expire_all()
     return _to_response(_load_quiz(db, quiz_id))
+
+
+def create_question(
+    db: Session,
+    account: CurrentAccount,
+    quiz_id: int,
+    payload: QuestionWrite,
+) -> QuestionResponse:
+    _, version = _editable_version(db, account, quiz_id)
+    next_order = max(
+        (question.question_order for question in version.questions), default=0
+    ) + 1
+    question = Question(
+        question_order=next_order,
+        question_text=payload.question_text,
+        explanation=payload.explanation,
+        time_limit_seconds=payload.time_limit_seconds,
+        base_points=payload.base_points,
+        choices=_new_choices(payload),
+    )
+    version.questions.append(question)
+
+    try:
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(
+            500, "question_creation_failed", "Could not create the question."
+        ) from exc
+
+    question_id = question.question_id
+    db.expire_all()
+    refreshed_version = _current_version(_load_quiz(db, quiz_id))
+    return QuestionResponse.model_validate(
+        _question_in_version(refreshed_version, question_id)
+    )
+
+
+def update_question(
+    db: Session,
+    account: CurrentAccount,
+    quiz_id: int,
+    question_id: int,
+    payload: QuestionWrite,
+) -> QuestionResponse:
+    _, version = _editable_version(db, account, quiz_id)
+    question = _question_in_version(version, question_id)
+    question.question_text = payload.question_text
+    question.explanation = payload.explanation
+    question.time_limit_seconds = payload.time_limit_seconds
+    question.base_points = payload.base_points
+    question.choices = _new_choices(payload)
+
+    try:
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(
+            500, "question_update_failed", "Could not update the question."
+        ) from exc
+
+    db.expire_all()
+    refreshed_version = _current_version(_load_quiz(db, quiz_id))
+    return QuestionResponse.model_validate(
+        _question_in_version(refreshed_version, question_id)
+    )
+
+
+def delete_question(
+    db: Session,
+    account: CurrentAccount,
+    quiz_id: int,
+    question_id: int,
+) -> None:
+    _, version = _editable_version(db, account, quiz_id)
+    question = _question_in_version(version, question_id)
+    version.questions.remove(question)
+
+    try:
+        db.flush()
+        remaining = sorted(version.questions, key=lambda item: item.question_order)
+        _apply_question_order(db, remaining)
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(
+            500, "question_deletion_failed", "Could not delete the question."
+        ) from exc
+
+
+def reorder_questions(
+    db: Session,
+    account: CurrentAccount,
+    quiz_id: int,
+    payload: QuestionOrderUpdate,
+) -> list[QuestionResponse]:
+    _, version = _editable_version(db, account, quiz_id)
+    questions_by_id = {
+        question.question_id: question for question in version.questions
+    }
+    if set(payload.question_ids) != set(questions_by_id):
+        raise APIError(
+            422,
+            "invalid_question_order",
+            "Question order must include every question exactly once.",
+        )
+
+    try:
+        ordered_questions = [
+            questions_by_id[question_id] for question_id in payload.question_ids
+        ]
+        _apply_question_order(db, ordered_questions)
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(
+            500, "question_reorder_failed", "Could not reorder the questions."
+        ) from exc
+
+    db.expire_all()
+    refreshed_version = _current_version(_load_quiz(db, quiz_id))
+    return [
+        QuestionResponse.model_validate(question)
+        for question in refreshed_version.questions
+    ]
