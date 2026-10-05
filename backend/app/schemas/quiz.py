@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models import QuestionType, QuizStatus, QuizVisibility
 
@@ -21,6 +22,34 @@ class QuizCreate(StrictSchema):
         if not title:
             raise ValueError("Title must not be blank.")
         return title
+
+
+class QuizUpdate(StrictSchema):
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = None
+    visibility: QuizVisibility | None = None
+
+    @field_validator("title")
+    @classmethod
+    def title_must_be_present_and_nonblank(cls, value: str | None) -> str:
+        if value is None or not value.strip():
+            raise ValueError("Title must not be null or blank.")
+        return value.strip()
+
+    @field_validator("visibility")
+    @classmethod
+    def visibility_must_not_be_null(
+        cls, value: QuizVisibility | None
+    ) -> QuizVisibility:
+        if value is None:
+            raise ValueError("Visibility must not be null.")
+        return value
+
+    @model_validator(mode="after")
+    def request_must_contain_an_update(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("At least one editable field is required.")
+        return self
 
 
 class AnswerChoiceResponse(BaseModel):
