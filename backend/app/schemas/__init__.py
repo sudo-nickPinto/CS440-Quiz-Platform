@@ -1,3 +1,3 @@
-from app.schemas.quiz import QuizCreate, QuizListItem, QuizResponse
+from app.schemas.quiz import QuizCreate, QuizResponse
 
-__all__ = ["QuizCreate", "QuizListItem", "QuizResponse"]
+__all__ = ["QuizCreate", "QuizResponse"]
