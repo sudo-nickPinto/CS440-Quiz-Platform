@@ -21,6 +21,7 @@ from app.services.quizzes import (
     delete_question,
     get_quiz,
     list_quizzes,
+    publish_quiz,
     reorder_questions,
     update_quiz,
     update_question,
@@ -81,6 +82,15 @@ def archive_quiz_route(
     account: CurrentAccount = Depends(active_account),
 ) -> QuizResponse:
     return archive_quiz(db, account, quiz_id)
+
+
+@router.post("/{quiz_id}/publish", response_model=QuizResponse)
+def publish_quiz_route(
+    quiz_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(active_account),
+) -> QuizResponse:
+    return publish_quiz(db, account, quiz_id)
 
 
 @router.post(
