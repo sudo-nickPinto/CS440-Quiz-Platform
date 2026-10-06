@@ -1,20 +1,29 @@
-# Roadmap
+# Roadmap (MVP)
 
-The plan for the rest of the semester (2026-10-01 to about 2026-12-11). We build a **walking skeleton** first: every layer connected end to end, even if thin. Then we add features one vertical slice at a time. Every task ends in something we can show: a merged PR, a doc, a passing test or a demo.
+The plan for the rest of the semester (now to about 2026-12-11), trimmed to the **MVP scope** the team agreed on 2026-10-04 (see `ulugbek-err/ER_Diagram.md`). We build a **walking skeleton** first, with every layer connected end to end even if thin. Then we fill in the game one slice at a time. Every task ends in something we can show: a merged PR, a doc, a passing test or a demo.
 
-## 1. Where we are (main @ `b2973d0`, 2026-10-01)
+## MVP in one paragraph
 
-| Area | Status | Owner (git evidence) |
+Anyone can log in with Auth0 (Google or email). Every account is a **User**. A few **Admins** are set by hand in the database. Users create quizzes; a saved quiz is published as-is and cannot be edited. Its author can archive it. The author hosts a live session from their quiz and gets a six-digit code. Any logged-in User joins with the code. **Host** and **participant** are things a User does, not roles. The host runs the questions live over WebSocket. Answers are scored on the server, using a score that rewards speed. When the session ends, results are saved. Participants see their own results, and the host and Admins see everyone's. The host or an Admin can export them.
+
+**After the MVP:** Professor/Student roles, authorization helpers for roles, classes and membership, private quizzes, editing saved quizzes and collaborating on them, semester statistics, and an admin dashboard. These are listed in [§5](#5-after-the-mvp) and are left out of the timeline on purpose.
+
+## 1. Where we are (main @ `62eac7e`, 2026-10-06)
+
+| Area | Status | Owner |
 |---|---|---|
-| FastAPI foundation (config, DB session, errors, `/health`) | Done | Anh |
+| FastAPI foundation (config, DB, errors, `/health`) | Done | Anh |
 | Auth0 backend + frontend, `/me`, account linking | Done (#21, #22) | Nick |
-| Quiz ORM models | Done (#13) | Anh |
-| SQL schema `0001`–`0004` + ER diagram v2 | Done as hand-run SQL; needs ER refresh + a migration runner | Ulug |
-| Quiz CRUD → publish → versioning | Written, **not merged**: stacked PRs #16–#20 (`feature/quiz-list-archive` … `feature/quiz-versioning`) | Anh |
-| Mockups: in-quiz host/participant (`anh/`), dashboard + design guide (`taha/`), login/lobby (`anindo/`) | Done | Anh, Taha, Anindo |
-| Classes, sessions/joining, WebSocket, scoring, results, exports | Not started (tables exist) | — |
-| SRS cleanup, REST API contract, live-session protocol doc | Not started | — |
-| CI, frontend tests, seed data, app shell/router | Not started | — |
+| MVP roles (User/Admin), active-account check | Done (#26) | Anh |
+| Auth tests on protected routes | In review (#31) | Nick |
+| Schema `0001`–`0005`, MVP ER diagram, local DB setup | Done | Ulug |
+| Quiz create / list / get / archive (no editing in MVP) | Done (#26) | Anh |
+| Mockups: in-quiz, dashboard, editor, presenter/participant flows, results | Done (#30 and earlier) | Anh, Taha, Anindo |
+| Response submission + speed-based scoring | In review (#27) | Pronob |
+| Session create + join (six-digit codes, participants) | In review (#28, stacked on #27) | Anh |
+| React dashboard + login restyle (sample data) | In review (#24) | Anindo |
+| Live-session protocol + WebSocket | **Not started**: the biggest risk | Nick (proposed) |
+| Results, export, CI, seed data, API doc | Not started | — |
 
 ## 2. Timeline
 
@@ -22,66 +31,52 @@ Sprints are two weeks. Red bars (`crit`) are the critical path: if one slips, th
 
 ```mermaid
 gantt
-    title CS440 Quiz Platform - Fall 2026
+    title CS440 Quiz Platform - MVP
     dateFormat YYYY-MM-DD
     axisFormat %m-%d
 
     section Sprint 0 (done)
     FastAPI foundation                       :done, s0_api, 2026-09-14, 2026-09-30
     Auth0 end to end (me + linking)          :done, s0_auth, 2026-09-21, 2026-10-01
-    Quiz ORM models                          :done, s0_orm, 2026-09-24, 2026-09-30
-    SQL schema 0001-0004 + ER v2             :done, s0_schema, 2026-09-14, 2026-09-30
-    Mockups (in-quiz, dashboard, login)      :done, s0_mock, 2026-09-07, 2026-09-30
+    Schema 0001-0005 + MVP ER                :done, s0_schema, 2026-09-14, 2026-10-04
+    Quiz create/list/archive                 :done, s0_quiz, 2026-10-01, 2026-10-06
+    Mockups (all MVP screens)                :done, s0_mock, 2026-09-07, 2026-10-06
 
     section Sprint 1 - walking skeleton
-    Quiz CRUD/versioning - merge stack       :active, quiz_stack, 2026-10-01, 5d
-    SRS - auth to Auth0                      :active, srs_auth, 2026-10-01, 2d
-    SRS - terminology                        :active, srs_terms, 2026-10-01, 2d
-    SRS - modes vs roles                     :active, srs_modes, 2026-10-01, 2d
-    SRS - scoring choice                     :srs_scoring, after srs_modes, 2d
-    SRS - private vs public                  :srs_private, after srs_modes, 2d
-    SRS - class joining                      :srs_join, after srs_modes, 2d
-    SRS - Taken/Made/explanations/stats/export :srs_pages, after srs_terms, 3d
-    SRS - MVP vs stretch                     :srs_mvp, after srs_scoring srs_private srs_join srs_pages, 2d
-    REST API contract                        :crit, api_contract, after srs_modes, 5d
-    Live-session protocol doc                :crit, active, ws_protocol, 2026-10-01, 5d
-    WebSocket PoC                            :crit, ws_poc, after ws_protocol, 7d
-    Authz helpers + role tests               :authz, 2026-10-08, 7d
-    DB - ER update + migration runner        :db_final, 2026-10-01, 7d
-    CI workflow                              :q_ci, 2026-10-01, 5d
-    Backend formatting + tests               :q_betest, after q_ci, 4d
-    Test DB config                           :q_testdb, after db_final, 3d
-    Seed data                                :q_seed, after db_final, 4d
-    Setup docs                               :q_docs, after q_seed, 2d
-    Global theme from DESIGN-GUIDE           :fe_theme, 2026-10-01, 5d
-    Router + nav (student vs professor)      :fe_router, after fe_theme, 5d
-    Taken/Made tabs                          :fe_tabs, after fe_router, 4d
-    Loading/error/empty states               :fe_states, after fe_router, 3d
-    Protected routes + unauthorized state    :fe_protect, after fe_router, 3d
+    Review + merge 27 scoring                :crit, active, m_scoring, 2026-10-06, 3d
+    Review + merge 28 sessions               :crit, m_sessions, after m_scoring, 2d
+    Review + merge 24 dashboard              :active, m_dash, 2026-10-06, 3d
+    Merge 31 auth tests                      :active, m_authtest, 2026-10-06, 1d
+    Live-session protocol doc                :crit, active, ws_protocol, 2026-10-06, 4d
+    WebSocket PoC                            :crit, ws_poc, after ws_protocol m_sessions, 5d
+    SRS trimmed to MVP                       :srs, 2026-10-06, 5d
+    API doc for MVP endpoints                :api_doc, after m_sessions, 3d
+    CI workflow                              :q_ci, 2026-10-08, 4d
 
-    section Sprint 2 - core features
-    Classes + membership API                 :crit, be_classes, after api_contract authz, 6d
-    Session create/join (codes, lobby)       :crit, be_sessions, after be_classes ws_poc, 7d
-    Made quiz-library page                   :fe_made, after fe_tabs quiz_stack, 7d
-    Quiz editor first flow                   :fe_editor, after fe_made, 6d
-    Frontend lint + tests                    :q_fetest, 2026-10-15, 7d
+    section Sprint 2 - wire the flow
+    Live controls (start/next/close/end)     :crit, be_live, after ws_poc, 6d
+    Protected routes + error states          :fe_protect, after m_dash, 4d
+    Made page on real API                    :fe_made, after m_dash, 5d
+    Quiz editor (create only)                :fe_editor, after fe_made, 6d
+    Join flow UI (code to lobby)             :crit, fe_join, after m_dash ws_poc, 5d
+    Seed data + setup docs                   :q_seed, 2026-10-15, 5d
+    Frontend lint + tests in CI              :q_fetest, after q_ci, 5d
 
     section Sprint 3 - live gameplay
-    Response submission + scoring            :crit, be_scoring, after be_sessions, 8d
-    Live UI behavior (controls, states)      :crit, fe_live_ui, after ws_poc be_sessions, 7d
-    Live UI integration                      :crit, fe_live_int, after fe_live_ui be_scoring, 7d
-    Class-management UI                      :fe_classes, 2026-10-29, 10d
+    Live UI on WebSocket                     :crit, fe_live, after be_live fe_join, 8d
+    Reconnect + host disconnect              :crit, be_reconnect, after be_live, 5d
+    Per-question results + leaderboard       :crit, live_board, after fe_live, 4d
 
     section Sprint 4 - results
-    Results + Taken history                  :crit, be_results, after fe_live_int, 5d
-    Exports + stats                          :crit, be_export, after be_results, 5d
-    Taken/results review page                :fe_review, after be_results, 5d
+    Final results + Taken history            :crit, be_results, 2026-11-12, 4d
+    Host/Admin CSV export                    :be_export, after be_results, 3d
+    Taken + host results pages               :crit, fe_results, after be_results, 5d
 
     section Thanksgiving (buffer)
     No planned work - catch up only          :thanks, 2026-11-23, 7d
 
     section Sprint 5 - hardening and demo
-    End-to-end testing + bug bash            :crit, e2e, after thanks be_export fe_review, 5d
+    End-to-end test + bug bash               :crit, e2e, after thanks fe_results be_export, 5d
     Deploy                                   :crit, deploy, after e2e, 3d
     Final demo + docs                        :crit, demo, after deploy, 3d
 ```
@@ -92,101 +87,81 @@ Arrows mean "must be done before". Red nodes are on the critical path.
 
 ```mermaid
 flowchart LR
-    SRS["SRS cleanup"] --> API["REST API contract"]
-    API --> CLS["Classes + membership API"]
-    API --> SES["Session create/join"]
-    AUTHZ["Authz helpers"] --> CLS
-    CLS --> SES
-    PROTO["Live-session protocol doc"] --> WS["WebSocket PoC"]
-    WS --> SES
-    SES --> SCORE["Responses + scoring"]
-    WS --> LIVE["Live UI behavior"]
-    LIVE --> LIVEINT["Live UI integration"]
-    SCORE --> LIVEINT
-    SCORE --> RES["Results + Taken history"]
-    RES --> EXP["Exports + stats"]
-    RES --> REVIEW["Taken/results review page"]
-    SHELL["Frontend app shell"] --> MADE["Made quiz-library page"]
-    QUIZ["Quiz CRUD stack merged"] --> MADE
-    MADE --> EDITOR["Quiz editor"]
-    LIVEINT --> E2E["E2E tests"]
+    SCORE["Merge #27 scoring"] --> SES["Merge #28 sessions"]
+    SES --> WS["WebSocket PoC"]
+    PROTO["Live-session protocol doc"] --> WS
+    WS --> LIVE["Live controls start/next/close/end"]
+    LIVE --> RECON["Reconnect + host disconnect"]
+    DASH["Merge #24 dashboard"] --> JOIN["Join flow UI"]
+    WS --> JOIN
+    LIVE --> LIVEUI["Live UI on WebSocket"]
+    JOIN --> LIVEUI
+    LIVEUI --> BOARD["Per-question results + leaderboard"]
+    BOARD --> RES["Final results + Taken history"]
+    RES --> PAGES["Taken + host results pages"]
+    RES --> EXP["Host/Admin CSV export"]
+    DASH --> MADE["Made page on real API"] --> EDIT["Quiz editor"]
+    RECON --> E2E["E2E test"]
+    PAGES --> E2E
     EXP --> E2E
-    REVIEW --> E2E
     E2E --> DEPLOY["Deploy"] --> DEMO["Final demo"]
 
     classDef crit fill:#f8d7da,stroke:#b02a37,stroke-width:2px,color:#000
-    class API,CLS,SES,PROTO,WS,SCORE,LIVE,LIVEINT,RES,EXP,E2E,DEPLOY,DEMO crit
+    class SCORE,SES,PROTO,WS,LIVE,RECON,JOIN,LIVEUI,BOARD,RES,PAGES,E2E,DEPLOY,DEMO crit
 ```
 
 ## 4. Tasks by sprint
 
-Owners come from who has committed related work. "Unclaimed" means nobody has touched it yet, so anyone can take it.
+Owners come from who wrote the related code or claimed it. "Unclaimed" means anyone can take it: put your name in the table in a PR.
 
-### Sprint 0: done (through 09-30)
+### Up next (this week)
 
-| Task | Owner | Done when |
-|---|---|---|
-| FastAPI foundation | Anh | `/health` returns DB status on `main` (done) |
-| Auth0 end to end, `/me`, account linking | Nick | Login works and `/me` returns the account; #21 and #22 merged (done) |
-| Quiz ORM models | Anh | #13 merged (done) |
-| SQL schema `0001`–`0004` + ER v2 | Ulug | Migrations in `ulugbek-err/migrations/` run cleanly on MySQL 8 (done) |
-| Mockups: in-quiz, dashboard + design guide, login/lobby | Anh, Taha, Anindo | `anh/`, `taha/`, `anindo/` on `main` (done) |
+1. **Merge #31** (auth tests). It's small and ready now.
+2. **Review and merge #27, then #28.** #28 is stacked on #27, so merge #27 first. The WebSocket work builds on both.
+3. **Review and merge #24.** Every frontend task in Sprint 2 builds on it.
+4. **Nick: write `docs/LIVE_PROTOCOL.md`** while #27 and #28 are in review. Then build the WebSocket PoC on top of them. #28 lists what's missing: moving a session from `LOBBY` to `ACTIVE`, creating `SessionQuestion` rows and opening and closing questions. Those transitions belong in the protocol.
 
-### Sprint 1: walking skeleton (10-01 to 10-14)
+### Sprint 1: walking skeleton (to 10-14)
 
 | Task | Owner | Done when |
 |---|---|---|
-| Quiz CRUD/versioning: merge the stack (#16–#20) | Anh | All five PRs merged in order; quiz tests pass on `main` |
-| SRS: auth section rewritten for Auth0 | unclaimed | SRS PR replaces the old password/login section with the Auth0 flow |
-| SRS: terminology | unclaimed | Glossary section; one term per concept (quiz, version, session, class/group) used throughout |
-| SRS: modes vs roles | unclaimed | SRS states which are roles (student, professor) and which are modes (host, participant) |
-| SRS: scoring choice | unclaimed | One scoring rule written down with a worked example |
-| SRS: private vs public quizzes | unclaimed | Visibility rules written down, matching `quiz_group` |
-| SRS: class joining | unclaimed | How a student joins a class (code, invite or roster) written down |
-| SRS: Taken/Made/explanations/stats/export | unclaimed | Each page's contents, answer explanations, stats and export formats written down |
-| SRS: MVP vs stretch | unclaimed | Every requirement tagged MVP or stretch; team agrees in a meeting |
-| REST API contract | unclaimed | `docs/API.md` (or OpenAPI) lists every MVP endpoint with request, response and error shapes |
-| Live-session protocol doc | Nick (proposed) | `docs/LIVE_PROTOCOL.md` has a state diagram, every event with its payload, and rules for reconnect, duplicate answers and host disconnect |
-| WebSocket PoC | Nick (proposed) | Demo: host creates a session, two clients join, host starts a question, both receive it, a reconnecting client gets current state; a two-client pytest passes |
-| Authorization helpers + role tests | Nick | `require_role` and ownership checks merged, with tests for missing, invalid, valid and wrong-role tokens |
-| DB: ER update + migration runner | Ulug | `ER_Diagram.md` matches `0004`; one command applies pending migrations and records them in `schema_migrations` |
-| CI workflow | unclaimed | GitHub Actions runs lint and tests on every PR |
-| Backend formatting + tests | unclaimed | Formatter/linter config committed; `pytest` runs green in CI |
-| Test DB config | unclaimed | Tests use a separate database (Docker MySQL or env var), never the shared `cray` DB |
-| Seed data | unclaimed | Script loads demo accounts, a class, and two published quizzes |
-| Setup docs | unclaimed | A new teammate goes from clone to running app + seeded DB using only `README.md` |
-| Global theme from `taha/DESIGN-GUIDE.md` | Taha | One global stylesheet with the design tokens, imported by `frontend/` |
-| Router + nav (student vs professor) | unclaimed | `react-router` in place; nav shows different links per role |
-| Taken/Made tabs | unclaimed | Tabs switch between two routed (empty) pages, styled per the design guide |
-| Loading/error/empty states | unclaimed | Shared components used by at least one page, shown at 390px width |
-| Protected routes + unauthorized state | Nick | Logged-out users are sent to login; wrong role sees an "unauthorized" screen |
+| Merge #27 response submission + scoring | Pronob | Merged into `main`; unit and MySQL integration tests pass |
+| Merge #28 session create/join | Anh | Merged after #27; join codes work end to end |
+| Merge #24 React dashboard + login | Anindo | Merged; `npm run lint` and `npm run build` clean |
+| Merge #31 auth tests | Nick | Merged; 39 unit tests pass |
+| Live-session protocol doc | Nick (proposed) | `docs/LIVE_PROTOCOL.md`: session state diagram (`LOBBY → ACTIVE → ENDED`, question open/closed), every WebSocket event with its payload, and rules for reconnect, duplicate answers (already rejected by #27) and host disconnect |
+| WebSocket PoC | Nick (proposed) | Demo: host opens a session, two participants connect, host starts a question, both receive it, a reconnecting client gets the current state; a two-client pytest passes |
+| SRS trimmed to MVP | unclaimed | SRS uses Auth0 instead of passwords, User/Admin roles with host/participant as modes, the speed-based scoring rule from #27 with a worked example, and an MVP vs after-MVP list matching §5 |
+| API doc for MVP endpoints | unclaimed | `docs/API.md` lists `/me`, `/quizzes`, sessions and responses with request, response and error shapes (FastAPI `/docs` can be the source) |
+| CI workflow | unclaimed | GitHub Actions runs backend unit tests and frontend lint/build on every PR |
 
-### Sprint 2: core features (10-15 to 10-28)
+### Sprint 2: wire the flow (10-15 to 10-28)
 
 | Task | Owner | Done when |
 |---|---|---|
-| Classes + membership API | unclaimed | Professor creates a class, students join it, roster endpoint works; tests pass |
-| Session create/join (codes, lobby) | unclaimed | Host creates a session from a published version, gets a join code; participants join and appear in the lobby |
-| Made quiz-library page | Taha | Lists the user's quizzes from the API (mock data first), with create, open and archive |
-| Quiz editor first flow | unclaimed | Create a quiz, add multiple-choice questions, publish; demo end to end against the API |
-| Frontend lint + tests | unclaimed | `npm run lint` clean; a test runner (e.g. Vitest) with at least one component test, run in CI |
+| Live controls: start, next question, close question, end session | Nick | Host's WebSocket commands change session/question state in MySQL and broadcast to participants; tests cover wrong-user and wrong-state commands |
+| Protected routes + loading/error/unauthorized states | Nick | Logged-out users are sent to login; expired session or inactive account shows a clear screen; shared loading/error/empty components |
+| Made page on the real API | Anindo | Dashboard from #24 lists the user's quizzes from `GET /quizzes` and archives through the API, instead of using sample data |
+| Quiz editor (create only) | unclaimed | Port `taha/quiz-editor-main.html`: title, multiple-choice questions with 2 to 4 choices, correct answer, timer, points; validation; saves with `POST /quizzes` |
+| Join flow UI | unclaimed | Participant enters a code, joins with `POST` from #28, and waits in the lobby (from `anindo/`) until the host starts |
+| Seed data + setup docs | Ulug | Script loads demo users, an Admin and two quizzes; README gets a new teammate from clone to running app |
+| Frontend lint + tests in CI | unclaimed | Vitest set up with at least one component test, run in CI |
 
 ### Sprint 3: live gameplay (10-29 to 11-11)
 
 | Task | Owner | Done when |
 |---|---|---|
-| Response submission + scoring | unclaimed | Answers saved once per participant per question; scores match the SRS rule; tests cover late and duplicate answers |
-| Live UI behavior (presenter/participant controls, reconnecting, waiting, ended states) | Anh (in-quiz mockups), Anindo (lobby) | Each screen from `anh/` and `anindo/` ported to `frontend/` and driven by fake events |
-| Live UI integration | Anh | Demo: a full game with one host and two participants over the real WebSocket |
-| Class-management UI | unclaimed | Professor creates a class and sees its roster; student joins with a code |
+| Live UI on WebSocket | Anh (in-quiz mockups) | Host and participant screens from `anh/` and `taha/*-flow-main.html` ported to `frontend/` and driven by real events; one host and two participants can play a full game |
+| Reconnect + host disconnect | Nick | Refreshing the page resumes the current question; if the host drops, participants see a waiting state and the session can resume or end |
+| Per-question results + leaderboard | Pronob | When a question closes, correct answer, points and leaderboard are broadcast (scores are hidden until close, per #27) |
 
 ### Sprint 4: results (11-12 to 11-22)
 
 | Task | Owner | Done when |
 |---|---|---|
-| Results + Taken history (incl. presenter/professor results) | unclaimed | `result` rows written when a session ends; endpoints for a student's history and a host's session results |
-| Exports + stats | unclaimed | Per-quiz and per-student CSV export with high, average, low and distribution |
-| Taken/results review page | unclaimed | Student reviews a finished quiz with their answers and explanations |
+| Final results + Taken history | Pronob | `result` rows are written when a session ends; endpoints return a participant's own history and the host's full session results, following the "who can see results" rules in `ER_Diagram.md` |
+| Host/Admin CSV export | unclaimed | Host or Admin downloads one session's results as CSV, with high, average and low scores |
+| Taken + host results pages | unclaimed | Port `taha/participant-results-main.html` and `taha/host-results-main.html`; participant reviews their answers, host sees everyone |
 
 ### Thanksgiving buffer (11-23 to 11-29)
 
@@ -196,12 +171,23 @@ Nothing planned. Use it only to catch up on slipped work.
 
 | Task | Owner | Done when |
 |---|---|---|
-| End-to-end testing + bug bash | unclaimed | Scripted run of login → create quiz → host → play → results passes; open bugs triaged |
-| Deploy | unclaimed | App reachable at a shared URL with the production Auth0 settings |
-| Final demo + docs | unclaimed | Demo rehearsed; README and docs match what we ship |
+| End-to-end test + bug bash | everyone | Scripted run of login → create quiz → host → join → play → results → export passes; open bugs triaged |
+| Deploy | unclaimed | App reachable at a shared URL with production Auth0 settings |
+| Final demo + docs | everyone | Demo rehearsed; README, API doc and protocol doc match what we ship |
 
-## 5. Notes
+## 5. After the MVP
+
+Not on the timeline. We'll pick these up only if the MVP ships early, or next semester. The database already has room for most of them (`account_type` enum, `course_group`, `group_membership`, `quiz_group`, `quiz_collaborator`).
+
+- **Professor/Student roles:** decide how someone becomes a professor, expand `AccountRole`, add shared `require_role` and ownership helpers to replace the inline checks, add role-matrix tests, and show different navigation per role. (The `effective_role` test in #31 will need updating.)
+- **Classes:** create a class, join or roster students, class-management UI, sessions tied to a class.
+- **Private quizzes:** visibility rules and the professor-of-class access described in `0002_quizzes`.
+- **Editing saved quizzes:** new versions on edit, drafts, collaborators.
+- **Statistics:** per-student exports, semester reports, score distributions.
+- **Admin dashboard:** view all users, classes and quizzes.
+
+## 6. Notes
 
 - **Dates are proposals.** Adjust them at the next team meeting, then update this file.
-- **Owners are inferred from commit history**, not assigned. "Nick (proposed)" means Nick plans to take it. To claim an "unclaimed" task, put your name in the table in a PR.
-- In the timeline, "Quiz CRUD/versioning – merge stack" covers both the "merge the versioning stack" and "backend quiz CRUD/versioning" items, since they are the same code.
+- **Owners are inferred from commits and open PRs**, not assigned. "Nick (proposed)" means Nick plans to take it.
+- `docs/AUTH.md` still says "every route should treat all accounts the same". Since #26 added Admin, that line needs a small update.
