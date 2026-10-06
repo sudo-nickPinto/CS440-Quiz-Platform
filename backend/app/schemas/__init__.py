@@ -9,6 +9,12 @@ from app.schemas.quiz import (
     QuizVersionResponse,
 )
 from app.schemas.response import ResponseReceipt, ResponseSubmit
+from app.schemas.session import (
+    SessionJoinRequest,
+    SessionJoinResponse,
+    SessionParticipantResponse,
+    SessionResponse,
+)
 
 __all__ = [
     "AnswerChoiceCreate",
@@ -21,4 +27,8 @@ __all__ = [
     "QuizVersionResponse",
     "ResponseReceipt",
     "ResponseSubmit",
+    "SessionJoinRequest",
+    "SessionJoinResponse",
+    "SessionParticipantResponse",
+    "SessionResponse",
 ]
