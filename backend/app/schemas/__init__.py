@@ -8,6 +8,7 @@ from app.schemas.quiz import (
     QuizResponse,
     QuizVersionResponse,
 )
+from app.schemas.response import ResponseReceipt, ResponseSubmit
 
 __all__ = [
     "AnswerChoiceCreate",
@@ -18,4 +19,6 @@ __all__ = [
     "QuizListItem",
     "QuizResponse",
     "QuizVersionResponse",
+    "ResponseReceipt",
+    "ResponseSubmit",
 ]

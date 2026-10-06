@@ -8,6 +8,14 @@ from app.models.quiz import (
     QuizVersion,
     QuizVisibility,
 )
+from app.models.session import (
+    LiveSession,
+    LiveSessionStatus,
+    Response,
+    SessionParticipant,
+    SessionQuestion,
+    SessionQuestionStatus,
+)
 
 __all__ = [
     "Account",
@@ -20,4 +28,10 @@ __all__ = [
     "QuizVersion",
     "QuizVisibility",
     "effective_role",
+    "LiveSession",
+    "LiveSessionStatus",
+    "Response",
+    "SessionParticipant",
+    "SessionQuestion",
+    "SessionQuestionStatus",
 ]
