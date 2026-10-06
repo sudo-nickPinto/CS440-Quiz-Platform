@@ -1,11 +1,28 @@
+from dataclasses import dataclass
+
 import jwt
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
 
+from app.accounts import get_or_create_account
+from app.database import get_db
 from app.errors import APIError
+from app.models.account import AccountRole, effective_role
 
 bearer = HTTPBearer(auto_error=False)
 _jwks: jwt.PyJWKClient | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentAccount:
+    account_id: int
+    role: AccountRole
+    is_active: bool
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == AccountRole.ADMIN
 
 
 def _jwks_client(domain: str) -> jwt.PyJWKClient:
@@ -34,5 +51,39 @@ def current_user(
             audience=settings.auth0_audience,
             issuer=f"https://{settings.auth0_domain}/",
         )
-    except jwt.PyJWTError:
-        raise APIError(401, "invalid_token", "Invalid token")
+    except jwt.PyJWTError as exc:
+        raise APIError(401, "invalid_token", "Invalid token") from exc
+
+
+def get_account_record(
+    request: Request,
+    claims: dict = Depends(current_user),
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: Session = Depends(get_db),
+) -> dict:
+    if creds is None:
+        raise APIError(401, "missing_token", "Missing bearer token")
+    return get_or_create_account(
+        db,
+        request.app.state.settings.auth0_domain,
+        claims["sub"],
+        creds.credentials,
+    )
+
+
+def get_current_account(
+    account: dict = Depends(get_account_record),
+) -> CurrentAccount:
+    return CurrentAccount(
+        account_id=account["account_id"],
+        role=effective_role(account["account_type"]),
+        is_active=bool(account["is_active"]),
+    )
+
+
+def get_active_account(
+    account: CurrentAccount = Depends(get_current_account),
+) -> CurrentAccount:
+    if not account.is_active:
+        raise APIError(403, "inactive_account", "This account is inactive.")
+    return account
