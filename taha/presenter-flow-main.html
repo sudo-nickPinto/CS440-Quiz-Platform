@@ -1,0 +1,2332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiz Platform — Live session (presenter)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<!--
+  Interactive presenter (host) prototype of a live session.
+  Visual design: Anh Nguyen's React mockup (CS440-Quiz-Platform/anh, App.css) — host header bar,
+  question card with the orange timer and pale-sky answer count, 2x2 answers, bar-chart distribution,
+  leaderboard rows with orange rank blocks. New screens (lobby, get ready, podium) reuse her pieces.
+  Everything is fake: 24 simulated participants driven by a seeded RNG, so runs are repeatable.
+  Deep links: #lobby  #q=3  #q=3&t=4  #reveal=3  #board=3  #final
+  Keys: Space/Enter = primary action, P = pause/resume the timer, Esc closes the dialog.
+  Static reference copy: static/presenter-static.html
+-->
+<style>
+:root {
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--sand);
+
+  --navy: #043371;
+  --orange: #CC4E00;
+  --orange-deep: #bf4c0c;
+  --sky: #8fdbff;
+  --sky-soft: #c2e6f8;
+  --apricot: #f6d2b6;
+  --sand: #ecdfd0;
+  --paper: #fcf9f4;
+  --ink: #222222;
+  --gray: #666666;
+  --b: 3px solid var(--ink);
+  --b-thin: 2px solid var(--ink);
+  --shadow: 6px 6px 0 var(--ink);
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --rowh: 68px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--sand);
+  overflow-x: hidden;
+}
+
+button { font: inherit; }
+
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 2px;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 20px 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Shared shell from Taha's Made dashboard */
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.brand-logo {
+  padding: 6px 14px;
+  border: var(--b);
+  background: var(--navy);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--paper);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 22px;
+  font-weight: 400;
+  transform: rotate(-1.5deg);
+}
+
+.brand-logo span { color: var(--sky); }
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 700;
+}
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  border: var(--b);
+  display: grid;
+  place-items: center;
+  background: var(--orange-deep);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--paper);
+}
+
+.mockup-frame {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+/* Host header (Anh's black title bar), now with the session controls */
+.host-header {
+  min-height: 64px;
+  padding: 12px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  border-bottom: var(--b);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.host-header strong {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.hh-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.hh-label {
+  color: var(--apricot);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.hh-label .code { color: var(--paper); }
+.hh-label .short,
+.hh-btn .short { display: none; }
+
+.hh-btn {
+  min-height: 34px;
+  padding: 5px 12px;
+  border: var(--b-thin);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.hh-btn:hover { background: var(--apricot); }
+.hh-btn:active { transform: translate(2px, 2px); }
+
+.host-view {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.host-page {
+  flex: 1 0 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+}
+
+.host-page > * { flex: 0 0 auto; }
+
+/* Screen transitions */
+.screen { animation: screenIn .5s var(--ease) backwards; }
+.screen.leaving { animation: screenOut .2s ease both; }
+
+@keyframes screenIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes screenOut {
+  to { opacity: 0; transform: translateY(-8px); }
+}
+
+.rise { animation: screenIn .55s var(--ease) backwards; animation-delay: calc(var(--i, 0) * 60ms + 80ms); }
+
+/* ---------- Anh's question card ---------- */
+.host-question-content,
+.host-results-content,
+.host-leaderboard-content {
+  width: min(1120px, calc(100% - 48px));
+  margin: 28px auto 36px;
+}
+
+.q-wrap {
+  width: min(1120px, calc(100% - 48px));
+  margin: 24px auto 26px;
+}
+
+.host-question-content {
+  position: relative;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.q-wrap .host-question-content {
+  width: auto;
+  margin: 0;
+}
+
+.host-question-top {
+  min-height: 250px;
+  padding: 32px;
+  display: grid;
+  grid-template-columns: 128px 1fr 128px;
+  align-items: center;
+  gap: 24px;
+  border-bottom: var(--b);
+  background: var(--paper);
+}
+
+.host-question-top h1,
+.host-results-content h1,
+.host-leaderboard-content h1,
+.lobby-top h1,
+.ready-content h1,
+.final-content h1 {
+  font-family: "Archivo Black", sans-serif;
+  font-weight: 400;
+}
+
+.host-question-top h1 {
+  max-width: 760px;
+  margin: auto;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.2;
+  text-align: center;
+}
+
+.host-timer {
+  width: 104px;
+  height: 104px;
+  justify-self: center;
+  border: var(--b);
+  display: grid;
+  place-items: center;
+  background: var(--orange-deep);
+  color: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 34px;
+  transition: background-color .2s, color .2s;
+}
+
+.host-timer.urgent { animation: tick .6s var(--ease); }
+.host-timer.paused { background: var(--sand); color: var(--ink); }
+
+@keyframes tick {
+  0% { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+
+.answer-count {
+  min-height: 104px;
+  border: var(--b);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--sky-soft);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--navy);
+}
+
+.answer-count strong {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.answer-count strong b {
+  display: inline-block;
+  font-weight: 400;
+}
+
+.answer-count strong small { font-size: 20px; }
+
+.answer-count > span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.bump { animation: bump .35s var(--ease); }
+
+@keyframes bump {
+  0% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+.time-track {
+  height: 10px;
+  border-bottom: var(--b);
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.time-fill {
+  height: 100%;
+  background: var(--orange-deep);
+  transform-origin: left center;
+  transition: transform .1s linear;
+}
+
+.host-answers {
+  position: relative;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  background: var(--sand);
+}
+
+.host-answer {
+  min-height: 112px;
+  padding: 20px 24px;
+  border: var(--b);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--ink);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  transition: opacity .3s;
+}
+
+.closed .host-answer,
+.closed .host-question-top h1 { opacity: .45; transition: opacity .3s; }
+
+.answer-index {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border: var(--b-thin);
+  background: var(--sky-soft);
+  color: var(--navy);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 16px;
+}
+
+.pause-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  padding: 7px 16px;
+  display: flex;
+  justify-content: space-between;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity .2s, transform .3s var(--ease);
+  pointer-events: none;
+}
+
+.pause-banner span:last-child { color: var(--apricot); }
+.is-paused .pause-banner { opacity: 1; transform: none; }
+
+.close-stamp {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  padding: 18px 34px;
+  border: var(--b);
+  background: var(--apricot);
+  box-shadow: 8px 8px 0 var(--ink);
+  color: var(--ink);
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(30px, 5vw, 52px);
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  animation: stamp .5s var(--ease) both;
+}
+
+.close-stamp.all { background: var(--sky-soft); color: var(--navy); }
+.close-stamp small {
+  display: block;
+  margin-top: 4px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+@keyframes stamp {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(1.35); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Actions under each screen */
+.host-actions {
+  margin-top: 22px;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.host-next-button,
+.leaderboard-next-button {
+  margin-top: 25px;
+  min-height: 46px;
+  padding: 12px 24px;
+  border: var(--b);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--orange-deep);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--paper);
+  cursor: pointer;
+  font-weight: 700;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.host-actions .host-next-button,
+.host-actions .leaderboard-next-button { margin-top: 0; }
+
+.host-next-button:active,
+.leaderboard-next-button:active {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+.host-next-button:hover { background: var(--orange); }
+
+.leaderboard-next-button {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.leaderboard-next-button:hover { background: var(--sky-soft); }
+
+.host-next-button:disabled,
+.leaderboard-next-button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.host-next-button:disabled:hover { background: var(--orange-deep); }
+.leaderboard-next-button:disabled:hover { background: var(--paper); }
+.leaderboard-next-button:disabled:active { transform: none; box-shadow: 4px 4px 0 var(--ink); }
+.host-next-button:disabled:active { transform: none; box-shadow: 4px 4px 0 var(--ink); }
+
+.kbd-hint {
+  margin: 14px 0 0;
+  color: var(--gray);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.kbd-hint kbd {
+  margin: 0 6px 0 14px;
+  padding: 1px 6px;
+  border: var(--b-thin);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.kbd-hint kbd:first-child { margin-left: 0; }
+
+/* ---------- Lobby ---------- */
+.lobby-content {
+  width: min(1120px, calc(100% - 48px));
+  margin: 28px auto 32px;
+}
+
+.lobby-card {
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.lobby-top {
+  padding: 26px 32px 30px;
+  text-align: center;
+}
+
+.host-eyebrow {
+  margin: 0;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.lobby-top h1 {
+  margin: 6px 0 20px;
+  font-size: clamp(30px, 4vw, 42px);
+}
+
+.join-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 22px 26px;
+}
+
+.join-step {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.join-step b {
+  color: var(--navy);
+  text-decoration: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
+
+.join-code {
+  padding: 6px 26px 10px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  color: var(--navy);
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(40px, 7.5vw, 96px);
+  letter-spacing: 3px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.join-code small {
+  display: block;
+  color: var(--gray);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.lobby-count {
+  width: 128px;
+}
+
+.panel-top {
+  padding: 9px 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: var(--b);
+  border-bottom: var(--b);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.panel-top span:last-child { color: var(--apricot); }
+
+.lobby-players {
+  min-height: 176px;
+  padding: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 12px;
+  background: var(--sand);
+}
+
+.player-chip {
+  padding: 8px 14px;
+  border: var(--b-thin);
+  background: var(--sky-soft);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--navy);
+  font-size: 16px;
+  font-weight: 700;
+  animation: chipIn .45s var(--ease) both;
+}
+
+@keyframes chipIn {
+  from { opacity: 0; transform: translateY(10px) scale(.7); }
+  to { opacity: 1; transform: none; }
+}
+
+.lobby-empty {
+  width: 100%;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray);
+  font-weight: 700;
+}
+
+.waiting-dots {
+  margin-top: 14px;
+  display: flex;
+  gap: 8px;
+}
+
+.waiting-dots span {
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--ink);
+  background: var(--apricot);
+  animation: dot 1.2s var(--ease) infinite;
+}
+
+.waiting-dots span:nth-child(2) { animation-delay: .15s; }
+.waiting-dots span:nth-child(3) { animation-delay: .3s; }
+
+@keyframes dot {
+  0%, 60%, 100% { transform: none; }
+  30% { transform: translateY(-7px); }
+}
+
+/* ---------- Get ready ---------- */
+.ready-content {
+  min-height: 520px;
+  padding: 40px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.ready-content h1 {
+  margin: 8px 0 30px;
+  font-size: clamp(34px, 5vw, 56px);
+}
+
+.ready-num {
+  width: 150px;
+  height: 150px;
+  border: var(--b);
+  display: grid;
+  place-items: center;
+  background: var(--orange-deep);
+  box-shadow: var(--shadow);
+  color: var(--paper);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 76px;
+}
+
+.ready-num.pop { animation: readyPop .6s var(--ease); }
+
+@keyframes readyPop {
+  from { opacity: 0; transform: scale(.55); }
+  to { opacity: 1; transform: none; }
+}
+
+.ready-question {
+  margin: 30px 0 0;
+  max-width: 640px;
+  color: var(--gray);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+/* ---------- Answer distribution (Anh) ---------- */
+.host-results-content { text-align: center; }
+
+.host-results-content h1 {
+  margin: 8px 0;
+  font-size: clamp(30px, 4vw, 40px);
+}
+
+.host-question-small {
+  margin: 0 0 24px;
+  color: var(--gray);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.distribution {
+  height: 390px;
+  padding: 22px;
+  border: var(--b);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 14px;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.distribution-column {
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.bar-area {
+  height: 280px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.bar-number {
+  margin-bottom: 7px;
+  color: var(--navy);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 24px;
+  line-height: 1.1;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity .35s, transform .5s var(--ease);
+}
+
+.bar-number small {
+  display: block;
+  color: var(--gray);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.grown .bar-number { opacity: 1; transform: none; }
+
+.distribution-bar {
+  width: 70%;
+  border: var(--b-thin);
+  border-bottom: 0;
+  background: var(--sand);
+  transform: scaleY(0);
+  transform-origin: bottom center;
+  transition: transform .9s var(--ease);
+}
+
+.grown .distribution-bar { transform: none; }
+
+.distribution-bar.correct {
+  background: var(--sky-soft);
+  border-top: 6px solid var(--navy);
+}
+
+.distribution-label {
+  min-height: 72px;
+  padding: 10px;
+  border: var(--b);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.distribution-label.correct { background: var(--sky-soft); color: var(--navy); }
+
+.dl-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.correct-check {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border: 2px solid var(--ink);
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+  color: var(--navy);
+  font-weight: 900;
+}
+
+.results-meta {
+  margin: 22px 0 0;
+  color: var(--gray);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.results-meta b { color: var(--ink); }
+
+/* ---------- Leaderboard (Anh's rows, animated) ---------- */
+.host-leaderboard-content {
+  max-width: 760px;
+  color: var(--ink);
+  text-align: center;
+}
+
+.host-leaderboard-content h1 {
+  margin: 8px 0 26px;
+  font-size: clamp(36px, 5vw, 48px);
+}
+
+.host-leaderboard {
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.host-leaderboard-row {
+  min-height: 68px;
+  padding: 0 22px 0 0;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  border-bottom: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+}
+
+.host-leaderboard-row:last-child { border-bottom: 0; }
+
+.leaderboard-rank {
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  border-right: var(--b);
+  background: var(--orange-deep);
+  color: var(--paper);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 22px;
+}
+
+.host-leaderboard-row strong {
+  padding-left: 18px;
+  overflow: hidden;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 19px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lb-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+}
+
+.lb-pts {
+  min-width: 92px;
+  font-size: 17px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.lb-delta {
+  color: var(--gray);
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity .3s;
+}
+
+.lb-move {
+  min-width: 44px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity .3s, transform .4s var(--ease);
+}
+
+.lb-move.up { color: var(--navy); }
+.lb-move.down { color: var(--orange-deep); }
+.lb-move.same { color: var(--gray); }
+.show-delta .lb-delta { opacity: 1; }
+.show-move .lb-move { opacity: 1; transform: none; }
+
+.host-leaderboard.live {
+  position: relative;
+  height: calc(var(--rowh) * 5 - 3px);
+  overflow: hidden;
+}
+
+.host-leaderboard.live .host-leaderboard-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--rowh);
+  min-height: 0;
+  border-bottom: var(--b);
+  transform: translateY(calc(var(--slot) * var(--rowh)));
+  transition: transform .85s var(--ease), opacity .45s;
+}
+
+.host-leaderboard-row.gone { opacity: 0; }
+.host-leaderboard-row.climb { z-index: 2; }
+
+/* ---------- Final / podium ---------- */
+.final-content {
+  width: min(1120px, calc(100% - 48px));
+  margin: 26px auto 34px;
+  text-align: center;
+}
+
+.final-content h1 {
+  margin: 6px 0 24px;
+  font-size: clamp(34px, 5vw, 48px);
+}
+
+.final-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  align-items: end;
+  gap: 40px;
+}
+
+.podium {
+  padding: 24px 10px 0 4px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 16px;
+  overflow: hidden;
+  border-bottom: var(--b);
+}
+
+.podium-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(110%);
+  transition: transform .9s var(--ease);
+}
+
+.podium-col.up { transform: none; }
+
+.podium-name {
+  margin-bottom: 12px;
+  padding: 10px 8px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  opacity: 0;
+  transition: opacity .4s .5s;
+}
+
+.podium-col.up .podium-name { opacity: 1; }
+
+.podium-name strong {
+  display: block;
+  overflow: hidden;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 20px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.podium-name span {
+  color: var(--gray);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.podium-block {
+  height: var(--h);
+  padding-top: 16px;
+  border: var(--b);
+  border-bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background: var(--sand);
+}
+
+.p1 .podium-block { background: var(--sky-soft); }
+.p2 .podium-block { background: var(--apricot); }
+
+.podium-rank {
+  width: 62px;
+  height: 62px;
+  border: var(--b);
+  display: grid;
+  place-items: center;
+  background: var(--orange-deep);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--paper);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 30px;
+}
+
+.final-board .host-eyebrow { margin-bottom: 12px; text-align: left; }
+.final-board .host-leaderboard-row { opacity: 0; }
+.final-board.shown .host-leaderboard-row { animation: screenIn .5s var(--ease) both; animation-delay: calc(var(--i) * 70ms); }
+.final-actions { opacity: 0; transition: opacity .4s; }
+.final-actions.shown { opacity: 1; }
+
+.final-empty {
+  padding: 40px 20px;
+  border: var(--b);
+  background: var(--sand);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.confetti {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.confetti i {
+  position: absolute;
+  top: -20px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--ink);
+  animation: fall var(--d) linear var(--delay) both;
+}
+
+@keyframes fall {
+  0% { transform: translate(0, 0); opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translate(var(--dx), 105vh); opacity: 0; }
+}
+
+/* ---------- Dialog + toast ---------- */
+dialog.confirm {
+  width: min(460px, calc(100% - 28px));
+  padding: 0;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 8px 8px 0 var(--ink);
+  color: var(--ink);
+}
+
+dialog.confirm[open] { animation: dlgIn .35s var(--ease); }
+dialog.confirm::backdrop { background: rgba(34, 34, 34, .45); }
+
+@keyframes dlgIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+dialog.confirm .panel-top { border-top: 0; }
+
+.confirm-body { padding: 22px 22px 24px; }
+
+.confirm-body h2 {
+  margin: 0 0 8px;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 26px;
+  font-weight: 400;
+}
+
+.confirm-body p {
+  margin: 0;
+  color: var(--gray);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.confirm-body .host-actions { justify-content: flex-end; }
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 99;
+  max-width: calc(100% - 28px);
+  padding: 12px 20px;
+  border: 3px solid var(--ink);
+  background: var(--navy);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+  transform: translate(-50%, calc(100% + 60px));
+  visibility: hidden;
+  transition: transform .25s var(--ease), visibility 0s .25s;
+}
+
+.toast.show { transform: translate(-50%, 0); visibility: visible; transition: transform .25s var(--ease); }
+
+.sr-only {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- Full-bleed question + results (fill the frame, scale type with the space) ---------- */
+.q-full,
+.r-full {
+  flex: 1 1 auto !important;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  --tsize: clamp(104px, min(19vh, 13vw), 180px);
+}
+
+.q-full .host-question-content {
+  width: auto;
+  margin: 0;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  box-shadow: none;
+}
+
+.q-full .host-question-top {
+  flex: 1 1 0;
+  min-height: 0;
+  padding: clamp(18px, 3vh, 34px) clamp(20px, 3vw, 44px);
+  grid-template-columns: calc(var(--tsize) * 1.2) minmax(0, 1fr) calc(var(--tsize) * 1.2);
+  grid-template-rows: minmax(0, 1fr);
+  gap: clamp(18px, 2.5vw, 40px);
+}
+
+.q-text {
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.q-full .host-question-top h1 {
+  max-width: 1100px;
+  margin: 0;
+  font-size: clamp(30px, min(4.4vw, 7.2vh), 74px);
+  line-height: 1.15;
+}
+
+.q-full .host-timer {
+  width: var(--tsize);
+  height: var(--tsize);
+  font-size: calc(var(--tsize) * .42);
+}
+
+.q-full .answer-count {
+  width: calc(var(--tsize) * 1.2);
+  height: var(--tsize);
+  min-height: 0;
+  justify-self: center;
+}
+
+.q-full .answer-count strong { font-size: calc(var(--tsize) * .36); }
+.q-full .answer-count strong small { font-size: calc(var(--tsize) * .19); }
+.q-full .answer-count > span { font-size: max(12px, calc(var(--tsize) * .085)); }
+
+.q-full .time-track { height: clamp(10px, 1.4vh, 14px); }
+
+.q-full .host-answers {
+  flex: 1.2 1 0;
+  min-height: 0;
+  padding: clamp(12px, 2vh, 22px);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: clamp(12px, 2vh, 22px);
+}
+
+.q-full .host-answer {
+  min-height: 0;
+  padding: 12px clamp(18px, 2.4vw, 36px);
+  gap: clamp(14px, 1.6vw, 26px);
+  font-size: clamp(20px, min(2.8vw, 4.6vh), 46px);
+  line-height: 1.15;
+}
+
+.q-full .answer-index {
+  width: 2.3em;
+  height: 2.3em;
+  flex: 0 0 2.3em;
+  border-width: 3px;
+  font-size: .62em;
+}
+
+.q-full .pause-banner { font-size: 13px; padding: 8px 18px; }
+.q-full .close-stamp { font-size: clamp(36px, min(6vw, 8vh), 80px); padding: .35em .7em; }
+.q-full .close-stamp small { font-size: clamp(13px, 1.8vh, 18px); }
+
+/* Slim control strip at the bottom of the frame (the dashboard's stripe texture is for control strips) */
+.control-strip {
+  min-height: 68px;
+  padding: 10px clamp(14px, 2vw, 28px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 18px;
+  flex-wrap: wrap;
+  border-top: var(--b);
+  background: repeating-linear-gradient(45deg, var(--paper), var(--paper) 10px, var(--sand) 10px, var(--sand) 20px);
+}
+
+.control-strip .kbd-hint,
+.control-strip .results-meta { margin: 0; text-align: left; }
+
+.control-strip .results-meta {
+  padding: 6px 12px;
+  border: var(--b-thin);
+  background: var(--paper);
+  color: var(--gray);
+}
+
+.strip-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 14px;
+}
+
+.strip-actions .host-next-button,
+.strip-actions .leaderboard-next-button { margin-top: 0; }
+
+/* Results */
+.r-full { text-align: center; }
+
+.r-head {
+  padding: clamp(14px, 2.4vh, 26px) 24px clamp(12px, 2vh, 22px);
+  border-bottom: var(--b);
+  text-align: center;
+}
+
+.r-head h1 {
+  margin: 4px 0 6px;
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(28px, min(3.4vw, 5vh), 46px);
+  font-weight: 400;
+}
+
+.r-head .host-question-small {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(17px, min(1.9vw, 3vh), 26px);
+  font-weight: 700;
+}
+
+.r-full .distribution {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+  padding: clamp(14px, 2.4vh, 26px) clamp(14px, 2.4vw, 36px) 0;
+  align-items: stretch;
+  gap: clamp(12px, 2vw, 30px);
+  border: 0;
+  box-shadow: none;
+}
+
+.r-full .bar-area {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+}
+
+.r-full .bar-number {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(max(4px, var(--h)) + 8px);
+  margin: 0;
+  font-size: clamp(24px, min(3vw, 5vh), 48px);
+}
+
+.r-full .bar-number small { font-size: clamp(13px, 1.9vh, 18px); }
+
+.r-full .distribution-bar {
+  position: absolute;
+  left: 15%;
+  bottom: 0;
+  width: 70%;
+  height: max(4px, var(--h));
+}
+
+.r-full .distribution-label {
+  min-height: clamp(72px, 12vh, 116px);
+  border-bottom: 0;
+  font-size: clamp(16px, min(1.9vw, 3vh), 28px);
+  gap: .5em;
+}
+
+.r-full .distribution-label .answer-index {
+  width: 2.1em;
+  height: 2.1em;
+  flex: 0 0 2.1em;
+  font-size: .7em;
+}
+
+.r-full .correct-check {
+  width: 1.3em;
+  height: 1.3em;
+  flex: 0 0 1.3em;
+}
+
+/* Phones and very short windows: natural height, page scrolls */
+@media (max-width: 640px), (max-height: 560px) {
+  .q-full,
+  .r-full { flex: 0 0 auto !important; --tsize: 104px; }
+  .q-full .host-question-content,
+  .q-full .host-question-top,
+  .q-full .host-answers,
+  .r-full .distribution { flex: 0 0 auto; }
+  .q-full .host-answers { grid-template-rows: none; }
+  .q-full .host-question-top { grid-template-rows: none; }
+  .q-full .host-answer { min-height: 64px; }
+  .r-full .distribution { height: 350px; }
+  .r-full .bar-area { flex: 0 0 230px; }
+}
+
+/* ---------- Responsive ---------- */
+@media (min-width: 641px) and (max-height: 930px) {
+  .app-shell { padding-top: 16px; gap: 14px; }
+}
+
+@media (max-width: 1100px) {
+  .final-grid { grid-template-columns: minmax(0, 1fr); max-width: 760px; margin: 0 auto; gap: 34px; }
+}
+
+@media (max-width: 900px) {
+  .host-question-top {
+    grid-template-columns: 112px 1fr 112px;
+    padding: 24px;
+  }
+
+  .host-timer,
+  .answer-count {
+    width: 96px;
+    min-height: 96px;
+    height: 96px;
+  }
+
+  .answer-count { justify-self: center; }
+  .answer-count strong { font-size: 30px; }
+  .answer-count strong small { font-size: 17px; }
+  .join-step { text-align: center; }
+}
+
+@media (max-width: 640px) {
+  :root { --rowh: 60px; }
+
+  .app-shell {
+    padding: 12px 10px 14px;
+    gap: 12px;
+  }
+
+  .user .name { display: none; }
+  .brand-logo { font-size: 17px; }
+  .mockup-frame { box-shadow: 4px 4px 0 var(--ink); }
+
+  .host-header {
+    min-height: 56px;
+    padding: 10px 14px;
+  }
+
+  .host-header strong { font-size: 16px; }
+  .hh-right { gap: 10px; }
+  .hh-label .long,
+  .hh-btn .long { display: none; }
+  .hh-label .short,
+  .hh-btn .short { display: inline; }
+
+  .host-question-content,
+  .host-results-content,
+  .host-leaderboard-content,
+  .q-wrap,
+  .lobby-content,
+  .final-content {
+    width: calc(100% - 24px);
+    margin: 16px auto 22px;
+  }
+
+  .lobby-top { padding: 20px 14px 22px; }
+  .lobby-count { width: 104px; min-height: 88px; }
+  .lobby-players { min-height: 140px; padding: 12px; gap: 9px; }
+  .player-chip { padding: 6px 10px; font-size: 14px; }
+
+  .host-question-top {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding: 20px 16px;
+    min-height: 0;
+  }
+
+  .host-question-top h1 {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    font-size: 24px;
+  }
+
+  .host-timer,
+  .answer-count { justify-self: center; width: 104px; }
+  .q-full .answer-count { width: 112px; }
+
+  .host-answers,
+  .q-full .host-answers { grid-template-columns: 1fr; padding: 12px; gap: 10px; }
+
+  .host-answer,
+  .q-full .host-answer {
+    min-height: 64px;
+    padding: 12px 14px;
+    font-size: 19px;
+  }
+
+  .q-full .host-question-top { grid-template-columns: 1fr 1fr; grid-template-rows: none; padding: 20px 16px; gap: 16px; }
+  .q-full .q-text { grid-column: 1 / -1; grid-row: 1; overflow: visible; }
+  .q-full .host-question-top h1 { font-size: 24px; }
+  .control-strip { padding: 10px 12px; }
+  .control-strip .results-meta { width: 100%; font-size: 13px; }
+  .strip-actions { width: 100%; margin-left: 0; }
+  .strip-actions > * { flex: 1 1 0; }
+  .r-head .host-question-small { font-size: 16px; }
+  .r-full .distribution { padding: 10px 8px 0; gap: 6px; }
+  .r-full .distribution-label { font-size: 12px; min-height: 88px; }
+
+  .close-stamp { padding: 14px 20px; }
+  .kbd-hint { display: none; }
+
+  .host-actions > * { flex: 1 1 140px; }
+
+  .distribution {
+    height: 350px;
+    padding: 10px;
+    gap: 6px;
+  }
+
+  .bar-area { height: 230px; }
+  .bar-number { font-size: 20px; }
+  .distribution-bar { width: 80%; }
+
+  .distribution-label {
+    min-height: 88px;
+    padding: 6px 2px;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+  }
+
+  .correct-check { width: 22px; height: 22px; flex-basis: 22px; }
+
+  .host-leaderboard-row {
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+    padding-right: 10px;
+  }
+
+  .leaderboard-rank { font-size: 19px; }
+
+  .host-leaderboard-row strong {
+    padding-left: 10px;
+    font-size: 16px;
+  }
+
+  .lb-right { gap: 6px; }
+  .lb-delta { display: none; }
+  .lb-move { min-width: 30px; font-size: 12px; }
+  .lb-pts { min-width: 0; font-size: 15px; }
+
+  .podium { gap: 8px; padding-top: 16px; }
+  .podium-name { padding: 8px 4px; }
+  .podium-name strong { font-size: 15px; }
+  .podium-name span { font-size: 12px; }
+  .podium-rank { width: 46px; height: 46px; font-size: 22px; }
+  .ready-content { min-height: 420px; }
+  .ready-num { width: 120px; height: 120px; font-size: 60px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    transition-delay: 0s !important;
+  }
+  .confetti { display: none; }
+}
+
+/* Shared scrollbar block (DESIGN-GUIDE section 4) */
+@supports not selector(::-webkit-scrollbar) {
+  html { scrollbar-width: thin; scrollbar-color: var(--ink) var(--sand); }
+  * { scrollbar-width: thin; scrollbar-color: var(--ink) transparent; }
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+html::-webkit-scrollbar, html::-webkit-scrollbar-track, body::-webkit-scrollbar, body::-webkit-scrollbar-track { background: var(--sand); }
+::-webkit-scrollbar-thumb { background: var(--ink); border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <header class="top">
+    <div class="brand-logo">QUIZ<span>.</span>PLATFORM</div>
+    <div class="user">
+      <span class="name">Taha Sabir</span>
+      <div class="avatar" aria-hidden="true">TS</div>
+    </div>
+  </header>
+
+  <div class="mockup-frame">
+    <header class="host-header">
+      <div><strong>Data Structures</strong></div>
+      <div class="hh-right">
+        <span class="hh-label" id="hhLabel"></span>
+        <button type="button" class="hh-btn" id="endBtn" aria-label="End session" hidden><span class="long">End session</span><span class="short">End</span></button>
+      </div>
+    </header>
+    <div class="host-view" id="view"></div>
+  </div>
+</div>
+
+<dialog class="confirm" id="endDlg" aria-labelledby="endTitle">
+  <div class="panel-top"><span>End session</span><span id="dlgWhere"></span></div>
+  <div class="confirm-body">
+    <h2 id="endTitle">End the session now?</h2>
+    <p id="dlgText"></p>
+    <div class="host-actions">
+      <button type="button" class="leaderboard-next-button" id="dlgKeep">Keep going</button>
+      <button type="button" class="host-next-button" id="dlgEnd">End session</button>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="sr-only" id="sr" aria-live="polite"></div>
+
+<script>
+/*SIM-START*/
+// ---------- Shared quiz data (same as participant-flow.html) ----------
+const QUIZ = {
+  title: "Data Structures",
+  code: "482 913",
+  questions: [
+    { text: "Which data structure follows LIFO (Last In, First Out) ordering?",
+      answers: ["Stack", "Queue", "Linked List", "Heap"], correct: 0, limit: 20,
+      diff: .05, everyone: true, distract: [0, 5, 1, 2] },
+    { text: "What is the worst-case time to search a balanced binary search tree?",
+      answers: ["O(1)", "O(log n)", "O(n)", "O(n log n)"], correct: 1, limit: 20,
+      diff: .42, everyone: false, distract: [1, 0, 5, 3] },
+    { text: "Which data structure follows FIFO (First In, First Out) ordering?",
+      answers: ["Stack", "Queue", "Binary Tree", "Hash Table"], correct: 1, limit: 20,
+      diff: .1, everyone: true, distract: [5, 0, 1, 1] },
+    { text: "Which structure gives average O(1) lookup by key?",
+      answers: ["Array", "Linked List", "Hash Table", "Binary Heap"], correct: 2, limit: 20,
+      diff: .28, everyone: false, distract: [4, 1, 0, 3] },
+    { text: "Which traversal visits a BST's keys in sorted order?",
+      answers: ["Pre-order", "In-order", "Post-order", "Level-order"], correct: 1, limit: 30,
+      diff: .34, everyone: false, distract: [3, 0, 2, 3] }
+  ]
+};
+
+// 24 fictional participants: [name, accuracy, speed (share of the time limit they usually use), skip chance]
+const PEOPLE = [
+  ["Priya K.", .96, .20, 0], ["Marcus T.", .90, .27, 0], ["Alex M.", .87, .22, .03],
+  ["Jamie L.", .89, .33, 0], ["Sofia R.", .83, .30, .02], ["Ethan W.", .74, .16, .02],
+  ["Grace H.", .94, .50, 0], ["Noah B.", .71, .26, .04], ["Mia C.", .80, .40, .02],
+  ["Taha S.", .84, .36, .02], ["Liam O.", .73, .35, .03], ["Zoe P.", .75, .44, .02],
+  ["Owen D.", .66, .30, .05], ["Ava N.", .79, .53, .03], ["Lucas F.", .60, .24, .04],
+  ["Chloe G.", .69, .46, .04], ["Ben A.", .58, .34, .06], ["Isla V.", .65, .56, .05],
+  ["Ryan J.", .52, .19, .06], ["Nora E.", .63, .61, .08], ["Caleb Y.", .50, .42, .08],
+  ["Leah Z.", .56, .66, .10], ["Diego Q.", .46, .30, .10], ["Hannah I.", .42, .50, .12]
+].map(([name, acc, speed, skip], id) => ({ id, name, acc, speed, skip }));
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+const SEED = 440482975;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const scoreFor = (t, limit) => Math.round(1000 * (1 - (t / limit) / 2));
+
+// Precomputed, seeded answer plan: PLAN[question][participant] = { answered, t, choice }
+const PLAN = (() => {
+  const rand = mulberry32(SEED);
+  return QUIZ.questions.map(q => PEOPLE.map(p => {
+    const r1 = rand(), r2 = rand(), r3 = rand(), r4 = rand();
+    let frac = p.speed * (.55 + r1 * .9) + q.diff * .12;
+    frac = clamp(frac, .07, q.everyone ? .88 : .99);
+    const answered = q.everyone ? true : (r2 >= p.skip + q.diff * .05 && frac < .96);
+    const pc = clamp(p.acc - q.diff * .35, .08, .98);
+    let choice = q.correct;
+    if (r3 >= pc) {
+      const total = q.distract.reduce((s, w) => s + w, 0);
+      let x = r4 * total;
+      choice = q.distract.findIndex(w => (x -= w) < 0);
+    }
+    return { answered, t: Math.round(frac * q.limit * 10) / 10, choice };
+  }));
+})();
+
+// Join times in the lobby (seconds). Most arrive in the first ~7s, a few late joiners trickle in.
+const JOIN_AT = (() => {
+  const rand = mulberry32(SEED + 7);
+  const order = PEOPLE.map(p => p.id).filter(id => id !== 9);
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+  order.splice(4, 0, 9); // Taha S. joins early
+  const at = [];
+  let t = .7;
+  order.forEach((id, i) => {
+    if (i < 20) t += .12 + rand() * .45;
+    else t += 2.5 + rand() * 3.5;
+    at[id] = Math.round(t * 100) / 100;
+  });
+  return at;
+})();
+
+function standings(totals, roster) {
+  return roster.slice().sort((a, b) => totals[b] - totals[a] || PEOPLE[a].name.localeCompare(PEOPLE[b].name));
+}
+
+// Which participants have answered question qi by elapsed time e
+function answeredBy(qi, roster, e) {
+  return roster.filter(id => PLAN[qi][id].answered && PLAN[qi][id].t <= e + 1e-9);
+}
+
+function naturalClose(qi, roster) {
+  const plan = roster.map(id => PLAN[qi][id]);
+  if (plan.every(a => a.answered)) return Math.max(...plan.map(a => a.t));
+  return QUIZ.questions[qi].limit;
+}
+/*SIM-END*/
+
+// ---------- App ----------
+const $ = s => document.querySelector(s);
+const view = $("#view");
+const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const NQ = QUIZ.questions.length;
+const fmt = n => n.toLocaleString("en-US");
+
+let S;
+let timers = new Set();
+let tickId = null;
+
+function resetState() {
+  S = {
+    screen: null, qi: -1, joined: [], lobbyStart: 0, history: [],
+    totals: PEOPLE.map(() => 0), run: null, paused: false, closing: false,
+    ended: false, primary: null
+  };
+}
+
+function later(fn, ms) {
+  const id = setTimeout(() => { timers.delete(id); fn(); }, ms);
+  timers.add(id);
+  return id;
+}
+
+const anim = ms => RM ? 0 : ms;
+
+function stopAll() {
+  timers.forEach(clearTimeout);
+  timers.clear();
+  clearInterval(tickId);
+  tickId = null;
+  document.querySelectorAll(".confetti").forEach(c => c.remove());
+}
+
+let toastT;
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove("show"), 1900);
+}
+
+const say = msg => { $("#sr").textContent = msg; };
+
+function setHash(h) { history.replaceState(null, "", "#" + h); }
+
+function header(long, short, showEnd) {
+  $("#hhLabel").innerHTML = `<span class="long">${long}</span><span class="short">${short || long}</span>`;
+  $("#endBtn").hidden = !showEnd;
+}
+
+// Swap the screen with a short fade-out / rise-in
+function mount(html, name) {
+  stopAll();
+  S.screen = name;
+  S.primary = null;
+  const el = document.createElement("div");
+  el.className = "host-page screen";
+  el.dataset.screen = name;
+  el.innerHTML = html;
+  // Retire every current screen (fast double presses can leave more than one on its way out)
+  view.querySelectorAll(":scope > .screen").forEach(old => {
+    if (RM || old.classList.contains("leaving")) { old.remove(); return; }
+    old.classList.add("leaving");
+    old.style.position = "absolute";
+    old.style.inset = "0 0 auto 0";
+    old.setAttribute("aria-hidden", "true");
+    old.inert = true;
+    setTimeout(() => old.remove(), 200);
+    el.style.animationDelay = ".12s";
+  });
+  view.appendChild(el);
+  const frameTop = view.getBoundingClientRect().top + scrollY - 90;
+  if (scrollY > frameTop) scrollTo({ top: Math.max(0, frameTop), behavior: RM ? "auto" : "smooth" });
+  return el;
+}
+
+function countUp(el, from, to, ms, f = fmt) {
+  if (!el) return;
+  if (RM || ms <= 0) { el.textContent = f(to); return; }
+  const t0 = performance.now();
+  const step = now => {
+    const k = Math.min(1, (now - t0) / ms);
+    const e = 1 - Math.pow(1 - k, 3);
+    el.textContent = f(Math.round(from + (to - from) * e));
+    if (k < 1 && el.isConnected) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Shrink the question text only if it doesn't fit its share of the screen
+function fitQuestion() {
+  const cell = document.querySelector('.screen:not(.leaving) .q-text');
+  if (!cell) return;
+  const h1 = cell.firstElementChild;
+  h1.style.fontSize = "";
+  let size = parseFloat(getComputedStyle(h1).fontSize);
+  while (size > 20 && (h1.offsetHeight > cell.clientHeight || h1.scrollWidth > cell.clientWidth)) {
+    size -= 2;
+    h1.style.fontSize = size + "px";
+  }
+}
+window.addEventListener("resize", fitQuestion);
+if (document.fonts) {
+  document.fonts.ready.then(fitQuestion);
+  document.fonts.addEventListener("loadingdone", fitQuestion); // refit once Archivo Black arrives
+}
+
+function bump(el) {
+  if (!el || RM) return;
+  el.classList.remove("bump");
+  void el.offsetWidth;
+  el.classList.add("bump");
+}
+
+// ---------- Lobby ----------
+function showLobby() {
+  resetState();
+  const el = mount(`
+    <main class="lobby-content">
+      <section class="lobby-card">
+        <div class="lobby-top">
+          <p class="host-eyebrow">Live session · Waiting room</p>
+          <h1>${QUIZ.title}</h1>
+          <div class="join-row">
+            <p class="join-step">Go to <b>quiz.platform</b><br>and enter the code</p>
+            <div class="join-code" aria-label="Join code ${QUIZ.code.split("").join(" ")}"><small>Join code</small>${QUIZ.code}</div>
+            <div class="answer-count lobby-count"><strong><b id="joinN">0</b></strong><span id="joinWord">Players</span></div>
+          </div>
+        </div>
+        <div class="panel-top"><span>Players</span><span id="joinNote">Waiting…</span></div>
+        <div class="lobby-players" id="chips">
+          <div class="lobby-empty" id="lobbyEmpty">Waiting for players to join
+            <div class="waiting-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+          </div>
+        </div>
+      </section>
+      <div class="host-actions">
+        <a class="leaderboard-next-button" href="made-dashboard-main.html">Cancel</a>
+        <button type="button" class="host-next-button" id="startBtn" disabled>Start quiz →</button>
+      </div>
+      <p class="kbd-hint"><kbd>Space</kbd>Start quiz</p>
+    </main>`, "lobby");
+  header(`Lobby · Code <span class="code">${QUIZ.code}</span>`, "Lobby", false);
+  setHash("lobby");
+  say("Lobby open. Join code " + QUIZ.code);
+  S.lobbyStart = performance.now();
+  el.querySelector("#startBtn").addEventListener("click", startQuiz);
+  S.primary = startQuiz;
+  tickId = setInterval(lobbyTick, 100);
+  lobbyTick();
+}
+
+function lobbyTick() {
+  const e = (performance.now() - S.lobbyStart) / 1000;
+  const chips = $("#chips");
+  let added = false;
+  PEOPLE.forEach(p => {
+    if (JOIN_AT[p.id] <= e && !S.joined.includes(p.id)) {
+      S.joined.push(p.id);
+      added = true;
+      const c = document.createElement("span");
+      c.className = "player-chip";
+      c.textContent = p.name;
+      chips.appendChild(c);
+    }
+  });
+  if (!added) return;
+  $("#lobbyEmpty")?.remove();
+  const n = S.joined.length;
+  $("#joinN").textContent = n;
+  bump($("#joinN"));
+  $("#joinWord").textContent = n === 1 ? "Player" : "Players";
+  $("#joinNote").textContent = n === PEOPLE.length ? "Everyone's here" : "Late joiners welcome";
+  $("#startBtn").disabled = false;
+  if (n === PEOPLE.length) clearInterval(tickId);
+}
+
+function startQuiz() {
+  if (S.screen !== "lobby") return;
+  if (!S.joined.length) { toast("Wait for at least one player to join"); return; }
+  showReady();
+}
+
+// ---------- Get ready (3-2-1) ----------
+function showReady() {
+  const el = mount(`
+    <main class="ready-content">
+      <p class="host-eyebrow">Question 1 of ${NQ} · ${S.joined.length} players</p>
+      <h1>Get ready…</h1>
+      <div class="ready-num pop" id="readyNum" aria-hidden="true">3</div>
+      <p class="ready-question">Players are seeing the countdown on their phones too.</p>
+    </main>`, "ready");
+  header("Starting", "Starting", true);
+  say("Quiz starting");
+  let n = 3;
+  const go = () => startQuestion(0);
+  const step = () => {
+    n--;
+    if (n === 0) return go();
+    const num = el.querySelector("#readyNum");
+    num.textContent = n;
+    num.classList.remove("pop"); void num.offsetWidth; num.classList.add("pop");
+    later(step, 750);
+  };
+  later(step, 750);
+  S.primary = go;
+}
+
+// ---------- Question ----------
+function joinLate() {
+  // Players who hadn't arrived when the host pressed Start join on their own schedule
+  // (clock keeps running from the lobby) and are added at the start of the next question.
+  const since = (performance.now() - S.lobbyStart) / 1000;
+  const missing = PEOPLE.filter(p => !S.joined.includes(p.id) && JOIN_AT[p.id] <= since).map(p => p.id);
+  if (!missing.length) return;
+  missing.forEach(id => S.joined.push(id));
+  later(() => toast(missing.length === 1 ? `${PEOPLE[missing[0]].name} joined late` : `${missing.length} more players joined`), 900);
+}
+
+function startQuestion(qi, opts = {}) {
+  joinLate();
+  const q = QUIZ.questions[qi];
+  S.qi = qi;
+  S.closing = false;
+  S.paused = false;
+  const roster = S.joined.slice();
+  const el = mount(`
+    <main class="q-full">
+      <section class="host-question-content" id="qcard">
+        <div class="pause-banner" aria-hidden="true"><span>Timer paused</span><span>Press P to resume</span></div>
+        <div class="host-question-top">
+          <div class="host-timer" id="timer" aria-label="Seconds left">${q.limit}</div>
+          <div class="q-text"><h1 class="rise">${q.text}</h1></div>
+          <div class="answer-count"><strong><b id="ansN">0</b><small>/${roster.length}</small></strong><span>Answers</span></div>
+        </div>
+        <div class="time-track" aria-hidden="true"><div class="time-fill" id="tfill"></div></div>
+        <div class="host-answers">
+          ${q.answers.map((a, i) => `<div class="host-answer rise" style="--i:${i + 2}"><span class="answer-index">${"ABCD"[i]}</span><span>${a}</span></div>`).join("")}
+        </div>
+      </section>
+      <div class="control-strip">
+        <p class="kbd-hint"><kbd>Space</kbd>Close question<kbd>P</kbd>Pause</p>
+        <div class="strip-actions">
+          <button type="button" class="leaderboard-next-button" id="pauseBtn">❚❚ Pause</button>
+          <button type="button" class="host-next-button" id="closeBtn">Close question</button>
+        </div>
+      </div>
+    </main>`, "question");
+  fitQuestion();
+  header(`Code <span class="code">${QUIZ.code}</span> · Question ${qi + 1} of ${NQ}`, `Q ${qi + 1} / ${NQ}`, true);
+  setHash("q=" + (qi + 1));
+  say(`Question ${qi + 1} of ${NQ}. ${q.text}`);
+  const startAt = opts.t != null ? clamp(q.limit - opts.t, 0, q.limit - .1) : 0;
+  S.run = { qi, roster, acc: startAt, startAt: performance.now(), running: true, shown: -1, lastSec: null };
+  el.querySelector("#pauseBtn").addEventListener("click", togglePause);
+  el.querySelector("#closeBtn").addEventListener("click", () => closeQuestion("host"));
+  S.primary = () => S.closing ? showReveal(qi) : closeQuestion("host");
+  tickId = setInterval(questionTick, 100);
+  questionTick();
+  if (dlg.open) pause(true);
+}
+
+function elapsed() {
+  const r = S.run;
+  return r.acc + (r.running ? (performance.now() - r.startAt) / 1000 : 0);
+}
+
+function questionTick() {
+  if (S.screen !== "question" || S.closing) return;
+  const r = S.run;
+  const q = QUIZ.questions[r.qi];
+  const e = Math.min(elapsed(), q.limit);
+  const left = q.limit - e;
+  const sec = Math.ceil(left - 1e-9);
+  const timer = $("#timer");
+  if (sec !== r.lastSec) {
+    timer.textContent = sec;
+    r.lastSec = sec;
+    if (sec <= 5 && sec > 0) {
+      timer.classList.add("urgent");
+      if (!RM) { timer.style.animation = "none"; void timer.offsetWidth; timer.style.animation = ""; }
+    }
+  }
+  $("#tfill").style.transform = `scaleX(${left / q.limit})`;
+  const n = answeredBy(r.qi, r.roster, e).length;
+  if (n !== r.shown) {
+    $("#ansN").textContent = n;
+    if (r.shown >= 0) bump($("#ansN"));
+    r.shown = n;
+  }
+  if (n === r.roster.length) closeQuestion("all");
+  else if (left <= 0) closeQuestion("time");
+}
+
+function pause(silent) {
+  if (S.screen !== "question" || S.closing || S.paused) return;
+  S.run.acc = elapsed();
+  S.run.running = false;
+  S.paused = true;
+  $("#qcard").classList.add("is-paused");
+  $("#timer").classList.add("paused");
+  $("#pauseBtn").textContent = "▶ Resume";
+  if (!silent) { toast("Timer paused"); say("Timer paused"); }
+}
+
+function resume(silent) {
+  if (S.screen !== "question" || S.closing || !S.paused) return;
+  S.run.startAt = performance.now();
+  S.run.running = true;
+  S.paused = false;
+  $("#qcard").classList.remove("is-paused");
+  $("#timer").classList.remove("paused");
+  $("#pauseBtn").textContent = "❚❚ Pause";
+  if (!silent) { toast("Timer resumed"); say("Timer resumed"); }
+}
+
+function togglePause() {
+  if (S.screen !== "question" || S.closing) { toast("Pause works while a question is open"); return; }
+  S.paused ? resume() : pause();
+}
+
+function record(qi, closedAt, roster) {
+  const q = QUIZ.questions[qi];
+  const ans = {};
+  answeredBy(qi, roster, closedAt).forEach(id => {
+    const a = PLAN[qi][id];
+    const pts = a.choice === q.correct ? scoreFor(a.t, q.limit) : 0;
+    ans[id] = { choice: a.choice, t: a.t, pts };
+    S.totals[id] += pts;
+  });
+  S.history[qi] = { closedAt, roster: roster.slice(), ans, totals: S.totals.slice() };
+}
+
+function closeQuestion(reason) {
+  if (S.screen !== "question" || S.closing) return;
+  const r = S.run;
+  const q = QUIZ.questions[r.qi];
+  if (S.paused) resume(true);
+  const e = reason === "time" ? q.limit : Math.min(elapsed(), q.limit);
+  r.acc = e; r.running = false;
+  S.closing = true;
+  clearInterval(tickId);
+  record(r.qi, e, r.roster);
+  const n = Object.keys(S.history[r.qi].ans).length;
+  const card = $("#qcard");
+  card.classList.add("closed");
+  if (reason === "time") { $("#timer").textContent = 0; $("#tfill").style.transform = "scaleX(0)"; }
+  $("#ansN").textContent = n;
+  const label = reason === "time" ? "Time's up!" : reason === "all" ? "Everyone answered!" : "Question closed";
+  const stamp = document.createElement("div");
+  stamp.className = "close-stamp" + (reason === "all" ? " all" : "");
+  stamp.innerHTML = `${label}<small>${n} of ${r.roster.length} answered</small>`;
+  card.querySelector(".host-answers").appendChild(stamp); // over the answers, so the question stays readable
+  $("#closeBtn").textContent = "Show results →";
+  $("#pauseBtn").disabled = true;
+  $("#closeBtn").onclick = () => showReveal(r.qi);
+  const hint = document.querySelector(".kbd-hint");
+  if (hint) hint.innerHTML = "<kbd>Space</kbd>Show results";
+  say(label);
+  later(() => showReveal(r.qi), 1800);
+}
+
+// ---------- Answer results ----------
+function showReveal(qi) {
+  const q = QUIZ.questions[qi];
+  const h = S.history[qi];
+  const counts = [0, 0, 0, 0];
+  Object.values(h.ans).forEach(a => counts[a.choice]++);
+  const answered = counts.reduce((s, c) => s + c, 0);
+  const max = Math.max(1, ...counts);
+  const right = counts[q.correct];
+  const fastest = Object.entries(h.ans).filter(([, a]) => a.choice === q.correct).sort((a, b) => a[1].t - b[1].t)[0];
+  const el = mount(`
+    <main class="r-full">
+      <div class="r-head">
+        <p class="host-eyebrow">Question ${qi + 1} of ${NQ}</p>
+        <h1>How did everyone answer?</h1>
+        <p class="host-question-small">${q.text}</p>
+      </div>
+      <div class="distribution" id="dist">
+        ${q.answers.map((a, i) => {
+          const ok = i === q.correct;
+          const pct = answered ? Math.round(counts[i] / answered * 100) : 0;
+          return `<div class="distribution-column">
+            <div class="bar-area" style="--i:${i};--h:${counts[i] ? Math.max(4, Math.round(counts[i] / max * 72)) : 0}%">
+              <span class="bar-number" style="transition-delay:${anim(i * 110 + 350)}ms"><span data-count="${counts[i]}">0</span><small>${pct}%</small></span>
+              <div class="distribution-bar${ok ? " correct" : ""}" style="transition-delay:${anim(i * 110)}ms"></div>
+            </div>
+            <div class="distribution-label${ok ? " correct" : ""}" aria-label="Answer ${"ABCD"[i]}, ${a}${ok ? ", correct answer" : ""}">
+              <span class="answer-index">${"ABCD"[i]}</span><span class="dl-text">${a}</span>${ok ? '<span class="correct-check">✓</span>' : ""}
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+      <div class="control-strip">
+      <p class="results-meta"><b>${answered}</b> of ${h.roster.length} answered · <b>${right}</b> correct (${answered ? Math.round(right / answered * 100) : 0}%)${fastest ? ` · fastest correct: <b>${PEOPLE[fastest[0]].name}</b> ${fastest[1].t.toFixed(1)}s` : ""}</p>
+      <div class="strip-actions"><button type="button" class="host-next-button" id="nextBtn">Show Leaderboard</button></div>
+      </div>
+    </main>`, "reveal");
+  header(`Code <span class="code">${QUIZ.code}</span> · Question ${qi + 1} Results`, "Results", true);
+  setHash("reveal=" + (qi + 1));
+  say(`Results for question ${qi + 1}. Correct answer: ${q.answers[q.correct]}. ${right} of ${answered} correct.`);
+  const go = () => showBoard(qi);
+  el.querySelector("#nextBtn").addEventListener("click", go);
+  S.primary = go;
+  later(() => {
+    el.querySelector("#dist").classList.add("grown");
+    el.querySelectorAll("[data-count]").forEach((s, i) => later(() => countUp(s, 0, +s.dataset.count, 700), anim(i * 110 + 300)));
+  }, anim(380));
+}
+
+// ---------- Leaderboard ----------
+function rowHTML(id, rank, pts, extra = "") {
+  return `<div class="host-leaderboard-row" data-id="${id}" ${extra}>
+    <span class="leaderboard-rank">${rank}</span>
+    <strong>${PEOPLE[id].name}</strong>
+    <span class="lb-right"><span class="lb-move"></span><span class="lb-delta"></span><span class="lb-pts"><span class="v">${fmt(pts)}</span> pts</span></span>
+  </div>`;
+}
+
+function showBoard(qi) {
+  const h = S.history[qi];
+  const roster = S.joined.slice();
+  const now = standings(h.totals, roster);
+  const prevTotals = qi > 0 ? S.history[qi - 1].totals : PEOPLE.map(() => 0);
+  const prev = qi > 0 ? standings(prevTotals, roster) : null;
+  const newTop = now.slice(0, 5);
+  const oldTop = prev ? prev.slice(0, 5) : [];
+  const ids = [...oldTop, ...newTop.filter(id => !oldTop.includes(id))];
+  const last = qi === NQ - 1;
+  const rows = ids.map((id, k) => {
+    const start = prev ? (oldTop.includes(id) ? prev.indexOf(id) : 5) : now.indexOf(id) + 1;
+    const rank = prev ? prev.indexOf(id) + 1 : now.indexOf(id) + 1;
+    return rowHTML(id, rank, prevTotals[id], `style="--slot:${start}${prev && oldTop.includes(id) ? "" : ";opacity:0"}"`);
+  }).join("");
+  const el = mount(`
+    <main class="host-leaderboard-content">
+      <p class="host-eyebrow light">After question ${qi + 1} of ${NQ}</p>
+      <h1>Leaderboard</h1>
+      <div class="host-leaderboard live" id="board" aria-live="off">${rows}</div>
+      <button type="button" class="leaderboard-next-button" id="nextBtn">${last ? "Final Results →" : "Next Question →"}</button>
+      <p class="kbd-hint"><kbd>Space</kbd>${last ? "Final results" : "Next question"}</p>
+    </main>`, "board");
+  header(`Code <span class="code">${QUIZ.code}</span> · Leaderboard · ${qi + 1} of ${NQ}`, "Board", true);
+  setHash("board=" + (qi + 1));
+  say("Leaderboard after question " + (qi + 1) + ". Leader: " + PEOPLE[now[0]].name);
+  const go = () => last ? showFinal() : startQuestion(qi + 1);
+  el.querySelector("#nextBtn").addEventListener("click", go);
+  S.primary = go;
+  const board = el.querySelector("#board");
+  const rowOf = id => board.querySelector(`[data-id="${id}"]`);
+
+  if (!prev) {
+    newTop.forEach((id, i) => later(() => {
+      const row = rowOf(id);
+      row.style.setProperty("--slot", i);
+      row.style.opacity = 1;
+      countUp(row.querySelector(".v"), 0, h.totals[id], 900);
+      row.querySelector(".lb-delta").textContent = "+" + fmt(h.ans[id]?.pts || 0);
+    }, anim(250 + i * 90)));
+    later(() => board.classList.add("show-delta"), anim(900));
+    return;
+  }
+  // 1) count the points up in the old order, 2) slide rows to their new ranks
+  later(() => {
+    ids.forEach(id => {
+      const row = rowOf(id);
+      countUp(row.querySelector(".v"), prevTotals[id], h.totals[id], 900);
+      row.querySelector(".lb-delta").textContent = "+" + fmt(h.ans[id]?.pts || 0);
+    });
+    board.classList.add("show-delta");
+  }, anim(500));
+  later(() => {
+    ids.forEach(id => {
+      const row = rowOf(id);
+      const from = prev.indexOf(id), to = now.indexOf(id);
+      row.classList.toggle("climb", to < from);
+      row.style.setProperty("--slot", Math.min(to, 6));
+      row.style.opacity = to < 5 ? 1 : 0;
+      row.querySelector(".leaderboard-rank").textContent = to + 1;
+      const mv = row.querySelector(".lb-move");
+      const d = from - to;
+      mv.className = "lb-move " + (d > 0 ? "up" : d < 0 ? "down" : "same");
+      mv.textContent = d > 0 ? "▲ " + d : d < 0 ? "▼ " + -d : "–";
+      mv.setAttribute("aria-label", d > 0 ? `up ${d}` : d < 0 ? `down ${-d}` : "no change");
+    });
+  }, anim(1600));
+  later(() => board.classList.add("show-move"), anim(2300));
+}
+
+// ---------- Final / podium ----------
+function showFinal() {
+  const done = S.history.filter(Boolean).length;
+  const roster = S.joined.slice();
+  const totals = done ? S.history[done - 1].totals : S.totals;
+  const order = standings(totals, roster);
+  const top = order.slice(0, 5);
+  const podium = [[1, "p2", "150px"], [0, "p1", "205px"], [2, "p3", "110px"]].filter(([i]) => top[i] != null);
+  const ended = S.ended && done < NQ;
+  const el = mount(`
+    <main class="final-content">
+      <p class="host-eyebrow">${QUIZ.title} · ${ended ? `Ended early after ${done} of ${NQ} questions` : `${NQ} questions`} · ${roster.length} players</p>
+      <h1>Final results</h1>
+      ${done ? `
+      <div class="final-grid">
+        <div class="podium" aria-label="Top three">
+          ${podium.map(([i, cls, hgt]) => `
+            <div class="podium-col ${cls}" data-rank="${i + 1}">
+              <div class="podium-name"><strong>${PEOPLE[top[i]].name}</strong><span>${fmt(totals[top[i]])} pts</span></div>
+              <div class="podium-block" style="--h:${hgt}"><span class="podium-rank">${i + 1}</span></div>
+            </div>`).join("")}
+        </div>
+        <div class="final-board" id="finalBoard">
+          <p class="host-eyebrow">Top 5</p>
+          <div class="host-leaderboard">
+            ${top.map((id, i) => rowHTML(id, i + 1, totals[id], `style="--i:${i}"`)).join("")}
+          </div>
+        </div>
+      </div>` : `<div class="final-empty">The session ended before any question closed, so there are no scores to show.</div>`}
+      <div class="host-actions final-actions${done ? "" : " shown"}" id="finalActions">
+        <a class="leaderboard-next-button" href="made-dashboard-main.html">Back to dashboard</a>
+        <a class="host-next-button" href="host-results-main.html">View full results →</a>
+      </div>
+    </main>`, "final");
+  header(ended ? "Session ended" : "Final results", ended ? "Ended" : "Final", false);
+  setHash("final");
+  if (!done) return;
+  say(`Final results. Winner: ${PEOPLE[top[0]].name} with ${fmt(totals[top[0]])} points.`);
+  const col = r => el.querySelector(`.podium-col[data-rank="${r}"]`);
+  [[3, 400], [2, 1100], [1, 1850]].forEach(([r, ms]) => later(() => col(r)?.classList.add("up"), anim(ms)));
+  later(confetti, anim(2500));
+  later(() => el.querySelector("#finalBoard").classList.add("shown"), anim(2900));
+  later(() => el.querySelector("#finalActions").classList.add("shown"), anim(3300));
+}
+
+function confetti() {
+  if (RM) return;
+  const box = document.createElement("div");
+  box.className = "confetti";
+  box.setAttribute("aria-hidden", "true");
+  const rand = mulberry32(SEED + 99);
+  const colors = ["var(--orange-deep)", "var(--sky-soft)", "var(--apricot)", "var(--navy)", "var(--paper)"];
+  for (let i = 0; i < 60; i++) {
+    const c = document.createElement("i");
+    c.style.left = (rand() * 100) + "%";
+    c.style.background = colors[i % colors.length];
+    c.style.setProperty("--d", (2.2 + rand() * 1.8).toFixed(2) + "s");
+    c.style.setProperty("--delay", (rand() * .7).toFixed(2) + "s");
+    c.style.setProperty("--dx", Math.round(rand() * 160 - 80) + "px");
+    box.appendChild(c);
+  }
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 5000);
+}
+
+// ---------- End session ----------
+const dlg = $("#endDlg");
+let wasPaused = false;
+
+function openEnd() {
+  if (S.screen === "final" || S.screen === "lobby") return;
+  const done = S.history.filter(Boolean).length;
+  wasPaused = S.paused;
+  dlg.returnValue = "";
+  pause(true);
+  $("#dlgWhere").textContent = S.qi >= 0 ? `Question ${S.qi + 1} of ${NQ}` : "Starting";
+  const open = S.screen === "question" && !S.closing;
+  $("#dlgText").textContent = done
+    ? `Scores from the ${done} question${done === 1 ? "" : "s"} closed so far become the final results${open ? " (the open question won't count)" : ""}. Players see the final screen.`
+    : "No question has closed yet, so there will be no scores. Players are sent back to the join screen.";
+  dlg.showModal();
+  $("#dlgKeep").focus();
+}
+
+dlg.addEventListener("close", () => {
+  if (dlg.returnValue === "end") return;
+  if (!wasPaused) resume(true);
+  $("#endBtn").focus();
+});
+$("#dlgKeep").addEventListener("click", () => { dlg.returnValue = "keep"; dlg.close(); });
+$("#dlgEnd").addEventListener("click", () => {
+  dlg.returnValue = "end";
+  dlg.close();
+  S.ended = true;
+  showFinal();
+  toast("Session ended");
+});
+dlg.addEventListener("click", e => { if (e.target === dlg) { dlg.returnValue = "keep"; dlg.close(); } });
+$("#endBtn").addEventListener("click", openEnd);
+
+// ---------- Keyboard + mouse focus ----------
+document.addEventListener("keydown", e => {
+  if (dlg.open || e.ctrlKey || e.metaKey || e.altKey) return;
+  const onControl = e.target.closest && e.target.closest("button, a, input, textarea, select");
+  if (e.key === " " || e.key === "Enter") {
+    if (onControl) return; // let the focused control handle it
+    e.preventDefault();
+    if (e.repeat) return;
+    S.primary && S.primary();
+  } else if ((e.key === "p" || e.key === "P") && !e.repeat) {
+    togglePause();
+  }
+});
+
+// Mouse clicks shouldn't leave focus on a button, or Space would re-press it instead of the primary action
+document.addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (b && e.detail > 0 && !dlg.contains(b)) b.blur();
+});
+
+// ---------- Deep links ----------
+function fastForward(n) {
+  S.joined = PEOPLE.map(p => p.id).sort((a, b) => JOIN_AT[a] - JOIN_AT[b]);
+  for (let qi = 0; qi < n; qi++) record(qi, naturalClose(qi, S.joined), S.joined);
+}
+
+function route() {
+  if (dlg.open) dlg.close();
+  const raw = location.hash.slice(1);
+  const p = Object.fromEntries(raw.split("&").filter(Boolean).map(kv => { const [k, v] = kv.split("="); return [k, v ?? ""]; }));
+  const n = k => clamp(parseInt(p[k], 10) || 1, 1, NQ);
+  resetState();
+  if ("q" in p) { fastForward(n("q") - 1); startQuestion(n("q") - 1, { t: p.t != null ? parseFloat(p.t) : null }); }
+  else if ("reveal" in p) { fastForward(n("reveal")); S.qi = n("reveal") - 1; showReveal(n("reveal") - 1); }
+  else if ("board" in p) { fastForward(n("board")); S.qi = n("board") - 1; showBoard(n("board") - 1); }
+  else if ("final" in p) { fastForward(NQ); S.qi = NQ - 1; showFinal(); }
+  else showLobby();
+}
+
+window.addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>

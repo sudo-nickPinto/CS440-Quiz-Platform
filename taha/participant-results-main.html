@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiz Platform — Your results</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* Participant session results, version B v4. Same three pieces as the original B (report card,
+     ten result tiles, the selected question), rearranged so the question gets room to breathe:
+       - the report card is a slim horizontal band across the top (title, host/date, points,
+         correct, average time, rank), so nothing eats the width below it
+       - the tiles sit in a narrow left column as a 2 × 5 grid of compact tiles
+       - the selected question takes the wide right side and the full height that is left:
+         big question type, choices as a 2 × 2 grid of answer blocks (like the ones you tapped
+         while playing) with "Your answer" / "Correct answer" tags, then time · points · why
+     Desktop (checked at 1440×900, 1280×800, 1000×760): the band, all ten tiles and the whole
+     question fit on screen together. The page scrolls on smaller windows (never a bordered panel).
+     Phones (≤900): one column, no sheet. Picking a tile pins a compact tile grid to the top of the
+     screen and the question reads below it in the page. Esc or the question's × un-pins it.
+     Result colors: Right = --sky-soft + navy ✓ · Wrong = --apricot + ink ✗ · Missed = --sand + ink — */
+  :root {
+    --navy: #043371; --orange: #CC4E00; --orange-deep: #bf4c0c; --sky: #8fdbff;
+    --sky-soft: #c2e6f8; --apricot: #f6d2b6; --sand: #ecdfd0; --paper: #fcf9f4;
+    --ink: #222222; --gray: #666666;
+    --b: 3px solid var(--ink); --b-thin: 2px solid var(--ink); --shadow: 6px 6px 0 var(--ink);
+    --ease: cubic-bezier(.22, 1, .36, 1);
+    /* sizing knobs for the question (changed by the media queries below) */
+    --q-size: clamp(22px, 1.9vw, 27px); --body-pad: 22px; --ch-min: 66px; --ch-max: 230px; --ch-text: 18px; --gap: 18px;
+  }
+
+  /* Shared scrollbar block (DESIGN-GUIDE §4) */
+  @supports not selector(::-webkit-scrollbar) {
+    html { scrollbar-width: thin; scrollbar-color: var(--ink) var(--sand); }
+    * { scrollbar-width: thin; scrollbar-color: var(--ink) transparent; }
+  }
+  html { background: var(--sand); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  html::-webkit-scrollbar, html::-webkit-scrollbar-track, body::-webkit-scrollbar, body::-webkit-scrollbar-track { background: var(--sand); }
+  ::-webkit-scrollbar-thumb { background: var(--ink); border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+
+  * { box-sizing: border-box; margin: 0; }
+  :focus-visible { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+  body {
+    font-family: "Space Grotesk", system-ui, sans-serif; background: var(--sand); color: var(--ink);
+    min-height: 100vh; display: flex; flex-direction: column; padding: 14px 22px 20px; gap: 12px;
+  }
+
+  /* Header (dashboard) */
+  header.top { display: flex; justify-content: space-between; align-items: center; }
+  .logo {
+    font-family: "Archivo Black", sans-serif; font-size: 20px; text-decoration: none;
+    background: var(--navy); color: var(--paper); padding: 5px 13px;
+    border: var(--b); box-shadow: 4px 4px 0 var(--ink); transform: rotate(-1.5deg);
+  }
+  .logo span { color: var(--sky); }
+  .user { display: flex; align-items: center; gap: 12px; font-weight: 700; }
+  .avatar {
+    width: 40px; height: 40px; border: var(--b); background: var(--orange-deep); color: var(--paper);
+    display: grid; place-items: center; font-weight: 700; box-shadow: 3px 3px 0 var(--ink);
+  }
+  /* Frame grows with its content; the page scrolls, not the frame */
+  .frame {
+    flex: 1; min-width: 0; display: flex; flex-direction: column;
+    border: var(--b); background: var(--paper); box-shadow: var(--shadow);
+  }
+
+  /* Back strip: same build as the dashboard tab bar; navy = the Participate tab you came from */
+  .crumbs { display: flex; border-bottom: var(--b); min-width: 0; }
+  .back {
+    display: flex; align-items: center; gap: 10px; text-decoration: none; white-space: nowrap;
+    font-family: "Archivo Black", sans-serif; font-size: clamp(15px, 1.5vw, 19px); text-transform: uppercase; letter-spacing: .5px;
+    background: var(--navy); color: var(--paper); padding: 11px 22px; border-right: var(--b);
+  }
+  .back:hover { background: var(--ink); }
+  .back:active { transform: translate(2px, 2px); }
+  .trail {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 18px;
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--gray);
+    white-space: nowrap; overflow: hidden;
+  }
+  .trail b { color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+  .private {
+    display: flex; align-items: center; gap: 8px; padding: 0 16px; border-left: var(--b-thin); white-space: nowrap;
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--navy);
+  }
+
+  /* Content: band on top, then tiles (narrow) | question (wide). The second row fills the frame. */
+  .content {
+    flex: 1; display: grid; grid-template-columns: clamp(240px, 20vw, 292px) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr); gap: 18px 22px; padding: 18px 20px 20px;
+  }
+  .band { grid-column: 1 / -1; }
+  .dock { display: flex; min-width: 0; }
+  .dock > .answers { flex: 1; min-width: 0; }
+
+  .panel { border: var(--b); background: var(--paper); box-shadow: var(--shadow); min-width: 0; }
+  .panel-top {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 36px; padding: 0 14px;
+    background: var(--ink); color: var(--paper); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
+  }
+
+  /* ---------- Report band (the original report card, laid flat) ---------- */
+  .band { display: flex; align-items: stretch; }
+  .band > * { padding: 12px 20px; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+  .band > * + * { border-left: var(--b-thin); }
+  .b-title { flex: 1 1 auto; }
+  .eyebrow { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  h1 { font-family: "Archivo Black", sans-serif; font-weight: 400; font-size: clamp(24px, 2.4vw, 34px); line-height: 1.08; margin: 3px 0 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub { font-size: 14px; font-weight: 500; color: var(--gray); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub b { color: var(--ink); }
+  .stat { flex: 0 0 auto; }
+  .stat b { font-family: "Archivo Black"; font-weight: 400; font-size: clamp(24px, 2.3vw, 32px); line-height: 1; color: var(--navy); white-space: nowrap; }
+  .stat b small { font-size: .5em; color: var(--ink); margin-left: 4px; }
+  .stat .lbl { margin-top: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); white-space: nowrap; }
+  .stat .lbl em { font-style: normal; color: var(--ink); }
+  .stat.time b { color: var(--ink); }
+  .stat.fast b small { color: var(--gray); }
+  .rank-tag { align-self: flex-start; border: var(--b-thin); background: var(--orange-deep); color: var(--paper); padding: 2px 10px; font-family: "Archivo Black"; font-size: clamp(19px, 1.7vw, 23px); line-height: 1.2; white-space: nowrap; box-shadow: 3px 3px 0 var(--ink); }
+  .rank-tag small { font-family: "Space Grotesk"; font-weight: 700; font-size: 13px; }
+
+  /* ---------- Tiles column ---------- */
+  .answers { display: flex; flex-direction: column; }
+  .key { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+  .key > span { display: inline-flex; align-items: center; gap: 5px; color: var(--apricot); }
+  .key i { width: 18px; height: 18px; border: 2px solid var(--paper); display: inline-grid; place-items: center; font-style: normal; font-size: 11px; color: var(--ink); }
+  .key .r { background: var(--sky-soft); color: var(--navy); }
+  .key .w { background: var(--apricot); }
+  .key .m { background: var(--sand); }
+
+  .tiles {
+    flex: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(60px, 1fr);
+    gap: 10px; padding: 14px;
+  }
+  .tile {
+    font: inherit; color: var(--ink); border: var(--b); background: var(--sand); cursor: pointer; text-align: left; min-width: 0;
+    display: flex; flex-direction: column; justify-content: space-between; gap: 4px; padding: 7px 10px 7px;
+    transition: transform .2s var(--ease), box-shadow .2s var(--ease);
+  }
+  .tile .r1, .tile .r2 { display: flex; justify-content: space-between; align-items: center; gap: 4px; }
+  .tile .r2 { align-items: baseline; }
+  .tile .n { font-family: "Archivo Black"; font-size: 18px; line-height: 1; }
+  .tile .g { font-size: 24px; font-weight: 700; line-height: 1; }
+  .tile .p { font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .tile .t { font-size: 12px; font-weight: 500; color: var(--gray); white-space: nowrap; }
+  .tile.right { background: var(--sky-soft); color: var(--navy); }
+  .tile.right .t { color: var(--navy); }
+  .tile.wrong { background: var(--apricot); }
+  .tile:hover { transform: translate(-2px, -2px); box-shadow: 3px 3px 0 var(--ink); }
+  .tile[aria-pressed="true"] { transform: translate(-4px, -4px); box-shadow: 6px 6px 0 var(--ink); outline: 3px solid var(--ink); outline-offset: -8px; }
+  .tile[aria-pressed="true"]:focus-visible { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+  .hint { display: none; padding: 0 12px 12px; font-size: 13px; font-weight: 500; color: var(--gray); }
+  .keys-hint { border-top: var(--b-thin); background: var(--sand); padding: 8px 14px; font-size: 12px; font-weight: 500; color: var(--gray); }
+  .keys-hint kbd { font: inherit; font-weight: 700; color: var(--ink); border: 2px solid var(--ink); background: var(--paper); padding: 0 5px; margin: 0 1px; }
+
+  /* ---------- Question detail (wide right side) ---------- */
+  .detail { display: flex; flex-direction: column; }
+  .detail .panel-top { padding: 5px 5px 5px 16px; min-height: 42px; }
+  .res { color: var(--apricot); white-space: nowrap; }
+  .tbtns { display: flex; align-items: center; gap: 6px; }
+  .tb {
+    font: inherit; font-weight: 700; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; line-height: 1;
+    min-width: 40px; height: 30px; padding: 0 10px; border: 2px solid var(--paper); background: var(--ink); color: var(--paper); cursor: pointer;
+  }
+  .tb:hover { background: var(--sky-soft); color: var(--navy); border-color: var(--sky-soft); }
+  .tb:active { transform: translate(2px, 2px); }
+  .tb:disabled { opacity: .35; cursor: default; background: var(--ink); color: var(--paper); border-color: var(--paper); border-style: dashed; transform: none; }
+  .x { display: none; font-size: 18px; }
+  .qs { display: none; }
+
+  .detail-body { flex: 1; display: flex; flex-direction: column; gap: var(--gap); padding: var(--body-pad) calc(var(--body-pad) + 4px); }
+  .qtext { font-family: "Archivo Black"; font-weight: 400; font-size: var(--q-size); line-height: 1.22; max-width: 34em; }
+
+  /* Choices: a 2 × 2 grid of answer blocks (true/false gets one row of two) */
+  .choices { flex: 1 1 auto; max-height: var(--ch-max); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(var(--ch-min), 1fr); gap: 14px; }
+  .ch {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0 14px;
+    border: var(--b); background: var(--paper); padding: 10px 14px; min-width: 0;
+  }
+  .ch .lt {
+    width: 34px; height: 34px; border: var(--b-thin); background: var(--paper); display: grid; place-items: center;
+    font-family: "Archivo Black"; font-size: 16px; color: var(--ink);
+  }
+  .ch .cw { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+  .ch .ct { font-weight: 700; font-size: var(--ch-text); line-height: 1.2; }
+  .ch .tag {
+    border: var(--b-thin); background: var(--paper); color: var(--ink);
+    padding: 1px 7px 2px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;
+  }
+  .ch.dim { color: var(--gray); border-color: var(--ink); }
+  .ch.ok { background: var(--sky-soft); color: var(--navy); box-shadow: 4px 4px 0 var(--ink); }
+  .ch.ok .tag { color: var(--navy); }
+  .ch.bad { background: var(--apricot); box-shadow: 4px 4px 0 var(--ink); }
+  .ch.pick .lt { background: var(--ink); color: var(--paper); }
+
+  /* Time · points · why */
+  .facts { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, .7fr) minmax(0, 1.9fr); border: var(--b-thin); margin-top: auto; }
+  .facts > div { padding: 11px 14px 12px; min-width: 0; }
+  .facts > div + div { border-left: var(--b-thin); }
+  .facts small { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); margin-bottom: 3px; }
+  .facts b { font-family: "Archivo Black"; font-weight: 400; font-size: 24px; line-height: 1.1; white-space: nowrap; }
+  .facts b em { font-family: "Space Grotesk"; font-style: normal; font-weight: 700; font-size: 13px; color: var(--gray); margin-left: 4px; }
+  .tbar { height: 10px; border: var(--b-thin); background: var(--paper); margin-top: 7px; }
+  .tbar i { display: block; height: 100%; background: var(--orange-deep); transform-origin: left; }
+  .facts .why p { font-weight: 500; font-size: 15px; line-height: 1.45; }
+  .facts .why p.none { color: var(--gray); }
+  .facts .miss { grid-column: span 2; background: var(--sand); }
+  .facts .miss b { font-size: 21px; }
+  .facts .miss p { font-size: 13px; font-weight: 500; color: var(--gray); line-height: 1.4; margin-top: 3px; }
+
+  .nav { display: none; justify-content: space-between; gap: 10px; border-top: var(--b-thin); background: var(--sand); padding: 10px 12px; }
+  .sbtn {
+    font: inherit; font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: .5px;
+    border: var(--b); background: var(--paper); color: var(--navy); padding: 8px 14px; cursor: pointer; box-shadow: 3px 3px 0 var(--ink); min-height: 42px;
+  }
+  .sbtn:hover { background: var(--sky-soft); }
+  .sbtn:active { transform: translate(3px, 3px); box-shadow: none; }
+  .sbtn:disabled { color: var(--gray); background: var(--sand); box-shadow: none; cursor: default; border-style: dashed; }
+
+  .detail-body > * { animation: fadeUp .32s var(--ease) both; }
+  .detail-body > :nth-child(2) { animation-delay: .05s; }
+  .detail-body > :nth-child(3) { animation-delay: .1s; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, calc(100% + 60px));
+    background: var(--navy); color: var(--paper); font-weight: 700; padding: 12px 20px;
+    border: var(--b); box-shadow: 4px 4px 0 var(--ink); transition: transform .2s; z-index: 99;
+  }
+  .toast.show { transform: translate(-50%, 0); }
+
+  /* Big screens: more air everywhere */
+  @media (min-width: 1300px) and (min-height: 860px) {
+    :root { --q-size: clamp(26px, 2vw, 30px); --body-pad: 30px; --ch-min: 84px; --ch-max: 260px; --ch-text: 20px; --gap: 24px; }
+    .content { padding: 22px 24px 24px; gap: 22px 26px; }
+    .band > * { padding: 14px 24px; }
+    .tile .n { font-size: 19px; }
+    .tile .g { font-size: 28px; }
+    .ch .lt { width: 38px; height: 38px; font-size: 17px; }
+    .facts > div { padding: 13px 16px 14px; }
+    .facts b { font-size: 26px; }
+    .facts .why p { font-size: 16px; }
+  }
+  /* Short desktop windows */
+  @media (min-width: 901px) and (max-height: 780px) {
+    :root { --q-size: clamp(21px, 2.1vw, 24px); --body-pad: 18px; --ch-min: 60px; --ch-max: 200px; --ch-text: 17px; --gap: 16px; }
+    body { padding-top: 12px; gap: 10px; }
+    .content { padding: 16px 18px 18px; gap: 16px 20px; }
+    .band > * { padding: 10px 16px; }
+    .tiles { gap: 8px; padding: 12px; }
+    .keys-hint { display: none; }
+    .ch { padding: 8px 12px; }
+    .facts > div { padding: 9px 12px 10px; }
+    .facts b { font-size: 22px; }
+  }
+  @media (max-width: 1250px) { .stat.fast { display: none; } }
+  @media (max-width: 1360px) and (min-width: 901px) { #tilesTitle .lab { display: none; } }
+  @media (max-width: 1150px) {
+    .band > * { padding-left: 14px; padding-right: 14px; }
+    .key { gap: 8px; }
+    .key .lab { display: none; }
+    .facts { grid-template-columns: minmax(0, .9fr) minmax(0, .75fr) minmax(0, 1.75fr); }
+    .facts .why p { font-size: 14px; }
+  }
+
+  /* ≤900: one column. Picking a tile pins a compact tile grid to the top; the question reads below it. */
+  @media (max-width: 900px) {
+    .content { display: flex; flex-direction: column; padding: 16px 14px 22px; gap: 16px; flex: none; }
+    .band { flex-wrap: wrap; }
+    .band .b-title { flex: 1 1 100%; border-bottom: var(--b-thin); }
+    .band .stat { flex: 1 1 0; border-left: none; }
+    .band .stat + .stat { border-left: var(--b-thin); }
+    .stat.fast { display: none; }
+    .hint { display: block; }
+    .keys-hint { display: none; }
+    .tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: auto; }
+    .tile { min-height: 76px; align-items: center; text-align: center; padding: 6px 4px; gap: 2px; }
+    .tile .r1 { flex-direction: column; gap: 3px; }
+    .tile .r2 { justify-content: center; }
+    .tile .t { display: none; }
+    .bar-nav { display: none; }
+    .x { display: block; }
+    .nav { display: flex; }
+    .detail { display: none; }
+    body.reading .detail { display: flex; }
+    body.reading .hint { display: none; }
+    .facts { grid-template-columns: 1fr 1fr; margin-top: 0; }
+    .facts .why { grid-column: 1 / -1; border-left: none !important; border-top: var(--b-thin); }
+    /* the dock: a paper strip that pins the tiles panel to the top of the screen */
+    body.reading .dock {
+      position: sticky; top: 0; z-index: 5; background: var(--paper);
+      margin: -10px -14px -4px; padding: 10px 14px 14px; border-bottom: var(--b-thin);
+    }
+    body.reading .tile { min-height: 46px; padding: 3px 4px; justify-content: center; }
+    body.reading .tile .r1 { flex-direction: row; gap: 6px; }
+    body.reading .tile .r2 { display: none; }
+    body.reading .tile .g { font-size: 20px; }
+    body.reading .tiles { padding: 10px; gap: 6px; }
+    body.reading .tile[aria-pressed="true"] { transform: translate(-3px, -3px); box-shadow: 3px 3px 0 var(--ink); outline-offset: -6px; }
+  }
+  @media (max-width: 640px) {
+    :root { --q-size: 21px; --body-pad: 14px; --ch-min: 54px; --ch-max: none; --ch-text: 17px; --gap: 14px; }
+    body { padding: 10px 10px 14px; gap: 10px; }
+    .logo { font-size: 18px; padding: 5px 10px; }
+    .user .name { display: none; }
+    .back { padding: 11px 14px; font-size: 14px; }
+    .private { display: none; }
+    .trail { padding: 0 12px; font-size: 11px; }
+    .trail .dash { display: none; }
+    .content { padding: 12px 10px 18px; gap: 14px; }
+    .band { display: grid; grid-template-columns: 1fr 1fr; }
+    .band > * { padding: 10px 12px; }
+    .band .b-title { grid-column: 1 / -1; }
+    .band .stat, .band .stat + .stat { border-left: none; }
+    .band .stat:nth-child(n + 4) { border-top: var(--b-thin); }
+    .band .stat:nth-child(3), .band .stat:nth-child(6) { border-left: var(--b-thin); }
+    h1 { font-size: 26px; }
+    .stat b { font-size: 22px; }
+    .stat .lbl { font-size: 10px; letter-spacing: .5px; margin-top: 4px; }
+    .stat .lbl em { display: none; }
+    .rank-tag { font-size: 17px; padding: 1px 6px; box-shadow: 2px 2px 0 var(--ink); }
+    .rank-tag small { font-size: 11px; }
+    .panel-top { padding: 0 10px; }
+    .tiles { gap: 6px; padding: 10px; }
+    .tile { min-height: 70px; border-width: 2px; }
+    .tile .n { font-size: 15px; }
+    .tile .g { font-size: 22px; }
+    .tile .p { font-size: 11px; }
+    .tile[aria-pressed="true"] { outline-offset: -6px; }
+    .key .lab { display: none; }
+    body.reading .dock { margin: -8px -10px -4px; padding: 8px 10px 12px; }
+    body.reading .tiles { padding: 8px; }
+    body.reading .tile { min-height: 42px; }
+    body.reading .tile .n { font-size: 14px; }
+    body.reading .tile .g { font-size: 18px; }
+    .detail .panel-top { padding-left: 10px; }
+    .qw { display: none; }
+    .qs { display: inline; }
+    .detail-body { padding: 16px 14px 18px; }
+    .choices { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .ch { padding: 9px 12px; gap: 0 12px; }
+    .ch .lt { width: 32px; height: 32px; font-size: 15px; }
+    .facts > div { padding: 10px 12px 11px; }
+    .facts b { font-size: 22px; }
+    .facts .why p { font-size: 15px; }
+    .nav { padding: 10px 12px; }
+    .sbtn { padding: 8px 12px; }
+  }
+  @media (max-width: 380px) {
+    .detail .res .pts { display: none; }
+    .band .stat { padding: 9px 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tile, .toast { transition: none !important; }
+    .detail-body > * { animation: none; }
+    .tile:hover, .tile[aria-pressed="true"], body.reading .tile[aria-pressed="true"] { transform: none; }
+  }
+</style>
+</head>
+<body>
+  <header class="top">
+    <a class="logo" href="made-dashboard-main.html#participate" aria-label="Quiz Platform dashboard">QUIZ<span>.</span>PLATFORM</a>
+    <div class="user"><span class="name">Taha Sabir</span><div class="avatar" aria-hidden="true">TS</div></div>
+  </header>
+
+  <main class="frame">
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <a class="back" href="made-dashboard-main.html#participate">← Participate</a>
+      <div class="trail"><span class="dash">Dashboard /</span><span>Results /</span><b id="trailTitle"></b></div>
+      <div class="private">Only you can see this</div>
+    </nav>
+
+    <div class="content" id="content">
+      <section class="panel band" id="band" aria-label="Report card"></section>
+      <div class="dock" id="dock">
+        <section class="panel answers" aria-labelledby="tilesTitle">
+          <div class="panel-top">
+            <span id="tilesTitle"><span class="lab">Your </span>answers</span>
+            <span class="key">
+              <span aria-label="Right"><i class="r" aria-hidden="true">✓</i><b id="cR"></b></span>
+              <span aria-label="Wrong"><i class="w" aria-hidden="true">✗</i><b id="cW"></b></span>
+              <span aria-label="Missed"><i class="m" aria-hidden="true">—</i><b id="cM"></b></span>
+            </span>
+          </div>
+          <div class="tiles" id="tiles"></div>
+          <p class="hint">Tap a question to see your answer and the correct one.</p>
+          <p class="keys-hint"><kbd>←</kbd><kbd>→</kbd> step through questions</p>
+        </section>
+      </div>
+      <section class="panel detail" id="detail" role="region" aria-live="polite" aria-labelledby="dTitle"></section>
+    </div>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+// Fake data. In React this comes from GET /sessions/:id/my-results (own answers only).
+const QUIZ = { title: "HTTP & REST", host: "Prof. Kim", date: "Thu, Sep 18, 2026", cls: "CS 440 · Fall 26", limit: 20, rank: 14, of: 29 };
+const L = "ABCD";
+const QS = [
+  { q: "Which HTTP method fully replaces a resource and is idempotent?", opts: ["GET", "POST", "PUT", "PATCH"], ans: 2, pick: null, t: null, miss: "late",
+    why: "PUT sends the whole new version of the resource. Sending it twice leaves the same result, which is what idempotent means." },
+  { q: "Which status code means a new resource was created?", opts: ["200 OK", "201 Created", "204 No Content", "301 Moved"], ans: 1, pick: 1, t: 4.2,
+    why: "201 is the usual reply to a successful POST that made something new." },
+  { q: "In /search?q=rest&page=2, what is the part after the “?” called?", opts: ["Path", "Fragment", "Query string", "Host"], ans: 2, pick: 2, t: 3.1,
+    why: "The query string holds key=value pairs separated by &." },
+  { q: "Which REST constraint means the server keeps no client session between requests?", opts: ["Cacheable", "Stateless", "Layered system", "Uniform interface"], ans: 1, pick: 0, t: 9.8,
+    why: "Stateless: every request carries everything the server needs. Cacheable is about marking responses as reusable." },
+  { q: "A request has no valid login token. Which status code fits best?", opts: ["400 Bad Request", "401 Unauthorized", "403 Forbidden", "404 Not Found"], ans: 1, pick: 2, t: 12.4,
+    why: "401 means “we don't know who you are.” 403 means “we know who you are, and you can't do this.”" },
+  { q: "Which header tells the server what format the request body is in?", opts: ["Accept", "Content-Type", "Authorization", "Host"], ans: 1, pick: 1, t: 6.0,
+    why: "Content-Type describes the body you send. Accept describes the format you want back." },
+  { q: "In GET /users/42, what does 42 usually identify?", opts: ["A page number", "A resource ID", "An API version", "A port"], ans: 1, pick: 1, t: 2.6, why: "" },
+  { q: "Which method should never change data on the server?", opts: ["GET", "POST", "DELETE", "PUT"], ans: 0, pick: null, t: null, miss: "timeout",
+    why: "GET is a safe method: it only reads. That is why browsers and caches can repeat it freely." },
+  { q: "True or false: HTTPS encrypts the URL path, not just the body.", opts: ["True", "False"], ans: 0, pick: 0, t: 7.5,
+    why: "The path and query are encrypted. Only the host name can leak, through DNS and SNI." },
+  { q: "What does a 5xx status code mean?", opts: ["Client error", "Server error", "Redirect", "Success"], ans: 1, pick: 1, t: 3.9,
+    why: "4xx means the request was wrong; 5xx means the server failed while handling a valid request." },
+];
+// Speed formula from the ER notes: 1000 × (1 − (t ÷ limit) ÷ 2), right answers only.
+QS.forEach(x => {
+  x.res = x.pick === null ? "miss" : x.pick === x.ans ? "right" : "wrong";
+  x.pts = x.res === "right" ? Math.round(1000 * (1 - (x.t / QUIZ.limit) / 2)) : 0;
+});
+const total = QS.reduce((s, x) => s + x.pts, 0);
+const count = r => QS.filter(x => x.res === r).length;
+const answered = QS.filter(x => x.t !== null);
+const avg = (answered.reduce((s, x) => s + x.t, 0) / answered.length).toFixed(1);
+const WORD = { right: "Right", wrong: "Wrong", miss: "Missed" }, GLYPH = { right: "✓", wrong: "✗", miss: "—" };
+const MISSWHY = { late: ["Joined late", "You joined after this question closed."], timeout: ["Timed out", "The 20-second timer ran out before you answered."] };
+const fmt = n => n.toLocaleString("en-US");
+const $ = id => document.getElementById(id);
+
+// Stacked layout (≤900): no question is open until a tile is picked ("reading" pins the tiles).
+const stackMQ = matchMedia("(max-width: 900px)");
+const motionOK = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+let sel = 0, reading = false;
+const fastest = QS.filter(x => x.res === "right").reduce((a, b) => (a.t < b.t ? a : b));
+const fi = QS.indexOf(fastest);
+
+$("trailTitle").textContent = QUIZ.title;
+$("band").innerHTML = `
+  <div class="b-title">
+    <p class="eyebrow">Report card · ${QUIZ.cls}</p>
+    <h1>${QUIZ.title}</h1>
+    <p class="sub">Hosted by <b>${QUIZ.host}</b> · ${QUIZ.date}</p>
+  </div>
+  <div class="stat"><b>${fmt(total)}<small>pts</small></b><span class="lbl">Speed points</span></div>
+  <div class="stat"><b>${count("right")}<small>/ ${QS.length}</small></b><span class="lbl">Correct<em> · ${count("wrong")} wrong · ${count("miss")} missed</em></span></div>
+  <div class="stat time"><b>${avg}s</b><span class="lbl">Avg. time</span></div>
+  <div class="stat fast"><b>Q${fi + 1}<small>${fastest.t}s</small></b><span class="lbl">Fastest right</span></div>
+  <div class="stat"><span class="rank-tag">#${QUIZ.rank} <small>of ${QUIZ.of}</small></span><span class="lbl">Your rank</span></div>`;
+$("cR").textContent = count("right"); $("cW").textContent = count("wrong"); $("cM").textContent = count("miss");
+
+const showSel = () => !stackMQ.matches || reading;
+function renderTiles() {
+  $("tiles").innerHTML = QS.map((x, i) => `
+    <button class="tile ${x.res}" aria-pressed="${showSel() && i === sel}" data-i="${i}" onclick="pick(${i})"
+      aria-label="Question ${i + 1}: ${WORD[x.res]}${x.res === "miss" ? ", " + MISSWHY[x.miss][0].toLowerCase() : ""}, ${x.pts} points">
+      <span class="r1" aria-hidden="true"><span class="n">Q${i + 1}</span><span class="g">${GLYPH[x.res]}</span></span>
+      <span class="r2" aria-hidden="true"><span class="p">${x.pts ? "+" + fmt(x.pts) : "0"}</span><span class="t">${x.t === null ? (x.miss === "late" ? "Late" : "Timeout") : x.t.toFixed(1) + "s"}</span></span>
+    </button>`).join("");
+}
+
+function renderDetail() {
+  const x = QS[sel], i = sel, last = QS.length - 1;
+  const choices = x.opts.map((o, j) => {
+    const ok = j === x.ans, pk = j === x.pick;
+    const tag = ok && pk ? "✓ Your answer · correct" : ok ? "✓ Correct answer" : pk ? "✗ Your answer" : "";
+    const cls = ok ? "ok" : pk ? "bad" : "dim";
+    return `<div class="ch ${cls} ${pk ? "pick" : ""}"><span class="lt" aria-hidden="true">${x.opts.length > 2 ? L[j] : o[0]}</span><span class="cw"><span class="ct">${o}</span>${tag ? `<span class="tag">${tag}</span>` : ""}</span></div>`;
+  }).join("");
+  const pts = x.pts ? "+" + fmt(x.pts) : "0";
+  const facts = x.res === "miss"
+    ? `<div class="miss"><small>Answer time · Points</small><b>— No answer</b><p>${MISSWHY[x.miss][0]}: ${MISSWHY[x.miss][1].toLowerCase()} Missed counts as 0 points, not as a wrong answer.</p></div>`
+    : `<div><small>Answer time</small><b>${x.t.toFixed(1)}s<em>of ${QUIZ.limit}s</em></b><div class="tbar"><i style="transform:scaleX(${x.t / QUIZ.limit})"></i></div></div>
+       <div><small>Points</small><b>${pts}<em>of 1,000</em></b></div>`;
+  $("detail").innerHTML = `
+    <div class="panel-top"><span id="dTitle"><span class="qw">Question </span><span class="qs">Q</span>${i + 1} of ${QS.length}</span>
+      <span class="tbtns"><span class="res">${GLYPH[x.res]} ${WORD[x.res]}${x.res === "miss" ? " · " + MISSWHY[x.miss][0] : ""}<span class="pts"> · ${pts} pts</span></span>
+        <span class="tbtns bar-nav">
+          <button class="tb" onclick="step(-1)" ${i === 0 ? "disabled" : ""} aria-label="Previous question">← ${i === 0 ? "Prev" : "Q" + i}</button>
+          <button class="tb" onclick="step(1)" ${i === last ? "disabled" : ""} aria-label="Next question">${i === last ? "Next" : "Q" + (i + 2)} →</button>
+        </span>
+        <button class="tb x" onclick="closeReading()" aria-label="Close question">×</button></span></div>
+    <div class="detail-body">
+      <p class="qtext">${x.q}</p>
+      <div class="choices" role="list" aria-label="Choices">${choices}</div>
+      <div class="facts">${facts}
+        <div class="why"><small>Why</small>${x.why ? `<p>${x.why}</p>` : `<p class="none">The host didn't add an explanation for this one.</p>`}</div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="sbtn" onclick="step(-1)" ${i === 0 ? "disabled" : ""} aria-label="Previous question">← ${i === 0 ? "Prev" : "Q" + i}</button>
+      <button class="sbtn" onclick="step(1)" ${i === last ? "disabled" : ""} aria-label="Next question">${i === last ? "Next" : "Q" + (i + 2)} →</button>
+    </div>`;
+  $("detail").querySelectorAll(".ch").forEach(c => c.setAttribute("role", "listitem"));
+}
+
+// Stacked layout: put the question's top just under the pinned tiles (page scroll, never an inner scroller)
+function alignStack(instant) {
+  if (!stackMQ.matches) return;
+  const target = $("detail").getBoundingClientRect().top + scrollY - $("dock").getBoundingClientRect().height - 12;
+  scrollTo({ top: Math.max(0, target), behavior: motionOK && !instant ? "smooth" : "auto" });
+}
+function setReading(on) {
+  reading = on;
+  document.body.classList.toggle("reading", on && stackMQ.matches);
+  $("detail").inert = stackMQ.matches && !on;
+}
+function focusTile(i) { const t = document.querySelector(`.tile[data-i="${i}"]`); if (t) t.focus({ preventScroll: true }); }
+function pick(i, quiet) {
+  const wasReading = reading;
+  sel = i; renderDetail();
+  if (stackMQ.matches) setReading(true);
+  renderTiles();
+  history.replaceState(null, "", "#q" + (i + 1));
+  if (!quiet) focusTile(i);
+  if (stackMQ.matches) requestAnimationFrame(() => { if (!wasReading || $("detail").getBoundingClientRect().top < $("dock").offsetHeight) alignStack(quiet); });
+}
+function step(d) {
+  const n = sel + d; if (n < 0 || n >= QS.length) return;
+  const a = document.activeElement;
+  const nav = a && a.closest(".bar-nav, .nav"), onTile = a && a.classList.contains("tile");
+  sel = n; renderDetail(); renderTiles();
+  // keep keyboard focus where it was after re-render (prev/next button falls back to its sibling when disabled)
+  if (nav) { const b = [...document.querySelectorAll(nav.classList.contains("nav") ? ".nav .sbtn" : ".bar-nav .tb")]; const k = d > 0 ? 1 : 0; (b[k].disabled ? b[1 - k] : b[k]).focus(); }
+  else if (onTile) focusTile(n);
+  history.replaceState(null, "", "#q" + (n + 1));
+  if (stackMQ.matches && nav && nav.classList.contains("nav")) alignStack();
+}
+function closeReading() {
+  if (!reading || !stackMQ.matches) return;
+  setReading(false); renderTiles();
+  const t = document.querySelector(`.tile[data-i="${sel}"]`);
+  if (t) { t.focus({ preventScroll: true }); t.scrollIntoView({ block: "center", behavior: motionOK ? "smooth" : "auto" }); }
+  history.replaceState(null, "", location.pathname);
+}
+document.addEventListener("keydown", e => {
+  const t = e.target instanceof Element ? e.target : document.body;
+  if (e.key === "Escape") closeReading();
+  if (!showSel() || t.closest("input, textarea")) return;
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); step(e.key === "ArrowRight" ? 1 : -1); }
+  // Up/down move through the tile grid by one row when a tile has focus
+  if ((e.key === "ArrowDown" || e.key === "ArrowUp") && t.classList.contains("tile")) {
+    const cols = getComputedStyle($("tiles")).gridTemplateColumns.split(" ").length;
+    const n = sel + (e.key === "ArrowDown" ? cols : -cols);
+    e.preventDefault(); if (n >= 0 && n < QS.length) step(n - sel);
+  }
+});
+stackMQ.addEventListener("change", () => { setReading(reading); renderTiles(); });
+let tt; function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 1800); }
+
+renderDetail(); renderTiles(); setReading(false);
+// #q4 selects question 4 (on phones it also pins the tiles and scrolls the question into view)
+const m = location.hash.match(/^#q(\d+)$/);
+if (m && QS[m[1] - 1]) { pick(m[1] - 1, true); document.fonts.ready.then(() => alignStack(true)); }
+</script>
+</body>
+</html>

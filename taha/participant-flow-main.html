@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiz Platform — Live session</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<!--
+  Participant live-session prototype. Visual design is Anh Nguyen's React mockup
+  (CS440-Quiz-Platform/anh, App.css): the "Question N of M" row with the orange timer square,
+  the 2x2 letter buttons, the Score/Rank boxes, the submitted screen with dots, the Correct!
+  feedback, and the trophy results. Static reference: static/participant-static.html.
+  Shared quiz data matches presenter-flow.html. Any 6-digit code joins (the host's code is 482 913).
+  TEST_TOOLS (top of the script) adds a dev-only "Skip wait" chip; set it to false to remove it.
+  Deep links: #join #lobby #countdown #q=3 (&t=4 seconds left) #timeup=3 #submitted=3 (&pick=B)
+              #feedback=3 (&result=correct|wrong|none) #ready=3 #final. Add &hold to freeze timers.
+-->
+<style>
+:root {
+  --navy: #043371;
+  --orange: #CC4E00;
+  --orange-deep: #bf4c0c;
+  --sky: #8fdbff;
+  --sky-soft: #c2e6f8;
+  --apricot: #f6d2b6;
+  --sand: #ecdfd0;
+  --paper: #fcf9f4;
+  --ink: #222222;
+  --gray: #666666;
+  --b: 3px solid var(--ink);
+  --b-thin: 2px solid var(--ink);
+  --shadow: 6px 6px 0 var(--ink);
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --test-h: 0px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 20px 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--sand);
+  color: var(--ink);
+  font-family: "Space Grotesk", system-ui, sans-serif;
+}
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+h1, p { margin: 0; }
+h1 { font-family: "Archivo Black", sans-serif; font-weight: 400; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Header (shared shell) */
+.top { display: flex; justify-content: space-between; align-items: center; }
+.brand-logo {
+  padding: 6px 14px;
+  border: var(--b);
+  background: var(--navy);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--paper);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 22px;
+  transform: rotate(-1.5deg);
+}
+.brand-logo span { color: var(--sky); }
+.user { display: flex; align-items: center; gap: 12px; font-weight: 700; }
+.avatar {
+  width: 44px; height: 44px;
+  border: var(--b);
+  display: grid; place-items: center;
+  background: var(--orange-deep);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--paper);
+}
+
+/* Frame: one bordered app surface; the page (not the frame) scrolls if needed */
+.frame {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  overflow: clip;
+}
+.bar {
+  min-height: 40px;
+  padding: 9px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.bar span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .r { flex-shrink: 0; color: var(--apricot); }
+.view {
+  flex: 1;
+  min-width: 0;
+  padding: clamp(22px, 3.2vw, 44px) clamp(16px, 3vw, 40px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.screen {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.screen.out { opacity: 0; transform: translateY(-6px); transition: opacity .18s ease, transform .18s ease; }
+.screen:not([hidden]) .rise { animation: rise .55s var(--ease) both; animation-delay: calc(var(--i, 0) * 55ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes pop {
+  0% { opacity: 0; transform: scale(.4); }
+  65% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Shared bits */
+.eyebrow {
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.hl {
+  padding: 0 8px;
+  border: var(--b);
+  background: var(--sky-soft);
+  color: var(--navy);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.btn {
+  min-height: 48px;
+  padding: 12px 24px;
+  border: var(--b);
+  background: var(--orange-deep);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--paper);
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform .12s var(--ease);
+}
+.btn:hover { background: var(--orange); }
+.btn:active { transform: translate(4px, 4px); box-shadow: none; }
+.btn.alt { background: var(--paper); color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
+.btn.alt:hover { background: var(--sky-soft); }
+.btn.alt:active { transform: translate(3px, 3px); box-shadow: none; }
+.btn[aria-busy="true"] { cursor: progress; background: var(--orange); transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+.link {
+  color: var(--navy);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.link:hover { text-decoration-color: var(--orange-deep); }
+.waiting-dots { display: flex; gap: 8px; }
+.waiting-dots span {
+  width: 11px; height: 11px;
+  border: 2px solid var(--ink);
+  background: var(--apricot);
+  animation: hop 1.2s var(--ease) infinite;
+}
+.waiting-dots span:nth-child(2) { animation-delay: .15s; }
+.waiting-dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes hop { 0%, 55%, 100% { transform: translateY(0); } 25% { transform: translateY(-9px); } }
+.marks { display: flex; gap: 6px; }
+.marks i { width: 14px; height: 14px; border: 2px solid var(--ink); background: var(--paper); }
+.marks i.done { background: var(--ink); }
+.marks i.cur { background: var(--orange-deep); }
+.stat-box {
+  padding: 10px 12px;
+  border: 2px solid var(--ink);
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  text-align: left;
+}
+.stat-box span {
+  color: var(--gray);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.stat-box strong {
+  margin-top: 2px;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 20px;
+  font-weight: 400;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.stat-box small { color: var(--gray); font-family: "Space Grotesk", sans-serif; font-size: 13px; font-weight: 700; }
+
+/* Join */
+.join-page { max-width: 440px; }
+.join-page h1 { margin: 12px 0 10px; font-size: clamp(30px, 4vw, 44px); line-height: 1.3; }
+.join-page .lede { color: var(--gray); font-size: 16px; font-weight: 500; line-height: 1.5; }
+.join-form { width: 100%; margin-top: 26px; display: flex; flex-direction: column; align-items: stretch; text-align: left; }
+.lbl { margin-bottom: 8px; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.code-input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--navy);
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(30px, 4vw, 40px);
+  letter-spacing: 6px;
+  text-align: center;
+}
+.code-input::placeholder { color: #b3a89b; }
+.code-input:focus { outline: none; background: var(--paper); box-shadow: 3px 3px 0 var(--ink), inset 0 0 0 2px var(--navy); }
+.code-input:focus-visible { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+.code-input[aria-invalid="true"] { border-color: var(--orange-deep); }
+.shake { animation: shake .4s var(--ease); }
+@keyframes shake { 0%, 100% { transform: none; } 20% { transform: translateX(-8px); } 40% { transform: translateX(7px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(3px); } }
+.err { min-height: 22px; margin: 10px 0 6px; color: var(--orange-deep); font-size: 14px; font-weight: 700; }
+.join-form .btn { width: 100%; font-size: 17px; }
+.as { margin-top: 18px; color: var(--gray); font-size: 13px; font-weight: 500; text-align: center; }
+.as b { color: var(--ink); }
+.back { margin-top: 22px; font-size: 15px; }
+
+/* Lobby */
+.lobby-page { max-width: 980px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 36px; align-items: center; }
+.lobby-main { display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
+.lobby-main h1 { margin: 10px 0 20px; font-size: clamp(34px, 4.6vw, 56px); line-height: 1.2; }
+.quiz-card { width: 100%; border: var(--b); background: var(--paper); box-shadow: 4px 4px 0 var(--ink); }
+.quiz-card .qc-top { padding: 7px 14px; background: var(--apricot); border-bottom: var(--b-thin); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.quiz-card .qc-body { padding: 14px 16px 16px; }
+.quiz-card strong { display: block; font-family: "Archivo Black", sans-serif; font-size: clamp(22px, 2.4vw, 28px); font-weight: 400; }
+.quiz-card p { margin-top: 4px; color: var(--gray); font-size: 14px; font-weight: 700; }
+.lobby-wait { margin: 24px 0; display: flex; align-items: center; gap: 14px; font-weight: 700; }
+.lobby-actions { min-height: 52px; }
+.confirm {
+  padding: 12px 14px;
+  border: var(--b);
+  background: var(--apricot);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  animation: rise .35s var(--ease) both;
+}
+.confirm p { flex-basis: 100%; font-weight: 700; }
+.confirm .btn { min-height: 40px; padding: 8px 16px; font-size: 14px; }
+.panel { width: 100%; border: var(--b); background: var(--paper); box-shadow: var(--shadow); text-align: left; }
+.panel-top { padding: 9px 14px; display: flex; justify-content: space-between; gap: 10px; background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.panel-top span:last-child { color: var(--apricot); }
+.panel-body { padding: 16px; }
+.count-line { display: flex; align-items: baseline; gap: 10px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: var(--b-thin); }
+.count-line strong { color: var(--navy); font-family: "Archivo Black", sans-serif; font-size: 52px; font-weight: 400; line-height: 1; display: inline-block; }
+.count-line strong.bump { animation: bump .35s var(--ease); }
+@keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.count-line span { color: var(--gray); font-weight: 700; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 5px 10px; border: var(--b-thin); background: var(--sky-soft); color: var(--navy); font-size: 14px; font-weight: 700; }
+.chip.me { background: var(--navy); color: var(--paper); }
+.chip.more { background: var(--paper); color: var(--gray); }
+.chip.new { animation: pop .4s var(--ease) both; }
+
+/* Countdown and interstitial */
+.countdown-page h1, .ready-page h1 { margin: 10px 0 0; font-size: clamp(32px, 4.4vw, 54px); }
+.cd-num {
+  width: clamp(130px, 16vw, 180px);
+  aspect-ratio: 1;
+  margin: 30px 0 26px;
+  border: var(--b);
+  display: grid;
+  place-items: center;
+  background: var(--orange-deep);
+  box-shadow: var(--shadow);
+  color: var(--paper);
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(72px, 9vw, 104px);
+}
+.cd-num.go { animation: pop .5s var(--ease) both; }
+.cd-sub { color: var(--gray); font-weight: 700; }
+.ready-page .marks { margin: 26px 0 22px; }
+.ready-page .marks i { width: 22px; height: 22px; border-width: 3px; }
+.fill-bar { width: min(320px, 100%); height: 12px; margin-top: 22px; border: var(--b-thin); background: var(--sand); }
+.fill-bar i { display: block; height: 100%; background: var(--ink); transform-origin: left; transform: scaleX(0); }
+.fill-bar.run i { animation: fill var(--dur, 2s) linear forwards; }
+@keyframes fill { to { transform: scaleX(1); } }
+
+/* Question (Anh's ParticipantQuestionPage) */
+.participant-question-page { max-width: 920px; align-items: stretch; text-align: left; }
+.participant-top {
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.q-label { display: flex; flex-direction: column; gap: 7px; }
+.q-label > span { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.q-label small { color: var(--gray); font-size: 13px; font-weight: 500; }
+.participant-timer {
+  width: 50px; height: 50px;
+  flex: 0 0 auto;
+  border: var(--b);
+  display: grid;
+  place-items: center;
+  background: var(--orange-deep);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--paper);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 17px;
+}
+.participant-timer.urgent { animation: urgent .5s var(--ease); }
+@keyframes urgent { 0% { transform: scale(1); } 35% { transform: scale(1.16); } 100% { transform: scale(1); } }
+.tbar { height: 10px; margin-top: 12px; border: var(--b-thin); background: var(--sand); }
+.tbar i { display: block; height: 100%; background: var(--ink); transform-origin: left; }
+.tbar.urgent i { background: var(--orange-deep); }
+.answers-wrap { position: relative; display: flex; justify-content: center; }
+.participant-answers {
+  width: min(100%, 420px);
+  aspect-ratio: 1;
+  padding: 14px 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.participant-answer {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  padding: 12px;
+  border: var(--b);
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--navy);
+  cursor: pointer;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 34px;
+  transition: transform .14s var(--ease), opacity .3s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.participant-answers:not(.locked) .participant-answer:hover { background: var(--sky-soft); }
+.participant-answers:not(.locked) .participant-answer:active { transform: translate(3px, 3px); box-shadow: none; }
+.participant-answer .k { display: none; }
+.participant-answers.locked .participant-answer { cursor: default; }
+.participant-answers.locked .participant-answer:not(.picked) { opacity: .35; }
+.participant-answer.picked { background: var(--navy); color: var(--paper); transform: translate(3px, 3px); box-shadow: none; }
+.timeup-stamp {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: max-content;
+  max-width: 90%;
+  padding: 16px 26px;
+  border: var(--b);
+  background: var(--apricot);
+  box-shadow: var(--shadow);
+  text-align: center;
+  transform: translate(-50%, -50%);
+  animation: stamp .45s var(--ease) both;
+}
+.timeup-stamp strong { display: block; font-family: "Archivo Black", sans-serif; font-size: 30px; font-weight: 400; }
+.timeup-stamp span { font-size: 14px; font-weight: 700; }
+@keyframes stamp { from { opacity: 0; transform: translate(-50%, -50%) scale(.6); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+.participant-bottom {
+  min-height: 76px;
+  padding: 9px 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.participant-bottom > div:last-child { text-align: right; }
+.participant-bottom > div:last-child strong { justify-content: flex-end; }
+
+/* Submitted (Anh's ParticipantSubmittedPage) */
+.submitted-page h1 { margin: 0 0 10px; font-size: 27px; }
+.submitted-page p { max-width: 260px; color: var(--gray); line-height: 1.5; }
+.my-pick {
+  width: 92px; height: 92px;
+  margin: 4px 0 22px;
+  border: var(--b);
+  display: grid;
+  place-items: center;
+  background: var(--navy);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--paper);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 46px;
+  animation: pop .45s var(--ease) both;
+}
+.pick-label { margin-bottom: 10px; color: var(--gray); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.submitted-page .waiting-dots { margin-top: 22px; }
+.sub-meta { margin-top: 22px; padding: 6px 12px; border: var(--b-thin); background: var(--sand); font-size: 13px; font-weight: 700; }
+
+/* Feedback (Anh's ParticipantFeedbackPage) */
+.feedback-page { max-width: 460px; }
+.feedback-check, .trophy {
+  width: 88px; height: 88px;
+  border: var(--b);
+  display: grid;
+  place-items: center;
+  background: var(--sky-soft);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--navy);
+  font-size: 48px;
+  font-weight: 900;
+  animation: pop .5s var(--ease) both;
+}
+.feedback-check.wrong { background: var(--apricot); color: var(--ink); }
+.feedback-check.none { background: var(--sand); color: var(--ink); }
+.feedback-page h1 { margin: 20px 0 4px; color: var(--navy); font-size: 35px; }
+.feedback-page.is-wrong h1, .feedback-page.is-none h1 { color: var(--ink); }
+.answer-line { color: var(--gray); font-size: 15px; font-weight: 700; }
+.answer-line b { color: var(--ink); }
+.points-earned { margin: 8px 0 2px; color: var(--orange-deep); font-family: "Archivo Black", sans-serif; font-size: 31px; }
+.points-earned.zero { color: var(--gray); }
+.feedback-stats, .final-result-stats { width: 100%; margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.delta { padding: 1px 6px; border: var(--b-thin); background: var(--paper); font-family: "Space Grotesk", sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .5px; }
+.delta.up { color: var(--navy); background: var(--sky-soft); }
+.delta.down { color: var(--ink); background: var(--apricot); }
+.delta.same { color: var(--gray); }
+.waiting-message { margin-top: 26px; color: var(--gray); font-size: 12px; font-weight: 700; }
+.feedback-page .fill-bar { height: 8px; margin-top: 12px; width: 140px; }
+
+/* Final results (Anh's ParticipantResultsPage) */
+.final-results-page { max-width: 640px; }
+.trophy-wrap { position: relative; }
+.trophy { width: 96px; height: 96px; background: var(--apricot); color: var(--ink); font-size: 46px; animation: trophy .7s var(--ease) both; }
+@keyframes trophy {
+  0% { opacity: 0; transform: translateY(26px) scale(.3); }
+  60% { opacity: 1; transform: translateY(-6px) scale(1.12); }
+  100% { opacity: 1; transform: none; }
+}
+.burst { position: absolute; top: 50%; left: 50%; width: 0; height: 0; pointer-events: none; }
+.burst i {
+  position: absolute;
+  width: 12px; height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid var(--ink);
+  background: var(--apricot);
+  opacity: 0;
+  animation: fly .9s var(--ease) .35s both;
+}
+.burst i:nth-child(3n+1) { background: var(--sky-soft); }
+.burst i:nth-child(3n+2) { background: var(--sand); }
+@keyframes fly {
+  0% { opacity: 1; transform: translate(0, 0) scale(.4); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--x), var(--y)) scale(1); }
+}
+.result-eyebrow { margin: 24px 0 3px; color: var(--navy); font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+.final-results-page h1 { margin: 5px 0 22px; font-size: 32px; }
+.final-row { width: 100%; display: flex; flex-direction: column; align-items: center; }
+.final-score {
+  width: 190px;
+  min-height: 150px;
+  padding: 18px;
+  border: var(--b);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--sky-soft);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.final-score strong { color: var(--navy); font-family: "Archivo Black", sans-serif; font-size: 38px; font-weight: 400; }
+.final-score span, .recorded-result-note { margin-top: 5px; color: var(--gray); font-size: 12px; }
+.final-score span { font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.recorded-result-note { margin-top: 22px; line-height: 1.5; font-size: 13px; }
+.final-actions { width: 100%; margin-top: 24px; display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px; left: 50%;
+  padding: 12px 20px;
+  border: var(--b);
+  background: var(--navy);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+  transform: translate(-50%, calc(100% + 60px));
+  transition: transform .3s var(--ease);
+  z-index: 99;
+  max-width: calc(100% - 32px);
+}
+.toast.show { transform: translate(-50%, 0); }
+
+/* Desktop / laptop: a proper web play area */
+@media (min-width: 900px) {
+  .q-label > span { font-size: 14px; }
+  .q-label small { font-size: 15px; }
+  .participant-timer { width: 76px; height: 76px; font-size: 30px; box-shadow: 4px 4px 0 var(--ink); }
+  .tbar { height: 12px; margin-top: 16px; }
+  .participant-answers {
+    width: 100%;
+    aspect-ratio: auto;
+    height: clamp(250px, calc(100vh - 450px - var(--test-h)), 470px);
+    height: clamp(250px, calc(100dvh - 450px - var(--test-h)), 470px);
+    padding: 22px 0;
+    gap: 18px;
+  }
+  .participant-answer { font-size: clamp(56px, 6vw, 80px); box-shadow: 4px 4px 0 var(--ink); }
+  .participant-answers:not(.locked) .participant-answer:active,
+  .participant-answer.picked { transform: translate(4px, 4px); }
+  .participant-bottom { gap: 18px; }
+  .participant-bottom .stat-box { padding: 12px 16px; }
+  .participant-bottom strong { font-size: 26px; }
+  .timeup-stamp { padding: 22px 40px; }
+  .timeup-stamp strong { font-size: 44px; }
+
+  .submitted-page h1 { font-size: 42px; margin-bottom: 14px; }
+  .submitted-page p { max-width: 360px; font-size: 18px; }
+  .my-pick { width: 128px; height: 128px; font-size: 64px; }
+  .waiting-dots span { width: 14px; height: 14px; }
+
+  .feedback-page { max-width: 560px; }
+  .feedback-check { width: 120px; height: 120px; font-size: 64px; box-shadow: var(--shadow); }
+  .feedback-page h1 { margin-top: 26px; font-size: 52px; }
+  .answer-line { font-size: 17px; }
+  .points-earned { font-size: 46px; }
+  .stat-box strong { font-size: 26px; }
+  .stat-box { padding: 12px 16px; }
+  .waiting-message { font-size: 14px; }
+
+  .trophy { width: 120px; height: 120px; font-size: 60px; box-shadow: var(--shadow); }
+  .final-results-page h1 { font-size: 46px; }
+  .final-row { flex-direction: row; align-items: stretch; gap: 14px; }
+  .final-row .final-result-stats { margin-top: 0; flex: 1; grid-template-columns: 1fr; }
+  .final-row .stat-box { justify-content: center; }
+  .final-score { width: 220px; }
+}
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
+  .participant-answer .k {
+    display: block;
+    position: absolute;
+    top: 10px; left: 12px;
+    padding: 1px 7px;
+    border: var(--b-thin);
+    background: var(--paper);
+    color: var(--gray);
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .participant-answer.picked .k { color: var(--ink); }
+}
+
+/* Tablet and down: lobby stacks */
+@media (max-width: 899px) {
+  .lobby-page { max-width: 520px; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+}
+
+/* Phones */
+@media (max-width: 640px) {
+  body { padding: 12px 10px 14px; gap: 12px; }
+  .user .name { display: none; }
+  .brand-logo { font-size: 17px; }
+  .frame { box-shadow: 4px 4px 0 var(--ink); }
+  .bar { min-height: 36px; padding: 8px 12px; font-size: 11px; }
+  .view { padding: 18px 14px 20px; }
+  .participant-answers { width: 100%; aspect-ratio: auto; height: clamp(260px, calc(100vh - 380px - var(--test-h)), 500px); height: clamp(260px, calc(100dvh - 380px - var(--test-h)), 500px); }
+  .participant-answer { font-size: 40px; }
+  .lobby-main h1 { margin-bottom: 16px; }
+  .lobby-wait { margin: 18px 0; }
+  .count-line strong { font-size: 40px; }
+  .panel { box-shadow: 4px 4px 0 var(--ink); }
+  .chip { font-size: 13px; padding: 4px 8px; }
+  .final-actions .btn { width: 100%; }
+  .final-actions { margin-top: 18px; gap: 10px; }
+  .trophy { width: 84px; height: 84px; font-size: 40px; }
+  .result-eyebrow { margin-top: 18px; }
+  .final-results-page h1 { margin-bottom: 16px; font-size: 28px; }
+  .final-score { min-height: 118px; padding: 12px; }
+  .recorded-result-note { margin-top: 14px; }
+  .confirm { width: 100%; }
+}
+
+/* Short phones: keep the answer grid in view */
+@media (max-width: 640px) and (max-height: 700px) {
+  .q-label small { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  .burst { display: none; }
+}
+
+/* Shared scrollbar block (DESIGN-GUIDE section 4) */
+@supports not selector(::-webkit-scrollbar) {
+  html { scrollbar-width: thin; scrollbar-color: var(--ink) var(--sand); }
+  * { scrollbar-width: thin; scrollbar-color: var(--ink) transparent; }
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+html::-webkit-scrollbar, html::-webkit-scrollbar-track, body::-webkit-scrollbar, body::-webkit-scrollbar-track { background: var(--sand); }
+::-webkit-scrollbar-thumb { background: var(--ink); border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* DEV / TESTING ONLY: "Skip wait" chip (TEST_TOOLS in the script). Not part of the product UI. */
+body.test-tools { --test-h: 44px; padding-bottom: calc(26px + var(--test-h)); }
+.test-skip {
+  position: fixed;
+  left: 12px; bottom: 10px;
+  z-index: 98;
+  padding: 5px 10px;
+  border: 2px dashed var(--ink);
+  background: var(--sand);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .5px;
+}
+.test-skip:hover:not(:disabled) { background: var(--paper); }
+.test-skip:disabled { opacity: .45; cursor: default; }
+.test-skip kbd { margin-left: 4px; padding: 0 4px; border: 1px solid var(--ink); font: inherit; font-size: 11px; }
+@media (max-width: 640px) { body.test-tools { padding-bottom: calc(14px + var(--test-h)); } .test-skip { left: 10px; bottom: 8px; } }
+
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand-logo">QUIZ<span>.</span>PLATFORM</div>
+  <div class="user">
+    <span class="name">Taha Sabir</span>
+    <div class="avatar" aria-hidden="true">TS</div>
+  </div>
+</header>
+
+<main class="frame">
+  <div class="bar"><span id="barL">Join a live session</span><span class="r" id="barR">Participant</span></div>
+  <div class="view">
+
+    <!-- 1. Join -->
+    <section class="screen join-page" data-screen="join" aria-labelledby="joinH">
+      <p class="eyebrow rise">Participate</p>
+      <h1 id="joinH" class="rise" style="--i:1">Join a <span class="hl">live quiz</span></h1>
+      <p class="lede rise" style="--i:2">Enter the 6-digit code on the host's screen.</p>
+      <form class="join-form rise" style="--i:3" id="joinForm" novalidate>
+        <label class="lbl" for="code">Session code</label>
+        <input class="code-input" id="code" name="code" inputmode="numeric" autocomplete="off" spellcheck="false"
+               placeholder="000 000" maxlength="7" aria-describedby="codeErr">
+        <p class="err" id="codeErr" role="alert"></p>
+        <button class="btn" type="submit" id="joinBtn">Join →</button>
+        <p class="as">Joining as <b>Taha Sabir</b></p>
+      </form>
+      <a class="link back rise" style="--i:4" href="made-dashboard-main.html#participate">← Back to dashboard</a>
+    </section>
+
+    <!-- 2. Waiting lobby -->
+    <section class="screen lobby-page" data-screen="lobby" hidden aria-labelledby="lobbyH">
+      <div class="lobby-main">
+        <p class="eyebrow rise" id="lobbyCode">Session 482 913</p>
+        <h1 id="lobbyH" class="rise" style="--i:1">You're <span class="hl">in!</span></h1>
+        <div class="quiz-card rise" style="--i:2">
+          <div class="qc-top">Live quiz</div>
+          <div class="qc-body">
+            <strong id="lobbyTitle">Data Structures</strong>
+            <p id="lobbyMeta">Hosted by Prof. Kim · 5 questions</p>
+          </div>
+        </div>
+        <div class="lobby-wait rise" style="--i:3" aria-live="polite">
+          <div class="waiting-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+          <span id="lobbyStatus">Waiting for Prof. Kim to start…</span>
+        </div>
+        <div class="lobby-actions rise" style="--i:4" id="lobbyActions">
+          <button class="btn alt" type="button" id="leaveBtn" aria-expanded="false" aria-controls="leaveConfirm">Leave</button>
+          <div class="confirm" id="leaveConfirm" role="group" aria-label="Confirm leaving" hidden>
+            <p>Leave this session?</p>
+            <button class="btn alt" type="button" id="stayBtn">Stay</button>
+            <button class="btn" type="button" id="leaveYes">Leave</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel rise" style="--i:3">
+        <div class="panel-top"><span>Players</span><span>Lobby open</span></div>
+        <div class="panel-body">
+          <div class="count-line"><strong id="joinCount">15</strong><span id="joinWord">players joined</span></div>
+          <div class="chips" id="chips"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Countdown -->
+    <section class="screen countdown-page" data-screen="countdown" hidden aria-labelledby="cdH">
+      <p class="eyebrow rise">Data Structures · 5 questions</p>
+      <h1 id="cdH" class="rise" style="--i:1">Get ready!</h1>
+      <div class="cd-num" id="cdNum" aria-live="assertive">3</div>
+      <p class="cd-sub rise" style="--i:2">Read each question on the host's screen, then tap your answer.</p>
+    </section>
+
+    <!-- 4. Question (Anh's answer screen) -->
+    <section class="screen participant-question-page" data-screen="question" hidden aria-labelledby="qLabel">
+      <div class="participant-top rise">
+        <div class="q-label">
+          <span id="qLabel">Question 1 of 5</span>
+          <div class="marks" id="qMarks" aria-hidden="true"></div>
+          <small>The question is on the host's screen.</small>
+        </div>
+        <div class="participant-timer" id="qTimer" role="timer" aria-label="Seconds left">20</div>
+      </div>
+      <div class="tbar rise" id="qBar" aria-hidden="true"><i></i></div>
+      <div class="answers-wrap rise" style="--i:1">
+        <div class="participant-answers" id="answers" role="group" aria-label="Answer choices">
+          <button class="participant-answer" type="button" data-i="0" aria-keyshortcuts="1 A" aria-label="Answer A"><span class="k" aria-hidden="true">1</span>A</button>
+          <button class="participant-answer" type="button" data-i="1" aria-keyshortcuts="2 B" aria-label="Answer B"><span class="k" aria-hidden="true">2</span>B</button>
+          <button class="participant-answer" type="button" data-i="2" aria-keyshortcuts="3 C" aria-label="Answer C"><span class="k" aria-hidden="true">3</span>C</button>
+          <button class="participant-answer" type="button" data-i="3" aria-keyshortcuts="4 D" aria-label="Answer D"><span class="k" aria-hidden="true">4</span>D</button>
+        </div>
+        <div class="timeup-stamp" id="timeup" role="alert" hidden><strong>Time's up!</strong><span>No answer this round</span></div>
+      </div>
+      <div class="participant-bottom rise" style="--i:2">
+        <div class="stat-box"><span>Score</span><strong id="qScore">0</strong></div>
+        <div class="stat-box"><span>Rank</span><strong id="qRank">—</strong></div>
+      </div>
+      <p class="sr" id="qLive" aria-live="assertive"></p>
+    </section>
+
+    <!-- 5. Submitted -->
+    <section class="screen submitted-page" data-screen="submitted" hidden aria-labelledby="subH">
+      <p class="pick-label rise">Your answer</p>
+      <div class="my-pick" id="subPick">B</div>
+      <h1 id="subH" class="rise" style="--i:1">Answer submitted!</h1>
+      <p class="rise" style="--i:2">Waiting for everyone else to answer...</p>
+      <div class="waiting-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="sub-meta rise" style="--i:3" id="subMeta" aria-live="polite">1 of 24 answered</div>
+    </section>
+
+    <!-- 6. Feedback -->
+    <section class="screen feedback-page" data-screen="feedback" hidden aria-labelledby="fbH">
+      <div class="feedback-check" id="fbIcon" aria-hidden="true">✓</div>
+      <h1 id="fbH" class="rise" style="--i:1">Correct!</h1>
+      <p class="answer-line rise" style="--i:2" id="fbLine">You picked <b>A · Stack</b></p>
+      <div class="points-earned rise" style="--i:2" id="fbPts">+847</div>
+      <div class="feedback-stats rise" style="--i:3">
+        <div class="stat-box"><span>Score</span><strong id="fbScore">0</strong></div>
+        <div class="stat-box"><span>Rank</span><strong id="fbRank">#1</strong></div>
+      </div>
+      <p class="waiting-message rise" style="--i:4">Look at the host screen for the leaderboard</p>
+      <div class="fill-bar" id="fbNext" aria-hidden="true"><i></i></div>
+    </section>
+
+    <!-- 7. Get ready interstitial -->
+    <section class="screen ready-page" data-screen="ready" hidden aria-labelledby="rdH">
+      <p class="eyebrow rise">Up next</p>
+      <h1 id="rdH" class="rise" style="--i:1">Question 2 of 5</h1>
+      <div class="marks rise" style="--i:2" id="rdMarks" aria-hidden="true"></div>
+      <p class="cd-sub rise" style="--i:3">Get ready…</p>
+      <div class="fill-bar" id="rdBar" aria-hidden="true"><i></i></div>
+    </section>
+
+    <!-- 8. Final results -->
+    <section class="screen final-results-page" data-screen="final" hidden aria-labelledby="fnH">
+      <div class="trophy-wrap">
+        <div class="trophy" aria-hidden="true">★</div>
+        <div class="burst" id="burst" aria-hidden="true"></div>
+      </div>
+      <p class="result-eyebrow rise" style="--i:4">Quiz complete</p>
+      <h1 id="fnH" class="rise" style="--i:5">Great job!</h1>
+      <div class="final-row rise" style="--i:6">
+        <div class="final-score"><strong id="fnCorrect">4 / 5</strong><span>Correct answers</span></div>
+        <div class="final-result-stats">
+          <div class="stat-box"><span>Final rank</span><strong id="fnRank">#3 <small>of 24</small></strong></div>
+          <div class="stat-box"><span>Points</span><strong id="fnPts">0</strong></div>
+        </div>
+      </div>
+      <p class="recorded-result-note rise" style="--i:7" id="fnNote">Your recorded quiz result is 4 out of 5 correct.</p>
+      <div class="final-actions rise" style="--i:8">
+        <a class="btn" href="participant-results-main.html">See your answers →</a>
+        <a class="btn alt" href="made-dashboard-main.html#participate">Back to dashboard</a>
+      </div>
+    </section>
+
+  </div>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<!-- DEV / TESTING ONLY (TEST_TOOLS): fast-forwards simulated waits. Never ships. -->
+<button class="test-skip" id="testSkip" type="button" hidden aria-keyshortcuts="S" title="Testing only: skip the current wait (S)">TEST · Skip wait ⏭<kbd>S</kbd></button>
+
+<script>
+"use strict";
+// DEV / TESTING ONLY. true shows the dashed "TEST · Skip wait" chip (key: S) that fast-forwards
+// the lobby, countdown, question timer (as time's up if unanswered), submitted wait, feedback and
+// Get ready screens. Set to false (or delete this flag, the chip markup, and the .test-skip CSS) for the product.
+const TEST_TOOLS = true;
+// ---- Shared quiz data (same as presenter-flow.html) ----
+const QUIZ = {
+  title: "Data Structures",
+  code: "482913",
+  host: "Prof. Kim",
+  questions: [
+    { text: "Which data structure follows LIFO (Last In, First Out) ordering?", options: ["Stack", "Queue", "Linked List", "Heap"], correct: 0, limit: 20 },
+    { text: "What is the worst-case time to search a balanced binary search tree?", options: ["O(1)", "O(log n)", "O(n)", "O(n log n)"], correct: 1, limit: 20 },
+    { text: "Which data structure follows FIFO (First In, First Out) ordering?", options: ["Stack", "Queue", "Binary Tree", "Hash Table"], correct: 1, limit: 20 },
+    { text: "Which structure gives average O(1) lookup by key?", options: ["Array", "Linked List", "Hash Table", "Binary Heap"], correct: 2, limit: 20 },
+    { text: "Which traversal visits a BST's keys in sorted order?", options: ["Pre-order", "In-order", "Post-order", "Level-order"], correct: 1, limit: 30 }
+  ]
+};
+const LETTERS = "ABCD", N = QUIZ.questions.length, PLAYERS = 24;
+const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const points = (t, limit) => Math.round(1000 * (1 - (t / limit) / 2));
+const fmt = n => n.toLocaleString("en-US");
+
+// ---- Simulated room: 23 seeded opponents (deterministic, independent of how you play) ----
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rand = mulberry32(440482);
+const NAMES = ["Maya P.", "Jordan L.", "Sam R.", "Priya S.", "Ethan B.", "Olivia C.", "Lucas M.", "Ava T.", "Daniel O.", "Grace H.", "Mateo G.", "Chloe W.",
+  "Ben A.", "Zoe F.", "Isaac N.", "Lily D.", "Omar K.", "Hannah V.", "Leo J.", "Nora E.", "Caleb Y.", "Ruby Q.", "Theo S."];
+const OPP = NAMES.map(name => {
+  const skill = .4 + rand() * .5, speed = .14 + rand() * .36;
+  return {
+    name,
+    ans: QUIZ.questions.map(q => {
+      const miss = rand() < .02, right = rand() < skill, f = Math.min(.92, Math.max(.08, speed + (rand() - .5) * .3));
+      const t = miss ? null : f * q.limit;
+      return { t, pts: !miss && right ? points(t, q.limit) : 0 };
+    })
+  };
+});
+
+// ---- You ----
+const me = { answers: [] }; // { pick: 0-3 | null, t: seconds | null, pts }
+// Demo history used only when a deep link jumps into the middle of the quiz.
+const DEMO = [{ pick: 0, f: .31 }, { pick: 2, f: .52 }, { pick: 1, f: .24 }, { pick: 2, f: .38 }, { pick: 1, f: .42 }];
+function record(i, pick, t) {
+  const q = QUIZ.questions[i];
+  me.answers[i] = { pick, t, pts: pick === q.correct ? points(t, q.limit) : 0 };
+}
+function fillDemo(k) {
+  me.answers.length = Math.min(me.answers.length, k);
+  for (let i = me.answers.length; i < k; i++) record(i, DEMO[i].pick, DEMO[i].f * QUIZ.questions[i].limit);
+}
+const myScore = k => me.answers.slice(0, k).reduce((s, a) => s + a.pts, 0);
+const oppScore = (o, k) => o.ans.slice(0, k).reduce((s, a) => s + a.pts, 0);
+const rankAfter = k => k === 0 ? null : 1 + OPP.filter(o => oppScore(o, k) > myScore(k)).length;
+
+// ---- Helpers ----
+const $ = s => document.querySelector(s);
+const screens = {};
+document.querySelectorAll("[data-screen]").forEach(s => screens[s.dataset.screen] = s);
+let HOLD = false, INSTANT = false, cur = screens.join, timers = [], loop = null, showTok = 0;
+function later(fn, ms) { if (!HOLD) timers.push(setTimeout(fn, ms)); }
+function stopAll() { timers.forEach(clearTimeout); timers = []; if (loop) { clearInterval(loop); loop = null; } setSkip(null); }
+// DEV / TESTING ONLY: each waiting state registers what "Skip wait" jumps to.
+let skipFn = null;
+const skipBtn = document.getElementById("testSkip");
+function setSkip(fn) { skipFn = fn; if (TEST_TOOLS) skipBtn.disabled = !fn; }
+function doSkip() { if (TEST_TOOLS && skipFn) { const f = skipFn; skipFn = null; f(); } }
+if (TEST_TOOLS) { document.body.classList.add("test-tools"); skipBtn.hidden = false; skipBtn.addEventListener("click", doSkip); }
+function setBar(l, r) { $("#barL").textContent = l; $("#barR").textContent = r; }
+function setHash(h) { history.replaceState(null, "", "#" + h + (HOLD ? "&hold" : "")); }
+function restartAnim(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+function marks(el, n, current) {
+  el.innerHTML = "";
+  for (let i = 1; i <= n; i++) { const m = document.createElement("i"); if (i < current) m.className = "done"; else if (i === current) m.className = "cur"; el.appendChild(m); }
+}
+function countUp(el, from, to, ms, f) {
+  cancelAnimationFrame(el._raf);
+  if (RM || HOLD || from === to) { el.textContent = f(to); return; }
+  const s = performance.now();
+  const step = now => {
+    const p = Math.min(1, (now - s) / ms), e = 1 - Math.pow(1 - p, 3);
+    el.textContent = f(Math.round(from + (to - from) * e));
+    if (p < 1) el._raf = requestAnimationFrame(step);
+  };
+  el._raf = requestAnimationFrame(step);
+}
+let toastT;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 1800); }
+
+// Screen change: quick fade out, then the next screen rises in (transform/opacity only).
+function show(name, setup) {
+  const next = screens[name], prev = cur, tok = ++showTok;
+  cur = next;
+  const reveal = () => {
+    if (tok !== showTok) return;
+    Object.values(screens).forEach(s => { s.classList.remove("out"); if (s !== next) s.hidden = true; });
+    next.hidden = true;
+    if (setup) setup();
+    void next.offsetWidth;
+    next.hidden = false;
+    if (window.scrollY > 0) window.scrollTo(0, 0);
+  };
+  if (prev && prev !== next && !prev.hidden && !RM && !HOLD && !INSTANT) { prev.classList.add("out"); setTimeout(reveal, 180); }
+  else reveal();
+}
+
+// ---- 1. Join ----
+const codeEl = $("#code"), joinBtn = $("#joinBtn");
+let joining = false;
+const digits = () => codeEl.value.replace(/\D/g, "").slice(0, 6);
+const formatCode = d => d.length > 3 ? d.slice(0, 3) + " " + d.slice(3) : d;
+function setErr(msg) {
+  $("#codeErr").textContent = msg;
+  codeEl.setAttribute("aria-invalid", msg ? "true" : "false");
+  if (msg) { restartAnim(codeEl, "shake"); codeEl.focus(); codeEl.select(); }
+}
+codeEl.addEventListener("input", () => {
+  const d = digits();
+  codeEl.value = formatCode(d);
+  if ($("#codeErr").textContent) setErr("");
+});
+codeEl.addEventListener("paste", e => {
+  const text = (e.clipboardData || window.clipboardData).getData("text");
+  const d = text.replace(/\D/g, "").slice(0, 6);
+  e.preventDefault();
+  codeEl.value = formatCode(d);
+  setErr("");
+});
+$("#joinForm").addEventListener("submit", e => {
+  e.preventDefault();
+  if (joining) return;
+  const d = digits();
+  if (!d) return setErr("Enter the 6-digit code from the host's screen.");
+  if (d.length < 6) return setErr("Session codes are 6 digits.");
+  joining = true;
+  joinBtn.setAttribute("aria-busy", "true");
+  joinBtn.textContent = "Joining…";
+  setTimeout(() => {
+    joining = false;
+    joinBtn.removeAttribute("aria-busy");
+    joinBtn.textContent = "Join →";
+    if (cur !== screens.join) return;
+    toLobby({ code: d });
+  }, 900);
+});
+function toJoin() {
+  stopAll();
+  setBar("Join a live session", "Participant");
+  setHash("join");
+  show("join", () => { codeEl.value = ""; setErr(""); });
+  if (matchMedia("(pointer: fine)").matches) setTimeout(() => codeEl.focus({ preventScroll: true }), 250);
+}
+
+// ---- 2. Lobby ----
+const ORDER = NAMES.slice(); // join order
+let joined = 0, lobbyPaused = false;
+function renderChips(fresh) {
+  const box = $("#chips"), cap = matchMedia("(max-width: 640px)").matches ? 7 : 24;
+  box.innerHTML = "";
+  const names = ["Taha S. (you)"].concat(ORDER.slice(0, joined - 1).reverse());
+  names.slice(0, cap).forEach((n, i) => {
+    const c = document.createElement("span");
+    c.className = "chip" + (i === 0 ? " me" : "") + (fresh && i === 1 ? " new" : "");
+    c.textContent = n;
+    box.appendChild(c);
+  });
+  if (names.length > cap) { const m = document.createElement("span"); m.className = "chip more"; m.textContent = "+" + (names.length - cap) + " more"; box.appendChild(m); }
+  $("#joinCount").textContent = joined;
+  $("#joinWord").textContent = joined === 1 ? "player joined" : "players joined";
+}
+function toLobby(opts = {}) {
+  stopAll();
+  me.answers = [];
+  joined = opts.n ? Math.min(PLAYERS, Math.max(1, +opts.n)) : 15;
+  const code = /^\d{6}$/.test(opts.code || "") ? opts.code : QUIZ.code;
+  $("#lobbyCode").textContent = "Session " + code.slice(0, 3) + " " + code.slice(3);
+  lobbyPaused = false;
+  setBar(QUIZ.title + " · " + QUIZ.host, "Lobby");
+  setHash("lobby");
+  setSkip(() => toCountdown());
+  show("lobby", () => {
+    $("#lobbyStatus").textContent = "Waiting for " + QUIZ.host + " to start…";
+    closeConfirm(false);
+    renderChips(false);
+  });
+  later(lobbyTick, 900);
+}
+function lobbyTick() {
+  if (lobbyPaused) return later(lobbyTick, 400);
+  if (joined < PLAYERS) {
+    joined++;
+    renderChips(true);
+    restartAnim($("#joinCount"), "bump");
+    return later(lobbyTick, 380 + ((joined * 137) % 320));
+  }
+  $("#lobbyStatus").textContent = QUIZ.host + " is starting the quiz…";
+  later(() => { if (lobbyPaused) return later(lobbyTick, 400); toCountdown(); }, 1500);
+}
+function openConfirm() {
+  lobbyPaused = true;
+  $("#leaveBtn").hidden = true;
+  $("#leaveBtn").setAttribute("aria-expanded", "true");
+  $("#leaveConfirm").hidden = false;
+  $("#stayBtn").focus();
+}
+function closeConfirm(focus = true) {
+  lobbyPaused = false;
+  $("#leaveConfirm").hidden = true;
+  $("#leaveBtn").hidden = false;
+  $("#leaveBtn").setAttribute("aria-expanded", "false");
+  if (focus) $("#leaveBtn").focus();
+}
+$("#leaveBtn").addEventListener("click", openConfirm);
+$("#stayBtn").addEventListener("click", () => closeConfirm());
+$("#leaveYes").addEventListener("click", () => { closeConfirm(false); toJoin(); toast("You left " + QUIZ.title); });
+
+// ---- 3. Countdown ----
+function toCountdown() {
+  stopAll();
+  setBar(QUIZ.title + " · " + QUIZ.host, "Starting");
+  setHash("countdown");
+  setSkip(() => toQuestion(1));
+  let n = 3;
+  const num = $("#cdNum");
+  show("countdown", () => { num.textContent = n; restartAnim(num, "go"); });
+  const tick = () => {
+    n--;
+    if (n > 0) { num.textContent = n; restartAnim(num, "go"); later(tick, 900); }
+    else toQuestion(1);
+  };
+  later(tick, 1080);
+}
+
+// ---- 4. Question ----
+const Q = { n: 1, openTs: 0, answered: false, locked: false, closeAt: 0, lastSec: null };
+const answersEl = $("#answers"), timerEl = $("#qTimer"), tbar = $("#qBar");
+function scoreRankInto(scoreEl, rankEl, k) {
+  scoreEl.textContent = fmt(myScore(k));
+  const r = rankAfter(k);
+  rankEl.innerHTML = r ? "#" + r + " <small>of " + PLAYERS + "</small>" : "—";
+}
+function toQuestion(n, opts = {}) {
+  stopAll();
+  fillDemo(n - 1);
+  const q = QUIZ.questions[n - 1];
+  const left = opts.t != null ? Math.max(0, Math.min(q.limit, +opts.t)) : q.limit;
+  Object.assign(Q, { n, answered: false, locked: false, lastSec: null });
+  setBar(QUIZ.title, "Question " + n + " / " + N);
+  setHash("q=" + n + (opts.t != null ? "&t=" + left : ""));
+  setSkip(skipQuestion);
+  show("question", () => {
+    $("#qLabel").textContent = "Question " + n + " of " + N;
+    marks($("#qMarks"), N, n);
+    answersEl.classList.remove("locked");
+    answersEl.querySelectorAll("button").forEach(b => { b.classList.remove("picked"); b.removeAttribute("aria-pressed"); b.disabled = false; });
+    $("#timeup").hidden = true;
+    timerEl.classList.remove("urgent");
+    tbar.classList.toggle("urgent", left <= 5);
+    scoreRankInto($("#qScore"), $("#qRank"), n - 1);
+    Q.openTs = performance.now() - (q.limit - left) * 1000;
+    const fill = tbar.firstElementChild;
+    fill.style.transition = "none";
+    fill.style.transform = "scaleX(" + (left / q.limit) + ")";
+    void fill.offsetWidth;
+    if (!HOLD) { fill.style.transition = "transform " + left + "s linear"; fill.style.transform = "scaleX(0)"; }
+    paintTimer(left);
+    if (!HOLD) loop = setInterval(qLoop, 100);
+  });
+}
+// Skip during a question: unanswered -> time's up; answered or already timed out -> close it now.
+function skipQuestion() {
+  if (!Q.answered && !Q.locked) { timeUp(); setSkip(skipQuestion); }
+  else { stopAll(); toFeedback(Q.n); }
+}
+function paintTimer(left) {
+  const sec = Math.max(0, Math.ceil(left - 1e-6));
+  if (sec === Q.lastSec) return;
+  Q.lastSec = sec;
+  timerEl.textContent = sec;
+  if (sec <= 5 && sec > 0 && !Q.answered) {
+    tbar.classList.add("urgent");
+    if (!HOLD) restartAnim(timerEl, "urgent");
+    if (sec === 5) $("#qLive").textContent = "5 seconds left";
+  }
+}
+function qLoop() {
+  const q = QUIZ.questions[Q.n - 1];
+  const el = (performance.now() - Q.openTs) / 1000, left = q.limit - el;
+  if (cur === screens.question) paintTimer(left);
+  if (cur === screens.submitted) paintSubmitted(el, left);
+  if (!Q.answered && left <= 0) timeUp();
+  else if (Q.answered && el >= Q.closeAt) { stopAll(); toFeedback(Q.n); }
+}
+function answer(i) {
+  if (cur !== screens.question || Q.locked) return;
+  const q = QUIZ.questions[Q.n - 1];
+  const t = Math.min(q.limit, (performance.now() - Q.openTs) / 1000);
+  Q.locked = Q.answered = true;
+  record(Q.n - 1, i, t);
+  setCloseAt(t);
+  answersEl.classList.add("locked");
+  answersEl.querySelectorAll("button").forEach(b => { b.disabled = true; });
+  const btn = answersEl.children[i];
+  btn.classList.add("picked");
+  btn.setAttribute("aria-pressed", "true");
+  if (HOLD) return;
+  setTimeout(() => { if (cur === screens.question && Q.answered) toSubmitted(); }, RM ? 150 : 480);
+}
+// The question closes when everyone has answered (plus a beat), or when time runs out.
+function setCloseAt(myT) {
+  const q = QUIZ.questions[Q.n - 1], times = OPP.map(o => o.ans[Q.n - 1].t);
+  Q.closeAt = times.every(t => t != null) ? Math.min(q.limit, Math.max(myT, ...times) + 1) : q.limit;
+}
+answersEl.addEventListener("click", e => { const b = e.target.closest("button"); if (b) answer(+b.dataset.i); });
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.target.matches("input, textarea")) return;
+  if (e.key === "Escape" && !$("#leaveConfirm").hidden) { closeConfirm(); return; }
+  if (TEST_TOOLS && (e.key === "s" || e.key === "S")) { e.preventDefault(); doSkip(); return; }
+  if (cur !== screens.question || Q.locked || e.key.length !== 1) return;
+  const k = e.key.toUpperCase(), i = "1234".includes(k) ? "1234".indexOf(k) : "ABCD".indexOf(k);
+  if (i >= 0) { e.preventDefault(); answer(i); }
+});
+function timeUp(fromLink) {
+  if (loop) { clearInterval(loop); loop = null; }
+  Q.locked = true;
+  record(Q.n - 1, null, null);
+  timerEl.textContent = "0";
+  timerEl.classList.remove("urgent");
+  answersEl.classList.add("locked");
+  answersEl.querySelectorAll("button").forEach(b => { b.disabled = true; });
+  $("#timeup").hidden = false;
+  if (!fromLink) setHash("timeup=" + Q.n);
+  later(() => toFeedback(Q.n), 1600);
+}
+
+// ---- 5. Submitted ----
+function toSubmitted(n, opts = {}) {
+  if (n) { // deep link: rebuild the moment just after answering
+    stopAll();
+    fillDemo(n - 1);
+    const q = QUIZ.questions[n - 1], pick = opts.pick ? Math.max(0, LETTERS.indexOf(String(opts.pick).toUpperCase())) : DEMO[n - 1].pick;
+    const t = DEMO[n - 1].f * q.limit;
+    Object.assign(Q, { n, answered: true, locked: true });
+    record(n - 1, pick, t);
+    Q.openTs = performance.now() - (t + 1.5) * 1000;
+    setCloseAt(t);
+    setBar(QUIZ.title, "Question " + n + " / " + N);
+    if (!HOLD) loop = setInterval(qLoop, 100);
+  }
+  setHash("submitted=" + Q.n);
+  setSkip(skipQuestion);
+  show("submitted", () => {
+    $("#subPick").textContent = LETTERS[me.answers[Q.n - 1].pick];
+    $("#subPick").setAttribute("aria-label", "You answered " + LETTERS[me.answers[Q.n - 1].pick]);
+    const q = QUIZ.questions[Q.n - 1];
+    paintSubmitted((performance.now() - Q.openTs) / 1000, q.limit - (performance.now() - Q.openTs) / 1000);
+  });
+}
+function paintSubmitted(el, left) {
+  const n = 1 + OPP.filter(o => { const t = o.ans[Q.n - 1].t; return t != null && t <= el; }).length;
+  const txt = n >= PLAYERS ? "Everyone's in!" : n + " of " + PLAYERS + " answered · " + Math.max(0, Math.ceil(left)) + "s left";
+  const m = $("#subMeta");
+  if (m.textContent !== txt) m.textContent = txt;
+}
+
+// ---- 6. Feedback ----
+function toFeedback(n, opts = {}) {
+  stopAll();
+  const q = QUIZ.questions[n - 1];
+  if (opts.result || me.answers.length < n) { // deep link
+    fillDemo(n - 1);
+    const r = opts.result || "correct";
+    if (r === "none") record(n - 1, null, null);
+    else if (r === "wrong") record(n - 1, q.correct === 0 ? 1 : 0, DEMO[n - 1].f * q.limit);
+    else record(n - 1, q.correct, DEMO[n - 1].f * q.limit);
+  }
+  me.answers.length = n;
+  const a = me.answers[n - 1];
+  const kind = a.pick == null ? "none" : a.pick === q.correct ? "correct" : "wrong";
+  const right = LETTERS[q.correct] + " · " + q.options[q.correct];
+  const before = myScore(n - 1), after = myScore(n), r0 = rankAfter(n - 1), r1 = rankAfter(n);
+  setBar(QUIZ.title, "Question " + n + " / " + N);
+  setHash("feedback=" + n + (kind === "correct" ? "" : "&result=" + kind));
+  setSkip(() => n < N ? toReady(n + 1) : toFinal());
+  show("feedback", () => {
+    const page = screens.feedback, icon = $("#fbIcon");
+    page.classList.remove("is-correct", "is-wrong", "is-none");
+    page.classList.add("is-" + kind);
+    icon.className = "feedback-check" + (kind === "correct" ? "" : " " + kind);
+    icon.textContent = kind === "correct" ? "✓" : kind === "wrong" ? "✗" : "—";
+    $("#fbH").textContent = kind === "correct" ? "Correct!" : kind === "wrong" ? "Not quite" : "Time's up";
+    const line = $("#fbLine");
+    line.textContent = "";
+    if (kind === "correct") line.append("You picked ", bold(right));
+    else line.append((kind === "wrong" ? "You picked " + LETTERS[a.pick] + " · " : "No answer · ") + "The answer was ", bold(right));
+    const pts = $("#fbPts");
+    pts.classList.toggle("zero", a.pts === 0);
+    pts.textContent = "+0";
+    $("#fbScore").textContent = fmt(before);
+    const rank = $("#fbRank");
+    rank.textContent = "#" + r1 + " ";
+    const sm = document.createElement("small"); sm.textContent = "of " + PLAYERS; rank.appendChild(sm);
+    if (r0) {
+      const d = r0 - r1, tag = document.createElement("span");
+      tag.className = "delta " + (d > 0 ? "up" : d < 0 ? "down" : "same");
+      tag.textContent = d > 0 ? "▲ " + d : d < 0 ? "▼ " + (-d) : "= same";
+      tag.setAttribute("aria-label", d > 0 ? "Up " + d : d < 0 ? "Down " + (-d) : "No change");
+      rank.appendChild(tag);
+    }
+    const bar = $("#fbNext");
+    bar.style.setProperty("--dur", "6s");
+    bar.classList.remove("run");
+    if (!HOLD) { void bar.offsetWidth; bar.classList.add("run"); }
+    else bar.firstElementChild.style.transform = "scaleX(.35)";
+  });
+  const pEl = $("#fbPts"), sEl = $("#fbScore");
+  const run = () => { countUp(pEl, 0, a.pts, 800, v => "+" + fmt(v)); countUp(sEl, before, after, 900, fmt); };
+  if (HOLD) { pEl.textContent = "+" + fmt(a.pts); sEl.textContent = fmt(after); } else later(run, RM ? 0 : 450);
+  later(() => n < N ? toReady(n + 1) : toFinal(), RM ? 6000 : 6400);
+}
+function bold(t) { const b = document.createElement("b"); b.textContent = t; return b; }
+
+// ---- 7. Get ready ----
+function toReady(n) {
+  stopAll();
+  fillDemo(n - 1);
+  setBar(QUIZ.title, "Question " + n + " / " + N);
+  setHash("ready=" + n);
+  setSkip(() => toQuestion(n));
+  show("ready", () => {
+    $("#rdH").textContent = "Question " + n + " of " + N;
+    marks($("#rdMarks"), N, n);
+    const bar = $("#rdBar");
+    bar.style.setProperty("--dur", "2.2s");
+    bar.classList.remove("run");
+    if (!HOLD) { void bar.offsetWidth; bar.classList.add("run"); }
+    else bar.firstElementChild.style.transform = "scaleX(.5)";
+  });
+  later(() => toQuestion(n), 2400);
+}
+
+// ---- 8. Final ----
+function headline(correct, rank) {
+  if (rank === 1) return "You took first!";
+  if (correct === N) return "Perfect score!";
+  if (rank <= 3) return "Top 3 finish!";
+  if (correct >= 4) return "Great job!";
+  if (correct === 3) return "Nice work!";
+  if (correct >= 1) return "Good effort";
+  return "Tough round";
+}
+function toFinal() {
+  stopAll();
+  fillDemo(N);
+  const correct = me.answers.filter((a, i) => a.pick === QUIZ.questions[i].correct).length;
+  const rank = rankAfter(N), total = myScore(N);
+  setBar(QUIZ.title, "Complete");
+  setHash("final");
+  show("final", () => {
+    $("#fnH").textContent = headline(correct, rank);
+    $("#fnCorrect").textContent = correct + " / " + N;
+    const r = $("#fnRank"); r.textContent = "#" + rank + " ";
+    const sm = document.createElement("small"); sm.textContent = "of " + PLAYERS; r.appendChild(sm);
+    $("#fnPts").textContent = "0";
+    $("#fnNote").textContent = "Your recorded quiz result is " + correct + " out of " + N + " correct.";
+    const burst = $("#burst");
+    burst.innerHTML = "";
+    if (!RM) for (let i = 0; i < 12; i++) {
+      const p = document.createElement("i"), ang = (i / 12) * Math.PI * 2 - Math.PI / 2, d = 78 + (i % 3) * 22;
+      p.style.setProperty("--x", Math.round(Math.cos(ang) * d) + "px");
+      p.style.setProperty("--y", Math.round(Math.sin(ang) * d) + "px");
+      burst.appendChild(p);
+    }
+  });
+  if (HOLD) $("#fnPts").textContent = fmt(total);
+  else later(() => countUp($("#fnPts"), 0, total, 1200, fmt), RM ? 0 : 700);
+}
+
+// ---- Deep links ----
+function route() {
+  const raw = decodeURIComponent(location.hash.slice(1));
+  const parts = raw.split("&"), [key, val] = parts[0].split("="), opts = {};
+  parts.slice(1).forEach(p => { const [a, b] = p.split("="); opts[a] = b === undefined ? true : b; });
+  HOLD = !!opts.hold;
+  const n = Math.max(1, Math.min(N, parseInt(val, 10) || 1));
+  stopAll();
+  INSTANT = true;
+  try { go(key, n, opts); } finally { INSTANT = false; }
+}
+function go(key, n, opts) {
+  switch (key) {
+    case "lobby": return toLobby(opts);
+    case "countdown": return toCountdown();
+    case "q": case "question": return toQuestion(n, opts);
+    case "timeup": toQuestion(n, { t: 0 }); Q.lastSec = null; return timeUp(true);
+    case "submitted": return toSubmitted(n, opts);
+    case "feedback": return toFeedback(n, { result: opts.result || "correct" });
+    case "ready": return toReady(n);
+    case "final": case "results": return toFinal();
+    default: return toJoin();
+  }
+}
+window.addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>

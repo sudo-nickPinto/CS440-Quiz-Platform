@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiz Platform — Session results</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* Host session results — Version B, second pass (Taha's pick, October 6, 2026).
+     Changes from v1: fewer stats, no legend, no filter/sort popover, no "late" state
+     (a missed question is just "—"), fewer columns, and no inner scrolling panel:
+     the page itself scrolls, with the shared thin ink scrollbar.
+     v3: the question breakdown also lists who got it right (fastest first, with time),
+     next to "got it wrong" and "no answer"; long groups show 8 and a "+N more" toggle.
+     Deep links: #p=7 · #tab=questions&q=6 */
+  :root {
+    --navy: #043371;
+    --orange: #CC4E00;
+    --orange-deep: #bf4c0c;
+    --sky: #8fdbff;
+    --sky-soft: #c2e6f8;    /* also: correct */
+    --apricot: #f6d2b6;     /* also: wrong */
+    --sand: #ecdfd0;        /* also: no answer */
+    --paper: #fcf9f4;
+    --ink: #222222;
+    --gray: #666666;
+    --b: 3px solid var(--ink);
+    --b-thin: 2px solid var(--ink);
+    --shadow: 6px 6px 0 var(--ink);
+    --ease-out: cubic-bezier(.22, 1, .36, 1);
+    --rank-w: 88px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  :focus-visible { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+
+  /* Shared scrollbar spec (all screens) */
+  /* Standard props only where ::-webkit-scrollbar is unsupported (Firefox); in Chrome they
+     would override the webkit styles and bring the arrow buttons back. */
+  @supports not selector(::-webkit-scrollbar) {
+    html { scrollbar-width: thin; scrollbar-color: var(--ink) var(--sand); }
+    * { scrollbar-width: thin; scrollbar-color: var(--ink) transparent; }
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  html::-webkit-scrollbar, html::-webkit-scrollbar-track, body::-webkit-scrollbar, body::-webkit-scrollbar-track { background: var(--sand); }
+  ::-webkit-scrollbar-thumb { background: var(--ink); border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+
+  html { background: var(--sand); }
+  body {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    background: var(--sand); color: var(--ink);
+    min-height: 100vh; display: flex; flex-direction: column;
+    padding: 20px 24px 32px; gap: 18px;
+  }
+  button { font: inherit; color: inherit; }
+
+  /* Header (dashboard) */
+  header.top { display: flex; justify-content: space-between; align-items: center; }
+  .logo {
+    font-family: "Archivo Black", sans-serif; font-size: 22px; text-decoration: none;
+    background: var(--navy); color: var(--paper); padding: 6px 14px;
+    border: var(--b); box-shadow: 4px 4px 0 var(--ink); transform: rotate(-1.5deg);
+  }
+  .logo span { color: var(--sky); }
+  .user { display: flex; align-items: center; gap: 12px; font-weight: 700; }
+  .avatar {
+    width: 44px; height: 44px; border: var(--b); background: var(--orange-deep); color: var(--paper);
+    display: grid; place-items: center; font-weight: 700; box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  /* One frame, natural height: the page scrolls, nothing inside it does */
+  .frame { flex: 1 0 auto; min-width: 0; display: flex; flex-direction: column; border: var(--b); background: var(--paper); box-shadow: var(--shadow); }
+
+  /* Title bar: back · title · export */
+  .rbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: 18px 20px; border-bottom: var(--b); }
+  .back {
+    font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;
+    color: var(--navy); text-decoration: none; border: var(--b); background: var(--paper);
+    padding: 10px 14px; box-shadow: 3px 3px 0 var(--ink);
+  }
+  .back:hover { background: var(--sky-soft); }
+  .back:active { transform: translate(3px,3px); box-shadow: none; }
+  .rtitle { min-width: 0; }
+  .rtitle h1 { font-family: "Archivo Black", sans-serif; font-weight: 400; font-size: clamp(20px, 2.2vw, 28px); line-height: 1.2; letter-spacing: -.3px; }
+  .btn {
+    font: inherit; font-weight: 700; font-size: 16px; border: var(--b); background: var(--orange-deep); color: var(--paper);
+    padding: 11px 18px; box-shadow: 4px 4px 0 var(--ink); cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { background: var(--orange); }
+  .btn:active, .btn[aria-busy="true"] { transform: translate(4px,4px); box-shadow: none; }
+
+  /* Summary: three numbers on pale sky */
+  .summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--sky-soft); border-bottom: var(--b); }
+  .stat { padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
+  .stat + .stat { border-left: var(--b-thin); }
+  .stat small { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--navy); }
+  .stat b { font-family: "Archivo Black"; font-weight: 400; font-size: clamp(22px, 2.4vw, 30px); line-height: 1.1; }
+  .stat b i { font-style: normal; font-family: "Space Grotesk"; font-weight: 700; font-size: 15px; color: var(--gray); margin-left: 4px; }
+
+  /* Tabs (dashboard) */
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; border-bottom: var(--b); }
+  .tabs button {
+    border: none; border-right: var(--b); background: var(--paper); color: var(--ink);
+    padding: 16px 14px; cursor: pointer; font-family: "Archivo Black", sans-serif;
+    font-size: clamp(15px, 1.8vw, 22px); text-transform: uppercase; letter-spacing: .5px;
+  }
+  .tabs button:last-child { border-right: none; }
+  .tabs .tab[aria-selected="true"] { background: var(--orange-deep); color: var(--paper); text-decoration: underline; text-decoration-thickness: 4px; text-underline-offset: 7px; }
+  .tabs .tab:not([aria-selected="true"]):hover { background: var(--sand); }
+
+  /* Toolbar: just search (dashboard variant C, minus Filter) */
+  .toolbar {
+    display: flex; gap: 12px; padding: 12px 16px; border-bottom: var(--b); align-items: stretch;
+    background: repeating-linear-gradient(45deg, var(--paper), var(--paper) 10px, var(--sand) 10px, var(--sand) 20px);
+  }
+  .search { flex: 1; min-width: 0; display: flex; align-items: center; border: var(--b); background: var(--paper); box-shadow: 3px 3px 0 var(--ink); }
+  .search:focus-within { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+  .search span { padding: 0 10px 0 14px; font-size: 20px; font-weight: 700; color: var(--navy); }
+  .search input { flex: 1; min-width: 0; font: inherit; font-weight: 700; font-size: 16px; border: none; outline: none; padding: 10px 10px 10px 0; background: transparent; color: var(--ink); }
+  .count { display: flex; align-items: center; gap: 6px; border: var(--b); font-weight: 700; text-transform: uppercase; background: var(--orange-deep); color: var(--paper); padding: 5px 12px; white-space: nowrap; }
+  .count b { font-family: "Archivo Black"; font-weight: 400; }
+
+  /* Answer marks: glyph + tint, never color alone */
+  .mk { display: grid; place-items: center; font-weight: 700; line-height: 1; border: var(--b-thin); }
+  .mk.ok   { background: var(--sky-soft); color: var(--navy); }
+  .mk.no   { background: var(--apricot); color: var(--ink); }
+  .mk.miss { background: var(--sand); color: var(--ink); }
+
+  /* List */
+  .row, .head { display: grid; align-items: stretch; }
+  .head { background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .head > div { padding: 9px 16px; display: flex; align-items: center; }
+  .head .r, .cell.r { justify-content: flex-end; }
+  .row { border-bottom: var(--b-thin); min-height: 76px; cursor: pointer; scroll-margin-top: 12px; }
+  .row:hover, .row[data-open="true"] { background: var(--sand); }
+  .row:hover .name { text-decoration: underline; text-decoration-color: var(--orange-deep); text-decoration-thickness: 3px; text-underline-offset: 4px; }
+  .cell { padding: 12px 16px; display: flex; align-items: center; min-width: 0; }
+
+  .rank { grid-area: rank; border-right: var(--b-thin); display: grid; place-items: center; background: var(--orange-deep); color: var(--paper); font-family: "Archivo Black"; font-size: 22px; }
+  .qn { grid-area: rank; border-right: var(--b-thin); display: grid; place-items: center; background: var(--apricot); font-family: "Archivo Black"; font-size: 22px; }
+  .who { grid-area: name; padding: 12px 20px; display: flex; flex-direction: column; justify-content: center; min-width: 0; gap: 4px; }
+  .name { font-family: "Archivo Black"; font-size: 19px; line-height: 1.2; }
+  .sub { font-size: 13px; font-weight: 700; color: var(--gray); }
+  .qtext { font-weight: 700; font-size: 17px; line-height: 1.3; }
+
+  /* Leaderboard grid */
+  .lb .head, .lb .row { grid-template-columns: var(--rank-w) minmax(0, 1fr) auto 120px 130px 84px; grid-template-areas: "rank name strip correct pts tog"; }
+  .stripcell { grid-area: strip; }
+  .strip { display: grid; grid-template-columns: repeat(10, 30px); gap: 5px; }
+  .strip .mk { height: 32px; font-size: 15px; }
+  .head .strip span { text-align: center; font-size: 12px; }
+  .correct { grid-area: correct; }
+  .pts { grid-area: pts; }
+  .tog-cell { grid-area: tog; display: grid; place-items: center; }
+  .big { font-family: "Archivo Black"; font-size: 21px; }
+  .big small { font-family: "Space Grotesk"; font-size: 13px; font-weight: 700; color: var(--gray); margin-left: 3px; }
+  .pts .big { text-align: right; line-height: 1.1; }
+  .pts .big small { display: block; margin: 0; }
+  .pts .big small.alt { display: none; }
+
+  .tog {
+    font-weight: 700; border: var(--b); background: var(--paper); width: 48px; height: 40px;
+    cursor: pointer; box-shadow: 3px 3px 0 var(--ink); display: grid; place-items: center;
+  }
+  .tog::before { content: ""; width: 9px; height: 9px; border-right: 3px solid currentColor; border-bottom: 3px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .25s var(--ease-out); }
+  .tog[aria-expanded="true"]::before { transform: translateY(2px) rotate(-135deg); }
+  .tog:hover { background: var(--sky-soft); }
+  .tog:active { transform: translate(3px,3px); box-shadow: none; }
+  .tog[aria-expanded="true"] { background: var(--ink); color: var(--paper); transform: translate(3px,3px); box-shadow: none; }
+
+  /* Questions grid */
+  .qs .head, .qs .row { grid-template-columns: var(--rank-w) minmax(0, 1fr) 240px 84px; grid-template-areas: "rank name pct tog"; }
+  .pct { grid-area: pct; gap: 14px; }
+  .meter { flex: 1; height: 16px; border: var(--b-thin); background: var(--paper); }
+  .meter i { display: block; height: 100%; width: 100%; background: var(--navy); transform-origin: 0 50%; }
+  .pct .big { width: 64px; text-align: right; }
+
+  /* Expanded detail */
+  .xp { background: var(--sand); border-bottom: var(--b); padding: 14px 24px 28px calc(var(--rank-w) + 20px); }
+  .panel { border: var(--b); background: var(--paper); box-shadow: var(--shadow); animation: drop .32s var(--ease-out); }
+  @keyframes drop { from { opacity: 0; transform: translateY(-8px); } }
+  .panel-top { padding: 9px 14px; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; background: var(--ink); color: var(--paper); display: flex; justify-content: space-between; gap: 12px; }
+  .panel-top > span:last-child { color: var(--apricot); white-space: nowrap; }
+
+  /* Participant detail: one line per question */
+  .al-head, .al { display: grid; grid-template-columns: 48px 48px minmax(0, 1fr) 76px 76px; }
+  .al-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); border-bottom: var(--b-thin); }
+  .al-head > div { padding: 9px 12px; }
+  .al { border-bottom: var(--b-thin); }
+  .al:last-child { border-bottom: none; }
+  .al > div { padding: 12px; min-width: 0; }
+  .al .mk { border: none; border-right: var(--b-thin); font-size: 20px; padding: 0; }
+  .al .qno { font-family: "Archivo Black"; font-size: 15px; color: var(--gray); }
+  .al .q { font-weight: 700; font-size: 15px; line-height: 1.3; }
+  .al .a { font-size: 14px; font-weight: 500; margin-top: 4px; line-height: 1.35; }
+  .al .a b { font-weight: 700; }
+  .al .a .fix { color: var(--gray); font-weight: 700; display: block; }
+  .num { text-align: right; font-weight: 700; white-space: nowrap; }
+  .num.p { font-family: "Archivo Black"; font-weight: 400; font-size: 16px; }
+  .al-head .num { text-align: right; }
+  .al.focus { outline: 3px solid var(--ink); outline-offset: -3px; background: var(--sand); }
+  .al .t-ph { display: none; }
+
+  /* Question detail: answer bars | who got it right, wrong, or didn't answer */
+  .qx { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
+  .qx > div { padding: 18px 20px; }
+  .qx > .groups { border-left: var(--b-thin); padding: 0; display: flex; flex-direction: column; }
+  .grp { padding: 16px 20px 18px; }
+  .grp + .grp { border-top: var(--b-thin); }
+  .qx h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; color: var(--gray); display: flex; align-items: center; gap: 8px; }
+  .qx h3 b { color: var(--ink); }
+  .qx h3 .mk { width: 22px; height: 22px; font-size: 13px; font-style: normal; }
+  .opt-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; }
+  .opt-row + .opt-row { margin-top: 14px; }
+  .opt-row .let { width: 34px; height: 34px; border: var(--b-thin); display: grid; place-items: center; font-weight: 700; background: var(--paper); grid-row: span 2; }
+  .opt-row.right .let { background: var(--navy); color: var(--paper); }
+  .opt-row.none .let { background: var(--sand); }
+  .opt-row .lbl { font-weight: 700; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+  .opt-row .lbl em { font-style: normal; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--navy); margin-left: 8px; white-space: nowrap; }
+  .opt-row .track { grid-column: 2; height: 18px; border: var(--b-thin); background: var(--paper); }
+  .opt-row .track i { display: block; height: 100%; width: 100%; background: var(--apricot); transform-origin: 0 50%; animation: grow .5s var(--ease-out); }
+  .opt-row.right .track i { background: var(--sky-soft); }
+  .opt-row.none .track i { background: var(--sand); }
+  @keyframes grow { from { transform: scaleX(0); } }
+  .opt-row .n { grid-column: 3; grid-row: 1 / 3; display: grid; grid-template-columns: 3.4em auto 2em; align-items: baseline; gap: 8px; white-space: nowrap; font-family: "Archivo Black"; font-size: 22px; line-height: 1; }
+  .opt-row .n b { font-weight: 400; text-align: right; }
+  .opt-row .n .sep { font-family: "Space Grotesk"; font-weight: 700; font-size: 18px; color: var(--gray); }
+  .opt-row .n small { font-family: "Space Grotesk"; font-size: 16px; font-weight: 700; color: var(--ink); text-align: left; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-size: 14px; font-weight: 700; border: var(--b-thin); background: var(--paper); padding: 0 10px 0 0; min-height: 36px; cursor: pointer; display: inline-flex; align-items: stretch; gap: 8px; white-space: nowrap; }
+  .chip > * { display: flex; align-items: center; }
+  .chip:hover { background: var(--sand); }
+  .chip:hover .who-n { text-decoration: underline; text-decoration-color: var(--orange-deep); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  .chip i { font-style: normal; font-size: 13px; border-right: var(--b-thin); padding: 0 8px; justify-content: center; min-width: 32px; }
+  .chip i.ok   { background: var(--sky-soft); color: var(--navy); }
+  .chip i.no   { background: var(--apricot); color: var(--ink); }
+  .chip i.miss { background: var(--sand); color: var(--ink); }
+  .chip .t { color: var(--gray); font-size: 13px; }
+  .chip[hidden] { display: none; }
+  .more { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--navy); border: var(--b-thin); background: var(--paper); box-shadow: 2px 2px 0 var(--ink); min-height: 36px; padding: 0 12px; cursor: pointer; white-space: nowrap; }
+  .more:hover { background: var(--sky-soft); }
+  .more:active { transform: translate(2px,2px); box-shadow: none; }
+  .muted { color: var(--gray); font-weight: 700; font-size: 14px; }
+
+  .row.flash { animation: flash 1.2s var(--ease-out); }
+  @keyframes flash { 0%, 40% { outline: 3px solid var(--orange-deep); outline-offset: -3px; } 100% { outline: 3px solid transparent; outline-offset: -3px; } }
+
+  .empty { padding: 60px 20px; text-align: center; font-weight: 700; font-size: 18px; }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, calc(100% + 60px));
+    background: var(--navy); color: var(--paper); font-weight: 700; padding: 12px 20px; max-width: calc(100vw - 24px);
+    border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); transition: transform .2s, visibility .2s; z-index: 99; visibility: hidden;
+  }
+  .toast.show { transform: translate(-50%, 0); visibility: visible; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* Tablet: the answer strip moves under the name */
+  @media (max-width: 1150px) {
+    :root { --rank-w: 80px; }
+    .lb .row { grid-template-columns: var(--rank-w) minmax(0, 1fr) 100px 120px 80px; grid-template-areas: "rank name correct pts tog" "rank strip correct pts tog"; }
+    .lb .head { grid-template-columns: var(--rank-w) minmax(0, 1fr) 100px 120px 80px; grid-template-areas: "rank name correct pts tog"; }
+    .head .stripcell { display: none; }
+    .lb .who { padding-bottom: 6px; justify-content: flex-end; }
+    .lb .stripcell { padding: 0 20px 14px; }
+    .qs .head, .qs .row { grid-template-columns: var(--rank-w) minmax(0, 1fr) 180px 80px; }
+    .xp { padding: 14px 16px 24px; }
+  }
+
+  /* Phone */
+  @media (max-width: 640px) {
+    :root { --rank-w: 58px; }
+    body { padding: 12px 10px 18px; gap: 12px; }
+    .logo { font-size: 18px; }
+    .user .name { display: none; }
+    .avatar { width: 40px; height: 40px; }
+    .rbar { grid-template-columns: auto auto; grid-template-areas: "back exp" "title title"; justify-content: space-between; gap: 14px 10px; padding: 12px; }
+    .back { grid-area: back; padding: 8px 10px; font-size: 12px; }
+    .rtitle { grid-area: title; }
+    .rbar .btn { grid-area: exp; font-size: 14px; padding: 8px 12px; }
+    .rtitle h1 { font-size: 20px; }
+    .stat { padding: 12px; }
+    .stat small { font-size: 10px; letter-spacing: .5px; }
+    .stat b { font-size: 20px; }
+    .stat b i { font-size: 12px; margin-left: 2px; }
+    .tabs button { padding: 13px 6px; font-size: 14px; letter-spacing: 0; }
+    .toolbar { gap: 10px; padding: 10px; }
+    .search span { padding: 0 6px 0 10px; }
+    .search input { font-size: 15px; }
+    .count { flex-direction: column; justify-content: center; gap: 0; padding: 4px 10px; line-height: 1.05; }
+    .count b { font-size: 20px; }
+    .count span { font-size: 10px; letter-spacing: .5px; }
+    .head { display: none !important; }
+    .rank, .qn { font-size: 17px; }
+    .lb .row { grid-template-columns: var(--rank-w) minmax(0, 1fr) auto 56px; grid-template-areas: "rank name pts tog" "rank strip strip strip"; }
+    .correct { display: none !important; }
+    .who { padding: 12px 12px 6px; }
+    .name { font-size: 16px; }
+    .cell { padding: 10px 6px; }
+    .pts { padding-right: 4px; }
+    .pts .big { font-size: 17px; }
+    .pts .big small.alt { display: block; }
+    .lb .who { justify-content: center; padding-bottom: 4px; }
+    .lb .stripcell { padding: 2px 12px 14px; }
+    .strip { grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 3px; width: 100%; }
+    .strip .mk { height: 28px; font-size: 13px; }
+    .tog { width: 42px; }
+    .qs .row { grid-template-columns: var(--rank-w) minmax(0, 1fr) 66px 56px; }
+    .qs .who { padding: 12px; }
+    .qtext { font-size: 15px; }
+    .pct { padding: 10px 2px; }
+    .pct .meter { display: none; }
+    .pct .big { font-size: 17px; width: auto; }
+    .xp { padding: 10px 8px 18px; }
+    .al-head { display: none; }
+    .al { grid-template-columns: 40px minmax(0, 1fr) auto; }
+    .al .qno, .al .t-wide { display: none; }
+    .al > div { padding: 10px; }
+    .al .q { font-size: 14px; }
+    .al .a { font-size: 13px; }
+    .al .num.p { align-self: center; }
+    .al .t-ph { display: block; font-family: "Space Grotesk"; font-size: 12px; color: var(--gray); font-weight: 700; }
+    .qx { grid-template-columns: minmax(0, 1fr); }
+    .qx > div { padding: 14px; }
+    .qx > .groups { border-left: none; border-top: var(--b-thin); padding: 0; }
+    .grp { padding: 14px; }
+    .chips { gap: 6px; }
+    .chip { font-size: 13px; gap: 6px; padding-right: 8px; }
+    .chip i { min-width: 28px; padding: 0 6px; }
+    .opt-row { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 5px 10px; }
+    .opt-row .let { width: 30px; height: 30px; }
+    .opt-row .lbl { font-size: 14px; }
+    .opt-row .n { font-size: 18px; gap: 6px; }
+    .opt-row .n .sep { font-size: 15px; }
+    .opt-row .n small { font-size: 14px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+  <header class="top">
+    <a class="logo" href="made-dashboard-main.html" aria-label="Quiz Platform dashboard">QUIZ<span>.</span>PLATFORM</a>
+    <div class="user"><span class="name">Taha Sabir</span><div class="avatar">TS</div></div>
+  </header>
+
+  <main class="frame">
+    <div class="rbar">
+      <a class="back" href="made-dashboard-main.html">← Dashboard</a>
+      <div class="rtitle">
+        <h1 id="quizTitle"></h1>
+      </div>
+      <button class="btn" id="exportBtn" onclick="exportXlsx(this)">Export to Excel</button>
+    </div>
+    <section class="summary" id="summary" aria-label="Session summary"></section>
+    <nav class="tabs" role="tablist" aria-label="Results views">
+      <button class="tab" role="tab" id="tab-lb" aria-selected="true" aria-controls="list" data-tab="lb">Leaderboard</button>
+      <button class="tab" role="tab" id="tab-qs" aria-selected="false" aria-controls="list" data-tab="qs">Questions</button>
+    </nav>
+    <div class="toolbar">
+      <div class="search"><span aria-hidden="true">⌕</span><input id="q" aria-label="Search participants" placeholder="Search participants…" oninput="query=this.value;renderList()"></div>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="list" id="list" role="tabpanel"></div>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ---- Fake session data (seeded: same results every load) ---- */
+const SESSION = {
+  quiz: "Quiz 4 — Data Structures Review",
+  cls: "CS 440",
+  date: "Mon, Oct 5",
+  time: "10:04–10:19 AM",
+  file: "quiz4-data-structures-review_2026-10-05.xlsx",
+};
+const LETTERS = "ABCD";
+const QUESTIONS = [
+  { text: "Worst-case time of binary search on n sorted items?", opts: ["O(1)", "O(log n)", "O(n)", "O(n log n)"], ans: 1, limit: 20, diff: .25, trap: 2 },
+  { text: "Which data structure removes items in LIFO order?", opts: ["Queue", "Heap", "Stack", "Linked list"], ans: 2, limit: 20, diff: .1, trap: 0 },
+  { text: "Average-case lookup time in a hash table?", opts: ["O(1)", "O(log n)", "O(n)", "O(n²)"], ans: 0, limit: 20, diff: .35, trap: 1 },
+  { text: "Which traversal visits a binary search tree in sorted order?", opts: ["Pre-order", "In-order", "Post-order", "Level-order"], ans: 1, limit: 30, diff: .45, trap: 0 },
+  { text: "What does an SQL INNER JOIN return?", opts: ["All rows from the left table", "Rows that match in both tables", "All rows from both tables", "Rows that match in neither table"], ans: 1, limit: 30, diff: .3, trap: 0 },
+  { text: "Which of these sorting algorithms is stable?", opts: ["Quicksort", "Heapsort", "Selection sort", "Merge sort"], ans: 3, limit: 30, diff: .75, trap: 0 },
+  { text: "HTTP status code for “Not Found”?", opts: ["400", "403", "404", "500"], ans: 2, limit: 15, diff: .05, trap: 1 },
+  { text: "Which Git command creates a new branch and switches to it?", opts: ["git branch -m", "git switch -c", "git checkout main", "git merge -b"], ans: 1, limit: 20, diff: .6, trap: 0 },
+  { text: "Cost of inserting at the front of an array-backed list?", opts: ["O(1)", "O(log n)", "O(n)", "O(n²)"], ans: 2, limit: 20, diff: .55, trap: 0 },
+  { text: "Which of these is NOT a primitive type in Java?", opts: ["int", "boolean", "char", "String"], ans: 3, limit: 15, diff: .4, trap: 2 },
+];
+const NAMES = ["Maya Patel", "Jordan Lee", "Sofia Ramirez", "Ethan Brooks", "Aisha Khan", "Liam O'Connor", "Chloe Nguyen",
+  "Marcus Johnson", "Priya Shah", "Noah Fischer", "Hannah Kim", "Diego Alvarez", "Grace Okafor", "Owen Price",
+  "Zara Ahmed", "Lucas Martin", "Emma Walsh", "Kenji Sato", "Ruby Castillo", "Theo Bennett", "Amara Diallo",
+  "Sam Rivera", "Isla Murphy"];
+const LATE = { 7: 2, 15: 4, 20: 1 };   // joined late: questions before this index count as "no answer"
+
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rand = mulberry32(440);
+// Speed-based scoring (placeholder for the SRS formula): correct = 1000 × (1 − (time ÷ limit) ÷ 2),
+// so 500–1000 points; wrong or no answer = 0.
+const scoreFor = (t, limit) => Math.round(1000 * (1 - (t / limit) / 2));
+
+const PLAYERS = NAMES.map((name, i) => {
+  const skill = .42 + rand() * .55, joined = LATE[i] || 0, parts = name.split(" ");
+  const answers = QUESTIONS.map((q, qi) => {
+    if (qi < joined) return { state: "miss", late: true, pick: null, time: null, pts: 0 };
+    if (rand() < .05 + (1 - skill) * .06) return { state: "miss", pick: null, time: null, pts: 0 };
+    const p = Math.min(.97, Math.max(.08, skill - .5 * q.diff + .22));
+    const ok = rand() < p;
+    let pick = q.ans;
+    if (!ok) { pick = rand() < .6 ? q.trap : [0,1,2,3].filter(x => x !== q.ans)[Math.floor(rand() * 3)]; if (pick === q.ans) pick = q.trap; }
+    const t = ok ? q.limit * (.12 + rand() * .55 * (1.25 - skill)) : q.limit * (.3 + rand() * .62);
+    const time = Math.round(Math.min(q.limit - .2, t) * 10) / 10;
+    return { state: ok ? "ok" : "no", pick, time, pts: ok ? scoreFor(time, q.limit) : 0 };
+  });
+  return {
+    id: i, name, short: parts[0] + " " + parts[parts.length - 1][0] + ".", answers,
+    correct: answers.filter(a => a.state === "ok").length,
+    points: answers.reduce((s, a) => s + a.pts, 0),
+  };
+});
+[...PLAYERS].sort((a, b) => b.points - a.points || b.correct - a.correct || a.name.localeCompare(b.name)).forEach((p, i) => p.rank = i + 1);
+
+const QSTATS = QUESTIONS.map((q, qi) => {
+  const counts = [0, 0, 0, 0]; let none = 0;
+  PLAYERS.forEach(p => { const a = p.answers[qi]; a.pick == null ? none++ : counts[a.pick]++; });
+  const correct = counts[q.ans];
+  return {
+    counts, none, correct, pct: Math.round(correct / PLAYERS.length * 100),
+    right: PLAYERS.filter(p => p.answers[qi].state === "ok").sort((a, b) => a.answers[qi].time - b.answers[qi].time || a.rank - b.rank),
+    wrong: PLAYERS.filter(p => p.answers[qi].state === "no").sort((a, b) => a.rank - b.rank),
+    noAnswer: PLAYERS.filter(p => p.answers[qi].state === "miss").sort((a, b) => a.rank - b.rank),
+  };
+});
+const N = PLAYERS.length, NQ = QUESTIONS.length;
+const AVG_POINTS = Math.round(PLAYERS.reduce((s, p) => s + p.points, 0) / N);
+const AVG_CORRECT = PLAYERS.reduce((s, p) => s + p.correct, 0) / N;
+
+/* ---- Helpers ---- */
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const fmt = n => n.toLocaleString("en-US");
+const secs = t => t == null ? "—" : t.toFixed(1) + "s";
+const GLYPH = { ok: "✓", no: "✗", miss: "—" };
+const WORD = { ok: "correct", no: "wrong", miss: "no answer" };
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const opt = (q, i) => `${LETTERS[i]}. ${esc(q.opts[i])}`;
+let tt; function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 1800); }
+
+// The real app asks FastAPI for the saved session's .xlsx. Here we fake the wait.
+function exportXlsx(btn) {
+  if (btn.getAttribute("aria-busy") === "true") return;
+  btn.setAttribute("aria-busy", "true"); btn.textContent = "Preparing…";
+  setTimeout(() => { btn.removeAttribute("aria-busy"); btn.textContent = "Export to Excel"; toast(SESSION.file + " downloaded"); }, 900);
+}
+
+/* ---- Static parts ---- */
+document.getElementById("quizTitle").textContent = SESSION.quiz;
+document.getElementById("summary").innerHTML = `
+  <div class="stat"><small>Participants</small><b>${N}</b></div>
+  <div class="stat"><small>Avg correct</small><b>${AVG_CORRECT.toFixed(1)}<i>/ ${NQ}</i></b></div>
+  <div class="stat"><small>Avg points</small><b>${fmt(AVG_POINTS)}</b></div>`;
+
+/* ---- State ---- */
+let tab = "lb", query = "", focusQ = null;
+const openP = new Set(), openQ = new Set();
+const SHOW = 8, moreOpen = new Set();   // groups longer than 10 show 8 chips plus a "+N more" toggle; keys like "5-right"
+
+const strip = p => `<span class="strip" role="img" aria-label="${p.answers.map((a, i) => "Q" + (i + 1) + " " + WORD[a.state]).join(", ")}">${p.answers.map(a => `<i class="mk ${a.state}">${GLYPH[a.state]}</i>`).join("")}</span>`;
+
+function playerDetail(p) {
+  const lines = QUESTIONS.map((q, qi) => {
+    const a = p.answers[qi];
+    const ans = a.state === "ok" ? `<b>${opt(q, a.pick)}</b>`
+      : a.state === "no" ? `<b>${opt(q, a.pick)}</b><span class="fix">Correct: ${opt(q, q.ans)}</span>`
+      : `<b>No answer</b>${a.late ? " (joined after this question)" : ""}<span class="fix">Correct: ${opt(q, q.ans)}</span>`;
+    return `<div class="al ${focusQ === qi ? "focus" : ""}">
+      <div class="mk ${a.state}" aria-label="${WORD[a.state]}">${GLYPH[a.state]}</div>
+      <div class="qno">Q${qi + 1}</div>
+      <div><div class="q"><span class="sr">Question ${qi + 1}: </span>${esc(q.text)}</div><div class="a">${ans}</div></div>
+      <div class="num t-wide">${secs(a.time)}</div>
+      <div class="num p">${a.pts}<span class="sr"> points</span><span class="t-ph">${a.time != null ? secs(a.time) : ""}</span></div>
+    </div>`;
+  }).join("");
+  return `<div class="xp" id="xp-p${p.id}"><div class="panel">
+    <div class="panel-top"><span>${esc(p.name)}</span><span>${p.correct}/${NQ} · ${fmt(p.points)} pts</span></div>
+    <div class="al-head"><div></div><div>Q</div><div>Question · their answer</div><div class="num">Time</div><div class="num">Points</div></div>
+    ${lines}
+  </div></div>`;
+}
+
+function questionDetail(qi) {
+  const q = QUESTIONS[qi], s = QSTATS[qi];
+  const bar = (cls, letter, label, n) => `<div class="opt-row ${cls}"><span class="let" aria-hidden="true">${letter}</span>
+      <span class="lbl">${label}</span><span class="track" aria-hidden="true"><i style="transform:scaleX(${n / N})"></i></span>
+      <span class="n"><b>${Math.round(n / N * 100)}%</b><span class="sep" aria-hidden="true">|</span><small>${n}<span class="sr"> people</span></small></span></div>`;
+  const chip = (p, kind, hide) => {
+    const a = p.answers[qi];
+    const badge = kind === "ok" ? `<i class="ok" aria-hidden="true">✓</i>` : kind === "no" ? `<i class="no" aria-hidden="true">✗ ${LETTERS[a.pick]}</i>` : `<i class="miss" aria-hidden="true">—</i>`;
+    const sr = kind === "ok" ? `, correct in ${secs(a.time)}` : kind === "no" ? `, picked ${LETTERS[a.pick]}` : ", no answer";
+    return `<button class="chip"${hide ? " hidden" : ""} onclick="jumpTo(${p.id}, ${qi})">${badge}<span class="who-n">${esc(p.short)}</span>${kind === "ok" ? `<span class="t" aria-hidden="true">${secs(a.time)}</span>` : ""}<span class="sr">${sr}</span></button>`;
+  };
+  const group = (key, kind, title, people, empty) => {
+    const id = `${qi}-${key}`, long = people.length > 10, open = moreOpen.has(id), extra = people.length - SHOW;
+    return `<div class="grp"><h3><i class="mk ${kind}" aria-hidden="true">${GLYPH[kind]}</i>${title} · <b>${people.length}</b></h3>${people.length
+      ? `<div class="chips" id="chips-${id}">${people.map((p, i) => chip(p, kind, long && !open && i >= SHOW)).join("")}${long
+        ? `<button class="more" aria-expanded="${open}" aria-controls="chips-${id}" data-extra="${extra}" onclick="toggleMore('${id}', this)">${open ? "Show fewer" : `+${extra} more`}</button>` : ""}</div>`
+      : `<p class="muted">${empty}</p>`}</div>`;
+  };
+  return `<div class="xp" id="xp-q${qi}"><div class="panel">
+    <div class="panel-top"><span>Q${qi + 1} · Answer split</span><span>${s.correct}/${N} correct</span></div>
+    <div class="qx">
+      <div>${q.opts.map((o, i) => bar(i === q.ans ? "right" : "", i === q.ans ? "✓" : LETTERS[i], `${LETTERS[i]}. ${esc(o)}${i === q.ans ? "<em>Correct</em>" : ""}`, s.counts[i])).join("")}
+        ${bar("none", "—", "No answer", s.none)}</div>
+      <div class="groups">
+        ${group("right", "ok", "Got it right", s.right, "Nobody.")}
+        ${group("wrong", "no", "Got it wrong", s.wrong, "Nobody.")}
+        ${group("none", "miss", "No answer", s.noAnswer, "Everyone answered.")}
+      </div>
+    </div>
+  </div></div>`;
+}
+
+function renderList() {
+  const list = document.getElementById("list"), qq = query.trim().toLowerCase();
+  list.className = "list " + tab;
+  if (tab === "lb") {
+    const rows = PLAYERS.filter(p => p.name.toLowerCase().includes(qq)).sort((a, b) => a.rank - b.rank);
+    document.getElementById("count").innerHTML = `<b>${rows.length}</b><span>${rows.length === 1 ? "player" : "players"}</span>`;
+    const head = `<div class="head" aria-hidden="true"><div style="grid-area:rank">Rank</div><div style="grid-area:name">Participant</div>
+      <div class="stripcell"><span class="strip">${QUESTIONS.map((_, i) => `<span>${i + 1}</span>`).join("")}</span></div>
+      <div style="grid-area:correct">Correct</div><div class="r" style="grid-area:pts">Points</div><div style="grid-area:tog"></div></div>`;
+    list.innerHTML = rows.length ? head + rows.map(p => {
+      const open = openP.has(p.id);
+      return `<div class="row" data-open="${open}" id="row-p${p.id}" onclick="toggleP(${p.id})">
+        <div class="rank"><span><span class="sr">Rank </span>${p.rank}</span></div>
+        <div class="who"><span class="name">${esc(p.name)}</span></div>
+        <div class="cell stripcell">${strip(p)}</div>
+        <div class="cell correct"><span class="big">${p.correct}<small>/ ${NQ}</small></span></div>
+        <div class="cell r pts"><div class="big">${fmt(p.points)}<small class="alt">${p.correct}/${NQ} correct</small></div></div>
+        <div class="tog-cell"><button class="tog" aria-expanded="${open}" aria-controls="xp-p${p.id}" aria-label="${open ? "Hide" : "Show"} ${esc(p.name)}'s answers" onclick="event.stopPropagation();toggleP(${p.id})"></button></div>
+      </div>${open ? playerDetail(p) : ""}`;
+    }).join("") : `<div class="empty">No participants match “${esc(query)}”.</div>`;
+  } else {
+    const idx = QUESTIONS.map((_, i) => i).filter(i => QUESTIONS[i].text.toLowerCase().includes(qq) || "q" + (i + 1) === qq);
+    document.getElementById("count").innerHTML = `<b>${idx.length}</b><span>${idx.length === 1 ? "question" : "questions"}</span>`;
+    const head = `<div class="head" aria-hidden="true"><div style="grid-area:rank">#</div><div style="grid-area:name">Question</div><div style="grid-area:pct">Correct</div><div style="grid-area:tog"></div></div>`;
+    list.innerHTML = idx.length ? head + idx.map(qi => {
+      const q = QUESTIONS[qi], s = QSTATS[qi], open = openQ.has(qi);
+      return `<div class="row" data-open="${open}" id="row-q${qi}" onclick="toggleQ(${qi})">
+        <div class="qn">Q${qi + 1}</div>
+        <div class="who"><span class="qtext">${esc(q.text)}</span></div>
+        <div class="cell pct"><span class="meter" aria-hidden="true"><i style="transform:scaleX(${s.pct / 100})"></i></span><span class="big">${s.pct}%<span class="sr"> correct</span></span></div>
+        <div class="tog-cell"><button class="tog" aria-expanded="${open}" aria-controls="xp-q${qi}" aria-label="${open ? "Hide" : "Show"} question ${qi + 1} breakdown" onclick="event.stopPropagation();toggleQ(${qi})"></button></div>
+      </div>${open ? questionDetail(qi) : ""}`;
+    }).join("") : `<div class="empty">No questions match “${esc(query)}”.</div>`;
+  }
+}
+function toggleP(id) { focusQ = null; openP.has(id) ? openP.delete(id) : openP.add(id); renderList(); syncHash(); }
+// Show or hide the chips past the first 8 in place (no re-render, so the panel doesn't replay its entrance)
+function toggleMore(id, btn) {
+  const open = !moreOpen.has(id);
+  open ? moreOpen.add(id) : moreOpen.delete(id);
+  [...btn.parentElement.querySelectorAll(".chip")].forEach((c, i) => c.hidden = !open && i >= SHOW);
+  btn.setAttribute("aria-expanded", open);
+  btn.textContent = open ? "Show fewer" : `+${btn.dataset.extra} more`;
+}
+function toggleQ(qi) { openQ.has(qi) ? openQ.delete(qi) : openQ.add(qi); renderList(); syncHash(); }
+function syncHash() {
+  const h = tab === "lb" ? (openP.size ? "#p=" + [...openP].pop() : "") : "#tab=questions" + (openQ.size ? "&q=" + ([...openQ].pop() + 1) : "");
+  history.replaceState(null, "", location.pathname + location.search + h);
+}
+function setTab(t) {
+  tab = t; query = "";
+  const input = document.getElementById("q");
+  input.value = ""; input.placeholder = t === "lb" ? "Search participants…" : "Search questions…";
+  input.setAttribute("aria-label", t === "lb" ? "Search participants" : "Search questions");
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
+  renderList(); syncHash();
+}
+// From any chip in a question breakdown to that participant's answers
+function jumpTo(id, qi) {
+  setTab("lb"); openP.add(id); focusQ = qi; renderList(); syncHash();
+  const row = document.getElementById("row-p" + id);
+  row.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+  row.classList.add("flash");
+}
+
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+document.querySelector(".tabs").addEventListener("keydown", e => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  const t = tab === "lb" ? "qs" : "lb"; setTab(t); document.getElementById("tab-" + t).focus();
+});
+
+renderList();
+const hp = new URLSearchParams(location.hash.slice(1));
+if (hp.get("tab") === "questions") {
+  setTab("qs");
+  const qi = +hp.get("q") - 1;
+  if (QUESTIONS[qi]) { openQ.add(qi); renderList(); syncHash(); document.getElementById("row-q" + qi).scrollIntoView({ block: "start" }); }
+} else if (hp.has("p") && PLAYERS[+hp.get("p")]) {
+  openP.add(+hp.get("p")); renderList(); document.getElementById("row-p" + hp.get("p")).scrollIntoView({ block: "start" });
+}
+</script>
+</body>
+</html>
