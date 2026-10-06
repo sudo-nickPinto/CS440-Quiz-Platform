@@ -1,24 +1,42 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Auth0Provider } from '@auth0/auth0-react'
-import './index.css'
+import { BrowserRouter, Route, Routes } from 'react-router'
 import App from './App.jsx'
+import DashboardPage from './components/DashboardPage'
+import './index.css'
+import './styles/theme.css'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <Auth0Provider
-      domain={import.meta.env.VITE_AUTH0_DOMAIN}
-      clientId={import.meta.env.VITE_AUTH0_CLIENT_ID}
-      // On localhost Auth0 always demands consent, so the silent re-login
-      // after a refresh can never succeed. In dev only, keep the session in
-      // localStorage so reloads work; production keeps tokens in memory.
-      cacheLocation={import.meta.env.DEV ? 'localstorage' : 'memory'}
-      authorizationParams={{
-        redirect_uri: window.location.origin,
-        audience: import.meta.env.VITE_AUTH0_AUDIENCE,
-      }}
-    >
-      <App />
-    </Auth0Provider>
+    <BrowserRouter>
+      <Routes>
+        {import.meta.env.DEV && (
+          <Route
+            path="/preview/dashboard/:view"
+            element={<DashboardPage preview />}
+          />
+        )}
+
+        <Route
+          path="*"
+          element={
+            <Auth0Provider
+              domain={import.meta.env.VITE_AUTH0_DOMAIN}
+              clientId={import.meta.env.VITE_AUTH0_CLIENT_ID}
+              cacheLocation={
+                import.meta.env.DEV ? 'localstorage' : 'memory'
+              }
+              authorizationParams={{
+                redirect_uri: window.location.origin,
+                audience: import.meta.env.VITE_AUTH0_AUDIENCE,
+              }}
+            >
+              <App />
+            </Auth0Provider>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
   </StrictMode>,
 )

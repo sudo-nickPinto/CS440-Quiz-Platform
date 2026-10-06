@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
 import LoginPage from './components/LoginPage'
-import LobbyPage from './components/LobbyPage'
+import { Navigate, Route, Routes } from 'react-router'
+import DashboardPage from './components/DashboardPage'
 import AccountGate from './components/AccountGate'
 import './App.css'
 
@@ -55,11 +56,28 @@ export default function App() {
       <p className="error" role="alert">Login problem: {realError.message}</p>
       <button className="primary" onClick={() => loginWithRedirect()}>Try again</button>
     </div>
-  } else if (user) {
-    content = <AccountGate>
-      <LobbyPage user={user} headingRef={heading} />
+} else if (user) {
+  return (
+    <AccountGate>
+      <Routes>
+        <Route
+          path="/dashboard/:view"
+          element={
+            <DashboardPage
+              userName={user.name}
+              onLogout={logOut}
+            />
+          }
+        />
+
+        <Route
+          path="*"
+          element={<Navigate to="/dashboard/present" replace />}
+        />
+      </Routes>
     </AccountGate>
-  } else {
+  )
+} else {
     content = <LoginPage headingRef={heading} />
   }
 
