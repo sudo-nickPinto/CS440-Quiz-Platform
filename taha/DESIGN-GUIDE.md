@@ -119,6 +119,8 @@ There are two skeletons. **App pages** use the fixed frame; the **landing page**
 
 A header on top, then **one bordered frame that fills the rest of the screen**. Inside the frame, the top strips stay fixed and **only the content region scrolls**.
 
+> **Draft exception (October 6, 2026):** the quiz editor, host live view, and both results pages (`*-v2.html`) let the frame grow and the **page** scroll, so no bordered panel has its own scrollbar. If the team accepts this, it replaces the fixed frame for those pages; the dashboard still uses the fixed frame.
+
 ```html
 <body>
   <header class="top">
@@ -289,6 +291,23 @@ A pale-sky strip that opens under the tab bar for one-field tasks like a session
 **Empty state: `.empty`**
 Centered bold text that tells the user what to do: `Nothing here. Hit + to make a quiz.` or `No quizzes match "sql".`
 
+**Scrollbars: never the browser default**
+Avoid scrolling boxes inside bordered panels: let the page scroll, and make text areas grow with their content. Anything that still scrolls uses this block (thin square ink thumb, sand page track, no arrow buttons). Keep the standard `scrollbar-*` properties inside the `@supports` wrapper: in Chrome they override the `::-webkit-scrollbar` rules and bring the arrow buttons back.
+
+```css
+@supports not selector(::-webkit-scrollbar){
+  html{scrollbar-width:thin;scrollbar-color:var(--ink) var(--sand)}
+  *{scrollbar-width:thin;scrollbar-color:var(--ink) transparent}
+}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+html::-webkit-scrollbar,html::-webkit-scrollbar-track,
+body::-webkit-scrollbar,body::-webkit-scrollbar-track{background:var(--sand)}
+::-webkit-scrollbar-thumb{background:var(--ink);border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-button{display:none;width:0;height:0}
+::-webkit-scrollbar-corner{background:transparent}
+```
+
 ---
 
 ## 5. Responsive rules
@@ -358,6 +377,7 @@ The SRS stack is **React + FastAPI**. When porting:
 | 3px for major lines, 2px inside | 3px everywhere, or thin gray borders |
 | Ink hard shadows (`6px 6px 0`) | Colored or blurred shadows |
 | Square corners | `border-radius` |
+| Page scroll, or the shared thin ink scrollbar (§4) | Default browser scrollbars inside bordered panels |
 | Transform/opacity animations with a reduced-motion fallback | Animating font-size, grid columns, or height |
 | Username field + Google hand-off | A password field |
 | Test at 390px first, then 360 | Designing desktop-only |
@@ -373,6 +393,7 @@ The SRS stack is **React + FastAPI**. When porting:
 - [ ] Archivo Black for display text, Space Grotesk for everything else
 - [ ] 3px major lines, 2px inner lines, ink hard shadows, no rounded corners
 - [ ] Works at 1440, 1000, 390, and 360 wide with no sideways scrolling
+- [ ] No default browser scrollbars: no scrolling boxes inside panels, otherwise the shared scrollbar block (§4)
 - [ ] Empty states written, every action gives feedback, loading states set `aria-busy`
 - [ ] Focus outlines, `aria-label`s, `aria-expanded`, Esc-to-close, and keyboard access (§7)
 - [ ] Motion is transform/opacity only, with a reduced-motion fallback
