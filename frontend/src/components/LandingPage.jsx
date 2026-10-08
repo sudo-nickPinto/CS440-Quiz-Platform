@@ -6,30 +6,30 @@ const chapters = [
   {
     id: 'build',
     title: 'Build',
-    heading: 'Write it like a slide.',
+    heading: 'Create it. Check it. Save it.',
     description:
-      'Type the question, list the choices, mark the right one, and pick how long people get. It saves as a private draft, so nobody sees it until you say so.',
+      'Add your questions, answer choices, correct answers, and time limits. Check the complete quiz before saving: saving makes it public and published immediately, and saved quizzes cannot be edited.',
   },
   {
-    id: 'publish',
-    title: 'Publish',
-    heading: "Pick the class. That's the guest list.",
+    id: 'shared',
+    title: 'Share',
+    heading: 'One shared class. Everyone included.',
     description:
-      'Publishing ties the quiz to one of your classes. Only students in that class can join when you go live, so no one wanders in.',
+      'Everyone with an account belongs to the same shared class. Saved quizzes are public, with no class selection or enrollment step. Create your own quiz to host a session, then share its join code.',
   },
   {
     id: 'present',
     title: 'Present',
     heading: 'Open the lobby. Hit go.',
     description:
-      'Watch the room fill up, then start. You set the pace from the front; the right answer and explanation go up on the big screen after each question.',
+      'Host a quiz you created and share the session code. Any signed-in user can join as a participant. Watch the lobby fill up, then start the questions and guide the session.',
   },
   {
     id: 'review',
     title: 'Review',
-    heading: 'See how everyone did.',
+    heading: 'See how the session went.',
     description:
-      "Students see their own score and rank. Professors see the whole class and can export it. Results are locked to the quiz as it was played, so later edits don't change them.",
+      'Participants see their own answers, score, and rank. Hosts can view and export results for sessions they hosted, and Admins can access all results. Each session keeps its own results, and saved quizzes stay unchanged.',
   },
 ]
 
@@ -44,7 +44,7 @@ function ChapterPreview({ chapter }) {
       <div className="lp-panel" aria-hidden="true">
         <div className="lp-panel-top">
           <span>Quiz 2 · Recursion Check</span>
-          <span>Draft</span>
+          <span>Not saved</span>
         </div>
 
         <div className="lp-panel-body">
@@ -84,35 +84,35 @@ function ChapterPreview({ chapter }) {
     )
   }
 
-  if (chapter === 'publish') {
+  if (chapter === 'shared') {
     return (
       <div className="lp-panel" aria-hidden="true">
         <div className="lp-panel-top">
-          <span>Publish to…</span>
-          <span>3 classes</span>
+          <span>Shared quiz library</span>
+          <span>Public</span>
         </div>
 
         <div className="lp-panel-body">
-          <div className="lp-class">
-            CS 111 · Intro
-            <span>42 students</span>
-          </div>
-
           <div className="lp-class lp-selected">
-            CS 216 · Data Structures
-            <span>24 students</span>
+            One shared class
+            <span>Everyone with an account</span>
           </div>
 
-          <div className="lp-class">
-            CS 440 · Fall 26
-            <span>18 students</span>
+          <div className="lp-field">
+            <small>Saved quiz</small>
+            Quiz 2 · Recursion Check
           </div>
 
           <div className="lp-status-row">
-            <span className="lp-pill">Draft</span>
-            <span>→</span>
+            <span className="lp-pill">Public</span>
             <span className="lp-pill lp-selected">Published</span>
+            <span className="lp-pill">Read-only</span>
           </div>
+
+          <p className="lp-fine">
+            Saving publishes the complete quiz immediately.
+            Saved quizzes cannot be edited.
+          </p>
         </div>
       </div>
     )
@@ -122,14 +122,14 @@ function ChapterPreview({ chapter }) {
     return (
       <div className="lp-panel" aria-hidden="true">
         <div className="lp-panel-top">
-          <span>Lobby · CS 216</span>
+          <span>Lobby · Shared class</span>
           <span>Waiting</span>
         </div>
 
         <div className="lp-panel-body">
           <div className="lp-session-code">
             <small>Session code</small>
-            <b>4K9QX2</b>
+            <b>482193</b>
           </div>
 
           <div className="lp-joined">
@@ -144,7 +144,7 @@ function ChapterPreview({ chapter }) {
           </div>
 
           <div className="lp-go">
-            <span>10 of 24 here</span>
+            <span>10 participants joined</span>
             <span className="lp-start-example">Start →</span>
           </div>
         </div>
@@ -169,7 +169,7 @@ function ChapterPreview({ chapter }) {
 
             <span className="lp-result-name">
               {index === 0 ? 'You' : 'Classmate'}
-              <small>Sep 22 · CS 216</small>
+              <small>Sep 22 · Shared class</small>
             </span>
 
             <span className="lp-score">
@@ -463,7 +463,7 @@ export default function LandingPage({ authError = '' }) {
           <div className="lp-devices" aria-hidden="true">
             <div className="lp-screen">
               <div className="lp-screen-top">
-                <span>CS 216 · Question 3 of 8</span>
+                <span>Live session · Question 3 of 8</span>
                 <span className="lp-time">0:12</span>
               </div>
 
@@ -559,33 +559,38 @@ export default function LandingPage({ authError = '' }) {
         <section id="who">
           <div className="lp-wrap">
             <p className="lp-eyebrow">Who it&apos;s for</p>
-            <h2>Same app, both sides of the room.</h2>
+            <h2>One account. Join or host.</h2>
+
+            <p>
+              Every User can participate in quizzes and host quizzes they
+              create. Host and participant describe what you do in a
+              session, not separate account roles.
+            </p>
 
             <div className="lp-who">
               <div className="lp-who-card">
-                <h3>Students</h3>
+                <h3>Participate</h3>
                 <ul>
-                  <li>Join live quizzes for your classes from any device.</li>
-                  <li>See your own scores and ranks from past quizzes.</li>
-                  <li>
-                    Make and present your own quizzes too, like for a
-                    study group.
-                  </li>
+                  <li>Sign in and join a live session with its code.</li>
+                  <li>Answer questions from your phone or computer.</li>
+                  <li>Review your own answers, score, and rank afterward.</li>
                 </ul>
               </div>
 
               <div className="lp-who-card">
-                <h3>Professors</h3>
+                <h3>Host</h3>
                 <ul>
-                  <li>Build, publish, and run quizzes for each class.</li>
-                  <li>
-                    See every student&apos;s results, per quiz and across
-                    the semester.
-                  </li>
-                  <li>Export results when you need them.</li>
+                  <li>Create and save a complete public quiz.</li>
+                  <li>Host a quiz you created and share its session code.</li>
+                  <li>View and export results for sessions you hosted.</li>
                 </ul>
               </div>
             </div>
+
+            <p className="lp-fine">
+              The account roles are User and Admin. Admins can access all
+              session results and export them.
+            </p>
           </div>
         </section>
 
