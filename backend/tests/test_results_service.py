@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import Base, Database
 from app.errors import APIError
 from app.models import (
+    Account,
     AnswerChoice,
     LiveSession,
     LiveSessionStatus,
@@ -15,12 +16,17 @@ from app.models import (
     SessionQuestion,
     SessionQuestionStatus,
 )
-from app.services.results import get_closed_question_result_data
+from app.services.results import (
+    get_closed_question_result_data,
+    get_closed_question_results,
+)
 
 
 SESSION_ID = 20
 SESSION_QUESTION_ID = 10
 QUESTION_ID = 30
+PREVIOUS_SESSION_QUESTION_ID = 9
+OPEN_SESSION_QUESTION_ID = 11
 
 
 @pytest.fixture
@@ -30,6 +36,22 @@ def results_db() -> Iterator[Session]:
     with database.session_factory() as db:
         db.add_all(
             [
+                *[
+                    Account(
+                        account_id=account_id,
+                        auth0_sub=f"test|results-{account_id}",
+                        email=f"results-{account_id}@test.invalid",
+                        display_name=display_name,
+                    )
+                    for account_id, display_name in [
+                        (2, "Zoe"),
+                        (3, "Alice"),
+                        (4, "Charlie"),
+                        (5, "Bob"),
+                        (6, "Dana"),
+                        (7, "Eve"),
+                    ]
+                ],
                 Question(
                     question_id=QUESTION_ID,
                     quiz_version_id=100,
@@ -43,6 +65,36 @@ def results_db() -> Iterator[Session]:
                     question_id=QUESTION_ID,
                     choice_order=1,
                     choice_text="First",
+                    is_correct=True,
+                ),
+                Question(
+                    question_id=29,
+                    quiz_version_id=100,
+                    question_order=2,
+                    question_text="Previous question",
+                    time_limit_seconds=30,
+                    base_points=1000,
+                ),
+                AnswerChoice(
+                    choice_id=29,
+                    question_id=29,
+                    choice_order=1,
+                    choice_text="Previous answer",
+                    is_correct=True,
+                ),
+                Question(
+                    question_id=34,
+                    quiz_version_id=100,
+                    question_order=3,
+                    question_text="Open question",
+                    time_limit_seconds=30,
+                    base_points=1000,
+                ),
+                AnswerChoice(
+                    choice_id=34,
+                    question_id=34,
+                    choice_order=1,
+                    choice_text="Open answer",
                     is_correct=True,
                 ),
                 AnswerChoice(
@@ -72,6 +124,18 @@ def results_db() -> Iterator[Session]:
                     question_id=QUESTION_ID,
                     status=SessionQuestionStatus.CLOSED,
                 ),
+                SessionQuestion(
+                    session_question_id=PREVIOUS_SESSION_QUESTION_ID,
+                    session_id=SESSION_ID,
+                    question_id=29,
+                    status=SessionQuestionStatus.CLOSED,
+                ),
+                SessionQuestion(
+                    session_question_id=OPEN_SESSION_QUESTION_ID,
+                    session_id=SESSION_ID,
+                    question_id=34,
+                    status=SessionQuestionStatus.OPEN,
+                ),
                 SessionParticipant(
                     session_participant_id=41,
                     session_id=SESSION_ID,
@@ -86,6 +150,21 @@ def results_db() -> Iterator[Session]:
                     session_participant_id=43,
                     session_id=SESSION_ID,
                     account_id=4,
+                ),
+                SessionParticipant(
+                    session_participant_id=44,
+                    session_id=SESSION_ID,
+                    account_id=5,
+                ),
+                SessionParticipant(
+                    session_participant_id=45,
+                    session_id=SESSION_ID,
+                    account_id=6,
+                ),
+                SessionParticipant(
+                    session_participant_id=46,
+                    session_id=SESSION_ID,
+                    account_id=7,
                 ),
                 Response(
                     response_id=51,
@@ -113,6 +192,60 @@ def results_db() -> Iterator[Session]:
                     response_time_ms=3000,
                     is_correct=False,
                     points_awarded=0,
+                ),
+                Response(
+                    response_id=54,
+                    session_participant_id=41,
+                    session_question_id=PREVIOUS_SESSION_QUESTION_ID,
+                    choice_id=29,
+                    response_time_ms=1000,
+                    is_correct=True,
+                    points_awarded=300,
+                ),
+                Response(
+                    response_id=55,
+                    session_participant_id=42,
+                    session_question_id=PREVIOUS_SESSION_QUESTION_ID,
+                    choice_id=29,
+                    response_time_ms=1000,
+                    is_correct=True,
+                    points_awarded=300,
+                ),
+                Response(
+                    response_id=56,
+                    session_participant_id=43,
+                    session_question_id=PREVIOUS_SESSION_QUESTION_ID,
+                    choice_id=29,
+                    response_time_ms=1000,
+                    is_correct=True,
+                    points_awarded=500,
+                ),
+                Response(
+                    response_id=57,
+                    session_participant_id=44,
+                    session_question_id=PREVIOUS_SESSION_QUESTION_ID,
+                    choice_id=29,
+                    response_time_ms=1000,
+                    is_correct=True,
+                    points_awarded=500,
+                ),
+                Response(
+                    response_id=58,
+                    session_participant_id=45,
+                    session_question_id=PREVIOUS_SESSION_QUESTION_ID,
+                    choice_id=29,
+                    response_time_ms=1000,
+                    is_correct=True,
+                    points_awarded=100,
+                ),
+                Response(
+                    response_id=59,
+                    session_participant_id=45,
+                    session_question_id=OPEN_SESSION_QUESTION_ID,
+                    choice_id=34,
+                    response_time_ms=1000,
+                    is_correct=True,
+                    points_awarded=5000,
                 ),
             ]
         )
@@ -153,6 +286,35 @@ def test_closed_question_uses_stored_correctness_and_points(
         (response.is_correct, response.points_awarded)
         for response in result.responses
     ] == [(True, 900), (True, 700), (False, 0)]
+
+
+def test_leaderboard_includes_every_participant_and_rank_style_ties(
+    results_db: Session,
+) -> None:
+    result = get_closed_question_results(
+        results_db,
+        SESSION_ID,
+        SESSION_QUESTION_ID,
+    )
+
+    assert [
+        (
+            participant.display_name,
+            participant.selected_choice_id,
+            participant.is_correct,
+            participant.points_awarded,
+            participant.cumulative_score,
+            participant.rank,
+        )
+        for participant in result.participants
+    ] == [
+        ("Zoe", 31, True, 900, 1200, 1),
+        ("Alice", 31, True, 700, 1000, 2),
+        ("Bob", None, False, 0, 500, 3),
+        ("Charlie", 32, False, 0, 500, 3),
+        ("Dana", None, False, 0, 100, 5),
+        ("Eve", None, False, 0, 0, 6),
+    ]
 
 
 def test_question_from_another_session_is_not_returned(results_db: Session) -> None:
