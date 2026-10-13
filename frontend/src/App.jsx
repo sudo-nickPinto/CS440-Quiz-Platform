@@ -2,11 +2,10 @@ import { useEffect } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
 import { Navigate, Route, Routes } from 'react-router'
 import LandingPage from './components/LandingPage'
-import DashboardPage from './components/DashboardPage'
+import AuthenticatedDemo from './authenticated-demo/PreviewApp'
 import AccountGate from './components/AccountGate'
 import './App.css'
 
-// Preserve the existing session-restoration markers.
 const WAS_SIGNED_IN = 'quiz-was-signed-in'
 const TRIED = 'quiz-silent-tried'
 
@@ -26,6 +25,7 @@ export default function App() {
     logout,
   } = useAuth0()
 
+  // Restore the session. Page rendering belongs below this effect.
   useEffect(() => {
     if (isLoading) return
 
@@ -53,17 +53,15 @@ export default function App() {
             prompt: 'none',
           },
         }).catch(() => {
-          // If redirect setup fails, leave the landing page available.
-          // Keep TRIED for this tab to avoid an automatic retry loop.
           try {
             localStorage.removeItem(WAS_SIGNED_IN)
           } catch {
-            // Storage may be unavailable.
+            // Manual sign-in remains available if storage is blocked.
           }
         })
       }
     } catch {
-      // If browser storage is blocked, manual sign-in still works.
+      // Manual sign-in remains available if storage is blocked.
     }
   }, [
     isLoading,
@@ -77,7 +75,7 @@ export default function App() {
       localStorage.removeItem(WAS_SIGNED_IN)
       sessionStorage.removeItem(TRIED)
     } catch {
-      // Logout can continue even when storage is blocked.
+      // Logout can continue without browser storage.
     }
 
     void logout({
@@ -95,6 +93,7 @@ export default function App() {
     )
   }
 
+  // Render the new pages after login and backend account loading.
   if (isAuthenticated) {
     const userName =
       auth0User?.name ||
@@ -103,22 +102,36 @@ export default function App() {
 
     return (
       <AccountGate>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 16,
+            flexWrap: 'wrap',
+            padding: '12px 24px',
+            background: '#043371',
+            color: '#FFFFFF',
+          }}
+        >
+          <span>Signed in as {userName}</span>
+
+          <button type="button" onClick={logOut}>
+            Sign out
+          </button>
+        </div>
+
         <Routes>
           <Route
-            path="/dashboard/:view"
-            element={
-              <DashboardPage
-                userName={userName}
-                onLogout={logOut}
-              />
-            }
+            path="/app/*"
+            element={<AuthenticatedDemo />}
           />
 
           <Route
             path="*"
             element={
               <Navigate
-                to="/dashboard/present"
+                to="/app/dashboard/present"
                 replace
               />
             }
