@@ -1,6 +1,7 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
@@ -10,6 +11,7 @@ from app.models import (
     LiveSession,
     LiveSessionStatus,
     Question,
+    Response,
     SessionParticipant,
     SessionQuestion,
     SessionQuestionStatus,
@@ -17,10 +19,78 @@ from app.models import (
 from app.schemas.live_question import QuestionChoiceEvent, QuestionOpenedEvent
 
 
+@dataclass(frozen=True, slots=True)
+class AnswerProgress:
+    eligible_count: int
+    answered_count: int
+
+    @property
+    def everyone_answered(self) -> bool:
+        return self.eligible_count > 0 and self.answered_count == self.eligible_count
+
+
 def _utc_now() -> datetime:
     """Return naive UTC to match the project's MySQL DATETIME columns."""
     now = datetime.now(UTC).replace(tzinfo=None)
     return now.replace(microsecond=(now.microsecond // 1_000) * 1_000)
+
+
+def answer_progress(
+    db: Session,
+    session_id: int,
+    session_question_id: int,
+) -> AnswerProgress:
+    """Count answers against the participant roster frozen at opening time."""
+    session_question = db.scalar(
+        select(SessionQuestion).where(
+            SessionQuestion.session_question_id == session_question_id,
+            SessionQuestion.session_id == session_id,
+        )
+    )
+    if session_question is None:
+        raise APIError(
+            404,
+            "session_question_not_found",
+            "The question was not found in this session.",
+        )
+    if session_question.opened_at is None:
+        raise APIError(
+            409,
+            "question_not_opened",
+            "Answer progress is unavailable before the question opens.",
+        )
+
+    opened_at = session_question.opened_at
+    eligible_count, answered_count = db.execute(
+        select(
+            func.count(
+                func.distinct(SessionParticipant.session_participant_id)
+            ),
+            func.count(func.distinct(Response.session_participant_id)),
+        )
+        .select_from(SessionParticipant)
+        .outerjoin(
+            Response,
+            and_(
+                Response.session_participant_id
+                == SessionParticipant.session_participant_id,
+                Response.session_question_id == session_question_id,
+            ),
+        )
+        .where(
+            SessionParticipant.session_id == session_id,
+            SessionParticipant.joined_at <= opened_at,
+            or_(
+                SessionParticipant.left_at.is_(None),
+                SessionParticipant.left_at >= opened_at,
+            ),
+        )
+    ).one()
+
+    return AnswerProgress(
+        eligible_count=int(eligible_count),
+        answered_count=int(answered_count),
+    )
 
 
 def _opened_event(
