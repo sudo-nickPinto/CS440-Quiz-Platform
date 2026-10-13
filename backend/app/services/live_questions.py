@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
@@ -16,7 +16,12 @@ from app.models import (
     SessionQuestion,
     SessionQuestionStatus,
 )
-from app.schemas.live_question import QuestionChoiceEvent, QuestionOpenedEvent
+from app.schemas.live_question import (
+    QuestionChoiceEvent,
+    QuestionClosedEvent,
+    QuestionCloseReason,
+    QuestionOpenedEvent,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +37,12 @@ class AnswerProgress:
 def _utc_now() -> datetime:
     """Return naive UTC to match the project's MySQL DATETIME columns."""
     now = datetime.now(UTC).replace(tzinfo=None)
-    return now.replace(microsecond=(now.microsecond // 1_000) * 1_000)
+    return _stored_time(now)
+
+
+def _stored_time(value: datetime) -> datetime:
+    """Match the millisecond precision of the persisted MySQL timestamps."""
+    return value.replace(microsecond=(value.microsecond // 1_000) * 1_000)
 
 
 def answer_progress(
@@ -91,6 +101,117 @@ def answer_progress(
         eligible_count=int(eligible_count),
         answered_count=int(answered_count),
     )
+
+
+def _close_question_if_ready(
+    db: Session,
+    session_id: int,
+    session_question_id: int,
+    checked_at: datetime | None,
+) -> QuestionClosedEvent | None:
+    target = db.execute(
+        select(SessionQuestion, Question.question_order)
+        .join(Question, Question.question_id == SessionQuestion.question_id)
+        .where(
+            SessionQuestion.session_question_id == session_question_id,
+            SessionQuestion.session_id == session_id,
+        )
+    ).one_or_none()
+    if target is None:
+        raise APIError(
+            404,
+            "session_question_not_found",
+            "The question was not found in this session.",
+        )
+
+    session_question, question_order = target
+    if session_question.status != SessionQuestionStatus.OPEN:
+        return None
+    if (
+        session_question.opened_at is None
+        or session_question.closes_at is None
+        or session_question.closes_at <= session_question.opened_at
+    ):
+        raise APIError(
+            500,
+            "invalid_question_timing",
+            "The open question does not have valid server timestamps.",
+        )
+
+    effective_checked_at = _stored_time(
+        checked_at if checked_at is not None else _utc_now()
+    )
+    if effective_checked_at < session_question.opened_at:
+        raise APIError(
+            500,
+            "invalid_question_timing",
+            "The closure check cannot be earlier than the opening time.",
+        )
+
+    progress = answer_progress(db, session_id, session_question_id)
+    if effective_checked_at >= session_question.closes_at:
+        reason = QuestionCloseReason.DEADLINE
+    elif progress.everyone_answered:
+        reason = QuestionCloseReason.ALL_ANSWERED
+    else:
+        return None
+
+    event = QuestionClosedEvent(
+        session_id=session_id,
+        session_question_id=session_question_id,
+        question_order=question_order,
+        reason=reason,
+        answered_count=progress.answered_count,
+        eligible_count=progress.eligible_count,
+        opened_at=session_question.opened_at,
+        closes_at=session_question.closes_at,
+        closed_at=effective_checked_at,
+    )
+    transition = db.execute(
+        update(SessionQuestion)
+        .where(
+            SessionQuestion.session_question_id == session_question_id,
+            SessionQuestion.session_id == session_id,
+            SessionQuestion.status == SessionQuestionStatus.OPEN,
+        )
+        .values(
+            status=SessionQuestionStatus.CLOSED,
+            closed_at=effective_checked_at,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if transition.rowcount != 1:
+        db.rollback()
+        return None
+
+    db.commit()
+    return event
+
+
+def close_question_if_ready(
+    db: Session,
+    session_id: int,
+    session_question_id: int,
+    *,
+    checked_at: datetime | None = None,
+) -> QuestionClosedEvent | None:
+    """Close an open question once when answers or its deadline make it ready."""
+    try:
+        return _close_question_if_ready(
+            db,
+            session_id,
+            session_question_id,
+            checked_at,
+        )
+    except APIError:
+        raise
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(
+            500,
+            "question_close_failed",
+            "Could not close the question.",
+        ) from exc
 
 
 def _opened_event(
@@ -252,9 +373,8 @@ def _open_question(
                 "The previous question must be closed first.",
             )
 
-    effective_opened_at = opened_at if opened_at is not None else _utc_now()
-    effective_opened_at = effective_opened_at.replace(
-        microsecond=(effective_opened_at.microsecond // 1_000) * 1_000
+    effective_opened_at = _stored_time(
+        opened_at if opened_at is not None else _utc_now()
     )
     closes_at = effective_opened_at + timedelta(
         seconds=question.time_limit_seconds
