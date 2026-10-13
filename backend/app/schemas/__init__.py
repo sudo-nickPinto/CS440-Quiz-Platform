@@ -1,3 +1,9 @@
+from app.schemas.live_question import (
+    QuestionChoiceEvent,
+    QuestionClosedEvent,
+    QuestionCloseReason,
+    QuestionOpenedEvent,
+)
 from app.schemas.quiz import (
     AnswerChoiceCreate,
     AnswerChoiceResponse,
@@ -27,7 +33,11 @@ __all__ = [
     "AnswerChoiceResponse",
     "ClosedQuestionResultsSnapshot",
     "ParticipantQuestionResult",
+    "QuestionChoiceEvent",
+    "QuestionClosedEvent",
+    "QuestionCloseReason",
     "QuestionCreate",
+    "QuestionOpenedEvent",
     "QuestionResponse",
     "QuizCreate",
     "QuizListItem",
