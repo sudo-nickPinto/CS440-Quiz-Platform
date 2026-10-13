@@ -127,7 +127,7 @@ Auth added two modules (`auth.py`, `accounts.py`), one route module (`routes/me.
 |---|---|
 | `main.jsx` | Wraps the app in `Auth0Provider` (domain, client id, redirect URI, audience). |
 | `App.jsx` | Reads login state from `useAuth0()`, session restore, logout, shows login page or lobby. |
-| `components/LoginPage.jsx` | Log in, Create account (`screen_hint: 'signup'`) and Continue with Google (`connection: 'google-oauth2'`). |
+| `components/LandingPage.jsx` | Sign in and Create account (`screen_hint: 'signup'`), both sent to the email/password connection (`connection: 'Username-Password-Authentication'`), which also hides the Google button on Auth0's hosted page. |
 | `components/AccountGate.jsx` | Calls `/me` once logged in (creating the account on first login) before showing the lobby. |
 | `api.js` | `apiFetch(path, getToken, options)`: attaches the bearer token and throws `error.message` from the error body. |
 
