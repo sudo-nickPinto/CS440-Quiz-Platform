@@ -1,6 +1,6 @@
 # Authentication and accounts
 
-How login works, how the backend trusts a request, and how a person becomes a row in the `account` table. Auth0 handles passwords and Google sign-in. We never store or see a password.
+How login works, how the backend trusts a request, and how a person becomes a row in the `account` table. Auth0 handles email/password sign-in; the group dropped Google sign-in. We never store or see a password.
 
 - **Frontend:** Auth0 login, logout and session restore (`@auth0/auth0-react`).
 - **Backend:** verifies the Auth0 access token (JWT), then finds or creates the user's `account` row in MySQL.
@@ -16,7 +16,7 @@ sequenceDiagram
     participant D as MySQL (account)
 
     B->>A: loginWithRedirect() (audience = our API)
-    A->>A: password check / Google / signup / consent
+    A->>A: password check / signup / consent
     A-->>B: redirect back with one-time code
     B->>A: SDK swaps code for access token (JWT)
     B->>F: GET /me, Authorization: Bearer <JWT>
@@ -71,7 +71,7 @@ flowchart TD
     RB --> RET
 ```
 
-Email/password gives `auth0|...` and Google gives `google-oauth2|...`: different `sub` values for the same person. Each `sub` is a row in `account_identity` (migration `0004`) pointing at one `account`, so a second login method with the same verified email is linked to the existing account instead of failing. Linking requires `email_verified`, otherwise someone could sign up with another person's address and be attached to their account.
+Each Auth0 login has its own `sub` (email/password gives `auth0|...`; accounts made before Google sign-in was dropped may also have a `google-oauth2|...` one). Each `sub` is a row in `account_identity` (migration `0004`) pointing at one `account`, so a second login method with the same verified email is linked to the existing account instead of failing. Linking requires `email_verified`, otherwise someone could sign up with another person's address and be attached to their account.
 
 ## 4. Where auth sits in the backend layers
 
@@ -196,11 +196,11 @@ Every error has the shape `{"error": {"code": "...", "message": "..."}}`; the fr
 
 **Localhost always shows the consent screen.** Auth0 always asks for consent on `localhost`, even for your own app and even if "Allow Skipping User Consent" is on for the API (it is). This also makes the silent re-login fail with `consent_required`. Deploying to a real domain should remove the screen.
 
-**Back-button mitigation.** `LoginPage.jsx` passes `openUrl: (url) => window.location.replace(url)` to `loginWithRedirect`, so our page is replaced instead of added to history. Auth0's own pages (login, consent) still add entries, and the consent page's one-time state can produce an "Oops, something went wrong" page if you go Back to it. This reduces, but does not fully remove, the problem.
+**Back-button mitigation.** `LandingPage.jsx` passes `openUrl: (url) => window.location.replace(url)` to `loginWithRedirect`, so our page is replaced instead of added to history. Auth0's own pages (login, consent) still add entries, and the consent page's one-time state can produce an "Oops, something went wrong" page if you go Back to it. This reduces, but does not fully remove, the problem.
 
 **Duplicate signup message.** Signing up with an existing email shows a message customized in the Auth0 tenant (Universal Login custom text, signup prompt, key `auth0-users-validation`). That setting lives in Auth0, not in this repo.
 
-**Several login methods, one account.** Logging in with Google and with email/password using the same verified email lands on the same `account`. `account.auth0_sub` is only the first login and is not used for lookups.
+**Several logins, one account.** A new login with the same verified email as an existing account lands on that `account` (this is how older Google-made accounts pick up an email/password login). `account.auth0_sub` is only the first login and is not used for lookups.
 
 **Email verification happens once.** Auth0 marks an email verified when the user clicks the link in the verification email, and it stays verified. Users are not asked again. How often they must *log in* is a separate setting (Auth0 session lifetime, tenant settings > Advanced for the SSO session, and the application's refresh-token/absolute lifetime).
 
@@ -251,7 +251,7 @@ Login, token verification, account creation and linking of login methods all wor
 
 ## 12. Done so far
 
-- Auth0 login with Google and email/password, token verified in FastAPI (`auth.py`).
+- Auth0 email/password login (Google sign-in removed), token verified in FastAPI (`auth.py`).
 - First login creates an `account` row; later logins reuse it (`accounts.py`).
 - A second login method with the same verified email links to the same account through `account_identity` (migration `0004`). There is no longer a 409.
 - Student/professor chooser removed; everyone is a host/participant for now.
