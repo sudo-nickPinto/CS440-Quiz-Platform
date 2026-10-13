@@ -138,12 +138,12 @@ def test_repeat_login_reuses_account(client):
     assert count_accounts(client) == 1
 
 
-def test_unverified_email_is_rejected(client):
+def test_unverified_email_creates_pending_account(client):
     client.profile["email_verified"] = False
     response = get_me(client, make_token())
-    assert response.status_code == 403
-    assert error_code(response) == "email_not_verified"
-    assert count_accounts(client) == 0
+    assert response.status_code == 200
+    assert response.json()["is_active"] is False
+    assert count_accounts(client) == 1
 
 
 def count_identities(client):
@@ -172,6 +172,6 @@ def test_unverified_email_is_not_linked(client):
     get_me(client, make_token("google-oauth2|123"))
     client.profile["email_verified"] = False
     response = get_me(client, make_token("auth0|abc"))
-    assert response.status_code == 403
-    assert error_code(response) == "email_not_verified"
+    assert response.status_code == 409
+    assert error_code(response) == "email_in_use"
     assert count_identities(client) == 1

@@ -13,5 +13,5 @@ export async function apiFetch(path, getToken, options = {}) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.error?.message || `${res.status} ${res.statusText}`)
   }
-  return res.json()
+  return res.status === 204 ? null : res.json()
 }

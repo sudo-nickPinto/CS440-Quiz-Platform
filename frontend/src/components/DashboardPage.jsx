@@ -151,6 +151,10 @@ function DashboardView({
             {initials}
           </span>
 
+          {!preview && (
+            <Link className="db-control" to="/approve">Approve users</Link>
+          )}
+
           {preview ? (
             <Link className="db-control" to="/">Login page</Link>
           ) : (

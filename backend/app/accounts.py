@@ -49,6 +49,37 @@ def _add_identity(db: Session, sub: str, account_id: int) -> None:
     )
 
 
+def _link_or_create(db: Session, sub: str, email: str, name: str, verified: bool) -> None:
+    existing = _by_email(db, email)
+    if existing is None:
+        # A verified email (e.g. Google) is active right away. An unverified
+        # email/password signup stays inactive until someone approves it.
+        result = db.execute(
+            text(
+                "INSERT INTO account (auth0_sub, email, display_name, is_active) "
+                "VALUES (:sub, :email, :name, :active)"
+            ),
+            {"sub": sub, "email": email, "name": name, "active": verified},
+        )
+        _add_identity(db, sub, result.lastrowid)
+        return
+    # Linking trusts the email, so only a verified one may join an account, and
+    # never a pending one: it may have been created by someone else using it.
+    if not verified:
+        raise APIError(
+            409,
+            "email_in_use",
+            "An account with this email already exists. Log in the way you did before.",
+        )
+    if not existing["is_active"]:
+        raise APIError(
+            409,
+            "account_pending",
+            "An account with this email is waiting for approval. Ask to have it approved or rejected.",
+        )
+    _add_identity(db, sub, existing["account_id"])
+
+
 def get_or_create_account(db: Session, domain: str, sub: str, token: str) -> dict:
     """Return the account for this Auth0 login, creating or linking it on first use."""
     account = _by_sub(db, sub)
@@ -57,22 +88,13 @@ def get_or_create_account(db: Session, domain: str, sub: str, token: str) -> dic
 
     profile = _fetch_profile(domain, token)
     email = profile.get("email")
-    # Linking trusts the email, so it must be verified: otherwise anyone could
-    # sign up with someone else's address and be attached to their account.
-    if not email or not profile.get("email_verified"):
-        raise APIError(403, "email_not_verified", "Please verify your email address, then log in again.")
+    if not email:
+        raise APIError(403, "email_missing", "Your login has no email address. Use another login method.")
+    verified = bool(profile.get("email_verified"))
     name = (profile.get("name") or email)[:100]
 
     try:
-        existing = _by_email(db, email)
-        if existing:
-            _add_identity(db, sub, existing["account_id"])
-        else:
-            result = db.execute(
-                text("INSERT INTO account (auth0_sub, email, display_name) VALUES (:sub, :email, :name)"),
-                {"sub": sub, "email": email, "name": name},
-            )
-            _add_identity(db, sub, result.lastrowid)
+        _link_or_create(db, sub, email, name, verified)
         db.commit()
     except IntegrityError:
         # A parallel first request for this login or email got there first.
@@ -80,13 +102,11 @@ def get_or_create_account(db: Session, domain: str, sub: str, token: str) -> dic
         account = _by_sub(db, sub)
         if account:
             return account
-        existing = _by_email(db, email)
-        if existing:
-            try:
-                _add_identity(db, sub, existing["account_id"])
-                db.commit()
-            except IntegrityError:
-                db.rollback()
+        try:
+            _link_or_create(db, sub, email, name, verified)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
         account = _by_sub(db, sub)
         if account:
             return account

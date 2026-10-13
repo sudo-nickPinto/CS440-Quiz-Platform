@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from 'react-router'
 import LandingPage from './components/LandingPage'
 import DashboardPage from './components/DashboardPage'
 import AccountGate from './components/AccountGate'
+import ApproveUsersPage from './components/ApproveUsersPage'
 import './App.css'
 
 // Preserve the existing session-restoration markers.
@@ -102,8 +103,18 @@ export default function App() {
       'User'
 
     return (
-      <AccountGate>
+      <AccountGate onLogout={logOut}>
         <Routes>
+          <Route
+            path="/approve"
+            element={
+              <ApproveUsersPage
+                userName={userName}
+                onLogout={logOut}
+              />
+            }
+          />
+
           <Route
             path="/dashboard/:view"
             element={
