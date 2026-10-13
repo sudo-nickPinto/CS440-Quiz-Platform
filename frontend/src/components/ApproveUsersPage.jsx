@@ -100,8 +100,7 @@ export default function ApproveUsersPage({ userName = 'User', onLogout }) {
 
         <div className="db-toolbar">
           <p className="au-help">
-            People who signed up with email and password wait here until
-            someone approves them. Google sign-ins are approved automatically.
+            New accounts wait here until someone approves them.
           </p>
 
           <button

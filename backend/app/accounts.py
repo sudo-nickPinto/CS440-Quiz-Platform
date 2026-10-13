@@ -52,7 +52,7 @@ def _add_identity(db: Session, sub: str, account_id: int) -> None:
 def _link_or_create(db: Session, sub: str, email: str, name: str, verified: bool) -> None:
     existing = _by_email(db, email)
     if existing is None:
-        # A verified email (e.g. Google) is active right away. An unverified
+        # A verified email is active right away. An unverified
         # email/password signup stays inactive until someone approves it.
         result = db.execute(
             text(
