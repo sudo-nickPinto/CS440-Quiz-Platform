@@ -1,4 +1,5 @@
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -54,3 +55,69 @@ class ClosedQuestionResultsSnapshot(ResultsModel):
                     "Ranks must use RANK behavior based on cumulative score."
                 )
         return self
+
+
+# Participants see the top of the board plus their own row (LIVE_PROTOCOL §4).
+LEADERBOARD_SIZE = 5
+
+
+class FinalStanding(ResultsModel):
+    """One participant's final result row, as stored in the result table."""
+
+    session_participant_id: int = Field(gt=0)
+    display_name: str
+    total_score: int = Field(ge=0)
+    correct_count: int = Field(ge=0)
+    final_rank: int = Field(gt=0)
+
+
+class LeaderboardEntry(ResultsModel):
+    display_name: str
+    total_score: int = Field(ge=0)
+    final_rank: int = Field(gt=0)
+
+
+class FinalResults(ResultsModel):
+    """Every participant's final standing; what the host sees."""
+
+    session_id: int = Field(gt=0)
+    status: Literal["COMPLETED", "CANCELLED"]
+    ended_at: datetime | None
+    standings: list[FinalStanding]
+
+
+class ParticipantFinalResults(ResultsModel):
+    """A participant's cut of the final results: their row plus the top 5."""
+
+    session_id: int = Field(gt=0)
+    status: Literal["COMPLETED", "CANCELLED"]
+    ended_at: datetime | None
+    me: FinalStanding | None
+    leaderboard: list[LeaderboardEntry]
+
+
+def participant_final_view(
+    results: FinalResults,
+    session_participant_id: int | None,
+) -> ParticipantFinalResults:
+    return ParticipantFinalResults(
+        session_id=results.session_id,
+        status=results.status,
+        ended_at=results.ended_at,
+        me=next(
+            (
+                row
+                for row in results.standings
+                if row.session_participant_id == session_participant_id
+            ),
+            None,
+        ),
+        leaderboard=[
+            LeaderboardEntry(
+                display_name=row.display_name,
+                total_score=row.total_score,
+                final_rank=row.final_rank,
+            )
+            for row in results.standings[:LEADERBOARD_SIZE]
+        ],
+    )

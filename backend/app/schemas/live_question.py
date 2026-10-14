@@ -36,6 +36,7 @@ class QuestionOpenedEvent(LiveQuestionEventModel):
 class QuestionCloseReason(str, Enum):
     ALL_ANSWERED = "ALL_ANSWERED"
     DEADLINE = "DEADLINE"
+    HOST = "HOST"
 
 
 class QuestionClosedEvent(LiveQuestionEventModel):

@@ -70,16 +70,36 @@ class SubmitAnswerMessage(InboundMessage):
     choice_id: int = Field(gt=0)
 
 
+class CloseQuestionMessage(InboundMessage):
+    """Host skip: close the open question now (reason HOST)."""
+
+    type: Literal["close_question"]
+    session_question_id: int = Field(gt=0)
+
+
+class EndSessionMessage(InboundMessage):
+    type: Literal["end_session"]
+
+
+class CancelSessionMessage(InboundMessage):
+    type: Literal["cancel_session"]
+
+
+class LeaveMessage(InboundMessage):
+    type: Literal["leave"]
+
+
 CommandMessage = Annotated[
-    PingMessage | OpenQuestionMessage | SubmitAnswerMessage,
+    PingMessage
+    | OpenQuestionMessage
+    | SubmitAnswerMessage
+    | CloseQuestionMessage
+    | EndSessionMessage
+    | CancelSessionMessage
+    | LeaveMessage,
     Field(discriminator="type"),
 ]
 command_adapter: TypeAdapter[CommandMessage] = TypeAdapter(CommandMessage)
-
-# In the protocol but not built yet; they get an error instead of a 4400 close.
-UNSUPPORTED_COMMANDS = frozenset(
-    {"close_question", "end_session", "cancel_session", "leave"}
-)
 
 
 def _json_default(value: Any) -> Any:
