@@ -181,6 +181,7 @@ Not on the timeline. We'll pick these up only if the MVP ships early, or next se
 
 - **Professor/Student roles:** decide how someone becomes a professor, expand `AccountRole`, add shared `require_role` and ownership helpers to replace the inline checks, add role-matrix tests, and show different navigation per role. (The `effective_role` test in #31 will need updating.)
 - **Classes:** create a class, join or roster students, class-management UI, sessions tied to a class.
+  - Proposal: [`CLASS_APPROVAL.md`](CLASS_APPROVAL.md). Each class's teacher approves the students who ask to join. There's no app-wide signup approval.
 - **Private quizzes:** visibility rules and the professor-of-class access described in `0002_quizzes`.
 - **Editing saved quizzes:** new versions on edit, drafts, collaborators.
 - **Statistics:** per-student exports, semester reports, score distributions.
