@@ -13,6 +13,7 @@ from app.auth import CurrentAccount
 from app.live.protocol import CloseCode, encode
 from app.live.snapshot import (
     LiveRole,
+    active_participant_count,
     host_results_view,
     open_question_deadlines,
     participant_results_view,
@@ -158,6 +159,28 @@ class LiveHub:
         finally:
             if self._timers.get(session_question_id) is asyncio.current_task():
                 del self._timers[session_question_id]
+
+    async def participant_joined(
+        self,
+        session_id: int,
+        session_participant_id: int,
+        display_name: str,
+    ) -> None:
+        """Hook run after a committed REST join; tells the host (§4)."""
+        try:
+            participant_count = await self.run_db(active_participant_count, session_id)
+            await self.broadcast(
+                session_id,
+                {
+                    "type": "participant_joined",
+                    "session_participant_id": session_participant_id,
+                    "display_name": display_name,
+                    "participant_count": participant_count,
+                },
+                role="host",
+            )
+        except Exception:
+            logger.exception("Join hook failed for session %s", session_id)
 
     async def after_answer(self, session_id: int, session_question_id: int) -> None:
         """Hook run after every committed answer, from WebSocket or REST."""

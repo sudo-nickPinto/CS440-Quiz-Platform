@@ -94,6 +94,18 @@ def results_view(
     return participant_results_view(snapshot, session_participant_id)
 
 
+def active_participant_count(db: Session, session_id: int) -> int:
+    return int(
+        db.scalar(
+            select(func.count(SessionParticipant.session_participant_id)).where(
+                SessionParticipant.session_id == session_id,
+                SessionParticipant.left_at.is_(None),
+            )
+        )
+        or 0
+    )
+
+
 def build_session_state(
     db: Session,
     session_id: int,
@@ -114,18 +126,11 @@ def build_session_state(
         )
         or 0
     )
-    participant_count = int(
-        db.scalar(
-            select(func.count(SessionParticipant.session_participant_id)).where(
-                SessionParticipant.session_id == session_id,
-                SessionParticipant.left_at.is_(None),
-            )
-        )
-        or 0
-    )
+    participant_count = active_participant_count(db, session_id)
 
     current_question = None
     my_answer = None
+    last_question = None
     last_results = None
     if session.current_question_order is not None:
         target = db.execute(
@@ -162,6 +167,10 @@ def build_session_state(
                     db, session_id, session_question.session_question_id
                 )
                 last_results = results_view(snapshot, role, session_participant_id)
+                # Results hold only IDs and counts; the text is needed to draw them.
+                last_question = _opened_event(
+                    session_question, question, total_questions
+                ).model_dump()
 
     session_block = {
         "session_id": session.session_id,
@@ -180,6 +189,7 @@ def build_session_state(
         "host_connected": host_connected,
         "current_question": current_question,
         "my_answer": my_answer,
+        "last_question": last_question,
         "last_results": last_results,
     }
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
@@ -39,10 +39,20 @@ def create_session_route(
 )
 def join_session_route(
     payload: SessionJoinRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> SessionJoinResponse:
-    return join_session(db, account, payload.join_code)
+    joined = join_session(db, account, payload.join_code)
+    # Joining happens over REST, so tell the live host after the commit.
+    background_tasks.add_task(
+        request.app.state.live_hub.participant_joined,
+        joined.session.session_id,
+        joined.participant.session_participant_id,
+        joined.participant.display_name,
+    )
+    return joined
 
 
 @router.get("/sessions/{session_id}", response_model=SessionResponse)

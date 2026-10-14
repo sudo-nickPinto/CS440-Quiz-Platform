@@ -17,6 +17,7 @@ from app.live.protocol import (
     PingMessage,
     SubmitAnswerMessage,
     command_adapter,
+    encode,
     error_message,
 )
 from app.live.snapshot import build_session_state, resolve_membership
@@ -88,17 +89,21 @@ async def live_session_socket(websocket: WebSocket, session_id: int) -> None:
         role=role,
         session_participant_id=session_participant_id,
     )
-    await hub.connect(conn)
     try:
         await hub.sweep(session_id)
-        state = await hub.run_db(
-            build_session_state,
-            session_id,
-            role,
-            session_participant_id,
-            hub.host_connected(session_id),
-        )
-        await hub.send(conn, state)
+        # Register and send the snapshot while holding this socket's send lock,
+        # so session_state is always its first message and any broadcast that
+        # races the connect queues up behind it (protocol §2).
+        async with conn.send_lock:
+            await hub.connect(conn)
+            state = await hub.run_db(
+                build_session_state,
+                session_id,
+                role,
+                session_participant_id,
+                hub.host_connected(session_id),
+            )
+            await websocket.send_text(encode(state))
         await _receive_loop(hub, conn)
     except WebSocketDisconnect:
         pass
