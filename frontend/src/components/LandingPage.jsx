@@ -284,8 +284,11 @@ export default function LandingPage({ authError = '' }) {
     setPending(action)
 
     // Email/password only, so Auth0's hosted page hides its Google button too.
+    // Always show the login screen so an existing Auth0 session for a
+    // different account isn't reused silently.
     const authorizationParams = {
       connection: 'Username-Password-Authentication',
+      prompt: 'login',
     }
 
     if (action === 'signup') {
