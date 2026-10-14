@@ -52,7 +52,7 @@ stateDiagram-v2
 ws(s)://<api-host>/ws/sessions/{session_id}
 ```
 
-One endpoint for hosts and participants alike. The server works out the role from the database: `live_session.host_id` means host, and a `session_participant` row with `left_at IS NULL` means participant. Anyone else is refused. Admins get no live access in the MVP (§9).
+One endpoint for hosts and participants alike. The server works out the role from the database: `live_session.host_id` means host, and a `session_participant` row with `left_at IS NULL` means participant. Anyone else is refused. Admins get no live access in the MVP (§9, open question 2).
 
 ### Authentication: first message, not URL
 
@@ -93,20 +93,20 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 | `cancel_session` | host, `LOBBY` only | — | **NEW** `cancel_session()` → `CANCELLED` → broadcast `session_ended` with `reason: "CANCELLED"` |
 | `leave` | participant | — | **NEW**: sets `left_at` and closes the socket |
 
-`POST /sessions/{id}/questions/{qid}/responses` stays as it is. It must run the same after-answer hook (`close_question_if_ready` + broadcast) as `submit_answer`, so it can't become a back door that never closes questions. The live UI uses `submit_answer`.
+`POST /sessions/{id}/questions/{qid}/responses` (`submit_response_route` in `api/routes/responses.py`) stays as it is. After `submit_response()` commits, it must run the same after-answer hook (`answer_progress` + `close_question_if_ready` + broadcast) as `submit_answer`, so it can't become a back door that never closes questions. The live UI uses `submit_answer`.
 
 ### Server → client
 
 | `type` | To | Payload |
 |---|---|---|
 | `session_state` | the one client, on (re)connect | snapshot, see below |
-| `participant_joined` | host | `session_participant_id`, `display_name`, `participant_count`. Produced by an after-commit hook on `POST /sessions/join` (the same pattern as the REST answer hook), because joining happens over REST, not the socket |
+| `participant_joined` | host | `session_participant_id`, `display_name`, `participant_count`. Joining happens over REST, not the socket, so `join_session_route` (`POST /sessions/join`) gets an after-commit hook into the WebSocket hub, the same pattern as the REST answer hook: once `join_session()` has committed, it broadcasts `participant_joined` to the host's socket(s) using the new `SessionParticipantResponse`. If the host isn't connected nothing is sent, and they see the count in their next `session_state` |
 | `participant_left` | host | same fields. Produced by **NEW** `leave` |
 | `question_opened` | everyone | `QuestionOpenedEvent` (no correctness, just as today) |
 | `answer_progress` | host | `session_question_id`, `answered_count`, `eligible_count` (sent after each answer) |
 | `question_closed` | everyone | `QuestionClosedEvent` (`reason` ∈ `ALL_ANSWERED`, `DEADLINE`, `HOST`) |
 | `question_results` | host | the full `ClosedQuestionResultsSnapshot` |
-| `question_results` | each participant | **participant view**: `correct_choice_ids`, per-choice `response_count`, `me` (their own row: `selected_choice_id`, `is_correct`, `points_awarded`, `cumulative_score`, `rank`), and `leaderboard`: top 5 `{display_name, cumulative_score, rank}`. **Provisional** until §9 question 1 is decided; if the decision is "own rank only", `leaderboard` is dropped and nothing else changes |
+| `question_results` | each participant | **participant view**: `correct_choice_ids`, per-choice `response_count`, `me` (their own row: `selected_choice_id`, `is_correct`, `points_awarded`, `cumulative_score`, `rank`), and `leaderboard`: top 5 `{display_name, cumulative_score, rank}` (decided, §9) |
 | `host_status` | participants | `{"connected": bool}` |
 | `session_ended` | everyone | `reason` ∈ `COMPLETED`, `CANCELLED`, plus the final top 5 |
 | `ack` | the sender | `request_id`, plus `session_question_id` for `open_question` or `receipt` (a `ResponseReceipt`) for `submit_answer` |
@@ -141,7 +141,7 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 - **Roster = joined, not connected.** Eligibility for a question is "had an un-left `session_participant` row when it opened" (`answer_progress()` in #35). A dropped socket does **not** shrink the roster. If someone's Wi-Fi dies, the question waits for the deadline rather than closing early without them. Only an explicit `leave` sets `left_at`.
 - **The roster is frozen for the whole question.** It is fixed when the question opens and does not change until the next one. Someone who joins mid-question is not in it. Someone who explicitly `leave`s mid-question still counts for that question, but can no longer answer it, so it may wait until the deadline. `left_at` only affects eligibility from the next question onward.
 - **Reconnect** means connect + `auth` again. The server replies with `session_state`, and the client renders from that snapshot alone. Duplicate answers are still rejected (`response_already_submitted`), so a client that retries after reconnecting is safe.
-- **Host disconnects:** the session is not ended. Open questions keep their server timers and still close on schedule. Participants get `host_status {connected:false}` and see a "waiting for host" state. When the host reconnects they get `session_state` and carry on. In the MVP a `LOBBY` or `ACTIVE` session with no host stays open indefinitely (see open question 2).
+- **Host disconnects:** the session is not ended. Open questions keep their server timers and still close on schedule. Participants get `host_status {connected:false}` and see a "waiting for host" state. When the host reconnects they get `session_state` and carry on. In the MVP a `LOBBY` or `ACTIVE` session with no host stays open indefinitely (see open question 1).
 - **Same account, two tabs:** the newest socket replaces the older one, which is closed with `4409`.
 
 ## 6. Closing a question exactly once
@@ -205,14 +205,16 @@ Problems with the connection itself close the socket:
 
 ## 9. Open questions (decide at the next meeting)
 
-1. **Leaderboard for participants:** top 5 + your own rank, or your own rank only? → Taha, depending on the approved screens. Until decided, the server sends top 5 + own rank, marked **provisional** in §4; the frontend should render `leaderboard` only if it is present.
-2. **Abandoned sessions:** auto-cancel a `LOBBY` with no host after N minutes, and auto-end an `ACTIVE` one? Proposal: not in the MVP.
-3. **Admin access to live sessions:** watch-only, or none? Proposal: none in the MVP. Admins see results afterwards (Sprint 4).
-4. **Host as player:** the schema forbids the host being a participant (`host_cannot_join`). Keep it that way.
+**Decided:** participants see the top 5 plus their own rank (`leaderboard` + `me` in the participant `question_results`, §4). The final top 5 in `session_ended` follows the same rule.
+
+1. **Abandoned sessions:** auto-cancel a `LOBBY` with no host after N minutes, and auto-end an `ACTIVE` one? Proposal: not in the MVP.
+2. **Admin access to live sessions:** watch-only, or none? Proposal: none in the MVP. Admins see results afterwards (Sprint 4).
+3. **Host as player:** the schema forbids the host being a participant (`host_cannot_join`). Keep it that way.
 
 ## 10. Work this unlocks (in order)
 
 1. **WebSocket PoC** (Nick): the `/ws/sessions/{id}` endpoint, `auth`, the connection registry, `session_state`, `open_question` → `question_opened`, `submit_answer` → `ack`, the after-answer close hook, the deadline timer, plus the two-participant test.
-2. **Missing services:** `end_session()` (writes `result` rows using `RANK()`, as `0003` requires), `cancel_session()`, `leave_session()`, `close_question_now()`.
-3. **Participant-view filter** for `question_results` (§4).
-4. **Frontend:** a `useLiveSession(sessionId)` hook that owns the socket, reconnects with backoff and keeps the latest `session_state`; the screens render from it.
+2. **REST hooks:** the after-commit hooks on `join_session_route` (`participant_joined`) and `submit_response_route` (after-answer close, §4).
+3. **Missing services:** `end_session()` (writes `result` rows using `RANK()`, as `0003` requires), `cancel_session()`, `leave_session()`, `close_question_now()`.
+4. **Participant-view filter** for `question_results` (§4).
+5. **Frontend:** a `useLiveSession(sessionId)` hook that owns the socket, reconnects with backoff and keeps the latest `session_state`; the screens render from it.
