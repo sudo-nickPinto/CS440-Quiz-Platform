@@ -283,10 +283,9 @@ export default function LandingPage({ authError = '' }) {
     setLoginError('')
     setPending(action)
 
-    const authorizationParams = {}
-
-    if (action === 'google') {
-      authorizationParams.connection = 'google-oauth2'
+    // Email/password only, so Auth0's hosted page hides its Google button too.
+    const authorizationParams = {
+      connection: 'Username-Password-Authentication',
     }
 
     if (action === 'signup') {
@@ -370,7 +369,7 @@ export default function LandingPage({ authError = '' }) {
                   </button>
 
                   <p className="lp-fine">
-                    Use your existing account or continue with Google.
+                    Log in with your email and password, or create an account.
                   </p>
                 </div>
               )}
@@ -418,17 +417,6 @@ export default function LandingPage({ authError = '' }) {
                     >
                       {pending === 'login' ? 'Opening sign-in…' : 'Sign in'}
                       <span aria-hidden="true">→</span>
-                    </button>
-
-                    <button
-                      className="lp-button lp-button-secondary"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => startLogin('google')}
-                    >
-                      {pending === 'google'
-                        ? 'Opening Google…'
-                        : 'Continue with Google'}
                     </button>
 
                     <p className="lp-fine">
