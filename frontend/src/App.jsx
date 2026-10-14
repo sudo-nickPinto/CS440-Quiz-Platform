@@ -110,8 +110,8 @@ export default function App() {
             gap: 16,
             flexWrap: 'wrap',
             padding: '12px 24px',
-            background: '#043371',
-            color: '#FFFFFF',
+            background: 'var(--navy)',
+            color: 'var(--paper)',
           }}
         >
           <span>Signed in as {userName}</span>

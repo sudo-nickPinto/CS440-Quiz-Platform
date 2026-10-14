@@ -1,16 +1,15 @@
+import logging
 from dataclasses import dataclass
 
 import jwt
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
-import logging
 
 from app.accounts import get_or_create_account
 from app.database import get_db
 from app.errors import APIError
 from app.models.account import AccountRole, effective_role
-
 bearer = HTTPBearer(auto_error=False)
 _jwks: jwt.PyJWKClient | None = None
 
@@ -35,22 +34,35 @@ def _jwks_client(domain: str) -> jwt.PyJWKClient:
 
 
 def current_user(
-    request: Request, creds: HTTPAuthorizationCredentials | None = Depends(bearer)
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer),
 ) -> dict:
     """Validate the Auth0 access token and return its claims."""
     settings = request.app.state.settings
+
     if not settings.auth0_domain or not settings.auth0_audience:
-        raise APIError(500, "auth_not_configured", "AUTH0_DOMAIN and AUTH0_AUDIENCE are not configured")
+        raise APIError(
+            500,
+            "auth_not_configured",
+            "AUTH0_DOMAIN and AUTH0_AUDIENCE are not configured",
+        )
+
     if creds is None:
         raise APIError(401, "missing_token", "Missing bearer token")
+
     try:
-        key = _jwks_client(settings.auth0_domain).get_signing_key_from_jwt(creds.credentials)
+        key = _jwks_client(
+            settings.auth0_domain
+        ).get_signing_key_from_jwt(creds.credentials)
+
         return jwt.decode(
             creds.credentials,
             key.key,
             algorithms=["RS256"],
             audience=settings.auth0_audience,
             issuer=f"https://{settings.auth0_domain}/",
+            # Allow small clock differences for token timing checks.
+            # This also allows expiration within the same 30-second window.
             leeway=30,
         )
     except jwt.PyJWTError as exc:
@@ -58,9 +70,12 @@ def current_user(
             "Auth0 token validation failed: %s",
             type(exc).__name__,
         )
-        raise APIError(401, "invalid_token", "Invalid token") from exc
+        raise APIError(
+            401,
+            "invalid_token",
+            "Invalid token",
+        ) from exc
         
-
 
 def get_account_record(
     request: Request,

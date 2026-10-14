@@ -23,7 +23,7 @@ def _fetch_profile(domain: str, token: str) -> dict:
 
 
 def _by_sub(db: Session, sub: str) -> dict | None:
-    # A person can have several logins (Google, email/password); each sub is
+    # A person can have several logins (e.g. older Google logins plus email/password); each sub is
     # a row in account_identity pointing at the one account.
     row = db.execute(
         text(

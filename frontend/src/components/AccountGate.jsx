@@ -1,103 +1,91 @@
 import { useEffect, useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
-import { apiFetch } from '../api'
+import { apiFetch, NEEDS_INTERACTION } from '../api'
+import VerifyEmailScreen from './VerifyEmailScreen'
 
-const INTERACTIVE_ERRORS = [
-  'consent_required',
-  'login_required',
-  'interaction_required',
-]
+const REDIRECTED = 'quiz-interactive-login-tried'
 
+// Loads the user's account from the backend, which creates it on first login,
+// before showing the app. Everyone is a host/participant for now.
 export default function AccountGate({ children }) {
-  const {
-    getAccessTokenSilently,
-    loginWithRedirect,
-  } = useAuth0()
-
+  const { getAccessTokenSilently, loginWithRedirect, logout, user } = useAuth0()
   const [ready, setReady] = useState(false)
-  const [error, setError] = useState(null)
-  const [redirecting, setRedirecting] = useState(false)
+  const [error, setError] = useState('')
+  const [unverified, setUnverified] = useState(false)
 
   useEffect(() => {
-    let active = true
-
+    let cancelled = false
     apiFetch('/me', getAccessTokenSilently)
       .then(() => {
-        if (!active) return
-        setError(null)
+        if (cancelled) return
+        try {
+          sessionStorage.removeItem(REDIRECTED)
+        } catch {
+          // Storage may be unavailable.
+        }
         setReady(true)
       })
       .catch((err) => {
-        if (!active) return
-        setError({
-          code: err.error,
-          message: err.message || 'Could not load your account.',
-        })
-      })
+        if (cancelled) return
+        // The backend only links accounts with a verified email. Logging in
+        // again won't help until the user clicks the link, so don't redirect.
+        if (err.code === 'email_not_verified') {
+          setUnverified(true)
+          return
+        }
+        let alreadyTried
+        try {
+          alreadyTried = Boolean(sessionStorage.getItem(REDIRECTED))
+          if (!alreadyTried) sessionStorage.setItem(REDIRECTED, '1')
+        } catch {
+          // Without storage, fall through to showing the error.
+          alreadyTried = true
+        }
 
+        // Only redirect once per tab so a persistent failure can't loop.
+        if (NEEDS_INTERACTION.includes(err.error) && !alreadyTried) {
+          // Re-authenticate as the same account rather than whichever account
+          // the Auth0 session cookie belongs to.
+          void loginWithRedirect({
+            authorizationParams: {
+              prompt: 'login',
+              ...(user?.email ? { login_hint: user.email } : {}),
+            },
+          }).catch(() => setError(err.message))
+          return
+        }
+        setError(err.message)
+      })
     return () => {
-      active = false
+      cancelled = true
     }
-  }, [getAccessTokenSilently])
+  }, [getAccessTokenSilently, loginWithRedirect, user?.email])
 
-  async function continueSignIn() {
-    setRedirecting(true)
-
-    try {
-      await loginWithRedirect({
-        authorizationParams: {
-          redirect_uri: window.location.origin,
-          audience: import.meta.env.VITE_AUTH0_AUDIENCE,
-          ...(error?.code === 'consent_required'
-            ? { prompt: 'consent' }
-            : {}),
-        },
-      })
-    } catch {
-      setRedirecting(false)
-      setError((previous) => ({
-        ...previous,
-        message: 'Could not open sign-in. Please try again.',
-      }))
-    }
-  }
-
-  if (error) {
-    const needsInteraction =
-      INTERACTIVE_ERRORS.includes(error.code)
-
+  if (unverified) {
     return (
-      <main className="lp-app-status">
-        <h1>
-          {needsInteraction
-            ? 'Complete your sign-in'
-            : 'Could not load your account'}
-        </h1>
-
-        <p role="alert">
-          {error.code === 'consent_required'
-            ? 'Continue to Auth0 to review and approve access.'
-            : error.message}
-        </p>
-
-        {needsInteraction && (
-          <button
-            type="button"
-            onClick={continueSignIn}
-            disabled={redirecting}
-          >
-            {redirecting
-              ? 'Opening Auth0…'
-              : 'Continue sign-in'}
-          </button>
-        )}
-      </main>
+      <VerifyEmailScreen
+        onVerified={() => {
+          setUnverified(false)
+          setReady(true)
+        }}
+      />
     )
   }
 
-  if (!ready) {
-    return <p role="status">Loading your account…</p>
+  // Give a way out of an error instead of a dead-end message.
+  if (error) {
+    return (
+      <div role="alert">
+        <p className="error">{error}</p>
+        <button
+          type="button"
+          onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+        >
+          Sign out and try again
+        </button>
+      </div>
+    )
   }
-
+  if (!ready) return <p className="muted" role="status">Loading…</p>
   return children
 }

@@ -1,3 +1,9 @@
+from app.schemas.live_question import (
+    QuestionChoiceEvent,
+    QuestionClosedEvent,
+    QuestionCloseReason,
+    QuestionOpenedEvent,
+)
 from app.schemas.quiz import (
     AnswerChoiceCreate,
     AnswerChoiceResponse,
@@ -9,6 +15,11 @@ from app.schemas.quiz import (
     QuizVersionResponse,
 )
 from app.schemas.response import ResponseReceipt, ResponseSubmit
+from app.schemas.results import (
+    AnswerChoiceResult,
+    ClosedQuestionResultsSnapshot,
+    ParticipantQuestionResult,
+)
 from app.schemas.session import (
     SessionJoinRequest,
     SessionJoinResponse,
@@ -18,8 +29,15 @@ from app.schemas.session import (
 
 __all__ = [
     "AnswerChoiceCreate",
+    "AnswerChoiceResult",
     "AnswerChoiceResponse",
+    "ClosedQuestionResultsSnapshot",
+    "ParticipantQuestionResult",
+    "QuestionChoiceEvent",
+    "QuestionClosedEvent",
+    "QuestionCloseReason",
     "QuestionCreate",
+    "QuestionOpenedEvent",
     "QuestionResponse",
     "QuizCreate",
     "QuizListItem",
