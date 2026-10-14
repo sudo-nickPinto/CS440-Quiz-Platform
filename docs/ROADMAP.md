@@ -4,7 +4,7 @@ The plan for the rest of the semester (now to about 2026-12-11), trimmed to the 
 
 ## MVP in one paragraph
 
-Anyone can log in with Auth0 (Google or email). Every account is a **User**. A few **Admins** are set by hand in the database. Users create quizzes; a saved quiz is published as-is and cannot be edited. Its author can archive it. The author hosts a live session from their quiz and gets a six-digit code. Any logged-in User joins with the code. **Host** and **participant** are things a User does, not roles. The host runs the questions live over WebSocket. Answers are scored on the server, using a score that rewards speed. When the session ends, results are saved. Participants see their own results, and the host and Admins see everyone's. The host or an Admin can export them.
+Anyone can log in with Auth0 (email and password). Every account is a **User**. A few **Admins** are set by hand in the database. Users create quizzes; a saved quiz is published as-is and cannot be edited. Its author can archive it. The author hosts a live session from their quiz and gets a six-digit code. Any logged-in User joins with the code. **Host** and **participant** are things a User does, not roles. The host runs the questions live over WebSocket. Answers are scored on the server, using a score that rewards speed. When the session ends, results are saved. Participants see their own results, and the host and Admins see everyone's. The host or an Admin can export them.
 
 **After the MVP:** Professor/Student roles, authorization helpers for roles, classes and membership, private quizzes, editing saved quizzes and collaborating on them, semester statistics, and an admin dashboard. These are listed in [§5](#5-after-the-mvp) and are left out of the timeline on purpose.
 
