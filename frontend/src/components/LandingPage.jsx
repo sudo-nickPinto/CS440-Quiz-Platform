@@ -283,7 +283,9 @@ export default function LandingPage({ authError = '' }) {
     setLoginError('')
     setPending(action)
 
-    const authorizationParams = {}
+    // Always show the Auth0 login screen so an existing Auth0 session for a
+    // different account isn't reused silently.
+    const authorizationParams = { prompt: 'login' }
 
     if (action === 'google') {
       authorizationParams.connection = 'google-oauth2'
