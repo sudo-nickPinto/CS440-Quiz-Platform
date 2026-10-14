@@ -62,6 +62,8 @@ Browsers can't set an `Authorization` header on a WebSocket. Putting the token i
 2. The server verifies it with the same code as HTTP (`current_user` → `get_or_create_account`), checks that `is_active` is true, and resolves the role.
 3. On success, the server sends `session_state` (§4). On failure, it closes the socket with a code from §7.
 
+**`session_state` is always the first server message after a successful `auth`.** The socket gets no broadcasts until its snapshot has been sent. Any event that happens while the snapshot is being built is queued and delivered after it. The snapshot is built from the database, so a queued event may repeat what the snapshot already shows, and clients must treat such repeats as harmless.
+
 The access token's expiry is checked only at connect time. A connection that outlives the token stays open, and its next reconnect needs a fresh token, which `getAccessTokenSilently()` provides.
 
 ### Keep-alive
@@ -98,15 +100,16 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 | `type` | To | Payload |
 |---|---|---|
 | `session_state` | the one client, on (re)connect | snapshot, see below |
-| `participant_joined` / `participant_left` | host | `session_participant_id`, `display_name`, `participant_count` |
+| `participant_joined` | host | `session_participant_id`, `display_name`, `participant_count`. Produced by an after-commit hook on `POST /sessions/join` (the same pattern as the REST answer hook), because joining happens over REST, not the socket |
+| `participant_left` | host | same fields. Produced by **NEW** `leave` |
 | `question_opened` | everyone | `QuestionOpenedEvent` (no correctness, just as today) |
 | `answer_progress` | host | `session_question_id`, `answered_count`, `eligible_count` (sent after each answer) |
 | `question_closed` | everyone | `QuestionClosedEvent` (`reason` ∈ `ALL_ANSWERED`, `DEADLINE`, `HOST`) |
 | `question_results` | host | the full `ClosedQuestionResultsSnapshot` |
-| `question_results` | each participant | **participant view**: `correct_choice_ids`, per-choice `response_count`, *their own* row (`selected_choice_id`, `is_correct`, `points_awarded`, `cumulative_score`, `rank`), and `leaderboard`: top 5 `{display_name, cumulative_score, rank}` |
+| `question_results` | each participant | **participant view**: `correct_choice_ids`, per-choice `response_count`, `me` (their own row: `selected_choice_id`, `is_correct`, `points_awarded`, `cumulative_score`, `rank`), and `leaderboard`: top 5 `{display_name, cumulative_score, rank}`. **Provisional** until §9 question 1 is decided; if the decision is "own rank only", `leaderboard` is dropped and nothing else changes |
 | `host_status` | participants | `{"connected": bool}` |
 | `session_ended` | everyone | `reason` ∈ `COMPLETED`, `CANCELLED`, plus the final top 5 |
-| `ack` | the sender | `request_id`, plus a `ResponseReceipt` for answers |
+| `ack` | the sender | `request_id`, plus `session_question_id` for `open_question` or `receipt` (a `ResponseReceipt`) for `submit_answer` |
 | `error` | the sender | `request_id`, `code`, `message` (§7) |
 | `pong` | the sender | — |
 
@@ -122,12 +125,13 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
   "host_connected": true,
   "current_question": null,
   "my_answer": null,
+  "last_question": null,
   "last_results": null
 }
 ```
 
 - If a question is `OPEN`, `current_question` is its `question_opened` payload. For a participant, `my_answer` is `{choice_id, submitted_at}` if they already answered, so a refresh shows "answer submitted" instead of the choices again.
-- If the latest question is `CLOSED`, `last_results` is that client's `question_results` view.
+- If the latest question is `CLOSED`, `last_results` is that client's `question_results` view, and `last_question` is that question's `question_opened` payload (question text, choices with `choice_id`, `choice_order`, `choice_text`, timestamps). Results only hold IDs and counts, so the client needs `last_question` to draw the results screen after a reconnect.
 - `join_code` is sent to the host only.
 
 **Who sees what.** Correctness and points stay hidden until `question_closed` (rule from #27). After that, participants see only their own row plus the top-5 board, and the host gets every row. `results.py` returns everything, so **the WebSocket layer must cut the data down to the participant view before sending it.** The results service performs no permission check of its own.
@@ -135,6 +139,7 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 ## 5. Rosters, disconnects and reconnects
 
 - **Roster = joined, not connected.** Eligibility for a question is "had an un-left `session_participant` row when it opened" (`answer_progress()` in #35). A dropped socket does **not** shrink the roster. If someone's Wi-Fi dies, the question waits for the deadline rather than closing early without them. Only an explicit `leave` sets `left_at`.
+- **The roster is frozen for the whole question.** It is fixed when the question opens and does not change until the next one. Someone who joins mid-question is not in it. Someone who explicitly `leave`s mid-question still counts for that question, but can no longer answer it, so it may wait until the deadline. `left_at` only affects eligibility from the next question onward.
 - **Reconnect** means connect + `auth` again. The server replies with `session_state`, and the client renders from that snapshot alone. Duplicate answers are still rejected (`response_already_submitted`), so a client that retries after reconnecting is safe.
 - **Host disconnects:** the session is not ended. Open questions keep their server timers and still close on schedule. Participants get `host_status {connected:false}` and see a "waiting for host" state. When the host reconnects they get `session_state` and carry on. In the MVP a `LOBBY` or `ACTIVE` session with no host stays open indefinitely (see open question 2).
 - **Same account, two tabs:** the newest socket replaces the older one, which is closed with `4409`.
@@ -200,7 +205,7 @@ Problems with the connection itself close the socket:
 
 ## 9. Open questions (decide at the next meeting)
 
-1. **Leaderboard for participants:** top 5 + your own rank (proposed here), or your own rank only? → Taha, depending on the approved screens.
+1. **Leaderboard for participants:** top 5 + your own rank, or your own rank only? → Taha, depending on the approved screens. Until decided, the server sends top 5 + own rank, marked **provisional** in §4; the frontend should render `leaderboard` only if it is present.
 2. **Abandoned sessions:** auto-cancel a `LOBBY` with no host after N minutes, and auto-end an `ACTIVE` one? Proposal: not in the MVP.
 3. **Admin access to live sessions:** watch-only, or none? Proposal: none in the MVP. Admins see results afterwards (Sprint 4).
 4. **Host as player:** the schema forbids the host being a participant (`host_cannot_join`). Keep it that way.
