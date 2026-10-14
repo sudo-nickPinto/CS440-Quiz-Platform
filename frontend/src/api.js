@@ -5,6 +5,9 @@ export const NEEDS_INTERACTION = [
   'consent_required',
   'login_required',
   'interaction_required',
+  // No refresh token stored, or Auth0 rejected it (expired or revoked).
+  'missing_refresh_token',
+  'invalid_grant',
 ]
 
 // Calls the FastAPI backend with the user's Auth0 access token attached.
