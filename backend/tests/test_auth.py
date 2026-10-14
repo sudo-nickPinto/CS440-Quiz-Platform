@@ -82,7 +82,7 @@ def test_valid_token_reaches_protected_route(client):
 def test_inactive_account_is_forbidden(client):
     token = make_token()
     get_quizzes(client, token)  # first login creates the account
-    set_account(client, is_active=False)
+    set_account(client, status="DISABLED", is_active=False)
 
     response = get_quizzes(client, token)
     assert response.status_code == 403
@@ -100,7 +100,7 @@ def test_administrator_account_type_becomes_admin(client):
     set_account(client, account_type="ADMINISTRATOR")
 
     account = auth.get_current_account(
-        {"account_id": 1, "account_type": "ADMINISTRATOR", "is_active": 1}
+        {"account_id": 1, "account_type": "ADMINISTRATOR", "status": "ACTIVE", "is_active": 1}
     )
     response = client.get("/me", headers={"Authorization": f"Bearer {token}"})
     assert response.json()["role"] == AccountRole.ADMIN

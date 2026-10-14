@@ -34,7 +34,8 @@ erDiagram
         varchar email UK
         varchar display_name
         enum account_type "ADMINISTRATOR = Admin; anything else = User"
-        boolean is_active
+        enum status "PENDING, ACTIVE, DISABLED"
+        boolean is_active "always status = ACTIVE"
         datetime created_at
     }
     ACCOUNT_IDENTITY {
@@ -138,6 +139,11 @@ erDiagram
   - The `account_type` column was built for Student, Professor and Administrator. We're not changing the column, because the login code already reads it.
   - For the MVP: `ADMINISTRATOR` means Admin. Anything else (including empty) means User.
   - To make someone an Admin, we set `account_type = 'ADMINISTRATOR'` by hand in the database.
+- `status` says whether an account can use the app:
+  - `PENDING`: an email/password signup that an Admin hasn't approved yet. Only Admins can approve (sets `ACTIVE`) or reject (deletes the account) a pending signup.
+  - `ACTIVE`: can use the app.
+  - `DISABLED`: turned off on purpose. Approving or rejecting signups never changes or deletes a disabled account.
+  - `is_active` is kept for older code. It's always the same as `status = 'ACTIVE'`, and a `CHECK` rule keeps them in step, so change both together.
 - Hosting and joining are things a User does. They aren't roles, so they aren't stored on the account.
 - Everyone is in one shared class. There's no class table in the MVP, so "in the class" just means "has an account".
 
@@ -198,6 +204,7 @@ The database can't easily check these, so the backend code has to:
   - An Admin can see everything.
   - Being able to see a quiz doesn't let you see other people's results.
 - **Who can export:** the host of the session, or an Admin.
+- **Who can approve signups:** only an Admin, and only for `PENDING` accounts.
 - **Matching data:** a session can only show questions from the quiz it's playing, and an answer has to be one of that question's choices.
 - **No editing:** once a quiz is saved, it can't be changed.
 - **Late and repeat answers:** both are rejected.

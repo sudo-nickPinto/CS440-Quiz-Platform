@@ -104,37 +104,47 @@ export default function App() {
 
     return (
       <AccountGate onLogout={logOut}>
-        <Routes>
-          <Route
-            path="/approve"
-            element={
-              <ApproveUsersPage
-                userName={userName}
-                onLogout={logOut}
+        {(account) => {
+          const isAdmin = account.role === 'ADMIN'
+          return (
+            <Routes>
+              <Route
+                path="/approve"
+                element={
+                  isAdmin ? (
+                    <ApproveUsersPage
+                      userName={userName}
+                      onLogout={logOut}
+                    />
+                  ) : (
+                    <Navigate to="/dashboard/present" replace />
+                  )
+                }
               />
-            }
-          />
 
-          <Route
-            path="/dashboard/:view"
-            element={
-              <DashboardPage
-                userName={userName}
-                onLogout={logOut}
+              <Route
+                path="/dashboard/:view"
+                element={
+                  <DashboardPage
+                    userName={userName}
+                    onLogout={logOut}
+                    isAdmin={isAdmin}
+                  />
+                }
               />
-            }
-          />
 
-          <Route
-            path="*"
-            element={
-              <Navigate
-                to="/dashboard/present"
-                replace
+              <Route
+                path="*"
+                element={
+                  <Navigate
+                    to="/dashboard/present"
+                    replace
+                  />
+                }
               />
-            }
-          />
-        </Routes>
+            </Routes>
+          )
+        }}
       </AccountGate>
     )
   }

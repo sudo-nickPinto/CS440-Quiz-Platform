@@ -23,7 +23,11 @@ CREATE TABLE account (
     email        VARCHAR(320) NOT NULL UNIQUE,
     display_name VARCHAR(100) NOT NULL,
     account_type VARCHAR(20) NULL,
-    is_active    BOOLEAN NOT NULL DEFAULT 1
+    status       VARCHAR(10) NOT NULL DEFAULT 'ACTIVE'
+                 CHECK (status IN ('PENDING', 'ACTIVE', 'DISABLED')),
+    is_active    BOOLEAN NOT NULL DEFAULT 1,
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_account_status_active CHECK (is_active = (status = 'ACTIVE'))
 );
 CREATE TABLE account_identity (
     auth0_sub  VARCHAR(255) NOT NULL PRIMARY KEY,
@@ -126,6 +130,7 @@ def test_first_login_creates_account(client):
     assert body["email"] == "a@example.com"
     assert body["display_name"] == "Ada"
     assert body["role"] == "USER"
+    assert body["status"] == "ACTIVE"
     assert body["is_active"] is True
     assert "account_type" not in body
     assert count_accounts(client) == 1
@@ -142,6 +147,7 @@ def test_unverified_email_creates_pending_account(client):
     client.profile["email_verified"] = False
     response = get_me(client, make_token())
     assert response.status_code == 200
+    assert response.json()["status"] == "PENDING"
     assert response.json()["is_active"] is False
     assert count_accounts(client) == 1
 
@@ -175,3 +181,135 @@ def test_unverified_email_is_not_linked(client):
     assert response.status_code == 409
     assert error_code(response) == "email_in_use"
     assert count_identities(client) == 1
+
+
+# --- Approving email/password signups -------------------------------------
+
+
+def insert_account(client, email, status="ACTIVE", account_type=None):
+    with client.app_ref.state.database.engine.begin() as conn:
+        return conn.execute(
+            text(
+                "INSERT INTO account (auth0_sub, email, display_name, account_type, status, is_active) "
+                "VALUES (:sub, :email, :email, :type, :status, :active)"
+            ),
+            {
+                "sub": f"seed|{email}",
+                "email": email,
+                "type": account_type,
+                "status": status,
+                "active": status == "ACTIVE",
+            },
+        ).lastrowid
+
+
+def account_status(client, account_id):
+    with client.app_ref.state.database.engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT status, is_active FROM account WHERE account_id = :id"),
+            {"id": account_id},
+        ).first()
+    return None if row is None else (row[0], bool(row[1]))
+
+
+def login_as(client, account_type=None):
+    """Log in as a@example.com (ACTIVE) and return auth headers."""
+    token = make_token()
+    me = get_me(client, token).json()
+    if account_type:
+        with client.app_ref.state.database.engine.begin() as conn:
+            conn.execute(
+                text("UPDATE account SET account_type = :type WHERE account_id = :id"),
+                {"type": account_type, "id": me["account_id"]},
+            )
+    return {"Authorization": f"Bearer {token}"}
+
+
+APPROVAL_CALLS = [
+    ("get", "/accounts/pending"),
+    ("post", "/accounts/{id}/approve"),
+    ("delete", "/accounts/{id}"),
+]
+
+
+@pytest.mark.parametrize("method,path", APPROVAL_CALLS, ids=["list", "approve", "reject"])
+def test_regular_user_cannot_use_approval_endpoints(client, method, path):
+    headers = login_as(client)
+    pending_id = insert_account(client, "new@example.com", status="PENDING")
+
+    response = getattr(client, method)(path.format(id=pending_id), headers=headers)
+
+    assert response.status_code == 403
+    assert error_code(response) == "admin_required"
+    assert account_status(client, pending_id) == ("PENDING", False)
+
+
+def test_admin_lists_only_pending_accounts(client):
+    headers = login_as(client, "ADMINISTRATOR")
+    pending_id = insert_account(client, "new@example.com", status="PENDING")
+    insert_account(client, "off@example.com", status="DISABLED")
+    insert_account(client, "on@example.com", status="ACTIVE")
+
+    response = client.get("/accounts/pending", headers=headers)
+
+    assert response.status_code == 200
+    assert [row["account_id"] for row in response.json()] == [pending_id]
+
+
+def test_admin_approves_pending_account(client):
+    headers = login_as(client, "ADMINISTRATOR")
+    pending_id = insert_account(client, "new@example.com", status="PENDING")
+
+    response = client.post(f"/accounts/{pending_id}/approve", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ACTIVE"
+    assert account_status(client, pending_id) == ("ACTIVE", True)
+
+
+def test_admin_rejects_pending_account(client):
+    headers = login_as(client, "ADMINISTRATOR")
+    pending_id = insert_account(client, "new@example.com", status="PENDING")
+
+    response = client.delete(f"/accounts/{pending_id}", headers=headers)
+
+    assert response.status_code == 204
+    assert account_status(client, pending_id) is None
+
+
+@pytest.mark.parametrize("status", ["DISABLED", "ACTIVE"])
+def test_approve_does_not_touch_non_pending_account(client, status):
+    headers = login_as(client, "ADMINISTRATOR")
+    other_id = insert_account(client, "other@example.com", status=status)
+
+    response = client.post(f"/accounts/{other_id}/approve", headers=headers)
+
+    assert response.status_code == 404
+    assert error_code(response) == "not_pending"
+    assert account_status(client, other_id) == (status, status == "ACTIVE")
+
+
+@pytest.mark.parametrize("status", ["DISABLED", "ACTIVE"])
+def test_reject_does_not_delete_non_pending_account(client, status):
+    headers = login_as(client, "ADMINISTRATOR")
+    other_id = insert_account(client, "other@example.com", status=status)
+
+    response = client.delete(f"/accounts/{other_id}", headers=headers)
+
+    assert response.status_code == 404
+    assert error_code(response) == "not_pending"
+    assert account_status(client, other_id) == (status, status == "ACTIVE")
+
+
+def test_disabled_account_cannot_use_the_app(client):
+    get_me(client, make_token())
+    with client.app_ref.state.database.engine.begin() as conn:
+        conn.execute(text("UPDATE account SET status = 'DISABLED', is_active = FALSE"))
+
+    me = get_me(client, make_token())
+    pending = client.get("/accounts/pending", headers={"Authorization": f"Bearer {make_token()}"})
+
+    assert me.json()["status"] == "DISABLED"
+    assert me.json()["is_active"] is False
+    assert pending.status_code == 403
+    assert error_code(pending) == "inactive_account"

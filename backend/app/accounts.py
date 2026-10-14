@@ -6,8 +6,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.errors import APIError
+from app.models.account import AccountStatus
 
-COLUMNS = "account_id, email, display_name, account_type, is_active"
+COLUMNS = "account_id, email, display_name, account_type, status, is_active"
 
 
 def _fetch_profile(domain: str, token: str) -> dict:
@@ -53,13 +54,20 @@ def _link_or_create(db: Session, sub: str, email: str, name: str, verified: bool
     existing = _by_email(db, email)
     if existing is None:
         # A verified email is active right away. An unverified
-        # email/password signup stays inactive until someone approves it.
+        # email/password signup stays PENDING until an Admin approves it.
+        status = AccountStatus.ACTIVE if verified else AccountStatus.PENDING
         result = db.execute(
             text(
-                "INSERT INTO account (auth0_sub, email, display_name, is_active) "
-                "VALUES (:sub, :email, :name, :active)"
+                "INSERT INTO account (auth0_sub, email, display_name, status, is_active) "
+                "VALUES (:sub, :email, :name, :status, :active)"
             ),
-            {"sub": sub, "email": email, "name": name, "active": verified},
+            {
+                "sub": sub,
+                "email": email,
+                "name": name,
+                "status": status.value,
+                "active": status == AccountStatus.ACTIVE,
+            },
         )
         _add_identity(db, sub, result.lastrowid)
         return
@@ -71,7 +79,7 @@ def _link_or_create(db: Session, sub: str, email: str, name: str, verified: bool
             "email_in_use",
             "An account with this email already exists. Log in the way you did before.",
         )
-    if not existing["is_active"]:
+    if existing["status"] == AccountStatus.PENDING.value:
         raise APIError(
             409,
             "account_pending",

@@ -11,6 +11,7 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0003_live_sessions` | `live_session`, `session_participant`, `session_question`, `response`, `result` |
 | `0004_account_identity` | `account_identity` (one account, several Auth0 logins); copies existing `account.auth0_sub` values into it |
 | `0005_optional_session_group` | Makes `live_session.group_id` optional. The MVP has one shared class, so sessions don't belong to a group |
+| `0006_account_status` | Adds `account.status` (`PENDING`/`ACTIVE`/`DISABLED`) so a signup waiting for approval is different from a disabled account. Existing inactive accounts become `DISABLED` |
 
 Each migration comes in two files:
 

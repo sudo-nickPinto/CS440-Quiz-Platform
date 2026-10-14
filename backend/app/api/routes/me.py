@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.auth import get_account_record
-from app.models.account import effective_role
+from app.models.account import AccountStatus, effective_role
 
 router = APIRouter(tags=["accounts"])
 
@@ -13,5 +13,6 @@ def me(account: dict = Depends(get_account_record)) -> dict:
         "email": account["email"],
         "display_name": account["display_name"],
         "role": effective_role(account["account_type"]),
-        "is_active": bool(account["is_active"]),
+        "status": account["status"],
+        "is_active": account["status"] == AccountStatus.ACTIVE.value,
     }

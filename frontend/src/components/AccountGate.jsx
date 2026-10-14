@@ -5,8 +5,9 @@ import './DashboardPage.css'
 import './ApproveUsersPage.css'
 
 // Loads the user's account from the backend, which creates it on first login,
-// before showing the app. Email/password signups start inactive and wait here
-// until someone approves them on the Approve users page.
+// before showing the app. Email/password signups start PENDING and wait here
+// until an Admin approves them on the Approve users page. `children` is a
+// function that receives the loaded account.
 export default function AccountGate({ children, onLogout }) {
   const { getAccessTokenSilently } = useAuth0()
   const [account, setAccount] = useState(null)
@@ -32,7 +33,7 @@ export default function AccountGate({ children, onLogout }) {
     fetchAccount()
   }
 
-  if (account?.is_active) return children
+  if (account?.status === 'ACTIVE') return children(account)
   if (!account && !error) return <p className="muted" role="status">Loading…</p>
 
   return (
@@ -44,13 +45,21 @@ export default function AccountGate({ children, onLogout }) {
               <h1>Can’t sign you in</h1>
               <p role="alert">{error}</p>
             </>
+          ) : account.status === 'DISABLED' ? (
+            <>
+              <h1>Account disabled</h1>
+              <p>
+                Your account ({account.email}) has been disabled. Ask an Admin
+                if you think this is a mistake.
+              </p>
+            </>
           ) : (
             <>
               <h1>Waiting for approval</h1>
               <p>
-                Your account ({account.email}) was created. Someone needs to
-                approve it before you can use the app. Ask a classmate or your
-                instructor, then check again.
+                Your account ({account.email}) was created. An Admin needs to
+                approve it before you can use the app. Ask your instructor,
+                then check again.
               </p>
             </>
           )}

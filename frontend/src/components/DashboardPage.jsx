@@ -12,6 +12,7 @@ export default function DashboardPage({
   userName = 'Preview User',
   onLogout,
   preview = false,
+  isAdmin = false,
   made = madeQuizzes,
   taken = takenQuizzes,
   loading = false,
@@ -33,6 +34,7 @@ export default function DashboardPage({
       userName={userName}
       onLogout={onLogout}
       preview={preview}
+      isAdmin={isAdmin}
       made={made}
       taken={taken}
       loading={loading}
@@ -47,6 +49,7 @@ function DashboardView({
   userName,
   onLogout,
   preview,
+  isAdmin,
   made,
   taken,
   loading,
@@ -151,7 +154,7 @@ function DashboardView({
             {initials}
           </span>
 
-          {!preview && (
+          {!preview && isAdmin && (
             <Link className="db-control" to="/approve">Approve users</Link>
           )}
 

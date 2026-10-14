@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.accounts import get_or_create_account
 from app.database import get_db
 from app.errors import APIError
-from app.models.account import AccountRole, effective_role
+from app.models.account import AccountRole, AccountStatus, effective_role
 
 bearer = HTTPBearer(auto_error=False)
 _jwks: jwt.PyJWKClient | None = None
@@ -77,7 +77,8 @@ def get_current_account(
     return CurrentAccount(
         account_id=account["account_id"],
         role=effective_role(account["account_type"]),
-        is_active=bool(account["is_active"]),
+        # status is the source of truth; is_active only mirrors it.
+        is_active=account["status"] == AccountStatus.ACTIVE.value,
     )
 
 
@@ -86,4 +87,12 @@ def get_active_account(
 ) -> CurrentAccount:
     if not account.is_active:
         raise APIError(403, "inactive_account", "This account is inactive.")
+    return account
+
+
+def get_admin_account(
+    account: CurrentAccount = Depends(get_active_account),
+) -> CurrentAccount:
+    if not account.is_admin:
+        raise APIError(403, "admin_required", "Only an Admin can do this.")
     return account
