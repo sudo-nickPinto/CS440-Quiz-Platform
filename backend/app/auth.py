@@ -10,6 +10,7 @@ from app.accounts import get_or_create_account
 from app.database import get_db
 from app.errors import APIError
 from app.models.account import AccountRole, effective_role
+
 bearer = HTTPBearer(auto_error=False)
 _jwks: jwt.PyJWKClient | None = None
 
@@ -75,7 +76,8 @@ def current_user(
             "invalid_token",
             "Invalid token",
         ) from exc
-        
+
+
 
 def get_account_record(
     request: Request,
