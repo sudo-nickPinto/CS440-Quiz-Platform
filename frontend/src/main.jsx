@@ -31,8 +31,8 @@ createRoot(document.getElementById('root')).render(
         <main
           style={{
             padding: 32,
-            background: '#f3ebe2',
-            color: '#222222',
+            background: 'var(--paper)',
+            color: 'var(--ink)',
           }}
         >
           <h1>Authentication is not configured yet.</h1>

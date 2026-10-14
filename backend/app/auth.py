@@ -69,8 +69,13 @@ def current_user(
             "Auth0 token validation failed: %s",
             type(exc).__name__,
         )
-        raise APIError(401, "invalid_token", "Invalid token") from exc
-        
+        raise APIError(
+            401,
+            "invalid_token",
+            "Invalid token",
+        ) from exc
+
+
 
 
 def get_account_record(
