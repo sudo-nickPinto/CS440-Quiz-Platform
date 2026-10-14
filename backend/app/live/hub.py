@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, TypeVar
@@ -39,6 +39,8 @@ class LiveConnection:
     role: LiveRole
     session_participant_id: int | None
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    # False until session_state has been sent; nothing else goes out before it.
+    ready: bool = False
 
 
 class LiveHub:
@@ -72,12 +74,27 @@ class LiveHub:
             for conn in self._sessions.get(session_id, {}).values()
         )
 
-    async def connect(self, conn: LiveConnection) -> None:
-        connections = self._sessions.setdefault(conn.session_id, {})
-        previous = connections.get(conn.account.account_id)
-        connections[conn.account.account_id] = conn
-        if previous is not None:
-            await self._close(previous, CloseCode.REPLACED, "replaced")
+    async def connect(
+        self,
+        conn: LiveConnection,
+        build_snapshot: Callable[[], Awaitable[BaseModel | dict]],
+    ) -> None:
+        """Register a socket and send its session_state before anything else.
+
+        The socket's send lock is held from registration until the snapshot is
+        on the wire. A broadcast that targets it meanwhile waits on that lock
+        (asyncio locks are FIFO), so it is delivered after session_state, in
+        order. Nothing called while the lock is held may send to this socket.
+        """
+        async with conn.send_lock:
+            connections = self._sessions.setdefault(conn.session_id, {})
+            previous = connections.get(conn.account.account_id)
+            connections[conn.account.account_id] = conn
+            if previous is not None:
+                await self._close(previous, CloseCode.REPLACED, "replaced")
+            state = await build_snapshot()
+            await conn.websocket.send_text(encode(state))
+            conn.ready = True
         if conn.role == "host":
             await self.broadcast(
                 conn.session_id,
@@ -92,7 +109,7 @@ class LiveHub:
         del connections[conn.account.account_id]
         if not connections:
             del self._sessions[conn.session_id]
-        if conn.role == "host":
+        if conn.role == "host" and conn.ready:
             await self.broadcast(
                 conn.session_id,
                 {"type": "host_status", "connected": False},
@@ -104,6 +121,8 @@ class LiveHub:
     async def send(self, conn: LiveConnection, payload: BaseModel | dict) -> None:
         try:
             async with conn.send_lock:
+                if not conn.ready:
+                    return  # snapshot never went out; the socket is closing
                 await conn.websocket.send_text(encode(payload))
         except Exception:  # dead socket; its receive loop will clean it up
             logger.debug("Dropped message to a closed socket", exc_info=True)

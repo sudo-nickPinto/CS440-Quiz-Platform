@@ -28,6 +28,20 @@ class LiveCloseError(Exception):
         self.reason = reason
 
 
+# Expected HTTP-style failures from shared services -> close codes (§7).
+_STATUS_CLOSE_CODES = {
+    400: CloseCode.MALFORMED,
+    401: CloseCode.UNAUTHORIZED,
+    403: CloseCode.FORBIDDEN,
+    404: CloseCode.NOT_FOUND,
+}
+
+
+def close_code_for_status(status_code: int) -> CloseCode:
+    """Map an APIError status to a close code; anything else is a server error."""
+    return _STATUS_CLOSE_CODES.get(status_code, CloseCode.SERVER_ERROR)
+
+
 class InboundMessage(BaseModel):
     """Clients only ever send IDs; never scores, roles, or times."""
 

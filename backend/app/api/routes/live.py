@@ -16,8 +16,8 @@ from app.live.protocol import (
     OpenQuestionMessage,
     PingMessage,
     SubmitAnswerMessage,
+    close_code_for_status,
     command_adapter,
-    encode,
     error_message,
 )
 from app.live.snapshot import build_session_state, resolve_membership
@@ -62,8 +62,20 @@ async def live_session_socket(websocket: WebSocket, session_id: int) -> None:
         return
 
     try:
-        auth = AuthMessage.model_validate(_parse_json(raw))
-    except (MalformedMessage, ValidationError):
+        data = _parse_json(raw)
+    except MalformedMessage:
+        await websocket.close(code=CloseCode.MALFORMED, reason="expected_auth")
+        return
+    if data["type"] != "auth":
+        await websocket.close(code=CloseCode.MALFORMED, reason="expected_auth")
+        return
+    token = data.get("token")
+    if not isinstance(token, str) or not token:
+        await websocket.close(code=CloseCode.UNAUTHORIZED, reason="missing_token")
+        return
+    try:
+        auth = AuthMessage.model_validate(data)
+    except ValidationError:
         await websocket.close(code=CloseCode.MALFORMED, reason="expected_auth")
         return
 
@@ -74,8 +86,16 @@ async def live_session_socket(websocket: WebSocket, session_id: int) -> None:
         role, session_participant_id = await hub.run_db(
             resolve_membership, session_id, account
         )
+        # Close overdue questions before registering, so the sweep's broadcasts
+        # never race this socket's snapshot.
+        await hub.sweep(session_id)
     except LiveCloseError as exc:
         await websocket.close(code=exc.close_code, reason=exc.reason)
+        return
+    except APIError as exc:
+        await websocket.close(
+            code=close_code_for_status(exc.status_code), reason=exc.code
+        )
         return
     except Exception:
         logger.exception("Live connect failed for session %s", session_id)
@@ -89,24 +109,24 @@ async def live_session_socket(websocket: WebSocket, session_id: int) -> None:
         role=role,
         session_participant_id=session_participant_id,
     )
+
+    async def snapshot():
+        return await hub.run_db(
+            build_session_state,
+            session_id,
+            role,
+            session_participant_id,
+            hub.host_connected(session_id),
+        )
+
     try:
-        await hub.sweep(session_id)
-        # Register and send the snapshot while holding this socket's send lock,
-        # so session_state is always its first message and any broadcast that
-        # races the connect queues up behind it (protocol §2).
-        async with conn.send_lock:
-            await hub.connect(conn)
-            state = await hub.run_db(
-                build_session_state,
-                session_id,
-                role,
-                session_participant_id,
-                hub.host_connected(session_id),
-            )
-            await websocket.send_text(encode(state))
+        # session_state is the first server message; broadcasts queue behind it.
+        await hub.connect(conn, snapshot)
         await _receive_loop(hub, conn)
     except WebSocketDisconnect:
         pass
+    except LiveCloseError as exc:
+        await websocket.close(code=exc.close_code, reason=exc.reason)
     except Exception:
         logger.exception("Live socket failed for session %s", session_id)
         await websocket.close(code=CloseCode.SERVER_ERROR, reason="server_error")
