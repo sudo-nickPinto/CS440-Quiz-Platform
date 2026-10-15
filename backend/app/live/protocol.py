@@ -10,6 +10,7 @@ class CloseCode(IntEnum):
     """WebSocket close codes from LIVE_PROTOCOL.md §7."""
 
     NORMAL = 1000
+    GOING_AWAY = 1001  # idle timeout / restart: the client reconnects
     SERVER_ERROR = 1011
     MALFORMED = 4400
     UNAUTHORIZED = 4401

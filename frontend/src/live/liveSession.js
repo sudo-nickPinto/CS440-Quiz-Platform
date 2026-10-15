@@ -46,19 +46,39 @@ export function createLiveSession({
     }
   }
 
+  // Joins and leaves that arrive while a roster fetch is in flight. The
+  // fetched rows may predate them, so they're replayed on top (null when no
+  // fetch is running).
+  let rosterEvents = null
+  let rosterFetch = 0
+
   // The snapshot has only a count; the host's lobby wants the names too.
   async function loadRoster() {
+    const fetchId = ++rosterFetch
+    rosterEvents = []
     try {
       const rows = await getJson(`/sessions/${sessionId}/participants`)
-      dispatch({
-        type: 'participants',
-        participants: rows.map(({ session_participant_id, display_name }) => ({
-          session_participant_id,
-          display_name,
-        })),
-      })
+      if (fetchId !== rosterFetch) return // a newer snapshot started another
+      let participants = rows.map(({ session_participant_id, display_name }) => ({
+        session_participant_id,
+        display_name,
+      }))
+      for (const event of rosterEvents) {
+        participants = participants.filter(
+          (p) => p.session_participant_id !== event.session_participant_id,
+        )
+        if (event.type === 'participant_joined') {
+          participants.push({
+            session_participant_id: event.session_participant_id,
+            display_name: event.display_name,
+          })
+        }
+      }
+      dispatch({ type: 'participants', participants })
     } catch {
       // Non-fatal: participant_joined events still fill the list in.
+    } finally {
+      if (fetchId === rosterFetch) rosterEvents = null
     }
   }
 
@@ -74,6 +94,12 @@ export function createLiveSession({
       WebSocketImpl,
       timers,
       onMessage(message) {
+        if (
+          rosterEvents &&
+          (message.type === 'participant_joined' || message.type === 'participant_left')
+        ) {
+          rosterEvents.push(message)
+        }
         dispatch({ type: 'server', message })
         if (message.type === 'session_state' && message.role === 'host') loadRoster()
       },

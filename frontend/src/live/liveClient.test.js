@@ -156,6 +156,23 @@ describe('createLiveClient', () => {
     spy.mockRestore()
   })
 
+  it.each([
+    [CloseCode.GOING_AWAY, 'idle_timeout'],
+    [CloseCode.NORMAL, 'idle_timeout'], // older servers idled out with 1000
+  ])('close %i %s is an idle drop: reconnect, not ended', async (code, reason) => {
+    const { statuses } = await connected()
+    FakeSocket.latest().drop(code, reason)
+    expect(statuses.at(-1)).toBe('reconnecting')
+    expect(statuses).not.toContain('ended')
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(FakeSocket.all).toHaveLength(2)
+    const ws = FakeSocket.latest()
+    ws.open()
+    ws.serve(SNAPSHOT)
+    expect(statuses.at(-1)).toBe('open')
+  })
+
   it('reconnects with backoff after a drop and resets after a snapshot', async () => {
     const { statuses } = await connected()
     FakeSocket.latest().drop(1006)

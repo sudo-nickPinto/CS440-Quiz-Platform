@@ -146,7 +146,9 @@ async def _receive_loop(hub: LiveHub, conn: LiveConnection) -> None:
                 websocket.receive_text(), timeout=IDLE_TIMEOUT_SECONDS
             )
         except asyncio.TimeoutError:
-            await websocket.close(code=CloseCode.NORMAL, reason="idle_timeout")
+            # Not 1000: clients treat 1000 as "session over" (§7). 1001 is
+            # retryable, so a client whose pings stalled just reconnects.
+            await websocket.close(code=CloseCode.GOING_AWAY, reason="idle_timeout")
             return
 
         try:

@@ -7,6 +7,7 @@
 
 export const CloseCode = Object.freeze({
   NORMAL: 1000,
+  GOING_AWAY: 1001,
   SERVER_ERROR: 1011,
   MALFORMED: 4400,
   UNAUTHORIZED: 4401,
@@ -146,7 +147,10 @@ export function createLiveClient({
       rejectPending(`socket closed (${event.code})`)
       if (stopped) return
 
-      const finalStatus = FINAL_STATUS[event.code]
+      // The server idles out with 1001, but an older server used 1000 for
+      // that too; either way it's a dropped socket, not the end (§7).
+      const idleDrop = event.reason === 'idle_timeout'
+      const finalStatus = idleDrop ? undefined : FINAL_STATUS[event.code]
       if (finalStatus) {
         stopped = true
         if (event.code === CloseCode.MALFORMED) {
@@ -167,7 +171,8 @@ export function createLiveClient({
         connect({ freshToken: true })
         return
       }
-      // 1011, 1006 (network drop), 1001 (server restart): back off and retry.
+      // 1011, 1006 (network drop), 1001 (idle timeout or server restart):
+      // back off and retry.
       const delay = backoffDelay(attempt)
       attempt += 1
       setStatus('reconnecting', { ...event, delay })

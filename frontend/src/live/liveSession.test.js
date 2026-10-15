@@ -90,6 +90,71 @@ describe('createLiveSession', () => {
     expect(live.getState().participants).toEqual([{ session_participant_id: 4, display_name: 'Ann' }])
   })
 
+  describe('a roster response that arrives late', () => {
+    // The host's snapshot starts a roster fetch; we hold its reply back.
+    async function hostWithHeldRoster() {
+      const replies = []
+      const fetchImpl = vi.fn(
+        () => new Promise((resolve) => replies.push((rows) => resolve({ ok: true, json: async () => rows }))),
+      )
+      const live = createLiveSession({
+        sessionId: 9,
+        apiBaseUrl: 'http://api',
+        getToken: async () => 'tok',
+        WebSocketImpl: FakeSocket,
+        fetchImpl,
+      })
+      live.start()
+      await vi.advanceTimersByTimeAsync(0)
+      const ws = FakeSocket.all.at(-1)
+      ws.onopen()
+      ws.serve(snapshot('host'))
+      await vi.advanceTimersByTimeAsync(0)
+      return { live, ws, replies }
+    }
+    const ann = { session_participant_id: 4, display_name: 'Ann' }
+    const ben = { session_participant_id: 5, display_name: 'Ben' }
+    const names = (live) => live.getState().participants.map((p) => p.display_name)
+
+    it('keeps a participant_joined that came in before it', async () => {
+      const { live, ws, replies } = await hostWithHeldRoster()
+      ws.serve({ type: 'participant_joined', ...ben, participant_count: 2 })
+      expect(names(live)).toEqual(['Ben'])
+
+      replies[0]([ann]) // the roster was read before Ben joined
+      await vi.advanceTimersByTimeAsync(0)
+      expect(names(live)).toEqual(['Ann', 'Ben'])
+    })
+
+    it('keeps a participant_left that came in before it', async () => {
+      const { live, ws, replies } = await hostWithHeldRoster()
+      ws.serve({ type: 'participant_left', session_participant_id: 4, display_name: 'Ann', participant_count: 1 })
+
+      replies[0]([ann, ben]) // still lists Ann, who has since left
+      await vi.advanceTimersByTimeAsync(0)
+      expect(names(live)).toEqual(['Ben'])
+    })
+
+    it('does not double-list someone the roster already had', async () => {
+      const { live, ws, replies } = await hostWithHeldRoster()
+      ws.serve({ type: 'participant_joined', ...ben, participant_count: 2 })
+      replies[0]([ann, ben])
+      await vi.advanceTimersByTimeAsync(0)
+      expect(names(live)).toEqual(['Ann', 'Ben'])
+    })
+
+    it('ignores an older fetch that finishes after a newer one', async () => {
+      const { live, ws, replies } = await hostWithHeldRoster()
+      ws.serve(snapshot('host')) // a reconnect: second fetch
+      await vi.advanceTimersByTimeAsync(0)
+      replies[1]([ann, ben])
+      await vi.advanceTimersByTimeAsync(0)
+      replies[0]([]) // stale
+      await vi.advanceTimersByTimeAsync(0)
+      expect(names(live)).toEqual(['Ann', 'Ben'])
+    })
+  })
+
   it('opens the next question and skips the current one by id', async () => {
     const { live, ws } = await startSession('host', {
       current_question: { session_question_id: 31, question_order: 1, choices: [] },
