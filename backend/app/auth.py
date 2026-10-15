@@ -12,6 +12,7 @@ from app.models.account import AccountRole, effective_role
 
 bearer = HTTPBearer(auto_error=False)
 _jwks: jwt.PyJWKClient | None = None
+TOKEN_LEEWAY_SECONDS = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +34,24 @@ def _jwks_client(domain: str) -> jwt.PyJWKClient:
     return _jwks
 
 
+def decode_access_token(settings, token: str) -> dict:
+    """Verify an Auth0 access token's signature and claims; raises PyJWTError.
+
+    Shared by HTTP and the live WebSocket so both accept the same tokens.
+    """
+    key = _jwks_client(settings.auth0_domain).get_signing_key_from_jwt(token)
+    return jwt.decode(
+        token,
+        key.key,
+        algorithms=["RS256"],
+        audience=settings.auth0_audience,
+        issuer=f"https://{settings.auth0_domain}/",
+        # Tolerate small clock skew; without it a fresh token whose iat is
+        # a fraction of a second ahead of this machine fails as invalid.
+        leeway=TOKEN_LEEWAY_SECONDS,
+    )
+
+
 def current_user(
     request: Request, creds: HTTPAuthorizationCredentials | None = Depends(bearer)
 ) -> dict:
@@ -43,17 +62,7 @@ def current_user(
     if creds is None:
         raise APIError(401, "missing_token", "Missing bearer token")
     try:
-        key = _jwks_client(settings.auth0_domain).get_signing_key_from_jwt(creds.credentials)
-        return jwt.decode(
-            creds.credentials,
-            key.key,
-            algorithms=["RS256"],
-            audience=settings.auth0_audience,
-            issuer=f"https://{settings.auth0_domain}/",
-            # Tolerate small clock skew; without it a fresh token whose iat is
-            # a fraction of a second ahead of this machine fails as invalid.
-            leeway=5,
-        )
+        return decode_access_token(settings, creds.credentials)
     except jwt.PyJWTError as exc:
         raise APIError(401, "invalid_token", "Invalid token") from exc
 

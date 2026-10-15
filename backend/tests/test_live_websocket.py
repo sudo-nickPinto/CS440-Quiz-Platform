@@ -7,9 +7,11 @@ dependency override from test_session_api.py.
 
 import asyncio
 import threading
+import time
 from collections.abc import Iterator
 from types import SimpleNamespace
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -241,6 +243,44 @@ def test_expired_token_closes_with_4401(live) -> None:
     sid = make_session(client, people)["session_id"]
     with client.websocket_connect(ws_url(sid)) as ws:
         ws.send_json({"type": "auth", "token": make_token(sub="test|host", exp_offset=-60)})
+        assert_closed_with(ws, CloseCode.UNAUTHORIZED)
+
+
+def skewed_token(sub: str, *, iat_offset: int = 0, exp_offset: int = 3600) -> str:
+    now = int(time.time())
+    claims = {
+        "sub": sub,
+        "aud": AUDIENCE,
+        "iss": f"https://{DOMAIN}/",
+        "iat": now + iat_offset,
+        "exp": now + exp_offset,
+    }
+    return jwt.encode(claims, PRIVATE_KEY, algorithm="RS256")
+
+
+@pytest.mark.parametrize(
+    ("iat_offset", "exp_offset"),
+    [(2, 3600), (0, -2)],
+    ids=["issued-slightly-in-future", "expired-just-now"],
+)
+def test_small_clock_skew_is_tolerated_like_http(live, iat_offset, exp_offset) -> None:
+    """The socket accepts the same tokens as HTTP (5 s leeway, auth.py)."""
+    client, people = live
+    sid = make_session(client, people)["session_id"]
+    token = skewed_token("test|host", iat_offset=iat_offset, exp_offset=exp_offset)
+
+    client.app.dependency_overrides.clear()  # REST checks the real token too
+    assert client.get("/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+    with client.websocket_connect(ws_url(sid)) as ws:
+        ws.send_json({"type": "auth", "token": token})
+        assert ws.receive_json()["type"] == "session_state"
+
+
+def test_token_issued_beyond_leeway_closes_with_4401(live) -> None:
+    client, people = live
+    sid = make_session(client, people)["session_id"]
+    with client.websocket_connect(ws_url(sid)) as ws:
+        ws.send_json({"type": "auth", "token": skewed_token("test|host", iat_offset=30)})
         assert_closed_with(ws, CloseCode.UNAUTHORIZED)
 
 
