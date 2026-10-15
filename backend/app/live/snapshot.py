@@ -15,12 +15,11 @@ from app.models import (
     SessionQuestion,
     SessionQuestionStatus,
 )
-from app.schemas.results import ClosedQuestionResultsSnapshot
+from app.schemas.results import LEADERBOARD_SIZE, ClosedQuestionResultsSnapshot
 from app.services.live_questions import _opened_event
 from app.services.results import get_closed_question_results
 
 LiveRole = Literal["host", "participant"]
-LEADERBOARD_SIZE = 5
 
 
 def resolve_membership(
