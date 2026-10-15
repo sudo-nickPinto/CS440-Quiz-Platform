@@ -2,7 +2,8 @@ import jwt
 from sqlalchemy.orm import Session
 
 # Module lookups, not name imports, so tests that patch the HTTP auth chain
-# (auth._jwks_client, accounts._fetch_profile) patch this path too.
+# (auth._jwks_client, accounts._fetch_profile) patch this path too, and
+# tokens are decoded by the same function (and leeway) as HTTP.
 from app import accounts, auth
 from app.auth import CurrentAccount
 from app.config import Settings
@@ -22,14 +23,7 @@ def authenticate_token(db: Session, settings: Settings, token: str) -> CurrentAc
     if not token:
         raise LiveCloseError(CloseCode.UNAUTHORIZED, "missing_token")
     try:
-        key = auth._jwks_client(settings.auth0_domain).get_signing_key_from_jwt(token)
-        claims = jwt.decode(
-            token,
-            key.key,
-            algorithms=["RS256"],
-            audience=settings.auth0_audience,
-            issuer=f"https://{settings.auth0_domain}/",
-        )
+        claims = auth.decode_access_token(settings, token)
     except jwt.ExpiredSignatureError as exc:
         raise LiveCloseError(CloseCode.UNAUTHORIZED, "token_expired") from exc
     except jwt.PyJWTError as exc:
