@@ -210,15 +210,6 @@
   box-shadow: none;
 }
 
-.lp .lp-button-secondary {
-  background: var(--paper);
-  color: var(--navy);
-}
-
-.lp .lp-button-secondary:hover:not(:disabled) {
-  background: var(--sky-soft);
-}
-
 .lp-fine {
   color: var(--gray);
   font-size: 13px;

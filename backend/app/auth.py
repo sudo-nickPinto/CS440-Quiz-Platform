@@ -50,6 +50,9 @@ def current_user(
             algorithms=["RS256"],
             audience=settings.auth0_audience,
             issuer=f"https://{settings.auth0_domain}/",
+            # Tolerate small clock skew; without it a fresh token whose iat is
+            # a fraction of a second ahead of this machine fails as invalid.
+            leeway=5,
         )
     except jwt.PyJWTError as exc:
         raise APIError(401, "invalid_token", "Invalid token") from exc
