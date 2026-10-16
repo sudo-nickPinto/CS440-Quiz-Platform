@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
@@ -16,15 +16,23 @@ router = APIRouter(prefix="/sessions", tags=["responses"])
 )
 def submit_response_route(
     payload: ResponseSubmit,
+    request: Request,
+    background_tasks: BackgroundTasks,
     session_id: int = Path(gt=0),
     session_question_id: int = Path(gt=0),
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> ResponseReceipt:
-    return submit_response(
+    receipt = submit_response(
         db,
         account,
         session_id,
         session_question_id,
         payload,
     )
+    # Same after-answer hook as the live socket, so REST answers still close
+    # the question and notify the host (LIVE_PROTOCOL.md §4).
+    background_tasks.add_task(
+        request.app.state.live_hub.after_answer, session_id, session_question_id
+    )
+    return receipt

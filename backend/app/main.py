@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,6 +8,9 @@ from app.api.router import api_router
 from app.config import Settings, get_settings
 from app.database import Database
 from app.errors import register_error_handlers
+from app.live import LiveHub
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -16,7 +20,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         application.state.database = Database(settings.sqlalchemy_url)
+        try:
+            # Re-arm deadline timers lost on restart and close overdue questions.
+            await application.state.live_hub.sweep()
+        except Exception:
+            logger.exception("Startup sweep of open questions failed")
         yield
+        await application.state.live_hub.shutdown()
         application.state.database.dispose()
 
     application = FastAPI(
@@ -25,6 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.settings = settings
+    application.state.live_hub = LiveHub(application)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
