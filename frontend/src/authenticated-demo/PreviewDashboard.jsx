@@ -6,36 +6,74 @@ import {
   useNavigate,
   useParams,
 } from 'react-router'
-import { makeSession, standings } from './model'
-import { dispatch, usePreview } from './store'
+
+import { useAccount } from './account'
+import { useAction, useApi, useResource } from './rest'
+import RequestError from './RequestError'
+import { ResumeSession } from './SessionPages'
 
 export default function PreviewDashboard() {
   const { view } = useParams()
+  const account = useAccount()
+  const api = useApi()
   const navigate = useNavigate()
-  const state = usePreview()
 
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('recent')
 
+  const presenting = view === 'present'
+  const resource = useResource(
+    presenting ? '/quizzes' : null,
+  )
+  const action = useAction()
+
   if (!['present', 'participate'].includes(view)) {
-    return <Navigate to="/app/dashboard/present" replace />
+    return (
+      <Navigate to="/app/dashboard/present" replace />
+    )
   }
 
-  const presenting = view === 'present'
-  const matches = (title) =>
-    title.toLowerCase().includes(query.toLowerCase())
-
-  const quizzes = state.quizzes.filter((q) => matches(q.title))
+  const quizzes = (resource.data || []).filter((quiz) =>
+    quiz.author_id === account.account_id &&
+    quiz.status === 'PUBLISHED' &&
+    quiz.title.toLowerCase().includes(query.toLowerCase()),
+  )
 
   if (sort === 'az') {
     quizzes.sort((a, b) => a.title.localeCompare(b.title))
   }
 
-  const sessions = state.sessions.filter(
-    (s) =>
-      s.mode === (presenting ? 'host' : 'participant') &&
-      matches(s.quiz.title),
-  )
+  async function host(quiz) {
+    const session = await action.run(() =>
+      api(`/quizzes/${quiz.quiz_id}/sessions`, {
+        method: 'POST',
+      }),
+    )
+
+    if (session) {
+      navigate(`/app/host/${session.session_id}`)
+    }
+  }
+
+  async function archive(quiz) {
+    if (
+      !window.confirm(
+        `Archive "${quiz.title}"? It will no longer be hostable.`,
+      )
+    ) {
+      return
+    }
+
+    const saved = await action.run(() =>
+      api(`/quizzes/${quiz.quiz_id}/archive`, {
+        method: 'PATCH',
+      }),
+    )
+
+    if (saved) {
+      resource.reload()
+    }
+  }
 
   return (
     <>
@@ -43,158 +81,139 @@ export default function PreviewDashboard() {
         <NavLink to="/app/dashboard/present">
           Present
         </NavLink>
-
         <NavLink to="/app/dashboard/participate">
           Participate
         </NavLink>
-
-        <Link to="/app/quizzes/new" aria-label="Create quiz">
-          ＋ Create
-        </Link>
-
+        <Link to="/app/quizzes/new">＋ Create</Link>
         <Link to="/app/join">Join</Link>
       </nav>
 
-      <div className="qp-toolbar">
-        <label>
-          Search
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </label>
-
-        {presenting && (
-          <label>
-            Sort
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value)}
-            >
-              <option value="recent">Newest first</option>
-              <option value="az">A–Z</option>
-            </select>
-          </label>
-        )}
-
-        <span>One shared class</span>
-      </div>
-
       <section className="qp-content">
         <h1>
-          {presenting ? 'Quizzes you made' : 'Your sessions'}
+          {presenting ? 'Quizzes you made' : 'Participate'}
         </h1>
 
-        {presenting && (
+        <RequestError error={action.error} />
+
+        {presenting ? (
           <>
-            {!quizzes.length && (
-              <p>No matching quizzes. Create one to get started.</p>
+            <div className="qp-toolbar">
+              <label>
+                Search
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(event) =>
+                    setQuery(event.target.value)
+                  }
+                />
+              </label>
+
+              <label>
+                Sort
+                <select
+                  value={sort}
+                  onChange={(event) =>
+                    setSort(event.target.value)
+                  }
+                >
+                  <option value="recent">
+                    Newest first
+                  </option>
+                  <option value="az">A–Z</option>
+                </select>
+              </label>
+
+              <button
+                type="button"
+                onClick={resource.reload}
+                disabled={resource.loading || action.busy}
+              >
+                Refresh
+              </button>
+            </div>
+
+            {resource.loading && (
+              <p role="status">Loading quizzes…</p>
+            )}
+
+            <RequestError
+              error={resource.error}
+              retry={resource.reload}
+            />
+
+            {resource.data && !quizzes.length && (
+              <p>
+                No matching published quizzes.
+                Create one to get started.
+              </p>
             )}
 
             {quizzes.map((quiz) => (
-              <article className="qp-row" key={quiz.id}>
-                <span className="qp-badge">{quiz.status}</span>
+              <article
+                className="qp-row"
+                key={quiz.quiz_id}
+              >
+                <span className="qp-badge">
+                  {quiz.status}
+                </span>
 
                 <div>
-                  <Link to={`/app/quizzes/${quiz.id}`}>
+                  <Link to={`/app/quizzes/${quiz.quiz_id}`}>
                     {quiz.title}
                   </Link>
                   <small>
-                    {quiz.questions.length} questions · Public · Read-only
+                    {quiz.question_count} questions ·
+                    Public · Read-only
                   </small>
                 </div>
 
-                {quiz.status !== 'archived' && (
-                  <div className="qp-actions">
-                    <button
-                      className="qp-primary"
-                      onClick={() => {
-                        const session = makeSession(
-                          crypto.randomUUID(),
-                          quiz,
-                          'host',
-                          Date.now(),
-                        )
+                <div className="qp-actions">
+                  <button
+                    type="button"
+                    className="qp-primary"
+                    disabled={action.busy}
+                    onClick={() => void host(quiz)}
+                  >
+                    Host
+                  </button>
 
-                        dispatch({
-                          type: 'CREATE_SESSION',
-                          session,
-                        })
-
-                        navigate(`/app/host/${session.id}`)
-                      }}
-                    >
-                      Host
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Archive "${quiz.title}" in this preview?`,
-                          )
-                        ) {
-                          dispatch({
-                            type: 'ARCHIVE',
-                            id: quiz.id,
-                          })
-                        }
-                      }}
-                    >
-                      Archive
-                    </button>
-                  </div>
-                )}
+                  <button
+                    type="button"
+                    disabled={action.busy}
+                    onClick={() => void archive(quiz)}
+                  >
+                    Archive
+                  </button>
+                </div>
               </article>
             ))}
-
-            <h2>Hosted sessions</h2>
           </>
+        ) : (
+          <p>
+            <Link
+              className="qp-button"
+              to="/app/join"
+            >
+              Join with a code
+            </Link>
+          </p>
         )}
 
-        {!sessions.length && <p>No matching sessions yet.</p>}
+        {action.busy && (
+          <p role="status">Saving your request…</p>
+        )}
 
-        {sessions.map((session) => {
-          const me = standings(session).find(
-            (row) => row.id === 'me',
-          )
+        <h2>Return to a session</h2>
+        <p>
+          Session history is not connected yet. Keep your
+          session URL, or enter its session ID below.
+          This is different from the join code.
+        </p>
 
-          const resultPath = presenting ? 'host' : 'me'
-          const livePath = presenting ? 'host' : 'play'
-
-          return (
-            <article className="qp-row" key={session.id}>
-              <span className="qp-badge">
-                {session.phase === 'ended'
-                  ? 'Finished'
-                  : 'In progress'}
-              </span>
-
-              <div>
-                <strong>{session.quiz.title}</strong>
-                <small>
-                  {new Date(session.createdAt).toLocaleDateString()}
-                  {me &&
-                    ` · ${me.correct}/${session.history.length} correct · ${me.points} points`}
-                </small>
-              </div>
-
-              <Link
-                className="qp-button"
-                to={
-                  session.phase === 'ended'
-                    ? `/app/results/${resultPath}/${session.id}`
-                    : `/app/${livePath}/${session.id}`
-                }
-              >
-                {session.phase === 'ended'
-                  ? 'View results'
-                  : 'Resume'}
-              </Link>
-            </article>
-          )
-        })}
+        <ResumeSession
+          mode={presenting ? 'host' : 'participant'}
+        />
       </section>
     </>
   )

@@ -1,493 +1,252 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
-import { LETTERS, makeSession, standings } from './model'
-import { dispatch, usePreview } from './store'
+import { useState } from 'react'
+import {
+  Link,
+  Navigate,
+  useNavigate,
+  useParams,
+} from 'react-router'
 
-const SHAPES = ['▲', '◆', '●', '■', '★', '⬟']
+import { useAccount } from './account'
+import { useAction, useApi, useResource } from './rest'
+import RequestError from './RequestError'
+
+export function ResumeSession({ mode }) {
+  const [id, setId] = useState('')
+  const navigate = useNavigate()
+
+  return (
+    <form
+      className="qp-actions"
+      onSubmit={(event) => {
+        event.preventDefault()
+
+        if (!/^[1-9][0-9]*$/.test(id.trim())) return
+
+        navigate(
+          `/app/${mode === 'host' ? 'host' : 'play'}/${id.trim()}`,
+        )
+      }}
+    >
+      <label>
+        Session ID
+        <input
+          required
+          inputMode="numeric"
+          pattern="[1-9][0-9]*"
+          value={id}
+          onChange={(event) => setId(event.target.value)}
+        />
+      </label>
+
+      <button type="submit">
+        Open session
+      </button>
+    </form>
+  )
+}
 
 export function JoinPage() {
-  const state = usePreview()
-  const navigate = useNavigate()
   const [code, setCode] = useState('')
-  const [error, setError] = useState('')
+  const api = useApi()
+  const action = useAction()
+  const navigate = useNavigate()
 
-  function join(e) {
-    e.preventDefault()
+  async function join(event) {
+    event.preventDefault()
 
-    if (!/^\d{6}$/.test(code)) {
-      setError('Enter exactly six digits.')
-      return
-    }
-
-    if (code !== '482913') {
-      setError('No demo session has that code. Use 482913.')
-      return
-    }
-
-    const quiz = state.quizzes.find(
-      (q) => q.id === 'data-structures',
+    const joined = await action.run(() =>
+      api('/sessions/join', {
+        method: 'POST',
+        body: JSON.stringify({
+          join_code: code.trim(),
+        }),
+      }),
     )
 
-    const session = makeSession(
-      crypto.randomUUID(),
-      quiz,
-      'participant',
-      Date.now(),
-    )
-
-    dispatch({ type: 'CREATE_SESSION', session })
-    navigate(`/app/play/${session.id}`)
+    if (joined) {
+      navigate(`/app/play/${joined.session.session_id}`)
+    }
   }
 
   return (
-    <section className="qp-content qp-center">
+    <section className="qp-content">
       <Link to="/app/dashboard/participate">
         ← Dashboard
       </Link>
 
-      <h1>Join a live quiz</h1>
-      <p>Demo code: <strong>482913</strong></p>
+      <h1>Join a session</h1>
 
       <form onSubmit={join}>
-        <label>
-          Session code
-          <input
-            className="qp-code"
-            inputMode="numeric"
-            autoComplete="off"
-            maxLength={6}
-            value={code}
-            aria-invalid={Boolean(error)}
-            aria-describedby={error ? 'join-error' : undefined}
-            onChange={(e) => {
-              setCode(
-                e.target.value.replace(/\D/g, '').slice(0, 6),
-              )
-              setError('')
-            }}
-          />
-        </label>
+        <fieldset
+          disabled={action.busy}
+          className="qp-form-fields"
+        >
+          <label>
+            Six-digit join code
+            <input
+              required
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              minLength={6}
+              maxLength={6}
+              value={code}
+              onChange={(event) =>
+                setCode(event.target.value)
+              }
+            />
+          </label>
 
-        {error && <p id="join-error" role="alert">{error}</p>}
-
-        <button className="qp-primary">Join →</button>
+          <button
+            className="qp-primary"
+            type="submit"
+          >
+            {action.busy ? 'Joining…' : 'Join'}
+          </button>
+        </fieldset>
       </form>
+
+      <RequestError error={action.error} />
+
+      {action.error?.code === 'session_already_joined' && (
+        <p>
+          Open your previous session URL, or use the
+          session ID below. The join endpoint does not
+          return that ID for an already-joined account.
+        </p>
+      )}
+
+      <h2>Already joined?</h2>
+      <ResumeSession mode="participant" />
     </section>
   )
 }
 
-function useClock(session) {
-  const [now, setNow] = useState(() => Date.now())
-  const id = session?.id
-  const phase = session?.phase
-  const deadline = session?.deadline
-
-  useEffect(() => {
-    if (!['countdown', 'question'].includes(phase)) return
-
-    const timer = setInterval(() => {
-      const time = Date.now()
-      setNow(time)
-
-      if (time >= deadline) {
-        dispatch({ type: 'TICK', id, now: time })
-      }
-    }, 100)
-
-    return () => clearInterval(timer)
-  }, [id, phase, deadline])
-
-  return now
-}
-
 export function SessionPage({ mode }) {
   const { sessionId } = useParams()
-  const { sessions } = usePreview()
+  const account = useAccount()
+  const validId = /^[1-9][0-9]*$/.test(sessionId)
 
-  const session = sessions.find(
-    (s) => s.id === sessionId && s.mode === mode,
+  const session = useResource(
+    validId ? `/sessions/${sessionId}` : null,
+    3000,
   )
 
-  const now = useClock(session)
-  const [notice, setNotice] = useState('')
+  const host =
+    session.data?.host_id === account.account_id
 
-  if (!session) {
+  const roster = useResource(
+    host
+      ? `/sessions/${sessionId}/participants`
+      : null,
+    3000,
+  )
+
+  if (!validId) {
+    return <p role="alert">Invalid session ID.</p>
+  }
+
+  if (session.loading) {
+    return <p role="status">Loading session…</p>
+  }
+
+  if (session.error) {
     return (
-      <p className="qp-content">
-        Session not found. Return to the dashboard.
-      </p>
+      <RequestError
+        error={session.error}
+        retry={session.reload}
+      />
     )
   }
 
-  const host = mode === 'host'
-  const q = session.quiz.questions[session.index]
-  const rows = standings(session)
-  const me = rows.find((row) => row.id === 'me')
-  const mine = session.history[session.index]?.me
+  if (!session.data) return null
 
-  const seconds = Math.max(
-    0,
-    Math.ceil(((session.deadline || now) - now) / 1000),
-  )
-
-  const send = (type, extra = {}) =>
-    dispatch({
-      type,
-      id: session.id,
-      now: Date.now(),
-      ...extra,
-    })
-
-  const resultPath =
-    `/app/results/${host ? 'host' : 'me'}/${session.id}`
+  if ((mode === 'host') !== host) {
+    return (
+      <Navigate
+        to={`/app/${host ? 'host' : 'play'}/${sessionId}`}
+        replace
+      />
+    )
+  }
 
   return (
-    <>
-      <div className="qp-toolbar">
-        <Link
-          to={`/app/dashboard/${host ? 'present' : 'participate'}`}
-        >
-          ← Dashboard
-        </Link>
+    <section className="qp-content">
+      <Link
+        to={`/app/dashboard/${host ? 'present' : 'participate'}`}
+      >
+        ← Dashboard
+      </Link>
 
-        <strong>{session.quiz.title}</strong>
-        <span>{host ? 'Host' : 'Participant'}</span>
+      <h1>{session.data.quiz_title}</h1>
 
-        {session.phase !== 'ended' && (
-          <button
-            onClick={() => {
-              if (
-                window.confirm(
-                  host
-                    ? 'End this demo session?'
-                    : 'Leave and finish this demo run?',
-                )
-              ) {
-                send('END')
-              }
-            }}
-          >
-            {host ? 'End session' : 'Leave demo'}
-          </button>
-        )}
-      </div>
+      <p>
+        Session ID:
+        {' '}<strong>{session.data.session_id}</strong>
+      </p>
 
-      <div className="qp-content">
-        {session.phase === 'lobby' && (
-          <>
-            <h1>{host ? 'Ready when you are.' : "You're in!"}</h1>
-            <p>Session code</p>
-            <div className="qp-code">{session.code}</div>
+      <p>
+        Status:
+        {' '}<strong>{session.data.status}</strong>
+      </p>
 
-            <p>
-              {session.quiz.questions.length} questions ·{' '}
-              {session.players.length} simulated participants
+      <p>Bookmark this URL to return to this session.</p>
+
+      {host ? (
+        <>
+          <h2>
+            Join code: {session.data.join_code}
+          </h2>
+
+          <h2>Participants</h2>
+
+          {roster.loading && (
+            <p role="status">
+              Loading participants…
             </p>
+          )}
 
-            <div className="qp-chips">
-              {session.players.map((player) => (
-                <span key={player.id}>{player.name}</span>
-              ))}
-            </div>
+          <RequestError
+            error={roster.error}
+            retry={roster.reload}
+          />
 
-            <div className="qp-actions">
-              {host && (
-                <button
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(
-                        session.code,
-                      )
-                      setNotice('Code copied.')
-                    } catch {
-                      setNotice(
-                        `Copy this code manually: ${session.code}`,
-                      )
-                    }
-                  }}
-                >
-                  Copy code
-                </button>
+          {roster.data && (
+            <>
+              <p>{roster.data.length} joined</p>
+
+              {!roster.data.length && (
+                <p>Waiting for participants.</p>
               )}
 
-              <button
-                className="qp-primary"
-                onClick={() => send('START')}
-              >
-                {host ? 'Start quiz' : 'Start simulated host'}
-              </button>
-            </div>
+              <ul>
+                {roster.data.map((person) => (
+                  <li key={person.session_participant_id}>
+                    {person.display_name}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      ) : (
+        <p>
+          You joined as {account.display_name}.
+        </p>
+      )}
 
-            {host && (
-              <p className="qp-muted">
-                The host code is illustrative; use 482913 for the
-                separate participant demo.
-              </p>
-            )}
-          </>
-        )}
+      <p className="qp-notice">
+        This session is saved in the database.
+        This integration stage supports joining and
+        viewing the lobby. Live question controls,
+        answering, and results will be connected
+        in the next stage.
+      </p>
 
-        {session.phase === 'countdown' && (
-          <div className="qp-center">
-            <h1>Get ready!</h1>
-            <p>
-              Question {session.index + 1} of{' '}
-              {session.quiz.questions.length}
-            </p>
-            <strong className="qp-countdown" role="status">
-              {Math.min(3, seconds)}
-            </strong>
-          </div>
-        )}
-
-        {session.phase === 'question' && (
-          <>
-            <div className="qp-bar">
-              <span>
-                Question {session.index + 1} of{' '}
-                {session.quiz.questions.length}
-              </span>
-
-              <strong role="timer" aria-label="Seconds left">
-                {Math.min(q.limit, seconds)}s
-              </strong>
-            </div>
-
-            <progress
-              aria-label="Time remaining"
-              max={q.limit}
-              value={Math.min(q.limit, seconds)}
-            />
-
-            {host ? (
-              <>
-                <h1>{q.text}</h1>
-
-                <div className="qp-answer-grid">
-                  {q.options.map((text, i) => (
-                    <div
-                      className={`qp-answer qp-answer-${i}`}
-                      key={i}
-                    >
-                      <b>{SHAPES[i]} {LETTERS[i]}</b> {text}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="qp-actions">
-                  <button
-                    className="qp-primary"
-                    onClick={() => send('CLOSE')}
-                  >
-                    Close question
-                  </button>
-
-                  <button
-                    onClick={async () => {
-                      try {
-                        if (document.fullscreenElement) {
-                          await document.exitFullscreen()
-                        } else {
-                          await document.documentElement.requestFullscreen()
-                        }
-                      } catch {
-                        setNotice(
-                          'Fullscreen is unavailable in this browser.',
-                        )
-                      }
-                    }}
-                  >
-                    Toggle fullscreen
-                  </button>
-                </div>
-              </>
-            ) : session.pick ? (
-              <div className="qp-center" role="status">
-                <h1>Answer submitted!</h1>
-                <p>
-                  You picked {LETTERS[session.pick.pick]}.
-                  Wait for the question to close.
-                </p>
-              </div>
-            ) : (
-              <>
-                <h1>Look at the classroom screen.</h1>
-
-                <details className="qp-card qp-content">
-                  <summary>Show simulated classroom screen</summary>
-                  <h2>{q.text}</h2>
-                  <ol type="A">
-                    {q.options.map((text, i) => (
-                      <li key={i}>{text}</li>
-                    ))}
-                  </ol>
-                </details>
-
-                <div className="qp-answer-grid">
-                  {q.options.map((_, i) => (
-                    <button
-                      className={`qp-answer qp-answer-${i}`}
-                      key={i}
-                      aria-label={`Choose answer ${LETTERS[i]}`}
-                      disabled={now >= session.deadline}
-                      onClick={() => send('PICK', { pick: i })}
-                    >
-                      {SHAPES[i]} {LETTERS[i]}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {!host && (
-              <button onClick={() => send('CLOSE')}>
-                Demo: close question now
-              </button>
-            )}
-          </>
-        )}
-
-        {session.phase === 'feedback' && (
-          <>
-            <h1>
-              {host
-                ? 'How did everyone answer?'
-                : mine?.pick === null
-                  ? "Time's up!"
-                  : mine?.correct
-                    ? 'Correct!'
-                    : 'Not quite.'}
-            </h1>
-
-            <h2>{q.text}</h2>
-
-            <p>
-              Correct answer:{' '}
-              <strong>
-                {LETTERS[q.correct]} · {q.options[q.correct]}
-              </strong>
-            </p>
-
-            {!host && (
-              <p role="status">
-                +{mine?.points || 0} points · Total{' '}
-                {me?.points || 0} · Rank #{me?.rank}
-              </p>
-            )}
-
-            {host &&
-              q.options.map((text, i) => {
-                const count = Object.values(
-                  session.history[session.index],
-                ).filter((a) => a.pick === i).length
-
-                return (
-                  <div className="qp-distribution" key={i}>
-                    <span>
-                      {LETTERS[i]}. {text}
-                      {i === q.correct ? ' ✓' : ''}
-                    </span>
-
-                    <progress
-                      max={session.players.length}
-                      value={count}
-                    />
-
-                    <b>{count}</b>
-                  </div>
-                )
-              })}
-
-            <button
-              className="qp-primary"
-              onClick={() => send('BOARD')}
-            >
-              Leaderboard →
-            </button>
-          </>
-        )}
-
-        {session.phase === 'board' && (
-          <>
-            <h1>Leaderboard</h1>
-            <Leaderboard rows={rows} />
-
-            <button
-              className="qp-primary"
-              onClick={() => send('NEXT')}
-            >
-              {session.index + 1 === session.quiz.questions.length
-                ? 'Final results'
-                : host
-                  ? 'Next question →'
-                  : 'Demo host: next question →'}
-            </button>
-          </>
-        )}
-
-        {session.phase === 'ended' && (
-          <>
-            <h1>Final results</h1>
-
-            <p>
-              {session.history.length} of{' '}
-              {session.quiz.questions.length} questions played
-            </p>
-
-            {session.history.length > 0 && (
-              <>
-                <div className="qp-podium">
-                  {[rows[1], rows[0], rows[2]]
-                    .filter(Boolean)
-                    .map((row) => (
-                      <div
-                        className="qp-place"
-                        data-rank={row.rank}
-                        key={row.id}
-                      >
-                        <strong>#{row.rank}</strong>
-                        <span>{row.name}</span>
-                        <b>{row.points} points</b>
-                      </div>
-                    ))}
-                </div>
-
-                {!host && (
-                  <p>
-                    You got {me.correct}/{session.history.length}{' '}
-                    correct.
-                  </p>
-                )}
-
-                <Leaderboard rows={rows} />
-              </>
-            )}
-
-            <Link
-              className="qp-button qp-primary"
-              to={resultPath}
-            >
-              Review results →
-            </Link>
-          </>
-        )}
-
-        <p role="status">{notice}</p>
-      </div>
-    </>
-  )
-}
-
-function Leaderboard({ rows }) {
-  return (
-    <ol className="qp-leaderboard">
-      {rows.map((row) => (
-        <li key={row.id}>
-          <strong>#{row.rank}</strong>
-          <span>{row.name}</span>
-          <b>{row.points} pts</b>
-        </li>
-      ))}
-    </ol>
+      <p>
+        Session details refresh every three seconds.
+        Returning to the dashboard does not leave or
+        end the session.
+      </p>
+    </section>
   )
 }

@@ -6,109 +6,129 @@ import {
   Routes,
   useLocation,
 } from 'react-router'
+
+import { AccountContext } from './account'
+import { useResource } from './rest'
+import RequestError from './RequestError'
 import PreviewDashboard from './PreviewDashboard'
 import { QuizEditor, QuizViewer } from './QuizEditor'
 import { JoinPage, SessionPage } from './SessionPages'
-import { HostResults, ParticipantResults } from './ResultsPages'
-import { createInitialState } from './model'
-import { dispatch, usePreview } from './store'
 import './preview.css'
 
+function ResultsPending() {
+  return (
+    <section className="qp-content">
+      <h1>Results are not connected yet</h1>
+      <p>
+        Live gameplay and saved results will be connected
+        in the next stage.
+      </p>
+      <Link to="/app/dashboard/present">
+        Return to dashboard
+      </Link>
+    </section>
+  )
+}
+
 export default function PreviewApp() {
-  const state = usePreview()
+  const account = useResource('/me')
   const { pathname } = useLocation()
   const main = useRef(null)
 
   useEffect(() => {
     main.current?.focus()
     window.scrollTo(0, 0)
-  }, [pathname])
+  }, [pathname, account.data])
+
+  if (account.loading) {
+    return <p role="status">Loading your account…</p>
+  }
+
+  if (account.error) {
+    return (
+      <RequestError
+        error={account.error}
+        retry={account.reload}
+      />
+    )
+  }
+
+  if (!account.data?.is_active) {
+    return (
+      <p role="alert">
+        This account is inactive. Contact your administrator.
+      </p>
+    )
+  }
 
   return (
-    <div className="qp">
-      <a className="qp-skip" href="#preview-main">
-        Skip to content
-      </a>
+    <AccountContext.Provider value={account.data}>
+      <div className="qp">
+        <a className="qp-skip" href="#app-main">
+          Skip to content
+        </a>
 
-      <header className="qp-header">
-        <Link className="qp-logo" to="/app/dashboard/present">
-          QUIZ<span>.</span>PLATFORM
-        </Link>
+        <header className="qp-header">
+          <Link
+            className="qp-logo"
+            to="/app/dashboard/present"
+          >
+            QUIZ<span>.</span>PLATFORM
+          </Link>
+          <span>{account.data.display_name}</span>
+        </header>
 
-        <span>Frontend testing</span>
-
-        <button
-          onClick={() => {
-            if (
-              window.confirm(
-                'Reset all browser-only preview quizzes and results?',
-              )
-            ) {
-              dispatch({
-                type: 'RESET',
-                state: createInitialState(),
-              })
-            }
-          }}
+        <main
+          id="app-main"
+          className="qp-frame"
+          ref={main}
+          tabIndex={-1}
         >
-          Reset sample data
-        </button>
-      </header>
-
-      <p className="qp-notice">
-        Signed-in frontend test · Quizzes and results use sample data
-        saved in this browser. They are not saved to your database or
-        separated by signed-in account. Other players are simulated.
-      </p>
-
-      {state.storageWarning && (
-        <p role="alert">{state.storageWarning}</p>
-      )}
-
-      <main
-        id="preview-main"
-        className="qp-frame"
-        ref={main}
-        tabIndex={-1}
-      >
-        <Routes>
-          <Route
-            path="dashboard/:view"
-            element={<PreviewDashboard />}
-          />
-
-          <Route path="quizzes/new" element={<QuizEditor />} />
-          <Route path="quizzes/:quizId" element={<QuizViewer />} />
-          <Route path="join" element={<JoinPage />} />
-
-          <Route
-            path="host/:sessionId"
-            element={<SessionPage mode="host" />}
-          />
-
-          <Route
-            path="play/:sessionId"
-            element={<SessionPage mode="participant" />}
-          />
-
-          <Route
-            path="results/host/:sessionId"
-            element={<HostResults />}
-          />
-
-          <Route
-            path="results/me/:sessionId"
-            element={<ParticipantResults />}
-          />
-
-          <Route
-            path="*"
-            element={
-              <Navigate to="/app/dashboard/present" replace />
-            }
-          />
-        </Routes>
-      </main>
-    </div>
+          <Routes>
+            <Route
+              path="dashboard/:view"
+              element={<PreviewDashboard />}
+            />
+            <Route
+              path="quizzes/new"
+              element={<QuizEditor />}
+            />
+            <Route
+              path="quizzes/:quizId"
+              element={<QuizViewer key={pathname} />}
+            />
+            <Route path="join" element={<JoinPage />} />
+            <Route
+              path="host/:sessionId"
+              element={
+                <SessionPage key={pathname} mode="host" />
+              }
+            />
+            <Route
+              path="play/:sessionId"
+              element={
+                <SessionPage
+                  key={pathname}
+                  mode="participant"
+                />
+              }
+            />
+            <Route
+              path="results/*"
+              element={<ResultsPending />}
+            />
+            <Route
+              path="*"
+              element={
+                <Navigate
+                  to="/app/dashboard/present"
+                  replace
+                />
+              }
+            />
+          </Routes>
+        </main>
+      </div>
+    </AccountContext.Provider>
   )
 }

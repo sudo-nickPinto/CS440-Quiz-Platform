@@ -103,7 +103,7 @@ export default function App() {
       'User'
 
     return (
-      <AccountGate>
+      <AccountGate key={auth0User?.sub}>
         <div
           style={{
             display: 'flex',
