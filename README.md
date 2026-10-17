@@ -119,3 +119,10 @@ Then create a pull request to merge the feature into `main`.
 Do not commit passwords, API keys, database credentials, or other secrets.
 
 Local environment variables should be stored in `.env` files, which are ignored by Git.
+
+## Docker deployment
+
+Production-ready Dockerfiles and Compose configuration are included for the
+React frontend, FastAPI backend, and an optional persistent MySQL container.
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for local verification and Reclaim
+deployment instructions.
