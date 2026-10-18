@@ -1,0 +1,162 @@
+.qp .live-session {
+  color: #222222;
+}
+
+.qp .live-panel {
+  margin-block: 1.25rem;
+  padding: clamp(1rem, 3vw, 2rem);
+  border: 1px solid #747474;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.qp .live-code {
+  font-size: clamp(1.25rem, 4vw, 2rem);
+  overflow-wrap: anywhere;
+}
+
+.qp .live-code strong {
+  color: #043371;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+}
+
+.qp .live-timer {
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.qp .live-answers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-block: 1rem;
+}
+
+.qp .live-choice {
+  display: block;
+  width: 100%;
+  min-height: 6rem;
+  padding: 1.25rem;
+  border: 2px solid #222222;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.qp button.live-choice {
+  cursor: pointer;
+}
+
+.qp .live-choice-0 {
+  background: #043371;
+  color: #ffffff;
+}
+
+.qp .live-choice-1 {
+  background: #cc4e00;
+  color: #ffffff;
+}
+
+.qp .live-choice-2 {
+  background: #8fdbff;
+  color: #222222;
+}
+
+.qp .live-choice-3 {
+  background: #f3ebe2;
+  color: #222222;
+}
+
+.qp .live-choice[aria-pressed="true"] {
+  outline: 4px solid #222222;
+  outline-offset: 3px;
+}
+
+.qp .live-choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.qp .live-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block: 1.25rem;
+}
+
+.qp .live-controls button {
+  min-height: 44px;
+}
+
+.qp .live-session button:focus-visible,
+.qp .live-session a:focus-visible {
+  outline: 3px solid #043371;
+  outline-offset: 4px;
+}
+
+.qp .live-choice-review {
+  padding-left: 1.5rem;
+}
+
+.qp .live-choice-review li {
+  margin-block: 0.75rem;
+}
+
+.qp .live-table-wrap {
+  overflow-x: auto;
+}
+
+.qp .live-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-block: 1rem;
+}
+
+.qp .live-table caption {
+  padding-block: 0.5rem;
+  text-align: left;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.qp .live-table th,
+.qp .live-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #747474;
+  text-align: left;
+}
+
+.qp .live-table th {
+  background: #f3ebe2;
+}
+
+.qp .live-help {
+  font-size: 0.95rem;
+}
+
+@media (max-width: 540px) {
+  .qp .live-answers {
+    gap: 0.75rem;
+  }
+
+  .qp .live-choice {
+    min-height: 5rem;
+    padding: 0.75rem;
+    font-size: 1rem;
+  }
+
+  .qp .live-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .qp .live-controls button {
+    width: 100%;
+  }
+}
