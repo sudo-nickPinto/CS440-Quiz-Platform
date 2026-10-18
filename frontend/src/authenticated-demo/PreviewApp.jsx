@@ -6,23 +6,13 @@ import { useResource } from "./rest";
 import RequestError from "./RequestError";
 import PreviewDashboard from "./PreviewDashboard";
 import { QuizEditor, QuizViewer } from "./QuizEditor";
-import { JoinPage } from "./SessionPages";
+import JoinSessionPage from "./JoinSessionPage";
 import LiveSessionPage from "./LiveSessionPage";
 import "./preview.css";
+import SessionResults from "./SessionResults";
+import "./taha-ui.css";
 
-function ResultsPending() {
-  return (
-    <section className="qp-content">
-      <h1>Results are not connected yet</h1>
-      <p>
-        Live gameplay and saved results will be connected in the next stage.
-      </p>
-      <Link to="/app/dashboard/present">Return to dashboard</Link>
-    </section>
-  );
-}
-
-export default function PreviewApp() {
+export default function PreviewApp({ onSignOut }) {
   const account = useResource("/me");
   const { pathname } = useLocation();
   const main = useRef(null);
@@ -57,7 +47,24 @@ export default function PreviewApp() {
           <Link className="qp-logo" to="/app/dashboard/present">
             QUIZ<span>.</span>PLATFORM
           </Link>
-          <span>{account.data.display_name}</span>
+
+          <div className="ui-user">
+            <span className="ui-user-name">{account.data.display_name}</span>
+
+            <span className="ui-avatar" aria-hidden="true">
+              {(account.data.display_name || "User")
+                .trim()
+                .split(/\s+/)
+                .slice(0, 2)
+                .map((part) => part[0])
+                .join("")
+                .toUpperCase()}
+            </span>
+
+            <button type="button" onClick={onSignOut}>
+              Sign out
+            </button>
+          </div>
         </header>
 
         <main id="app-main" className="qp-frame" ref={main} tabIndex={-1}>
@@ -68,7 +75,7 @@ export default function PreviewApp() {
               path="quizzes/:quizId"
               element={<QuizViewer key={pathname} />}
             />
-            <Route path="join" element={<JoinPage />} />
+            <Route path="join" element={<JoinSessionPage />} />
             <Route
               path="host/:sessionId"
               element={<LiveSessionPage key={pathname} />}
@@ -77,7 +84,10 @@ export default function PreviewApp() {
               path="play/:sessionId"
               element={<LiveSessionPage key={pathname} />}
             />
-            <Route path="results/*" element={<ResultsPending />} />
+            <Route
+              path="results/:view/:sessionId"
+              element={<SessionResults key={pathname} />}
+            />
             <Route
               path="*"
               element={<Navigate to="/app/dashboard/present" replace />}

@@ -1,6 +1,13 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from sqlalchemy.orm import Session
 
+from fastapi import Response as HTTPResponse
+
+from app.services.session_report import (
+    export_session_report,
+    get_session_report,
+)
+
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
 from app.schemas.results import (
@@ -100,3 +107,34 @@ def get_final_results_route(
     if viewer_participant_id is None:
         return results
     return participant_final_view(results, viewer_participant_id)
+
+
+@router.get("/sessions/{session_id}/report")
+def session_report_route(
+    session_id: int,
+    response: HTTPResponse,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> dict:
+    response.headers["Cache-Control"] = "no-store"
+    return get_session_report(db, account, session_id)
+
+
+@router.get("/sessions/{session_id}/results/export.csv")
+def session_results_export_route(
+    session_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> HTTPResponse:
+    content = export_session_report(db, account, session_id)
+
+    return HTTPResponse(
+        content="\ufeff" + content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="session-{session_id}-results.csv"'
+            ),
+            "Cache-Control": "no-store",
+        },
+    )

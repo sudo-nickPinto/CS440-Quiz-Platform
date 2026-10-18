@@ -1,140 +1,188 @@
-import { useState } from 'react'
+import { useState } from "react";
 import {
   Link,
   Navigate,
   NavLink,
   useNavigate,
   useParams,
-} from 'react-router'
+} from "react-router";
 
-import { useAccount } from './account'
-import { useAction, useApi, useResource } from './rest'
-import RequestError from './RequestError'
-import { ResumeSession } from './SessionPages'
+import { useAccount } from "./account";
+import { useAction, useApi, useResource } from "./rest";
+import RequestError from "./RequestError";
+import { ResumeSession } from "./SessionPages";
+
+function displayDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleDateString();
+}
 
 export default function PreviewDashboard() {
-  const { view } = useParams()
-  const account = useAccount()
-  const api = useApi()
-  const navigate = useNavigate()
+  const { view } = useParams();
+  const account = useAccount();
+  const api = useApi();
+  const navigate = useNavigate();
+  const action = useAction();
 
-  const [query, setQuery] = useState('')
-  const [sort, setSort] = useState('recent')
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState("recent");
 
-  const presenting = view === 'present'
-  const resource = useResource(
-    presenting ? '/quizzes' : null,
-  )
-  const action = useAction()
+  const presenting = view === "present";
+  const resource = useResource(presenting ? "/quizzes" : null);
 
-  if (!['present', 'participate'].includes(view)) {
-    return (
-      <Navigate to="/app/dashboard/present" replace />
+  if (!["present", "participate"].includes(view)) {
+    return <Navigate to="/app/dashboard/present" replace />;
+  }
+
+  const quizzes = (resource.data || [])
+    .filter(
+      (quiz) =>
+        quiz.author_id === account.account_id &&
+        quiz.status === "PUBLISHED" &&
+        quiz.title.toLowerCase().includes(query.trim().toLowerCase()),
     )
-  }
+    .sort((a, b) => {
+      if (sort === "az") {
+        return a.title.localeCompare(b.title);
+      }
 
-  const quizzes = (resource.data || []).filter((quiz) =>
-    quiz.author_id === account.account_id &&
-    quiz.status === 'PUBLISHED' &&
-    quiz.title.toLowerCase().includes(query.toLowerCase()),
-  )
+      if (sort === "questions") {
+        return b.question_count - a.question_count;
+      }
 
-  if (sort === 'az') {
-    quizzes.sort((a, b) => a.title.localeCompare(b.title))
-  }
+      return (
+        (Date.parse(b.created_at) || 0) -
+          (Date.parse(a.created_at) || 0) ||
+        b.quiz_id - a.quiz_id
+      );
+    });
 
   async function host(quiz) {
     const session = await action.run(() =>
       api(`/quizzes/${quiz.quiz_id}/sessions`, {
-        method: 'POST',
+        method: "POST",
       }),
-    )
+    );
 
     if (session) {
-      navigate(`/app/host/${session.session_id}`)
+      navigate(`/app/host/${session.session_id}`);
     }
   }
 
   async function archive(quiz) {
     if (
       !window.confirm(
-        `Archive "${quiz.title}"? It will no longer be hostable.`,
+        `Archive "${quiz.title}"? It will no longer be available to host.`,
       )
     ) {
-      return
+      return;
     }
 
-    const saved = await action.run(() =>
-      api(`/quizzes/${quiz.quiz_id}/archive`, {
-        method: 'PATCH',
-      }),
-    )
-
-    if (saved) {
-      resource.reload()
-    }
+    await action.run(async () => {
+      await api(`/quizzes/${quiz.quiz_id}/archive`, {
+        method: "PATCH",
+      });
+      resource.reload();
+    });
   }
 
   return (
-    <>
-      <nav className="qp-tabs" aria-label="Dashboard">
+    <section className="ui-dashboard" aria-label="Dashboard">
+      <nav className="ui-tabs" aria-label="Dashboard views">
         <NavLink to="/app/dashboard/present">
           Present
         </NavLink>
+
         <NavLink to="/app/dashboard/participate">
           Participate
         </NavLink>
-        <Link to="/app/quizzes/new">＋ Create</Link>
-        <Link to="/app/join">Join</Link>
+
+        <Link
+          className="ui-create"
+          to="/app/quizzes/new"
+          aria-label="Create a quiz"
+          title="Create a quiz"
+        >
+          +
+        </Link>
+
+        <Link className="ui-join-link" to="/app/join">
+          Join
+        </Link>
       </nav>
 
-      <section className="qp-content">
-        <h1>
-          {presenting ? 'Quizzes you made' : 'Participate'}
-        </h1>
+      {presenting && (
+        <div className="ui-toolbar">
+          <input
+            type="search"
+            aria-label="Search your quizzes"
+            placeholder="Search your quizzes…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
 
-        <RequestError error={action.error} />
+          <details className="ui-filter">
+            <summary>
+              Filter{sort !== "recent" ? " •" : ""}
+            </summary>
 
-        {presenting ? (
-          <>
-            <div className="qp-toolbar">
+            <div className="ui-filter-panel">
               <label>
-                Search
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(event) =>
-                    setQuery(event.target.value)
-                  }
-                />
-              </label>
-
-              <label>
-                Sort
+                Sort quizzes
                 <select
                   value={sort}
-                  onChange={(event) =>
-                    setSort(event.target.value)
-                  }
+                  onChange={(event) => setSort(event.target.value)}
                 >
-                  <option value="recent">
-                    Newest first
-                  </option>
-                  <option value="az">A–Z</option>
+                  <option value="recent">Newest first</option>
+                  <option value="az">Title A–Z</option>
+                  <option value="questions">Most questions</option>
                 </select>
               </label>
 
+              <p>Showing your published quizzes.</p>
+
               <button
                 type="button"
-                onClick={resource.reload}
                 disabled={resource.loading || action.busy}
+                onClick={resource.reload}
               >
-                Refresh
+                Refresh list
               </button>
+            </div>
+          </details>
+
+          <span className="ui-count" aria-live="polite">
+            <strong>{quizzes.length}</strong>
+            <span>quizzes</span>
+          </span>
+        </div>
+      )}
+
+      <div className="ui-dashboard-list">
+        <RequestError error={action.error} />
+
+        {action.busy && (
+          <p className="ui-message" role="status">
+            Saving your request…
+          </p>
+        )}
+
+        {presenting ? (
+          <>
+            <div className="ui-list-heading" aria-hidden="true">
+              <span>Status</span>
+              <span>Quiz</span>
+              <span>Questions</span>
+              <span>Created</span>
+              <span>Actions</span>
             </div>
 
             {resource.loading && (
-              <p role="status">Loading quizzes…</p>
+              <p className="ui-empty" role="status">
+                Loading your quizzes…
+              </p>
             )}
 
             <RequestError
@@ -142,79 +190,95 @@ export default function PreviewDashboard() {
               retry={resource.reload}
             />
 
-            {resource.data && !quizzes.length && (
-              <p>
-                No matching published quizzes.
-                Create one to get started.
-              </p>
-            )}
+            {!resource.loading &&
+              !resource.error &&
+              !quizzes.length && (
+                <div className="ui-empty">
+                  <h1>No matching quizzes</h1>
+                  <p>Create and publish a quiz to start hosting.</p>
+                  <Link className="qp-button" to="/app/quizzes/new">
+                    Create a quiz
+                  </Link>
+                </div>
+              )}
 
             {quizzes.map((quiz) => (
-              <article
-                className="qp-row"
-                key={quiz.quiz_id}
-              >
-                <span className="qp-badge">
-                  {quiz.status}
-                </span>
+              <article className="ui-quiz-row" key={quiz.quiz_id}>
+                <span className="ui-published">Published</span>
 
-                <div>
+                <div className="ui-quiz-title">
                   <Link to={`/app/quizzes/${quiz.quiz_id}`}>
                     {quiz.title}
                   </Link>
+
                   <small>
-                    {quiz.question_count} questions ·
-                    Public · Read-only
+                    Public · Read-only · {quiz.question_count} questions
                   </small>
                 </div>
 
-                <div className="qp-actions">
-                  <button
-                    type="button"
-                    className="qp-primary"
-                    disabled={action.busy}
-                    onClick={() => void host(quiz)}
-                  >
-                    Host
-                  </button>
+                <span className="ui-desktop-cell">
+                  {quiz.question_count}
+                </span>
 
-                  <button
-                    type="button"
-                    disabled={action.busy}
-                    onClick={() => void archive(quiz)}
-                  >
-                    Archive
-                  </button>
-                </div>
+                <span className="ui-desktop-cell">
+                  {displayDate(quiz.created_at)}
+                </span>
+
+                <details className="ui-row-menu">
+                  <summary aria-label={`Actions for ${quiz.title}`}>
+                    ⋯
+                  </summary>
+
+                  <div className="ui-row-options">
+                    <Link to={`/app/quizzes/${quiz.quiz_id}`}>
+                      View quiz
+                    </Link>
+
+                    <button
+                      type="button"
+                      disabled={action.busy}
+                      onClick={() => void host(quiz)}
+                    >
+                      Host live session
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={action.busy}
+                      onClick={() => void archive(quiz)}
+                    >
+                      Archive quiz
+                    </button>
+                  </div>
+                </details>
               </article>
             ))}
           </>
         ) : (
-          <p>
-            <Link
-              className="qp-button"
-              to="/app/join"
-            >
-              Join with a code
+          <div className="ui-empty">
+            <p className="ui-eyebrow">Participate</p>
+            <h1>
+              Pull up a <span className="ui-highlight">seat.</span>
+            </h1>
+            <p>Enter the code displayed on your host’s screen.</p>
+
+            <Link className="qp-button qp-primary" to="/app/join">
+              Join a live quiz →
             </Link>
-          </p>
+          </div>
         )}
+      </div>
 
-        {action.busy && (
-          <p role="status">Saving your request…</p>
-        )}
-
-        <h2>Return to a session</h2>
+      <details className="ui-return">
+        <summary>Return to a previous session</summary>
         <p>
-          Session history is not connected yet. Keep your
-          session URL, or enter its session ID below.
-          This is different from the join code.
+          Enter the session ID from its URL. This is different from
+          the six-digit join code.
         </p>
-
         <ResumeSession
-          mode={presenting ? 'host' : 'participant'}
+          mode={presenting ? "host" : "participant"}
         />
-      </section>
-    </>
-  )
+      </details>
+    </section>
+  );
 }
