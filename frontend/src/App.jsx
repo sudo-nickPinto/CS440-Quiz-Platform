@@ -14,6 +14,8 @@ const NO_SESSION = [
   'login_required',
   'consent_required',
   'interaction_required',
+  'missing_refresh_token',
+  'invalid_grant',
 ]
 
 export default function App() {

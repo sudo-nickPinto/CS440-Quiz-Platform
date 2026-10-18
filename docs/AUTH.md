@@ -192,7 +192,7 @@ Every error has the shape `{"error": {"code": "...", "message": "..."}}`; the fr
 
 ## 9. Behaviors worth knowing
 
-**Dev-only localStorage cache.** `main.jsx` sets `cacheLocation` to `'localstorage'` when `import.meta.env.DEV` is true and `'memory'` otherwise. By default the SDK keeps tokens in memory, so a refresh forgets them and the app asks Auth0 to restore the session silently (`prompt=none`, see `App.jsx`). On localhost that silent check always fails (next item), so in dev the session is cached in localStorage and reloads keep you logged in. Production builds keep tokens in memory, which exposes less to script injection.
+**Refresh tokens, cached in localStorage.** `main.jsx` sets `useRefreshTokens` and `cacheLocation="localstorage"` in every build. The SDK requests `offline_access`, stores a rotating refresh token, and renews access tokens by calling Auth0's token endpoint directly. Without this, renewing a token or restoring the session after a reload uses a hidden iframe that needs a third-party cookie, which Safari, Brave and Firefox's strict mode block. If the refresh token is missing, expired or revoked, the SDK throws `missing_refresh_token` / `invalid_grant`, and the app treats that like `login_required` (`NEEDS_INTERACTION` in `api.js`, `NO_SESSION` in `App.jsx`). Trade-off: tokens in localStorage can be read by injected script, so keep XSS out (JSX escaping, no `dangerouslySetInnerHTML` with user data). Rotation limits the damage, because a stolen refresh token is invalidated the next time the real user refreshes. Needs two dashboard settings: "Allow Offline Access" on the API, and Refresh Token Rotation on the application (checklist item 7).
 
 **Localhost always shows the consent screen.** Auth0 always asks for consent on `localhost`, even for your own app and even if "Allow Skipping User Consent" is on for the API (it is). This also makes the silent re-login fail with `consent_required`. Deploying to a real domain should remove the screen.
 
@@ -238,7 +238,7 @@ Login, token verification, account creation and linking of login methods all wor
 **Auth0 tenant settings (dashboard only, nothing in the repo)**
 5. **Require email verification for email/password signups**, and test that an unverified signup gets 403 `email_not_verified`. Account linking trusts `email_verified`, so this is a security requirement, not a nicety.
 6. **Set up a real email sender** (Authentication, then Email Provider). Auth0's built-in sender is rate-limited and meant for development. Verification and password-reset emails both go through it.
-7. **Decide how often people must log in** (the "once a month" idea): the SSO session lifetime and the application's refresh-token lifetime in the Auth0 dashboard. Email verification itself only happens once and never repeats.
+7. **Turn on refresh tokens and decide how often people must log in** (the "once a month" idea). APIs > (our API) > Settings: enable **Allow Offline Access**. Applications > (our SPA) > Settings > Refresh Token Rotation: enable **Rotation**, and set the absolute and inactivity lifetimes (e.g. 30 days absolute, 7 days inactivity). Those lifetimes are now what decides when users must log in again. Email verification itself only happens once and never repeats.
 8. **Test "Forgot password?"** once end to end with a real inbox. It is provided by Auth0 and has no code in this repo.
 
 **Product decisions still open**
