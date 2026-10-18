@@ -264,7 +264,7 @@ def skewed_token(sub: str, *, iat_offset: int = 0, exp_offset: int = 3600) -> st
     ids=["issued-slightly-in-future", "expired-just-now"],
 )
 def test_small_clock_skew_is_tolerated_like_http(live, iat_offset, exp_offset) -> None:
-    """The socket accepts the same tokens as HTTP (5 s leeway, auth.py)."""
+    """The socket accepts the same small clock skew as HTTP."""
     client, people = live
     sid = make_session(client, people)["session_id"]
     token = skewed_token("test|host", iat_offset=iat_offset, exp_offset=exp_offset)
@@ -279,8 +279,14 @@ def test_small_clock_skew_is_tolerated_like_http(live, iat_offset, exp_offset) -
 def test_token_issued_beyond_leeway_closes_with_4401(live) -> None:
     client, people = live
     sid = make_session(client, people)["session_id"]
+
+    token = skewed_token(
+        "test|host",
+        iat_offset=auth.TOKEN_LEEWAY_SECONDS + 60,
+    )
+
     with client.websocket_connect(ws_url(sid)) as ws:
-        ws.send_json({"type": "auth", "token": skewed_token("test|host", iat_offset=30)})
+        ws.send_json({"type": "auth", "token": token})
         assert_closed_with(ws, CloseCode.UNAUTHORIZED)
 
 

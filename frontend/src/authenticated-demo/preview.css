@@ -1,0 +1,531 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap');
+
+.qp {
+  min-height: 100vh;
+  padding: 20px 24px 36px;
+  background: var(--sand);
+  color: var(--ink);
+  font: 500 16px/1.5 'Space Grotesk', sans-serif;
+}
+
+.qp * {
+  box-sizing: border-box;
+}
+
+.qp h1,
+.qp h2,
+.qp h3 {
+  font-family: 'Archivo Black', sans-serif;
+  font-weight: 400;
+  letter-spacing: -.03em;
+}
+
+.qp h1 {
+  font-size: clamp(28px, 4vw, 48px);
+  margin: 20px 0;
+}
+
+.qp h2 {
+  font-size: clamp(20px, 3vw, 28px);
+  margin: 24px 0 14px;
+}
+
+.qp button,
+.qp input,
+.qp textarea,
+.qp select {
+  font: inherit;
+  border-radius: 0;
+}
+
+.qp button,
+.qp-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 9px 15px;
+  border: var(--b-thin);
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.qp button:hover:not(:disabled),
+.qp-button:hover {
+  background: var(--sky-soft);
+}
+
+.qp button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.qp .qp-primary {
+  background: var(--orange-deep);
+  color: var(--paper);
+  border: var(--b);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.qp .qp-primary:hover {
+  background: var(--orange);
+}
+
+.qp :focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 4px;
+}
+
+.qp-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.qp-header > button {
+  margin-left: auto;
+}
+
+.qp-logo {
+  padding: 8px 14px;
+  background: var(--navy);
+  color: var(--paper);
+  border: var(--b);
+  box-shadow: 4px 4px 0 var(--ink);
+  font: 22px 'Archivo Black', sans-serif;
+  text-decoration: none;
+}
+
+.qp-logo span {
+  color: var(--sky);
+}
+
+.qp-notice {
+  padding: 12px;
+  background: var(--paper);
+  border: var(--b-thin);
+}
+
+.qp-frame {
+  background: var(--paper);
+  border: var(--b);
+  box-shadow: var(--shadow);
+}
+
+.qp-content {
+  padding: clamp(16px, 3vw, 32px);
+}
+
+.qp-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  border-bottom: var(--b);
+}
+
+.qp-tabs a {
+  flex: 1;
+  padding: 18px;
+  text-align: center;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.qp-tabs .active {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.qp-tabs a:first-child.active {
+  background: var(--orange-deep);
+}
+
+.qp-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 14px;
+  border-bottom: var(--b-thin);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--paper),
+    var(--paper) 10px,
+    var(--sand) 10px,
+    var(--sand) 20px
+  );
+}
+
+.qp-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.qp label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.qp input:not([type=radio]),
+.qp textarea,
+.qp select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px;
+  color: var(--ink);
+  background: var(--paper);
+  border: var(--b-thin);
+}
+
+.qp textarea {
+  resize: vertical;
+}
+
+.qp small {
+  display: block;
+  color: var(--gray);
+  font-weight: 500;
+}
+
+.qp-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 18px 0;
+  border-bottom: var(--b-thin);
+}
+
+.qp-row a:not(.qp-button) {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.qp-badge {
+  padding: 8px;
+  background: var(--sky-soft);
+  border: var(--b-thin);
+  text-align: center;
+}
+
+.qp-card {
+  margin: 22px 0;
+  border: var(--b);
+  box-shadow: 4px 4px 0 var(--ink);
+  scroll-margin-top: 16px;
+}
+
+.qp-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.qp-bar .qp-actions {
+  margin: 0;
+}
+
+.qp fieldset {
+  border: var(--b-thin);
+  margin: 20px 0;
+  padding: 16px;
+  min-width: 0;
+}
+
+.qp-choice-editor {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 44px;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.qp-choice-editor label {
+  display: flex;
+  align-items: center;
+}
+
+.qp input[type=radio] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--navy);
+}
+
+.qp-savebar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 18px;
+  background: var(--sand);
+  border-top: var(--b);
+}
+
+.qp-savebar p {
+  margin: 6px 0 0;
+}
+
+.qp-error {
+  padding: 16px;
+  border: var(--b);
+  background: var(--apricot);
+  margin-top: 20px;
+}
+
+.qp-center {
+  text-align: center;
+}
+
+.qp-center form {
+  max-width: 380px;
+  margin: 24px auto;
+}
+
+.qp-center form button {
+  margin-top: 20px;
+}
+
+.qp .qp-code {
+  font: 36px 'Archivo Black', sans-serif;
+  letter-spacing: .16em;
+  text-align: center;
+}
+
+.qp-countdown {
+  display: block;
+  font: 100px 'Archivo Black', sans-serif;
+  color: var(--navy);
+}
+
+.qp-chips,
+.qp-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0;
+}
+
+.qp-chips span {
+  padding: 10px;
+  border: var(--b-thin);
+  background: var(--sky-soft);
+}
+
+.qp-answer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.qp .qp-answer {
+  min-height: 100px;
+  padding: 18px;
+  border: var(--b);
+  font-size: clamp(20px, 3vw, 30px);
+  background: var(--sky-soft);
+  color: var(--navy);
+  overflow-wrap: anywhere;
+}
+
+.qp .qp-answer-1,
+.qp .qp-answer-3,
+.qp .qp-answer-5 {
+  background: var(--apricot);
+  color: var(--ink);
+}
+
+.qp progress {
+  width: 100%;
+  height: 18px;
+  accent-color: var(--navy);
+}
+
+.qp-distribution {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 25% 30px;
+  gap: 12px;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: var(--b-thin);
+}
+
+.qp-leaderboard {
+  list-style: none;
+  padding: 0;
+}
+
+.qp-leaderboard li {
+  display: grid;
+  grid-template-columns: 50px 1fr auto;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: var(--b-thin);
+}
+
+.qp-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 24px 0;
+}
+
+.qp-stats > div {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  background: var(--sky-soft);
+  border: var(--b-thin);
+}
+
+.qp-stats strong {
+  font: 28px 'Archivo Black', sans-serif;
+}
+
+.qp-tiles button {
+  display: block;
+  text-align: left;
+}
+
+.qp [aria-pressed=true] {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.qp [aria-pressed=true] small {
+  color: var(--paper);
+}
+
+.qp-review-options {
+  list-style: none;
+  padding: 0;
+}
+
+.qp-review-options li {
+  border: var(--b-thin);
+  padding: 12px;
+  margin: 10px 0;
+}
+
+.qp-correct {
+  background: var(--sky-soft);
+}
+
+.qp summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 0;
+}
+
+.qp-podium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 16px;
+  margin: 30px 0;
+}
+
+.qp-place {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  min-height: 145px;
+  padding: 18px;
+  border: var(--b);
+  background: var(--sky-soft);
+  text-align: center;
+}
+
+.qp-place[data-rank="1"] {
+  min-height: 205px;
+  background: var(--apricot);
+}
+
+.qp-place strong {
+  font: 32px 'Archivo Black', sans-serif;
+}
+
+.qp-muted {
+  color: var(--gray);
+}
+
+.qp-skip {
+  position: absolute;
+  left: -10000px;
+}
+
+.qp-skip:focus {
+  left: 20px;
+  top: 8px;
+  padding: 12px;
+  background: var(--paper);
+  z-index: 10;
+}
+
+@media (max-width: 700px) {
+  .qp {
+    padding: 12px 10px 24px;
+  }
+
+  .qp-logo {
+    font-size: 18px;
+  }
+
+  .qp-row {
+    grid-template-columns: 85px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .qp-row > :last-child {
+    grid-column: 2;
+  }
+
+  .qp-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .qp-podium {
+    gap: 6px;
+  }
+
+  .qp-place {
+    padding: 12px 6px;
+    font-size: 12px;
+    min-width: 0;
+  }
+
+  .qp-choice-editor {
+    grid-template-columns: 46px minmax(0, 1fr) 40px;
+    gap: 6px;
+  }
+
+  .qp-content {
+    padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp *,
+  .qp *::before,
+  .qp *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

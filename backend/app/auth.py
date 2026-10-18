@@ -4,6 +4,7 @@ import jwt
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
+import logging
 
 from app.accounts import get_or_create_account
 from app.database import get_db
@@ -12,7 +13,7 @@ from app.models.account import AccountRole, effective_role
 
 bearer = HTTPBearer(auto_error=False)
 _jwks: jwt.PyJWKClient | None = None
-TOKEN_LEEWAY_SECONDS = 5
+TOKEN_LEEWAY_SECONDS = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +65,17 @@ def current_user(
     try:
         return decode_access_token(settings, creds.credentials)
     except jwt.PyJWTError as exc:
-        raise APIError(401, "invalid_token", "Invalid token") from exc
+        logging.getLogger(__name__).warning(
+            "Auth0 token validation failed: %s",
+            type(exc).__name__,
+        )
+        raise APIError(
+            401,
+            "invalid_token",
+            "Invalid token",
+        ) from exc
+
+
 
 
 def get_account_record(
