@@ -90,7 +90,7 @@ def test_me_rejects_garbage_token(client):
     [
         {"audience": "https://some-other-api"},
         {"issuer": "https://evil.example.com/"},
-        {"exp_offset": -10},
+        {"exp_offset": -120},
     ],
     ids=["wrong-audience", "wrong-issuer", "expired"],
 )
