@@ -9,9 +9,12 @@ from app.errors import APIError
 from app.live.auth import authenticate_token
 from app.live.hub import LiveConnection, LiveHub
 from app.live.protocol import (
-    UNSUPPORTED_COMMANDS,
     AuthMessage,
+    CancelSessionMessage,
     CloseCode,
+    CloseQuestionMessage,
+    EndSessionMessage,
+    LeaveMessage,
     LiveCloseError,
     OpenQuestionMessage,
     PingMessage,
@@ -22,8 +25,9 @@ from app.live.protocol import (
 )
 from app.live.snapshot import build_session_state, resolve_membership
 from app.schemas.response import ResponseSubmit
-from app.services.live_questions import open_question
+from app.services.live_questions import close_question_now, open_question
 from app.services.responses import submit_response
+from app.services.session_end import cancel_session, end_session, leave_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["live"])
@@ -142,7 +146,9 @@ async def _receive_loop(hub: LiveHub, conn: LiveConnection) -> None:
                 websocket.receive_text(), timeout=IDLE_TIMEOUT_SECONDS
             )
         except asyncio.TimeoutError:
-            await websocket.close(code=CloseCode.NORMAL, reason="idle_timeout")
+            # Not 1000: clients treat 1000 as "session over" (§7). 1001 is
+            # retryable, so a client whose pings stalled just reconnects.
+            await websocket.close(code=CloseCode.GOING_AWAY, reason="idle_timeout")
             return
 
         try:
@@ -150,19 +156,6 @@ async def _receive_loop(hub: LiveHub, conn: LiveConnection) -> None:
         except MalformedMessage as exc:
             await websocket.close(code=CloseCode.MALFORMED, reason=str(exc))
             return
-
-        request_id = data.get("request_id")
-        request_id = request_id if isinstance(request_id, str) else None
-        if data["type"] in UNSUPPORTED_COMMANDS:
-            await hub.send(
-                conn,
-                error_message(
-                    request_id,
-                    "command_not_supported",
-                    "This command is not available yet.",
-                ),
-            )
-            continue
 
         try:
             message = command_adapter.validate_python(data)
@@ -176,6 +169,8 @@ async def _receive_loop(hub: LiveHub, conn: LiveConnection) -> None:
             await hub.send(
                 conn, error_message(message.request_id, exc.code, exc.message)
             )
+        if conn.closed:
+            return  # the session ended or this participant left
 
 
 async def _handle(hub: LiveHub, conn: LiveConnection, message) -> None:
@@ -218,3 +213,63 @@ async def _handle(hub: LiveHub, conn: LiveConnection, message) -> None:
             },
         )
         await hub.after_answer(conn.session_id, message.session_question_id)
+        return
+
+    if isinstance(message, CloseQuestionMessage):
+        _require_host(conn)
+        event = await hub.run_db(
+            close_question_now,
+            conn.account,
+            conn.session_id,
+            message.session_question_id,
+        )
+        await hub.send(
+            conn,
+            {
+                "type": "ack",
+                "request_id": message.request_id,
+                "session_question_id": message.session_question_id,
+            },
+        )
+        # None: an answer or the deadline closed it first and already broadcast.
+        if event is not None:
+            await hub.question_closed(conn.session_id, event)
+        return
+
+    if isinstance(message, EndSessionMessage):
+        _require_host(conn)
+        ended = await hub.run_db(end_session, conn.account, conn.session_id)
+        await hub.send(conn, {"type": "ack", "request_id": message.request_id})
+        if ended.closed_question is not None:
+            await hub.question_closed(conn.session_id, ended.closed_question)
+        await hub.session_ended(conn.session_id, ended.results)
+        return
+
+    if isinstance(message, CancelSessionMessage):
+        _require_host(conn)
+        results = await hub.run_db(cancel_session, conn.account, conn.session_id)
+        await hub.send(conn, {"type": "ack", "request_id": message.request_id})
+        await hub.session_ended(conn.session_id, results)
+        return
+
+    if isinstance(message, LeaveMessage):
+        if conn.role != "participant":
+            raise APIError(
+                403,
+                "session_participant_denied",
+                "Only a participant can leave; the host ends or cancels instead.",
+            )
+        left = await hub.run_db(leave_session, conn.account, conn.session_id)
+        await hub.send(conn, {"type": "ack", "request_id": message.request_id})
+        await hub.participant_left(conn, left)
+        return
+
+
+def _require_host(conn: LiveConnection) -> None:
+    # The services check host_id too; this just gives a clearer error early.
+    if conn.role != "host":
+        raise APIError(
+            403,
+            "session_host_denied",
+            "Only this session's host can do that.",
+        )

@@ -18,4 +18,9 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    // The e2e test runs in Node and starts the backend.
+    files: ['e2e/**/*.js'],
+    languageOptions: { globals: globals.node },
+  },
 ])

@@ -111,14 +111,16 @@ class DuplicateRaceSession:
     """Small database double that reproduces a simultaneous second insert."""
 
     def __init__(self) -> None:
+        question = played_question()
         self.results = iter(
             [
+                question.session,
                 SessionParticipant(
                     session_participant_id=60,
                     session_id=20,
                     account_id=7,
                 ),
-                played_question(),
+                question,
                 None,
                 answer_choice(is_correct=True),
                 99,

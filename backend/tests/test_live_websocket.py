@@ -23,6 +23,7 @@ from app import auth
 from app.auth import CurrentAccount, get_active_account
 from app.config import Settings
 from app.database import Base
+from app.api.routes import live as live_routes
 from app.live.hub import LiveConnection, LiveHub
 from app.live.protocol import CloseCode
 from app.main import create_app
@@ -288,6 +289,19 @@ def test_token_issued_beyond_leeway_closes_with_4401(live) -> None:
     with client.websocket_connect(ws_url(sid)) as ws:
         ws.send_json({"type": "auth", "token": token})
         assert_closed_with(ws, CloseCode.UNAUTHORIZED)
+
+
+def test_idle_socket_closes_with_retryable_1001_not_1000(live, monkeypatch) -> None:
+    # 1000 means "session over" to clients (§7); an idle drop must not.
+    monkeypatch.setattr(live_routes, "IDLE_TIMEOUT_SECONDS", 0.2)
+    client, people = live
+    sid = make_session(client, people)["session_id"]
+    with client.websocket_connect(ws_url(sid)) as ws:
+        assert authenticate(ws, "host")["type"] == "session_state"
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_json()
+    assert closed.value.code == CloseCode.GOING_AWAY == 1001
+    assert closed.value.reason == "idle_timeout"
 
 
 def test_missing_token_closes_with_4401(live) -> None:
