@@ -215,13 +215,15 @@ export default function PreviewDashboard() {
                   <div className="ui-row-options">
                     <Link to={`/app/quizzes/${quiz.quiz_id}`}>View quiz</Link>
 
-                    <button
-                      type="button"
-                      disabled={action.busy}
-                      onClick={() => void host(quiz)}
-                    >
-                      Host live session
-                    </button>
+                    {quiz.author_id === account.account_id && (
+                      <button
+                        type="button"
+                        disabled={action.busy}
+                        onClick={() => void host(quiz)}
+                      >
+                        Host live session
+                      </button>
+                    )}
 
                     <button
                       type="button"
