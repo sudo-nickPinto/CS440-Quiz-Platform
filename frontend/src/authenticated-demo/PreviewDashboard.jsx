@@ -1,11 +1,5 @@
 import { useState } from "react";
-import {
-  Link,
-  Navigate,
-  NavLink,
-  useNavigate,
-  useParams,
-} from "react-router";
+import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router";
 
 import { useAccount } from "./account";
 import { useAction, useApi, useResource } from "./rest";
@@ -14,14 +8,13 @@ import { ResumeSession } from "./SessionPages";
 
 function displayDate(value) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? "—"
-    : date.toLocaleDateString();
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString();
 }
 
 export default function PreviewDashboard() {
   const { view } = useParams();
   const account = useAccount();
+  const isAdmin = account.role === "ADMIN";
   const api = useApi();
   const navigate = useNavigate();
   const action = useAction();
@@ -39,7 +32,7 @@ export default function PreviewDashboard() {
   const quizzes = (resource.data || [])
     .filter(
       (quiz) =>
-        quiz.author_id === account.account_id &&
+        (isAdmin || quiz.author_id === account.account_id) &&
         quiz.status === "PUBLISHED" &&
         quiz.title.toLowerCase().includes(query.trim().toLowerCase()),
     )
@@ -53,8 +46,7 @@ export default function PreviewDashboard() {
       }
 
       return (
-        (Date.parse(b.created_at) || 0) -
-          (Date.parse(a.created_at) || 0) ||
+        (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0) ||
         b.quiz_id - a.quiz_id
       );
     });
@@ -91,13 +83,9 @@ export default function PreviewDashboard() {
   return (
     <section className="ui-dashboard" aria-label="Dashboard">
       <nav className="ui-tabs" aria-label="Dashboard views">
-        <NavLink to="/app/dashboard/present">
-          Present
-        </NavLink>
+        <NavLink to="/app/dashboard/present">Present</NavLink>
 
-        <NavLink to="/app/dashboard/participate">
-          Participate
-        </NavLink>
+        <NavLink to="/app/dashboard/participate">Participate</NavLink>
 
         <Link
           className="ui-create"
@@ -117,16 +105,18 @@ export default function PreviewDashboard() {
         <div className="ui-toolbar">
           <input
             type="search"
-            aria-label="Search your quizzes"
-            placeholder="Search your quizzes…"
+            aria-label={
+              isAdmin ? "Search all published quizzes" : "Search your quizzes"
+            }
+            placeholder={
+              isAdmin ? "Search all published quizzes…" : "Search your quizzes…"
+            }
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
 
           <details className="ui-filter">
-            <summary>
-              Filter{sort !== "recent" ? " •" : ""}
-            </summary>
+            <summary>Filter{sort !== "recent" ? " •" : ""}</summary>
 
             <div className="ui-filter-panel">
               <label>
@@ -141,7 +131,11 @@ export default function PreviewDashboard() {
                 </select>
               </label>
 
-              <p>Showing your published quizzes.</p>
+              <p>
+                {isAdmin
+                  ? "Showing all published quizzes."
+                  : "Showing your published quizzes."}
+              </p>
 
               <button
                 type="button"
@@ -185,54 +179,41 @@ export default function PreviewDashboard() {
               </p>
             )}
 
-            <RequestError
-              error={resource.error}
-              retry={resource.reload}
-            />
+            <RequestError error={resource.error} retry={resource.reload} />
 
-            {!resource.loading &&
-              !resource.error &&
-              !quizzes.length && (
-                <div className="ui-empty">
-                  <h1>No matching quizzes</h1>
-                  <p>Create and publish a quiz to start hosting.</p>
-                  <Link className="qp-button" to="/app/quizzes/new">
-                    Create a quiz
-                  </Link>
-                </div>
-              )}
+            {!resource.loading && !resource.error && !quizzes.length && (
+              <div className="ui-empty">
+                <h1>No matching quizzes</h1>
+                <p>Create and publish a quiz to start hosting.</p>
+                <Link className="qp-button" to="/app/quizzes/new">
+                  Create a quiz
+                </Link>
+              </div>
+            )}
 
             {quizzes.map((quiz) => (
               <article className="ui-quiz-row" key={quiz.quiz_id}>
                 <span className="ui-published">Published</span>
 
                 <div className="ui-quiz-title">
-                  <Link to={`/app/quizzes/${quiz.quiz_id}`}>
-                    {quiz.title}
-                  </Link>
+                  <Link to={`/app/quizzes/${quiz.quiz_id}`}>{quiz.title}</Link>
 
                   <small>
                     Public · Read-only · {quiz.question_count} questions
                   </small>
                 </div>
 
-                <span className="ui-desktop-cell">
-                  {quiz.question_count}
-                </span>
+                <span className="ui-desktop-cell">{quiz.question_count}</span>
 
                 <span className="ui-desktop-cell">
                   {displayDate(quiz.created_at)}
                 </span>
 
                 <details className="ui-row-menu">
-                  <summary aria-label={`Actions for ${quiz.title}`}>
-                    ⋯
-                  </summary>
+                  <summary aria-label={`Actions for ${quiz.title}`}>⋯</summary>
 
                   <div className="ui-row-options">
-                    <Link to={`/app/quizzes/${quiz.quiz_id}`}>
-                      View quiz
-                    </Link>
+                    <Link to={`/app/quizzes/${quiz.quiz_id}`}>View quiz</Link>
 
                     <button
                       type="button"
@@ -272,12 +253,10 @@ export default function PreviewDashboard() {
       <details className="ui-return">
         <summary>Return to a previous session</summary>
         <p>
-          Enter the session ID from its URL. This is different from
-          the six-digit join code.
+          Enter the session ID from its URL. This is different from the
+          six-digit join code.
         </p>
-        <ResumeSession
-          mode={presenting ? "host" : "participant"}
-        />
+        <ResumeSession mode={presenting ? "host" : "participant"} />
       </details>
     </section>
   );
