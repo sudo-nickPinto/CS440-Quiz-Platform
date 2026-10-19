@@ -244,4 +244,3 @@ def test_csv_contains_saved_scores_and_escapes_formulas(db):
     )
 
     assert ["1", "'=1+1", "875", "1"] in rows
-    
