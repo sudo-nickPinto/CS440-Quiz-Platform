@@ -1068,3 +1068,22 @@
     transition: none;
   }
 }
+
+.qp .qp-explanation {
+  margin-top: 20px;
+  padding: 18px;
+  border: var(--b-thin);
+  background: var(--sky-soft);
+}
+
+.qp .qp-explanation h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.qp .qp-explanation p,
+.qp .rr-explanation p {
+  margin-bottom: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

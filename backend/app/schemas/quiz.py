@@ -24,6 +24,7 @@ class AnswerChoiceCreate(QuizRequestModel):
 
 class QuestionCreate(QuizRequestModel):
     question_text: str
+    explanation: str | None = Field(default=None, max_length=5000)
     time_limit_seconds: int = Field(default=20, ge=1, le=65_535)
     base_points: int = Field(default=1000, ge=1, le=4_294_967_295)
     choices: list[AnswerChoiceCreate] = Field(min_length=2, max_length=255)
@@ -35,6 +36,13 @@ class QuestionCreate(QuizRequestModel):
         if not value:
             raise ValueError("Question text must not be blank.")
         return value
+
+    @field_validator("explanation")
+    @classmethod
+    def normalize_explanation(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
 
     @model_validator(mode="after")
     def must_have_a_correct_choice(self) -> "QuestionCreate":
@@ -81,6 +89,7 @@ class QuestionResponse(BaseModel):
     question_order: int
     question_type: QuestionType
     question_text: str
+    explanation: str | None = None
     time_limit_seconds: int
     base_points: int
     choices: list[AnswerChoiceResponse]
