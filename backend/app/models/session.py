@@ -213,3 +213,32 @@ class Response(Base):
         back_populates="responses"
     )
     choice: Mapped[AnswerChoice | None] = relationship()
+
+
+class Result(Base):
+    """One participant's final standing, written once when the session ends."""
+
+    __tablename__ = "result"
+    __table_args__ = (
+        UniqueConstraint("session_participant_id", name="uq_result_participant"),
+        CheckConstraint("final_rank >= 1", name="ck_result_rank"),
+    )
+
+    result_id: Mapped[int] = mapped_column(INTEGER(unsigned=True), primary_key=True)
+    session_participant_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey(
+            "session_participant.session_participant_id", ondelete="CASCADE"
+        ),
+        nullable=False,
+    )
+    total_score: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True), nullable=False, default=0, server_default="0"
+    )
+    correct_count: Mapped[int] = mapped_column(
+        SMALLINT(unsigned=True), nullable=False, default=0, server_default="0"
+    )
+    final_rank: Mapped[int] = mapped_column(SMALLINT(unsigned=True), nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(
+        DATETIME(fsp=3), nullable=False, server_default=func.now()
+    )

@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from copy import deepcopy
 
 import pytest
 from fastapi.testclient import TestClient
@@ -175,3 +176,51 @@ def test_inactive_account_cannot_use_quiz_endpoints(
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "inactive_account"
+
+@pytest.mark.parametrize(
+    ("explanation", "expected"),
+    [
+        (
+            "  Two is even.\nIt is divisible by two.  ",
+            "Two is even.\nIt is divisible by two.",
+        ),
+        ("", None),
+        ("   \n  ", None),
+        (None, None),
+        ("x" * 5000, "x" * 5000),
+    ],
+)
+def test_explanation_is_saved_and_returned(
+    quiz_client,
+    explanation,
+    expected,
+) -> None:
+    client, _, _ = quiz_client
+    payload = deepcopy(QUIZ_PAYLOAD)
+    payload["questions"][0]["explanation"] = explanation
+
+    created = client.post("/quizzes", json=payload)
+
+    assert created.status_code == 201
+    body = created.json()
+    assert body["version"]["questions"][0]["explanation"] == expected
+
+    # The second question omits explanation entirely.
+    assert body["version"]["questions"][1]["explanation"] is None
+
+    # A separate GET must return the saved value.
+    fetched = client.get(f"/quizzes/{body['quiz_id']}")
+
+    assert fetched.status_code == 200
+    assert fetched.json()["version"]["questions"][0]["explanation"] == expected
+
+
+def test_explanation_over_limit_is_rejected(quiz_client) -> None:
+    client, _, _ = quiz_client
+    payload = deepcopy(QUIZ_PAYLOAD)
+    payload["questions"][0]["explanation"] = "x" * 5001
+
+    response = client.post("/quizzes", json=payload)
+
+    assert response.status_code == 422
+    

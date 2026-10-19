@@ -1,367 +1,397 @@
-import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
-import {
-  blankEditor,
-  LETTERS,
-  newQuestion,
-  validateQuiz,
-} from './model'
-import { dispatch, usePreview } from './store'
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router";
+
+import { blankEditor, LETTERS, newQuestion } from "./model";
+import { toQuizCreate } from "./quizPayload";
+import { useAction, useApi, useResource } from "./rest";
+import RequestError from "./RequestError";
 
 export function QuizEditor() {
-  const { editor } = usePreview()
-  const navigate = useNavigate()
-  const [errors, setErrors] = useState([])
-  const [reviewing, setReviewing] = useState(false)
+  const [editor, setEditor] = useState(blankEditor);
+  const [reviewing, setReviewing] = useState(false);
+  const [validation, setValidation] = useState("");
+
+  const api = useApi();
+  const action = useAction();
+  const navigate = useNavigate();
 
   function edit(next) {
-    dispatch({ type: 'EDITOR', editor: next })
-    setReviewing(false)
+    setEditor(next);
+    setReviewing(false);
+    setValidation("");
   }
 
-  function changeQuestion(id, change) {
+  function changeQuestion(id, changes) {
     edit({
       ...editor,
-      questions: editor.questions.map((q) =>
-        q.id === id ? { ...q, ...change } : q,
+      questions: editor.questions.map((question) =>
+        question.id === id ? { ...question, ...changes } : question,
       ),
-    })
+    });
   }
 
   function move(index, offset) {
-    const questions = [...editor.questions]
+    const questions = [...editor.questions];
+    const next = index + offset;
 
-    ;[questions[index], questions[index + offset]] = [
-      questions[index + offset],
-      questions[index],
-    ]
+    [questions[index], questions[next]] = [questions[next], questions[index]];
 
-    edit({ ...editor, questions })
+    edit({ ...editor, questions });
   }
 
-  function save() {
-    const issues = validateQuiz(editor)
-    setErrors(issues)
+  function review(event) {
+    event.preventDefault();
 
-    if (issues.length) {
-      setReviewing(false)
-      return
+    try {
+      toQuizCreate(editor);
+      setValidation("");
+      setReviewing(true);
+    } catch (error) {
+      setValidation(error.message);
+      setReviewing(false);
     }
+  }
 
-    const id = crypto.randomUUID()
+  async function save() {
+    const quiz = await action.run(() =>
+      api("/quizzes", {
+        method: "POST",
+        body: JSON.stringify(toQuizCreate(editor)),
+      }),
+    );
 
-    dispatch({
-      type: 'SAVE',
-      id,
-      nextEditor: blankEditor(),
-    })
-
-    navigate(`/app/quizzes/${id}`)
+    if (quiz) {
+      navigate(`/app/quizzes/${quiz.quiz_id}`, {
+        replace: true,
+      });
+    }
   }
 
   return (
-    <form
-      noValidate
-      onSubmit={(e) => {
-        e.preventDefault()
-        const issues = validateQuiz(editor)
-        setErrors(issues)
-        setReviewing(issues.length === 0)
-      }}
-    >
-      <div className="qp-toolbar">
-        <Link to="/app/dashboard/present">← Dashboard</Link>
-        <strong>Create a quiz</strong>
-        <span>Not saved</span>
-      </div>
-
-      <div className="qp-content">
-        <p>
-          Work in progress is kept only in this browser.
-          Saving locks the quiz.
-        </p>
-
-        <label>
-          Quiz title
-          <input
-            maxLength={200}
-            value={editor.title}
-            onChange={(e) =>
-              edit({ ...editor, title: e.target.value })
-            }
-          />
-        </label>
-
+    <form noValidate onSubmit={review}>
+      <fieldset disabled={action.busy} className="qp-form-fields">
         <div className="qp-toolbar">
-          <nav className="qp-actions" aria-label="Jump to question">
-            {editor.questions.map((q, i) => (
-              <a key={q.id} href={`#question-${q.id}`}>
-                Q{i + 1}
-              </a>
-            ))}
-          </nav>
+          <Link to="/app/dashboard/present">← Dashboard</Link>
+          <strong>Create a quiz</strong>
+        </div>
+
+        <div className="qp-content">
+          <p>
+            Unsaved work stays on this page only. Refreshing or leaving discards
+            it. Saving publishes a read-only quiz to the database.
+          </p>
+
+          <label>
+            Quiz title
+            <input
+              maxLength={200}
+              value={editor.title}
+              onChange={(event) =>
+                edit({
+                  ...editor,
+                  title: event.target.value,
+                })
+              }
+            />
+          </label>
 
           <label>
             Default time (seconds)
             <input
               type="number"
-              min="5"
-              max="300"
+              min={5}
+              max={300}
               value={editor.defaultTime}
-              onChange={(e) =>
-                edit({ ...editor, defaultTime: e.target.value })
+              onChange={(event) =>
+                edit({
+                  ...editor,
+                  defaultTime: event.target.value,
+                })
               }
             />
           </label>
-        </div>
 
-        {editor.questions.map((q, index) => (
-          <article
-            className="qp-card"
-            id={`question-${q.id}`}
-            key={q.id}
-          >
-            <div className="qp-bar">
-              <strong>Question {index + 1}</strong>
+          {editor.questions.map((question, index) => (
+            <article className="qp-card" key={question.id}>
+              <div className="qp-bar">
+                <strong>Question {index + 1}</strong>
 
-              <div className="qp-actions">
-                <button
-                  type="button"
-                  disabled={index === 0}
-                  aria-label={`Move question ${index + 1} up`}
-                  onClick={() => move(index, -1)}
-                >
-                  ↑
-                </button>
+                <div className="qp-actions">
+                  <button
+                    type="button"
+                    disabled={index === 0}
+                    aria-label={`Move question ${index + 1} up`}
+                    onClick={() => move(index, -1)}
+                  >
+                    ↑
+                  </button>
 
-                <button
-                  type="button"
-                  disabled={index === editor.questions.length - 1}
-                  aria-label={`Move question ${index + 1} down`}
-                  onClick={() => move(index, 1)}
-                >
-                  ↓
-                </button>
+                  <button
+                    type="button"
+                    disabled={index === editor.questions.length - 1}
+                    aria-label={`Move question ${index + 1} down`}
+                    onClick={() => move(index, 1)}
+                  >
+                    ↓
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm('Delete this question?')) {
-                      edit({
-                        ...editor,
-                        questions: editor.questions.filter(
-                          (x) => x.id !== q.id,
-                        ),
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("Delete this question?")) {
+                        edit({
+                          ...editor,
+                          questions: editor.questions.filter(
+                            (item) => item.id !== question.id,
+                          ),
+                        });
+                      }
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+
+              <div className="qp-content">
+                <label>
+                  Question text
+                  <textarea
+                    rows={2}
+                    value={question.text}
+                    onChange={(event) =>
+                      changeQuestion(question.id, {
+                        text: event.target.value,
                       })
                     }
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
+                  />
+                </label>
 
-            <div className="qp-content">
-              <label>
-                Question text
-                <textarea
-                  rows={2}
-                  value={q.text}
-                  onChange={(e) =>
-                    changeQuestion(q.id, { text: e.target.value })
-                  }
-                />
-              </label>
+                <fieldset>
+                  <legend>Choices — select the correct answer</legend>
 
-              <fieldset>
-                <legend>
-                  Choices — select the correct answer
-                </legend>
+                  {question.options.map((option, choiceIndex) => (
+                    <div className="qp-choice-editor" key={choiceIndex}>
+                      <label>
+                        <input
+                          type="radio"
+                          name={`correct-${question.id}`}
+                          checked={question.correct === choiceIndex}
+                          onChange={() =>
+                            changeQuestion(question.id, {
+                              correct: choiceIndex,
+                            })
+                          }
+                        />
+                        {LETTERS[choiceIndex]}
+                      </label>
 
-                {q.options.map((option, i) => (
-                  <div className="qp-choice-editor" key={i}>
-                    <label>
                       <input
-                        type="radio"
-                        name={`correct-${q.id}`}
-                        checked={q.correct === i}
-                        onChange={() =>
-                          changeQuestion(q.id, { correct: i })
+                        maxLength={500}
+                        value={option}
+                        aria-label={
+                          `Question ${index + 1}, ` +
+                          `choice ${LETTERS[choiceIndex]}`
+                        }
+                        onChange={(event) =>
+                          changeQuestion(question.id, {
+                            options: question.options.map((text, i) =>
+                              i === choiceIndex ? event.target.value : text,
+                            ),
+                          })
                         }
                       />
-                      {LETTERS[i]}
-                    </label>
 
-                    <input
-                      aria-label={`Question ${index + 1}, choice ${LETTERS[i]}`}
-                      maxLength={500}
-                      value={option}
-                      onChange={(e) =>
-                        changeQuestion(q.id, {
-                          options: q.options.map((text, j) =>
-                            j === i ? e.target.value : text,
-                          ),
-                        })
-                      }
-                    />
+                      <button
+                        type="button"
+                        disabled={question.options.length <= 2}
+                        aria-label={`Remove choice ${LETTERS[choiceIndex]}`}
+                        onClick={() =>
+                          changeQuestion(question.id, {
+                            options: question.options.filter(
+                              (_, i) => i !== choiceIndex,
+                            ),
+                            correct:
+                              question.correct === choiceIndex
+                                ? null
+                                : question.correct !== null &&
+                                    question.correct > choiceIndex
+                                  ? question.correct - 1
+                                  : question.correct,
+                          })
+                        }
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
 
-                    <button
-                      type="button"
-                      disabled={q.options.length <= 2}
-                      aria-label={`Remove choice ${LETTERS[i]}`}
-                      onClick={() =>
-                        changeQuestion(q.id, {
-                          options: q.options.filter(
-                            (_, j) => j !== i,
-                          ),
-                          correct:
-                            q.correct === i
-                              ? null
-                              : q.correct !== null && q.correct > i
-                                ? q.correct - 1
-                                : q.correct,
-                        })
-                      }
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
+                  <button
+                    type="button"
+                    disabled={question.options.length >= 4}
+                    onClick={() =>
+                      changeQuestion(question.id, {
+                        options: [...question.options, ""],
+                      })
+                    }
+                  >
+                    ＋ Add choice
+                  </button>
+                </fieldset>
 
-                <button
-                  type="button"
-                  disabled={q.options.length >= 6}
-                  onClick={() =>
-                    changeQuestion(q.id, {
-                      options: [...q.options, ''],
-                    })
-                  }
-                >
-                  + Add choice
-                </button>
-              </fieldset>
+                <label>
+                  Answer explanation (optional)
+                  <textarea
+                    rows={4}
+                    maxLength={5000}
+                    value={question.explanation ?? ""}
+                    placeholder="Explain why the selected answer is correct."
+                    aria-describedby={`explanation-help-${question.id}`}
+                    onChange={(event) =>
+                      changeQuestion(question.id, {
+                        explanation: event.target.value,
+                      })
+                    }
+                  />
+                </label>
 
-              <label>
-                Question time (leave blank to use the default)
-                <input
-                  type="number"
-                  min="5"
-                  max="300"
-                  value={q.limit ?? ''}
-                  placeholder={String(editor.defaultTime)}
-                  onChange={(e) =>
-                    changeQuestion(q.id, {
-                      limit:
-                        e.target.value === ''
-                          ? null
-                          : e.target.value,
-                    })
-                  }
-                />
-              </label>
-            </div>
-          </article>
-        ))}
+                <small id={`explanation-help-${question.id}`}>
+                  Explain the reasoning, show a calculation, or add a useful
+                  example. This is saved with the quiz and available in the
+                  final results review.{" "}
+                  {(question.explanation ?? "").length.toLocaleString()}
+                  /5,000 characters.
+                </small>
 
-        <button
-          type="button"
-          onClick={() =>
-            edit({
-              ...editor,
-              questions: [...editor.questions, newQuestion()],
-            })
-          }
-        >
-          + Add question
-        </button>
+                <label>
+                  Question time (blank uses default)
+                  <input
+                    type="number"
+                    min={5}
+                    max={300}
+                    value={question.limit ?? ""}
+                    placeholder={String(editor.defaultTime)}
+                    onChange={(event) =>
+                      changeQuestion(question.id, {
+                        limit:
+                          event.target.value === "" ? null : event.target.value,
+                      })
+                    }
+                  />
+                </label>
 
-        {errors.length > 0 && (
-          <div className="qp-error" role="alert">
-            <strong>Please fix:</strong>
-            <ul>
-              {errors.map((error) => (
-                <li key={error}>{error}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+                <p>
+                  Base points: 1,000. The server calculates the awarded score.
+                </p>
+              </div>
+            </article>
+          ))}
 
-      <div className="qp-savebar">
-        {reviewing ? (
-          <>
-            <div>
-              <strong>Saving is final.</strong>
-              <p>
-                This preview will mark the quiz public, published,
-                and read-only. It is saved only in your browser.
-              </p>
-            </div>
+          <button
+            type="button"
+            onClick={() =>
+              edit({
+                ...editor,
+                questions: [...editor.questions, newQuestion()],
+              })
+            }
+          >
+            ＋ Add question
+          </button>
 
-            <button
-              type="button"
-              onClick={() => setReviewing(false)}
-            >
-              Keep editing
-            </button>
+          {validation && (
+            <p className="qp-error" role="alert">
+              {validation}
+            </p>
+          )}
+        </div>
 
-            <button
-              type="button"
-              className="qp-primary"
-              onClick={save}
-            >
-              Save for good
-            </button>
-          </>
-        ) : (
-          <>
-            <span>{editor.questions.length} questions</span>
-            <button className="qp-primary" type="submit">
+        <div className="qp-savebar">
+          {reviewing ? (
+            <>
+              <p>Saving publishes this quiz. It cannot be edited afterward.</p>
+
+              <button type="button" onClick={() => setReviewing(false)}>
+                Keep editing
+              </button>
+
+              <button
+                type="button"
+                className="qp-primary"
+                onClick={() => void save()}
+              >
+                {action.busy ? "Saving…" : "Save for good"}
+              </button>
+            </>
+          ) : (
+            <button type="submit" className="qp-primary">
               Review and save
             </button>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      </fieldset>
+
+      <RequestError error={action.error} />
     </form>
-  )
+  );
 }
 
 export function QuizViewer() {
-  const { quizId } = useParams()
-  const { quizzes } = usePreview()
-  const quiz = quizzes.find((q) => q.id === quizId)
+  const { quizId } = useParams();
+  const validId = /^[1-9][0-9]*$/.test(quizId);
 
-  if (!quiz) {
-    return (
-      <p className="qp-content">
-        Quiz not found. Return to the dashboard.
-      </p>
-    )
+  const resource = useResource(validId ? `/quizzes/${quizId}` : null);
+
+  if (!validId) {
+    return <p role="alert">Invalid quiz ID.</p>;
   }
+
+  if (resource.loading) {
+    return <p role="status">Loading quiz…</p>;
+  }
+
+  if (resource.error) {
+    return <RequestError error={resource.error} retry={resource.reload} />;
+  }
+
+  if (!resource.data) return null;
+
+  const quiz = resource.data;
 
   return (
     <section className="qp-content">
       <Link to="/app/dashboard/present">← Dashboard</Link>
-      <h1>{quiz.title}</h1>
+
+      <h1>{quiz.version.title}</h1>
       <p>
-        {quiz.status} · Public · Read-only · Stored in this browser
+        {quiz.status} · {quiz.visibility} · Read-only · Saved to the database
       </p>
 
-      {quiz.questions.map((q, i) => (
-        <article className="qp-card qp-content" key={q.id}>
-          <h2>Q{i + 1}. {q.text}</h2>
-          <p>{q.limit} seconds</p>
+      {quiz.version.questions.map((question, index) => (
+        <article className="qp-card qp-content" key={question.question_id}>
+          <h2>
+            Q{index + 1}. {question.question_text}
+          </h2>
+
+          <p>
+            {question.time_limit_seconds} seconds · {question.base_points} base
+            points
+          </p>
 
           <ol type="A">
-            {q.options.map((text, n) => (
-              <li key={n}>
-                {text}
-                {n === q.correct ? ' — Correct' : ''}
+            {question.choices.map((choice) => (
+              <li key={choice.choice_id}>
+                {choice.choice_text}
+                {choice.is_correct ? " — Correct" : ""}
               </li>
             ))}
           </ol>
+          <div className="qp-explanation">
+            <h3>Answer explanation</h3>
+            <p>{question.explanation || "No explanation was provided."}</p>
+          </div>
         </article>
       ))}
     </section>
-  )
+  );
 }

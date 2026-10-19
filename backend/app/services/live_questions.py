@@ -156,36 +156,178 @@ def _close_question_if_ready(
     else:
         return None
 
+    event = _mark_closed(
+        db,
+        session_question,
+        question_order,
+        reason,
+        progress,
+        effective_checked_at,
+    )
+    if event is None:
+        db.rollback()
+        return None
+
+    db.commit()
+    return event
+
+
+def _mark_closed(
+    db: Session,
+    session_question: SessionQuestion,
+    question_order: int,
+    reason: QuestionCloseReason,
+    progress: AnswerProgress,
+    closed_at: datetime,
+) -> QuestionClosedEvent | None:
+    """Flip OPEN -> CLOSED with one conditional UPDATE; the caller commits.
+
+    Every close path (answers, deadline, host, end of session) goes through
+    here, so only the caller whose UPDATE matches the row gets an event (§6).
+    """
     event = QuestionClosedEvent(
-        session_id=session_id,
-        session_question_id=session_question_id,
+        session_id=session_question.session_id,
+        session_question_id=session_question.session_question_id,
         question_order=question_order,
         reason=reason,
         answered_count=progress.answered_count,
         eligible_count=progress.eligible_count,
         opened_at=session_question.opened_at,
         closes_at=session_question.closes_at,
-        closed_at=effective_checked_at,
+        closed_at=closed_at,
     )
     transition = db.execute(
         update(SessionQuestion)
         .where(
-            SessionQuestion.session_question_id == session_question_id,
-            SessionQuestion.session_id == session_id,
+            SessionQuestion.session_question_id
+            == session_question.session_question_id,
+            SessionQuestion.session_id == session_question.session_id,
             SessionQuestion.status == SessionQuestionStatus.OPEN,
         )
         .values(
             status=SessionQuestionStatus.CLOSED,
-            closed_at=effective_checked_at,
+            closed_at=closed_at,
         )
         .execution_options(synchronize_session=False)
     )
     if transition.rowcount != 1:
+        return None
+    return event
+
+
+def close_open_question_for_host(
+    db: Session,
+    session_id: int,
+    session_question_id: int,
+    closed_at: datetime,
+) -> QuestionClosedEvent | None:
+    """Close an OPEN question now, without committing.
+
+    Returns None when the question is already CLOSED (another path won). The
+    reason is HOST, or DEADLINE if the deadline had already passed.
+    """
+    target = db.execute(
+        select(SessionQuestion, Question.question_order)
+        .join(Question, Question.question_id == SessionQuestion.question_id)
+        .where(
+            SessionQuestion.session_question_id == session_question_id,
+            SessionQuestion.session_id == session_id,
+        )
+    ).one_or_none()
+    if target is None:
+        raise APIError(
+            404,
+            "session_question_not_found",
+            "The question was not found in this session.",
+        )
+
+    session_question, question_order = target
+    if session_question.status == SessionQuestionStatus.CLOSED:
+        return None
+    if (
+        session_question.status != SessionQuestionStatus.OPEN
+        or session_question.opened_at is None
+        or session_question.closes_at is None
+    ):
+        raise APIError(
+            409,
+            "question_not_open",
+            "Only an open question can be closed.",
+        )
+
+    closed_at = max(_stored_time(closed_at), session_question.opened_at)
+    reason = (
+        QuestionCloseReason.DEADLINE
+        if closed_at >= session_question.closes_at
+        else QuestionCloseReason.HOST
+    )
+    progress = answer_progress(db, session_id, session_question_id)
+    return _mark_closed(
+        db, session_question, question_order, reason, progress, closed_at
+    )
+
+
+def _close_question_now(
+    db: Session,
+    account: CurrentAccount,
+    session_id: int,
+    session_question_id: int,
+    closed_at: datetime | None,
+) -> QuestionClosedEvent | None:
+    session = db.scalar(
+        select(LiveSession)
+        .where(LiveSession.session_id == session_id)
+        .with_for_update()
+    )
+    if session is None:
+        raise APIError(404, "session_not_found", "Session not found.")
+    if session.host_id != account.account_id:
+        raise APIError(
+            403,
+            "session_host_denied",
+            "Only this session's host can close questions.",
+        )
+
+    event = close_open_question_for_host(
+        db,
+        session_id,
+        session_question_id,
+        closed_at if closed_at is not None else _utc_now(),
+    )
+    if event is None:
         db.rollback()
         return None
-
     db.commit()
     return event
+
+
+def close_question_now(
+    db: Session,
+    account: CurrentAccount,
+    session_id: int,
+    session_question_id: int,
+    *,
+    closed_at: datetime | None = None,
+) -> QuestionClosedEvent | None:
+    """Host skip: close the open question now with reason HOST (§6).
+
+    Returns None if the question had already closed, so only the winner of the
+    conditional UPDATE broadcasts.
+    """
+    try:
+        return _close_question_now(
+            db, account, session_id, session_question_id, closed_at
+        )
+    except APIError:
+        db.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(
+            500,
+            "question_close_failed",
+            "Could not close the question.",
+        ) from exc
 
 
 def close_question_if_ready(

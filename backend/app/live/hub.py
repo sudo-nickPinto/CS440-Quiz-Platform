@@ -18,8 +18,11 @@ from app.live.snapshot import (
     open_question_deadlines,
     participant_results_view,
 )
+from app.schemas.live_question import QuestionClosedEvent
+from app.schemas.results import FinalResults, participant_final_view
 from app.services.live_questions import answer_progress, close_question_if_ready
 from app.services.results import get_closed_question_results
+from app.services.session_end import ParticipantLeft
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +44,8 @@ class LiveConnection:
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     # False until session_state has been sent; nothing else goes out before it.
     ready: bool = False
+    # True once the server closed it on purpose (session ended, or left).
+    closed: bool = False
 
 
 class LiveHub:
@@ -231,13 +236,76 @@ class LiveHub:
         )
         if event is None:
             return False
+        await self.question_closed(session_id, event)
+        return True
 
-        timer = self._timers.pop(session_question_id, None)
+    async def question_closed(
+        self, session_id: int, event: QuestionClosedEvent
+    ) -> None:
+        """Broadcast a committed close, then the results (§6).
+
+        Only the caller that won the conditional UPDATE may call this.
+        """
+        timer = self._timers.pop(event.session_question_id, None)
         if timer is not None and timer is not asyncio.current_task():
             timer.cancel()
         await self.broadcast(session_id, event)
-        await self.publish_results(session_id, session_question_id)
-        return True
+        await self.publish_results(session_id, event.session_question_id)
+
+    async def session_ended(self, session_id: int, results: FinalResults) -> None:
+        """Send everyone their final view, then close every socket with 1000."""
+        connections = self._sessions.pop(session_id, {})
+        await asyncio.gather(
+            *(
+                self._finish(
+                    conn,
+                    {
+                        "type": "session_ended",
+                        "reason": results.status,
+                        **(
+                            results.model_dump()
+                            if conn.role == "host"
+                            else participant_final_view(
+                                results, conn.session_participant_id
+                            ).model_dump()
+                        ),
+                    },
+                    reason="session_ended",
+                )
+                for conn in connections.values()
+            )
+        )
+
+    async def participant_left(self, conn: LiveConnection, left: ParticipantLeft) -> None:
+        """Close the leaver's socket, then tell the host (§4)."""
+        connections = self._sessions.get(conn.session_id, {})
+        if connections.get(conn.account.account_id) is conn:
+            del connections[conn.account.account_id]
+        await self._finish(conn, None, reason="left")
+        await self.broadcast(
+            conn.session_id,
+            {
+                "type": "participant_left",
+                "session_participant_id": left.session_participant_id,
+                "display_name": left.display_name,
+                "participant_count": left.participant_count,
+            },
+            role="host",
+        )
+
+    async def _finish(
+        self, conn: LiveConnection, payload: BaseModel | dict | None, *, reason: str
+    ) -> None:
+        """Send a last message (if any) and close normally, in that order."""
+        async with conn.send_lock:
+            try:
+                if payload is not None and conn.ready:
+                    await conn.websocket.send_text(encode(payload))
+            except Exception:
+                logger.debug("Dropped final message to a closed socket", exc_info=True)
+            conn.ready = False
+            conn.closed = True
+            await self._close(conn, CloseCode.NORMAL, reason)
 
     async def publish_results(self, session_id: int, session_question_id: int) -> None:
         snapshot = await self.run_db(

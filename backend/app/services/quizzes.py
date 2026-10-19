@@ -92,6 +92,7 @@ def create_quiz(
             Question(
                 question_order=question_order,
                 question_text=question.question_text,
+                explanation=question.explanation,
                 time_limit_seconds=question.time_limit_seconds,
                 base_points=question.base_points,
                 choices=[

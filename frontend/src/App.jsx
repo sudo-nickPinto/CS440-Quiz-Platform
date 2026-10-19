@@ -1,21 +1,22 @@
-import { useEffect } from 'react'
-import { useAuth0 } from '@auth0/auth0-react'
-import { Navigate, Route, Routes } from 'react-router'
-import LandingPage from './components/LandingPage'
-import AuthenticatedDemo from './authenticated-demo/PreviewApp'
-import AccountGate from './components/AccountGate'
-import './App.css'
+import { useEffect } from "react";
+import { useAuth0 } from "@auth0/auth0-react";
+import { Navigate, Route, Routes } from "react-router";
 
-const WAS_SIGNED_IN = 'quiz-was-signed-in'
-const TRIED = 'quiz-silent-tried'
+import LandingPage from "./components/LandingPage";
+import AuthenticatedDemo from "./authenticated-demo/PreviewApp";
+import AccountGate from "./components/AccountGate";
+import "./App.css";
+
+const WAS_SIGNED_IN = "quiz-was-signed-in";
+const TRIED = "quiz-silent-tried";
 
 const NO_SESSION = [
-  'login_required',
-  'consent_required',
-  'interaction_required',
-  'missing_refresh_token',
-  'invalid_grant',
-]
+  "login_required",
+  "consent_required",
+  "interaction_required",
+  "missing_refresh_token",
+  "invalid_grant",
+];
 
 export default function App() {
   const {
@@ -25,57 +26,52 @@ export default function App() {
     user: auth0User,
     loginWithRedirect,
     logout,
-  } = useAuth0()
+  } = useAuth0();
 
-  // Restore the session. Page rendering belongs below this effect.
+  // Manage session restoration. Do not return JSX from this effect.
   useEffect(() => {
-    if (isLoading) return
+    if (isLoading) return;
 
     try {
       if (isAuthenticated) {
-        localStorage.setItem(WAS_SIGNED_IN, '1')
-        sessionStorage.removeItem(TRIED)
-        return
+        localStorage.setItem(WAS_SIGNED_IN, "1");
+        sessionStorage.removeItem(TRIED);
+        return;
       }
 
       if (error) {
-        localStorage.removeItem(WAS_SIGNED_IN)
-        sessionStorage.removeItem(TRIED)
-        return
+        localStorage.removeItem(WAS_SIGNED_IN);
+        sessionStorage.removeItem(TRIED);
+        return;
       }
 
-      const wasSignedIn = localStorage.getItem(WAS_SIGNED_IN)
-      const alreadyTried = sessionStorage.getItem(TRIED)
+      const wasSignedIn = localStorage.getItem(WAS_SIGNED_IN);
+      const alreadyTried = sessionStorage.getItem(TRIED);
 
       if (wasSignedIn && !alreadyTried) {
-        sessionStorage.setItem(TRIED, '1')
+        sessionStorage.setItem(TRIED, "1");
 
         void loginWithRedirect({
           authorizationParams: {
-            prompt: 'none',
+            prompt: "none",
           },
         }).catch(() => {
           try {
-            localStorage.removeItem(WAS_SIGNED_IN)
+            localStorage.removeItem(WAS_SIGNED_IN);
           } catch {
             // Manual sign-in remains available if storage is blocked.
           }
-        })
+        });
       }
     } catch {
       // Manual sign-in remains available if storage is blocked.
     }
-  }, [
-    isLoading,
-    isAuthenticated,
-    error,
-    loginWithRedirect,
-  ])
+  }, [isLoading, isAuthenticated, error, loginWithRedirect]);
 
   function logOut() {
     try {
-      localStorage.removeItem(WAS_SIGNED_IN)
-      sessionStorage.removeItem(TRIED)
+      localStorage.removeItem(WAS_SIGNED_IN);
+      sessionStorage.removeItem(TRIED);
     } catch {
       // Logout can continue without browser storage.
     }
@@ -84,7 +80,7 @@ export default function App() {
       logoutParams: {
         returnTo: window.location.origin,
       },
-    })
+    });
   }
 
   if (isLoading) {
@@ -92,41 +88,17 @@ export default function App() {
       <main className="lp-app-status">
         <p role="status">Loading your session…</p>
       </main>
-    )
+    );
   }
 
-  // Render the new pages after login and backend account loading.
+  // Render authenticated pages here, outside the effect.
   if (isAuthenticated) {
-    const userName =
-      auth0User?.name ||
-      auth0User?.email ||
-      'User'
-
     return (
-      <AccountGate>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 16,
-            flexWrap: 'wrap',
-            padding: '12px 24px',
-            background: '#043371',
-            color: '#FFFFFF',
-          }}
-        >
-          <span>Signed in as {userName}</span>
-
-          <button type="button" onClick={logOut}>
-            Sign out
-          </button>
-        </div>
-
+      <AccountGate key={auth0User?.sub}>
         <Routes>
           <Route
             path="/app/*"
-            element={<AuthenticatedDemo />}
+            element={<AuthenticatedDemo onSignOut={logOut} />}
           />
 
           <Route
@@ -140,13 +112,13 @@ export default function App() {
           />
         </Routes>
       </AccountGate>
-    )
+    );
   }
 
   const realError =
     error && !NO_SESSION.includes(error.error)
-      ? 'Sign-in could not be completed. Please select Sign in and try again.'
-      : ''
+      ? "Sign-in could not be completed. Please select Sign in and try again."
+      : "";
 
-  return <LandingPage authError={realError} />
+  return <LandingPage authError={realError} />;
 }

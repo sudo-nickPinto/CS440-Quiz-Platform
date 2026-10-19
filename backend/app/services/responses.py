@@ -8,6 +8,7 @@ from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models import (
     AnswerChoice,
+    LiveSession,
     LiveSessionStatus,
     Response,
     SessionParticipant,
@@ -109,6 +110,35 @@ def submit_response(
     # Capture the server time at the beginning of request processing so database
     # query latency cannot turn an on-time response into a late response.
     received_at = submitted_at or _utc_now()
+    try:
+        return _submit_response(
+            db, account, session_id, session_question_id, payload, received_at
+        )
+    except APIError:
+        db.rollback()  # release the row locks before the error goes out
+        raise
+
+
+def _submit_response(
+    db: Session,
+    account: CurrentAccount,
+    session_id: int,
+    session_question_id: int,
+    payload: ResponseSubmit,
+    received_at: datetime,
+) -> ResponseReceipt:
+
+    # Shared-lock the session first, before any plain read starts this
+    # transaction's snapshot. Skip and end take the same row FOR UPDATE, so
+    # they wait for in-flight answers (and answers wait for them): an answer
+    # can't commit after end_session has computed the final standings.
+    session = db.scalar(
+        select(LiveSession)
+        .where(LiveSession.session_id == session_id)
+        .with_for_update(read=True)
+    )
+    if session is None:
+        raise APIError(404, "session_not_found", "Session not found.")
 
     participant = db.scalar(
         select(SessionParticipant).where(
@@ -125,16 +155,16 @@ def submit_response(
         )
     participant_id = participant.session_participant_id
 
+    # A locking (current) read, so a close committed by the deadline sweep is
+    # seen here, and that close's UPDATE waits until this answer commits.
     session_question = db.scalar(
         select(SessionQuestion)
         .where(
             SessionQuestion.session_question_id == session_question_id,
             SessionQuestion.session_id == session_id,
         )
-        .options(
-            joinedload(SessionQuestion.session),
-            joinedload(SessionQuestion.question),
-        )
+        .options(joinedload(SessionQuestion.question))
+        .with_for_update(read=True, of=SessionQuestion)
     )
     if session_question is None:
         raise APIError(
