@@ -6,7 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 import logging
 
-from app.accounts import get_or_create_account
+from app.accounts import DEV_AUTH_SUB, get_or_create_account, get_or_create_dev_account
 from app.database import get_db
 from app.errors import APIError
 from app.models.account import AccountRole, effective_role
@@ -14,6 +14,7 @@ from app.models.account import AccountRole, effective_role
 bearer = HTTPBearer(auto_error=False)
 _jwks: jwt.PyJWKClient | None = None
 TOKEN_LEEWAY_SECONDS = 30
+DEV_AUTH_TOKEN = "local-development-token"
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +59,10 @@ def current_user(
 ) -> dict:
     """Validate the Auth0 access token and return its claims."""
     settings = request.app.state.settings
+    if settings.dev_auth_enabled:
+        if creds is None or creds.credentials != DEV_AUTH_TOKEN:
+            raise APIError(401, "invalid_token", "Invalid local development token")
+        return {"sub": DEV_AUTH_SUB}
     if not settings.auth0_domain or not settings.auth0_audience:
         raise APIError(500, "auth_not_configured", "AUTH0_DOMAIN and AUTH0_AUDIENCE are not configured")
     if creds is None:
@@ -86,9 +91,16 @@ def get_account_record(
 ) -> dict:
     if creds is None:
         raise APIError(401, "missing_token", "Missing bearer token")
+    settings = request.app.state.settings
+    if settings.dev_auth_enabled and claims.get("sub") == DEV_AUTH_SUB:
+        return get_or_create_dev_account(
+            db,
+            settings.dev_auth_email,
+            settings.dev_auth_display_name,
+        )
     return get_or_create_account(
         db,
-        request.app.state.settings.auth0_domain,
+        settings.auth0_domain,
         claims["sub"],
         creds.credentials,
     )

@@ -150,6 +150,8 @@ Never commit real values. The `.env` files are gitignored; each folder has a `.e
 | `AUTH0_AUDIENCE` | Must equal `VITE_AUTH0_AUDIENCE` |
 | `CORS_ORIGINS` | Allowed browser origins (default `http://localhost:5173`) |
 | `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | MySQL connection (or `DATABASE_URL`) |
+| `DEV_AUTH_BYPASS` | Optional local-only authentication bypass; ignored unless `APP_ENV=development` |
+| `DEV_AUTH_EMAIL`, `DEV_AUTH_DISPLAY_NAME` | Identity used by the local bypass |
 
 Auth0 dashboard settings for the SPA: `http://localhost:5173` must be allowed as callback, logout and web origin URLs.
 
@@ -175,6 +177,26 @@ cd frontend && npm install && npm run dev
 
 Check: `curl localhost:8001/health` returns database `ok`, and `curl localhost:8001/me` returns 401 `missing_token`. Logging in at http://localhost:5173 creates your row; inspect it with
 `docker exec quizdb-dev mysql -uroot -pdevpass quizdb -e "SELECT * FROM account;"`.
+
+### Optional local authentication bypass
+
+Developers who only need a local account can run without Auth0 redirects. The
+bypass is accepted only when the backend is in development mode, and Vite
+removes it from production builds.
+
+```bash
+# Backend
+APP_ENV=development DEV_AUTH_BYPASS=true \
+  uvicorn app.main:app --reload --port 8001
+
+# Frontend, in another terminal
+VITE_DEV_AUTH_BYPASS=true npm run dev
+```
+
+The first authenticated request creates `developer@localhost` as an active
+`USER`. Override `DEV_AUTH_EMAIL` and `DEV_AUTH_DISPLAY_NAME` if each developer
+needs a distinct local account. Do not enable or deploy this mode as a
+substitute for Auth0.
 
 The hosted database is a separate, new MySQL built from the same migration files. Only the connection settings change.
 

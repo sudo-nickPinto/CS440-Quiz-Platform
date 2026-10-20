@@ -18,6 +18,23 @@ def authenticate_token(db: Session, settings: Settings, token: str) -> CurrentAc
     Every expected failure becomes a LiveCloseError with a §7 close code, so
     only genuinely unexpected errors reach the handler's 1011 fallback.
     """
+    if settings.dev_auth_enabled:
+        if token != auth.DEV_AUTH_TOKEN:
+            raise LiveCloseError(CloseCode.UNAUTHORIZED, "invalid_token")
+        record = accounts.get_or_create_dev_account(
+            db,
+            settings.dev_auth_email,
+            settings.dev_auth_display_name,
+        )
+        account = CurrentAccount(
+            account_id=record["account_id"],
+            role=effective_role(record["account_type"]),
+            is_active=bool(record["is_active"]),
+        )
+        if not account.is_active:
+            raise LiveCloseError(CloseCode.FORBIDDEN, "inactive_account")
+        return account
+
     if not settings.auth0_domain or not settings.auth0_audience:
         raise LiveCloseError(CloseCode.SERVER_ERROR, "auth_not_configured")
     if not token:

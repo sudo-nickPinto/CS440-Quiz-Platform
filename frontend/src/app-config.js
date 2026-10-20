@@ -12,3 +12,7 @@ export function hasRequiredAppConfig(env) {
       env[name].trim().length > 0,
   )
 }
+
+export function isDevAuthEnabled(env) {
+  return env.DEV === true && env.VITE_DEV_AUTH_BYPASS === 'true'
+}

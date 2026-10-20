@@ -3,16 +3,22 @@ import { createRoot } from 'react-dom/client'
 import { Auth0Provider } from '@auth0/auth0-react'
 import { BrowserRouter } from 'react-router'
 import App from './App.jsx'
-import { hasRequiredAppConfig } from './app-config.js'
+import DevAuthProvider from './DevAuthProvider.jsx'
+import { hasRequiredAppConfig, isDevAuthEnabled } from './app-config.js'
 import './index.css'
 import './styles/theme.css'
 
 const authConfigured = hasRequiredAppConfig(import.meta.env)
+const devAuthEnabled = isDevAuthEnabled(import.meta.env)
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
-      {authConfigured ? (
+      {devAuthEnabled ? (
+        <DevAuthProvider>
+          <App />
+        </DevAuthProvider>
+      ) : authConfigured ? (
         <Auth0Provider
           domain={import.meta.env.VITE_AUTH0_DOMAIN}
           clientId={import.meta.env.VITE_AUTH0_CLIENT_ID}

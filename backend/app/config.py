@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     auth0_domain: str = ""
     auth0_audience: str = ""
 
+    # Local-only authentication shortcut. Even if the flag is accidentally set,
+    # it is ignored unless APP_ENV is development.
+    dev_auth_bypass: bool = False
+    dev_auth_email: str = "developer@localhost"
+    dev_auth_display_name: str = "Local Developer"
+
     # DATABASE_URL can override the individual MySQL fields (useful for tests/CI).
     database_url: str | None = None
     db_host: str = ""
@@ -68,6 +74,10 @@ class Settings(BaseSettings):
                 "connect_timeout": str(self.db_connect_timeout),
             },
         )
+
+    @property
+    def dev_auth_enabled(self) -> bool:
+        return self.app_env.lower() == "development" and self.dev_auth_bypass
 
 
 @lru_cache

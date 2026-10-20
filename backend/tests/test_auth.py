@@ -45,6 +45,30 @@ def client(monkeypatch):
         yield test_client
 
 
+@pytest.fixture
+def dev_client():
+    app = create_app(
+        Settings(
+            app_env="development",
+            database_url="sqlite://",
+            dev_auth_bypass=True,
+            dev_auth_email="developer@example.test",
+            dev_auth_display_name="Local Developer",
+        )
+    )
+    with TestClient(app) as test_client:
+        Base.metadata.create_all(app.state.database.engine)
+        with app.state.database.engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE TABLE account_identity ("
+                    " auth0_sub VARCHAR(255) NOT NULL PRIMARY KEY,"
+                    " account_id INTEGER NOT NULL REFERENCES account (account_id))"
+                )
+            )
+        yield test_client
+
+
 def get_quizzes(client, token=None):
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     return client.get("/quizzes", headers=headers)
@@ -111,3 +135,36 @@ def test_administrator_account_type_becomes_admin(client):
 def test_every_other_account_type_is_a_user(account_type):
     # MVP has only User and Admin; professor/student are not roles yet.
     assert effective_role(account_type) == AccountRole.USER
+
+
+def test_development_auth_bypass_creates_and_reuses_local_account(dev_client):
+    headers = {"Authorization": f"Bearer {auth.DEV_AUTH_TOKEN}"}
+
+    first = dev_client.get("/me", headers=headers)
+    second = dev_client.get("/me", headers=headers)
+
+    assert first.status_code == 200
+    assert first.json() == second.json()
+    assert first.json()["email"] == "developer@example.test"
+    assert first.json()["display_name"] == "Local Developer"
+    assert first.json()["role"] == AccountRole.USER
+
+
+def test_development_auth_bypass_rejects_other_tokens(dev_client):
+    response = dev_client.get(
+        "/me",
+        headers={"Authorization": "Bearer anything-else"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "invalid_token"
+
+
+def test_development_auth_bypass_is_disabled_in_production():
+    settings = Settings(
+        app_env="production",
+        database_url="sqlite://",
+        dev_auth_bypass=True,
+    )
+
+    assert settings.dev_auth_enabled is False

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.errors import APIError
 
 COLUMNS = "account_id, email, display_name, account_type, is_active"
+DEV_AUTH_SUB = "dev|local"
 
 
 def _fetch_profile(domain: str, token: str) -> dict:
@@ -92,3 +93,33 @@ def get_or_create_account(db: Session, domain: str, sub: str, token: str) -> dic
             return account
         raise
     return _by_sub(db, sub)
+
+
+def get_or_create_dev_account(db: Session, email: str, name: str) -> dict:
+    """Create the fixed local-development account without contacting Auth0."""
+    account = _by_sub(db, DEV_AUTH_SUB)
+    if account:
+        return account
+
+    try:
+        existing = _by_email(db, email)
+        if existing:
+            _add_identity(db, DEV_AUTH_SUB, existing["account_id"])
+        else:
+            result = db.execute(
+                text(
+                    "INSERT INTO account "
+                    "(auth0_sub, email, display_name, is_active) "
+                    "VALUES (:sub, :email, :name, TRUE)"
+                ),
+                {"sub": DEV_AUTH_SUB, "email": email, "name": name[:100]},
+            )
+            _add_identity(db, DEV_AUTH_SUB, result.lastrowid)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+
+    account = _by_sub(db, DEV_AUTH_SUB)
+    if account is None:
+        raise APIError(500, "dev_account_unavailable", "Could not create the local development account")
+    return account
