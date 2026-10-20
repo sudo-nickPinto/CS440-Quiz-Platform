@@ -52,8 +52,6 @@ def dev_client():
             app_env="development",
             database_url="sqlite://",
             dev_auth_bypass=True,
-            dev_auth_email="developer@example.test",
-            dev_auth_display_name="Local Developer",
         )
     )
     with TestClient(app) as test_client:
@@ -138,15 +136,17 @@ def test_every_other_account_type_is_a_user(account_type):
 
 
 def test_development_auth_bypass_creates_and_reuses_local_account(dev_client):
-    headers = {"Authorization": f"Bearer {auth.DEV_AUTH_TOKEN}"}
+    headers = {
+        "Authorization": f"Bearer {auth.DEV_AUTH_TOKEN_PREFIX}developer"
+    }
 
     first = dev_client.get("/me", headers=headers)
     second = dev_client.get("/me", headers=headers)
 
     assert first.status_code == 200
     assert first.json() == second.json()
-    assert first.json()["email"] == "developer@example.test"
-    assert first.json()["display_name"] == "Local Developer"
+    assert first.json()["email"] == "developer@localhost"
+    assert first.json()["display_name"] == "Developer"
     assert first.json()["role"] == AccountRole.USER
 
 
@@ -154,6 +154,44 @@ def test_development_auth_bypass_rejects_other_tokens(dev_client):
     response = dev_client.get(
         "/me",
         headers={"Authorization": "Bearer anything-else"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "invalid_token"
+
+
+def test_development_auth_bypass_supports_multiple_named_accounts(dev_client):
+    people = {}
+    for name in ("host", "alice", "bob"):
+        response = dev_client.get(
+            "/me",
+            headers={
+                "Authorization": f"Bearer {auth.DEV_AUTH_TOKEN_PREFIX}{name}"
+            },
+        )
+        assert response.status_code == 200
+        people[name] = response.json()
+
+    assert len({person["account_id"] for person in people.values()}) == 3
+    assert people["host"]["email"] == "host@localhost"
+    assert people["alice"]["display_name"] == "Alice"
+    assert people["bob"]["display_name"] == "Bob"
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "local-development-token:",
+        "local-development-token:Alice",
+        "local-development-token:two words",
+        "local-development-token:../../admin",
+        "local-development-token:" + "a" * 33,
+    ],
+)
+def test_development_auth_bypass_rejects_invalid_identity(dev_client, token):
+    response = dev_client.get(
+        "/me",
+        headers={"Authorization": f"Bearer {token}"},
     )
 
     assert response.status_code == 401

@@ -151,7 +151,6 @@ Never commit real values. The `.env` files are gitignored; each folder has a `.e
 | `CORS_ORIGINS` | Allowed browser origins (default `http://localhost:5173`) |
 | `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | MySQL connection (or `DATABASE_URL`) |
 | `DEV_AUTH_BYPASS` | Optional local-only authentication bypass; ignored unless `APP_ENV=development` |
-| `DEV_AUTH_EMAIL`, `DEV_AUTH_DISPLAY_NAME` | Identity used by the local bypass |
 
 Auth0 dashboard settings for the SPA: `http://localhost:5173` must be allowed as callback, logout and web origin URLs.
 
@@ -180,22 +179,10 @@ Check: `curl localhost:8001/health` returns database `ok`, and `curl localhost:8
 
 ### Optional local authentication bypass
 
-Developers who only need a local account can run without Auth0 redirects. The
-bypass is accepted only when the backend is in development mode, and Vite
-removes it from production builds.
-
-```bash
-# Backend
-APP_ENV=development DEV_AUTH_BYPASS=true \
-  uvicorn app.main:app --reload --port 8001
-
-# Frontend, in another terminal
-VITE_DEV_AUTH_BYPASS=true npm run dev
-```
-
-The first authenticated request creates `developer@localhost` as an active
-`USER`. Override `DEV_AUTH_EMAIL` and `DEV_AUTH_DISPLAY_NAME` if each developer
-needs a distinct local account. Do not enable or deploy this mode as a
+Developers can run without Auth0 redirects and can start multiple named users
+for manual live-session testing. See
+[LOCAL_AUTH_BYPASS.md](LOCAL_AUTH_BYPASS.md) for the one-backend,
+three-frontend host/Alice/Bob setup. Do not enable or deploy this mode as a
 substitute for Auth0.
 
 The hosted database is a separate, new MySQL built from the same migration files. Only the connection settings change.

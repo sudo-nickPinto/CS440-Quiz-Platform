@@ -26,8 +26,6 @@ class Settings(BaseSettings):
     # Local-only authentication shortcut. Even if the flag is accidentally set,
     # it is ignored unless APP_ENV is development.
     dev_auth_bypass: bool = False
-    dev_auth_email: str = "developer@localhost"
-    dev_auth_display_name: str = "Local Developer"
 
     # DATABASE_URL can override the individual MySQL fields (useful for tests/CI).
     database_url: str | None = None

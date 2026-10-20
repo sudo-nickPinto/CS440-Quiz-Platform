@@ -4,18 +4,23 @@ import { BrowserRouter } from 'react-router'
 import App from './App.jsx'
 import Auth0ProviderWithNavigate from './Auth0ProviderWithNavigate.jsx'
 import DevAuthProvider from './DevAuthProvider.jsx'
-import { hasRequiredAppConfig, isDevAuthEnabled } from './app-config.js'
+import {
+  getDevAuthIdentity,
+  hasRequiredAppConfig,
+  isDevAuthEnabled,
+} from './app-config.js'
 import './index.css'
 import './styles/theme.css'
 
 const authConfigured = hasRequiredAppConfig(import.meta.env)
 const devAuthEnabled = isDevAuthEnabled(import.meta.env)
+const devAuthIdentity = getDevAuthIdentity(import.meta.env)
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       {devAuthEnabled ? (
-        <DevAuthProvider>
+        <DevAuthProvider identity={devAuthIdentity}>
           <App />
         </DevAuthProvider>
       ) : authConfigured ? (

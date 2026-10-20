@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { hasRequiredAppConfig, isDevAuthEnabled } from '../src/app-config.js'
+import {
+  getDevAuthIdentity,
+  hasRequiredAppConfig,
+  isDevAuthEnabled,
+} from '../src/app-config.js'
 
 const completeConfig = {
   VITE_AUTH0_DOMAIN: 'tenant.example.auth0.com',
@@ -48,3 +52,22 @@ test('enables local auth only in the Vite development environment', () => {
     false,
   )
 })
+
+test('normalizes a named local development identity', () => {
+  assert.equal(getDevAuthIdentity({ VITE_DEV_AUTH_USER: ' Alice ' }), 'alice')
+  assert.equal(getDevAuthIdentity({}), 'developer')
+})
+
+for (const identity of ['', 'two words', '../../admin', 'a'.repeat(33)]) {
+  test(`rejects invalid local development identity ${JSON.stringify(identity)}`, () => {
+    assert.equal(getDevAuthIdentity({ VITE_DEV_AUTH_USER: identity }), null)
+    assert.equal(
+      isDevAuthEnabled({
+        DEV: true,
+        VITE_DEV_AUTH_BYPASS: 'true',
+        VITE_DEV_AUTH_USER: identity,
+      }),
+      false,
+    )
+  })
+}
