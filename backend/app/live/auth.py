@@ -19,13 +19,10 @@ def authenticate_token(db: Session, settings: Settings, token: str) -> CurrentAc
     only genuinely unexpected errors reach the handler's 1011 fallback.
     """
     if settings.dev_auth_enabled:
-        if token != auth.DEV_AUTH_TOKEN:
+        identity = auth.dev_auth_identity(token)
+        if identity is None:
             raise LiveCloseError(CloseCode.UNAUTHORIZED, "invalid_token")
-        record = accounts.get_or_create_dev_account(
-            db,
-            settings.dev_auth_email,
-            settings.dev_auth_display_name,
-        )
+        record = accounts.get_or_create_dev_account(db, identity)
         account = CurrentAccount(
             account_id=record["account_id"],
             role=effective_role(record["account_type"]),

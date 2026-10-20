@@ -1,23 +1,29 @@
 import { Auth0Context } from '@auth0/auth0-react'
 
-const DEV_TOKEN = 'local-development-token'
-
-const context = {
-  isAuthenticated: true,
-  isLoading: false,
-  error: undefined,
-  user: {
-    sub: 'dev|local',
-    email: 'developer@localhost',
-    name: 'Local Developer',
-    email_verified: true,
-  },
-  getAccessTokenSilently: async () => DEV_TOKEN,
-  loginWithRedirect: async () => {},
-  logout: async () => {},
+function displayName(identity) {
+  return identity
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(' ')
 }
 
-export default function DevAuthProvider({ children }) {
+export default function DevAuthProvider({ children, identity = 'developer' }) {
+  const context = {
+    isAuthenticated: true,
+    isLoading: false,
+    error: undefined,
+    user: {
+      sub: `dev|${identity}`,
+      email: `${identity}@localhost`,
+      name: displayName(identity),
+      email_verified: true,
+    },
+    getAccessTokenSilently: async () => `local-development-token:${identity}`,
+    loginWithRedirect: async () => {},
+    logout: async () => {},
+  }
+
   return (
     <Auth0Context.Provider value={context}>{children}</Auth0Context.Provider>
   )
