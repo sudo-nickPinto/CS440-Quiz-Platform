@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { hasRequiredAppConfig } from '../src/app-config.js'
+import { hasRequiredAppConfig, isDevAuthEnabled } from '../src/app-config.js'
 
 const completeConfig = {
   VITE_AUTH0_DOMAIN: 'tenant.example.auth0.com',
@@ -33,3 +33,18 @@ for (const name of Object.keys(completeConfig)) {
     assert.equal(hasRequiredAppConfig(env), false)
   })
 }
+
+test('enables local auth only in the Vite development environment', () => {
+  assert.equal(
+    isDevAuthEnabled({ DEV: true, VITE_DEV_AUTH_BYPASS: 'true' }),
+    true,
+  )
+  assert.equal(
+    isDevAuthEnabled({ DEV: false, VITE_DEV_AUTH_BYPASS: 'true' }),
+    false,
+  )
+  assert.equal(
+    isDevAuthEnabled({ DEV: true, VITE_DEV_AUTH_BYPASS: 'false' }),
+    false,
+  )
+})

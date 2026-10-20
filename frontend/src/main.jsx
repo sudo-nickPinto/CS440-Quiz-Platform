@@ -3,16 +3,22 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import App from './App.jsx'
 import Auth0ProviderWithNavigate from './Auth0ProviderWithNavigate.jsx'
-import { hasRequiredAppConfig } from './app-config.js'
+import DevAuthProvider from './DevAuthProvider.jsx'
+import { hasRequiredAppConfig, isDevAuthEnabled } from './app-config.js'
 import './index.css'
 import './styles/theme.css'
 
 const authConfigured = hasRequiredAppConfig(import.meta.env)
+const devAuthEnabled = isDevAuthEnabled(import.meta.env)
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
-      {authConfigured ? (
+      {devAuthEnabled ? (
+        <DevAuthProvider>
+          <App />
+        </DevAuthProvider>
+      ) : authConfigured ? (
         <Auth0ProviderWithNavigate>
           <App />
         </Auth0ProviderWithNavigate>
