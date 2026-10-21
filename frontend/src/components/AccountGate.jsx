@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
-import { apiFetch, NEEDS_INTERACTION } from '../api'
+import { apiFetch, NEEDS_INTERACTION, returnToState } from '../api'
+import AccountDisabledScreen from './AccountDisabledScreen'
 import VerifyEmailScreen from './VerifyEmailScreen'
 
 const REDIRECTED = 'quiz-interactive-login-tried'
@@ -12,6 +13,7 @@ export default function AccountGate({ children }) {
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
   const [unverified, setUnverified] = useState(false)
+  const [disabled, setDisabled] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -33,6 +35,11 @@ export default function AccountGate({ children }) {
           setUnverified(true)
           return
         }
+        // A deactivated account stays deactivated however often it signs in.
+        if (err.code === 'inactive_account') {
+          setDisabled(true)
+          return
+        }
         let alreadyTried
         try {
           alreadyTried = Boolean(sessionStorage.getItem(REDIRECTED))
@@ -47,6 +54,7 @@ export default function AccountGate({ children }) {
           // Re-authenticate as the same account rather than whichever account
           // the Auth0 session cookie belongs to.
           void loginWithRedirect({
+            appState: returnToState(),
             authorizationParams: {
               prompt: 'login',
               ...(user?.email ? { login_hint: user.email } : {}),
@@ -60,6 +68,8 @@ export default function AccountGate({ children }) {
       cancelled = true
     }
   }, [getAccessTokenSilently, loginWithRedirect, user?.email])
+
+  if (disabled) return <AccountDisabledScreen />
 
   if (unverified) {
     return (

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
-import { apiFetch, NEEDS_INTERACTION } from '../api'
+import { apiFetch, NEEDS_INTERACTION, returnToState } from '../api'
 import './VerifyEmailScreen.css'
 
 // Shown when the backend refuses to create/link the account because the
@@ -34,6 +34,7 @@ export default function VerifyEmailScreen({ onVerified }) {
         // A fresh token needs an interactive login; stay on the same account.
         try {
           await loginWithRedirect({
+            appState: returnToState(),
             authorizationParams: {
               prompt: 'login',
               ...(user?.email ? { login_hint: user.email } : {}),

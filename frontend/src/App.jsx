@@ -5,6 +5,7 @@ import { Navigate, Route, Routes } from "react-router";
 import LandingPage from "./components/LandingPage";
 import AuthenticatedDemo from "./authenticated-demo/PreviewApp";
 import AccountGate from "./components/AccountGate";
+import { returnToState } from "./api";
 import "./App.css";
 
 const WAS_SIGNED_IN = "quiz-was-signed-in";
@@ -52,6 +53,7 @@ export default function App() {
         sessionStorage.setItem(TRIED, "1");
 
         void loginWithRedirect({
+          appState: returnToState(),
           authorizationParams: {
             prompt: "none",
           },

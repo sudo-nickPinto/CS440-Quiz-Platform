@@ -7,6 +7,13 @@ export const NEEDS_INTERACTION = [
   'invalid_grant',
 ]
 
+// Auth0 appState that brings the user back to the page they were on after a
+// redirect sign-in. The root path needs no state; the app routes it already.
+export function returnToState() {
+  const { pathname, search } = window.location
+  return pathname === '/' ? undefined : { returnTo: pathname + search }
+}
+
 // Calls the backend with the current user's Auth0 access token.
 export async function apiFetch(path, getToken, options = {}) {
   const token = await getToken()
