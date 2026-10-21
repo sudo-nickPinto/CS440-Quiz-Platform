@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuizBurg — Class admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* V2 class page for the class's creator (October 21, 2026). Opened from classes-main.html.
+     Admin view (default): Presentations (sessions that ran) | Students (leaderboard-style gradebook),
+     plus a placeholder Excel export. User view: the regular dashboard (Present | Participate) scoped
+     to this class, so the admin can also make, edit, present, and take quizzes.
+     The Admin/User toggle only exists here; members of someone else's class never see it.
+     Page scrolls; nothing inside the frame does. Deep links: ?c=cs440 · #view=user · #tab=students&s=4 */
+  :root {
+    --navy: #043371;
+    --orange: #CC4E00;
+    --orange-deep: #bf4c0c;
+    --sky: #8fdbff;
+    --sky-soft: #c2e6f8;    /* also: 70% or better */
+    --apricot: #f6d2b6;     /* also: under 70% */
+    --sand: #ecdfd0;        /* also: didn't attend */
+    --paper: #fcf9f4;
+    --ink: #222222;
+    --gray: #666666;
+    --b: 3px solid var(--ink);
+    --b-thin: 2px solid var(--ink);
+    --shadow: 6px 6px 0 var(--ink);
+    --ease-out: cubic-bezier(.22, 1, .36, 1);
+    --lead-w: 96px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  :focus-visible { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+
+  @supports not selector(::-webkit-scrollbar) {
+    html { scrollbar-width: thin; scrollbar-color: var(--ink) var(--sand); }
+    * { scrollbar-width: thin; scrollbar-color: var(--ink) transparent; }
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  html::-webkit-scrollbar, html::-webkit-scrollbar-track, body::-webkit-scrollbar, body::-webkit-scrollbar-track { background: var(--sand); }
+  ::-webkit-scrollbar-thumb { background: var(--ink); border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+
+  html { background: var(--sand); }
+  body {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    background: var(--sand); color: var(--ink);
+    min-height: 100vh; display: flex; flex-direction: column;
+    padding: 20px 24px 32px; gap: 18px;
+  }
+  button { font: inherit; color: inherit; }
+  a { color: inherit; }
+
+  /* Header */
+  header.top { display: flex; justify-content: space-between; align-items: center; }
+  /* QuizBurg logo, option 02 "Split block" (logo-variations.html): navy QUIZ | ink line | deep-orange BURG */
+  .logo {
+    font-family: "Archivo Black", sans-serif; font-size: 22px; line-height: 1.15; text-decoration: none;
+    display: inline-flex; gap: 3px; background: var(--ink); white-space: nowrap;
+    border: var(--b); box-shadow: 4px 4px 0 var(--ink); transform: rotate(-1.5deg);
+  }
+  .logo .q, .logo .g { color: var(--paper); padding: 6px 11px; }
+  .logo .q { background: var(--navy); padding-right: 9px; }
+  .logo .g { background: var(--orange-deep); padding-left: 9px; }
+  .user { display: flex; align-items: center; gap: 12px; font-weight: 700; }
+  .avatar {
+    width: 44px; height: 44px; border: var(--b); background: var(--orange-deep); color: var(--paper);
+    display: grid; place-items: center; font-weight: 700; box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  .frame { flex: 1 0 auto; min-width: 0; display: flex; flex-direction: column; border: var(--b); background: var(--paper); box-shadow: var(--shadow); }
+
+  /* Class bar: back · class · view toggle · export */
+  .cbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "back title tog exp"; align-items: center; gap: 20px; padding: 18px 20px; border-bottom: var(--b); }
+  .back {
+    grid-area: back; font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;
+    color: var(--navy); text-decoration: none; border: var(--b); background: var(--paper);
+    padding: 10px 14px; box-shadow: 3px 3px 0 var(--ink);
+  }
+  .back:hover { background: var(--sky-soft); }
+  .back:active { transform: translate(3px,3px); box-shadow: none; }
+  .ctitle { grid-area: title; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .eyebrow { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--navy); display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+  .eyebrow .role { background: var(--orange-deep); color: var(--paper); padding: 2px 8px; border: var(--b-thin); }
+  .ctitle h1 { font-family: "Archivo Black", sans-serif; font-weight: 400; font-size: clamp(20px, 2.2vw, 28px); line-height: 1.2; letter-spacing: -.3px; }
+  .invite { font: inherit; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--ink); border: var(--b-thin); background: var(--paper); padding: 2px 8px; cursor: pointer; }
+  .invite b { letter-spacing: 2px; }
+  .invite:hover { background: var(--sky-soft); }
+
+  /* Admin / User view toggle */
+  .viewtog { grid-area: tog; display: flex; align-items: stretch; border: var(--b); box-shadow: 3px 3px 0 var(--ink); background: var(--paper); }
+  .viewtog > span { display: flex; align-items: center; padding: 0 10px; background: var(--ink); color: var(--paper); font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+  .viewtog button { border: none; border-left: var(--b-thin); background: var(--paper); padding: 9px 16px; font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; white-space: nowrap; }
+  .viewtog button:hover { background: var(--sand); }
+  .viewtog button[aria-pressed="true"] { background: var(--apricot); text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
+  .viewtog button[aria-pressed="true"]::before { content: "● "; color: var(--orange-deep); }
+  .btn {
+    font: inherit; font-weight: 700; font-size: 16px; border: var(--b); background: var(--orange-deep); color: var(--paper);
+    padding: 11px 18px; box-shadow: 4px 4px 0 var(--ink); cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { background: var(--orange); }
+  .btn:active, .btn[aria-busy="true"] { transform: translate(4px,4px); box-shadow: none; }
+  .acts { grid-area: exp; display: flex; gap: 14px; align-items: center; }
+  .acts[hidden] { display: none; }
+  .btn2 {
+    font-weight: 700; font-size: 16px; border: var(--b); background: var(--paper); color: var(--navy);
+    padding: 11px 16px; box-shadow: 4px 4px 0 var(--ink); cursor: pointer; white-space: nowrap;
+  }
+  .btn2:hover { background: var(--sky-soft); }
+  .btn2:active { transform: translate(4px,4px); box-shadow: none; }
+
+  /* Add member pop-up */
+  .dlg { padding: 0; border: var(--b); background: var(--paper); color: var(--ink); box-shadow: 8px 8px 0 var(--ink);
+    width: min(580px, calc(100vw - 24px)); max-width: none; max-height: min(680px, calc(100vh - 40px)); margin: auto; overflow: hidden; }
+  .dlg[open] { display: flex; flex-direction: column; animation: dlgIn .3s var(--ease-out); }
+  @keyframes dlgIn { from { opacity: 0; transform: translateY(10px); } }
+  .dlg::backdrop { background: rgba(34, 34, 34, .45); }
+  .dlg-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--ink); color: var(--paper); padding: 0 0 0 16px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .dlg-top b { color: var(--apricot); font-weight: 700; }
+  .dlg-x { border: none; border-left: 2px solid var(--paper); background: var(--ink); color: var(--paper); width: 48px; height: 44px; font-size: 22px; cursor: pointer; line-height: 1; }
+  .dlg-x:hover { background: var(--orange-deep); }
+  .dlg-head { padding: 18px 18px 16px; border-bottom: var(--b); background: var(--sky-soft); display: flex; flex-direction: column; gap: 10px; }
+  .dlg-head h2 { font-family: "Archivo Black"; font-weight: 400; font-size: 24px; line-height: 1.15; }
+  .dlg-head p { font-size: 13px; font-weight: 700; color: var(--navy); }
+  .dlg-sub { padding: 8px 18px; border-bottom: var(--b-thin); background: var(--sand); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); display: flex; justify-content: space-between; gap: 10px; }
+  .people { overflow-y: auto; flex: 1; min-height: 120px; }
+  .person { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 18px; border-bottom: var(--b-thin); }
+  .person:last-child { border-bottom: none; }
+  .pav { width: 44px; height: 44px; border: var(--b-thin); background: var(--sand); display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+  .person.in .pav { background: var(--apricot); }
+  .pname { font-weight: 700; font-size: 16px; min-width: 0; overflow-wrap: anywhere; }
+  .pname mark, .pmail mark { background: var(--sky-soft); color: inherit; }
+  .pmail { font-size: 13px; font-weight: 500; color: var(--gray); overflow-wrap: anywhere; }
+  .add-one { font-weight: 700; font-size: 14px; border: var(--b); background: var(--orange-deep); color: var(--paper); padding: 7px 14px; box-shadow: 3px 3px 0 var(--ink); cursor: pointer; white-space: nowrap; }
+  .add-one:hover { background: var(--orange); }
+  .add-one:active { transform: translate(3px,3px); box-shadow: none; }
+  .in-tag { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border: var(--b-thin); padding: 5px 10px; white-space: nowrap; background: var(--paper); color: var(--gray); }
+  .in-tag.just { background: var(--sky-soft); color: var(--navy); }
+  .dlg-empty { padding: 34px 18px; text-align: center; font-weight: 700; line-height: 1.4; }
+  .dlg-foot { border-top: var(--b); padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--paper); }
+  .dlg-foot span { font-weight: 700; font-size: 14px; color: var(--gray); }
+  .dlg-foot span b { color: var(--ink); }
+  .new-tag { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; border: var(--b-thin); background: var(--sky-soft); color: var(--navy); padding: 1px 6px; margin-left: 8px; vertical-align: 3px; font-family: "Space Grotesk"; }
+  .rank.new { background: var(--sand); color: var(--ink); font-size: 14px; font-family: "Space Grotesk"; font-weight: 700; letter-spacing: 1px; }
+
+  /* Summary */
+  .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--sky-soft); border-bottom: var(--b); }
+  .stat { padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
+  .stat + .stat { border-left: var(--b-thin); }
+  .stat small { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--navy); }
+  .stat b { font-family: "Archivo Black"; font-weight: 400; font-size: clamp(22px, 2.4vw, 30px); line-height: 1.1; }
+  .stat b i { font-style: normal; font-family: "Space Grotesk"; font-weight: 700; font-size: 15px; color: var(--gray); margin-left: 4px; }
+
+  /* Tabs (dashboard): left tab selects deep orange, right tab navy */
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; border-bottom: var(--b); }
+  .tabs.with-actions { grid-template-columns: 1fr 1fr auto auto; }
+  .tabs button {
+    border: none; border-right: var(--b); background: var(--paper); color: var(--ink);
+    padding: 18px 14px; cursor: pointer; font-family: "Archivo Black", sans-serif;
+    font-size: clamp(16px, 2.2vw, 28px); text-transform: uppercase; letter-spacing: .5px;
+  }
+  .tabs button:last-child { border-right: none; }
+  .tabs .tab[aria-selected="true"] { background: var(--orange-deep); color: var(--paper); text-decoration: underline; text-decoration-thickness: 4px; text-underline-offset: 7px; }
+  .tabs .tab[aria-selected="true"].right { background: var(--navy); }
+  .tabs .tab:not([aria-selected="true"]):hover { background: var(--sand); }
+  .tabs .plus { background: var(--sky-soft); color: var(--navy); width: 96px; font-size: 34px; }
+  .tabs .join { background: var(--navy); color: var(--paper); padding: 18px 36px; }
+  .tabs .plus:hover { background: var(--sand); }
+  .tabs .join:hover, .tabs .join[aria-expanded="true"] { background: var(--ink); }
+  .tabs .plus:active, .tabs .join:active { transform: translate(2px,2px); }
+
+  .join-panel { display: none; padding: 14px 16px; border-bottom: var(--b); background: var(--sky-soft); gap: 12px; align-items: center; flex-wrap: wrap; }
+  .join-panel.open { display: flex; }
+  .join-panel span { background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 6px 10px; }
+  .join-input { font: inherit; font-weight: 700; border: var(--b); background: var(--paper); box-shadow: 3px 3px 0 var(--ink); padding: 8px 12px; text-transform: uppercase; letter-spacing: 4px; width: 180px; }
+  .join-panel .btn { font-size: 15px; padding: 8px 18px; box-shadow: 3px 3px 0 var(--ink); }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex; gap: 12px; padding: 12px 16px; border-bottom: var(--b); align-items: stretch;
+    background: repeating-linear-gradient(45deg, var(--paper), var(--paper) 10px, var(--sand) 10px, var(--sand) 20px);
+  }
+  .search { flex: 1; min-width: 0; display: flex; align-items: center; border: var(--b); background: var(--paper); box-shadow: 3px 3px 0 var(--ink); }
+  .search:focus-within { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+  .search span { padding: 0 10px 0 14px; font-size: 20px; font-weight: 700; color: var(--navy); }
+  .search input { flex: 1; min-width: 0; font: inherit; font-weight: 700; font-size: 16px; border: none; outline: none; padding: 10px 10px 10px 0; background: transparent; color: var(--ink); }
+  .count { display: flex; align-items: center; gap: 6px; border: var(--b); font-weight: 700; text-transform: uppercase; background: var(--orange-deep); color: var(--paper); padding: 5px 12px; white-space: nowrap; }
+  .count b { font-family: "Archivo Black"; font-weight: 400; }
+
+  /* Lists */
+  .row, .head { display: grid; align-items: stretch; }
+  .head { background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .head > div { padding: 9px 16px; display: flex; align-items: center; }
+  .head .r, .cell.r { justify-content: flex-end; }
+  .row { border-bottom: var(--b-thin); min-height: 76px; cursor: pointer; text-decoration: none; color: inherit; scroll-margin-top: 12px; }
+  .row:hover, .row[data-open="true"] { background: var(--sand); }
+  .row:hover .name { text-decoration: underline; text-decoration-color: var(--orange-deep); text-decoration-thickness: 3px; text-underline-offset: 4px; }
+  .cell { padding: 12px 16px; display: flex; align-items: center; min-width: 0; }
+  .cell.dim { color: var(--gray); font-weight: 700; }
+  .who { grid-area: name; padding: 12px 20px; display: flex; flex-direction: column; justify-content: center; min-width: 0; gap: 4px; }
+  .name { font-family: "Archivo Black"; font-size: 19px; line-height: 1.2; }
+  .sub { font-size: 13px; font-weight: 700; color: var(--gray); }
+  .big { font-family: "Archivo Black"; font-size: 21px; }
+  .big small { font-family: "Space Grotesk"; font-size: 13px; font-weight: 700; color: var(--gray); margin-left: 3px; }
+  .go-cell, .tog-cell { grid-area: go; display: grid; place-items: center; }
+  .go, .tog {
+    font-weight: 700; border: var(--b); background: var(--paper); width: 48px; height: 40px; font-size: 20px; line-height: 1;
+    cursor: pointer; box-shadow: 3px 3px 0 var(--ink); display: grid; place-items: center;
+  }
+  .row:hover .go, .go:hover, .tog:hover { background: var(--sky-soft); }
+  .row:active .go, .tog:active { transform: translate(3px,3px); box-shadow: none; }
+  .tog::before { content: ""; width: 9px; height: 9px; border-right: 3px solid currentColor; border-bottom: 3px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .25s var(--ease-out); }
+  .tog[aria-expanded="true"]::before { transform: translateY(2px) rotate(-135deg); }
+  .tog[aria-expanded="true"] { background: var(--ink); color: var(--paper); transform: translate(3px,3px); box-shadow: none; }
+
+  /* Presentations */
+  .pres .head, .pres .row { grid-template-columns: var(--lead-w) minmax(0, 1fr) 130px 230px 200px 84px; grid-template-areas: "lead name att avg top go"; }
+  .date { grid-area: lead; border-right: var(--b-thin); background: var(--apricot); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; gap: 3px; }
+  .date small { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .date b { font-family: "Archivo Black"; font-weight: 400; font-size: 26px; }
+  .att { grid-area: att; }
+  .avg { grid-area: avg; gap: 14px; }
+  .meter { flex: 1; height: 16px; border: var(--b-thin); background: var(--paper); }
+  .meter i { display: block; height: 100%; width: 100%; background: var(--navy); transform-origin: 0 50%; }
+  .avg .big { width: 64px; text-align: right; }
+  .top-s { grid-area: top; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; font-weight: 700; }
+  .top-s small { font-size: 12px; color: var(--gray); }
+  .meta { display: none; }
+
+  /* Students (leaderboard-style) */
+  .stu .head, .stu .row { grid-template-columns: var(--lead-w) minmax(0, 1fr) auto 120px 110px 84px; grid-template-areas: "lead name strip avg att go"; }
+  .rank { grid-area: lead; border-right: var(--b-thin); display: grid; place-items: center; background: var(--orange-deep); color: var(--paper); font-family: "Archivo Black"; font-size: 22px; }
+  .stripcell { grid-area: strip; }
+  .strip { display: grid; grid-template-columns: repeat(8, 40px); gap: 5px; }
+  .head .strip span { text-align: center; font-size: 12px; }
+  .mk { display: grid; place-items: center; font-weight: 700; line-height: 1; border: var(--b-thin); font-style: normal; }
+  .strip .mk { height: 32px; font-size: 13px; }
+  .mk.hi   { background: var(--sky-soft); color: var(--navy); }
+  .mk.lo   { background: var(--apricot); color: var(--ink); }
+  .mk.miss { background: var(--sand); color: var(--ink); }
+  .s-avg { grid-area: avg; justify-content: flex-end; }
+  .s-att { grid-area: att; justify-content: flex-end; }
+  .stu .who .sub { display: none; }
+
+  /* Expanded student detail */
+  .xp { background: var(--sand); border-bottom: var(--b); padding: 14px 24px 28px calc(var(--lead-w) + 20px); }
+  .panel { border: var(--b); background: var(--paper); box-shadow: var(--shadow); animation: drop .32s var(--ease-out); }
+  @keyframes drop { from { opacity: 0; transform: translateY(-8px); } }
+  .panel-top { padding: 9px 14px; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; background: var(--ink); color: var(--paper); display: flex; justify-content: space-between; gap: 12px; }
+  .panel-top > span:last-child { color: var(--apricot); white-space: nowrap; }
+  .gl-head, .gl { display: grid; grid-template-columns: 60px 80px minmax(0, 1fr) 120px 90px 100px 120px; align-items: center; }
+  .gl-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); border-bottom: var(--b-thin); }
+  .gl-head > div, .gl > div { padding: 10px 12px; min-width: 0; }
+  .gl { border-bottom: var(--b-thin); min-height: 54px; }
+  .gl:last-child { border-bottom: none; }
+  .gl > .mk { border: none; border-right: var(--b-thin); align-self: stretch; font-size: 13px; padding: 0; }
+  .gl .d { font-weight: 700; color: var(--gray); font-size: 14px; }
+  .gl .q { font-weight: 700; font-size: 15px; line-height: 1.3; }
+  .gl .q span { display: none; }
+  .num { text-align: right; font-weight: 700; white-space: nowrap; }
+  .num.p { font-family: "Archivo Black"; font-weight: 400; font-size: 16px; }
+  .gl-head .num { text-align: right; }
+  .gl.missed .q, .gl.missed .num { color: var(--gray); }
+  .gl .lnk { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--navy); border: var(--b-thin); background: var(--paper); box-shadow: 2px 2px 0 var(--ink); padding: 6px 10px; text-decoration: none; white-space: nowrap; justify-self: end; }
+  .gl .lnk:hover { background: var(--sky-soft); }
+  .gl .lnk:active { transform: translate(2px,2px); box-shadow: none; }
+  .gl > div:last-child { display: flex; justify-content: flex-end; }
+
+  /* User view: dashboard rows */
+  .present .head, .present .row { grid-template-columns: 150px minmax(0, 1fr) 100px 150px 84px; grid-template-areas: "lead name qs ed go"; }
+  .participate .head, .participate .row { grid-template-columns: 150px minmax(0, 1fr) 170px 160px 84px; grid-template-areas: "lead name score host go"; }
+  .status { grid-area: lead; border-right: var(--b-thin); display: grid; place-items: center; text-align: center; font-weight: 700; text-transform: uppercase; font-size: 13px; letter-spacing: 1px; }
+  .status.draft { background: var(--sky-soft); color: var(--navy); }
+  .status.published { background: var(--navy); color: var(--paper); }
+  .status.rank-b { background: var(--orange-deep); color: var(--paper); line-height: 1.2; }
+  .status.rank-b b { font-family: "Archivo Black"; font-size: 22px; font-weight: 400; }
+  .score { font-family: "Archivo Black"; font-size: 22px; }
+  .bar { flex: 1; height: 12px; border: var(--b-thin); margin-left: 12px; background: var(--paper); max-width: 70px; }
+  .bar i { display: block; height: 100%; background: var(--orange-deep); }
+  .kebab-wrap { grid-area: go; display: grid; place-items: center; }
+  .kebab { font-weight: 700; border: var(--b); background: var(--paper); width: 50px; height: 38px; cursor: pointer; box-shadow: 3px 3px 0 var(--ink); font-size: 20px; line-height: 1; }
+  .kebab:hover { background: var(--sky-soft); }
+  .kebab:active, .kebab[aria-expanded="true"] { transform: translate(3px,3px); box-shadow: none; }
+  .kebab[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
+  .menu { position: fixed; z-index: 20; background: var(--paper); border: var(--b); box-shadow: var(--shadow); min-width: 220px; display: none; }
+  .menu.open { display: block; }
+  .menu a, .menu button { display: block; width: 100%; text-align: left; font-weight: 700; border: none; border-bottom: var(--b-thin); background: var(--paper); padding: 11px 14px; cursor: pointer; text-decoration: none; }
+  .menu > :last-child { border-bottom: none; }
+  .menu a:hover, .menu button:hover { background: var(--sky-soft); }
+
+  .row.flash { animation: flash 1.2s var(--ease-out); }
+  @keyframes flash { 0%, 40% { outline: 3px solid var(--orange-deep); outline-offset: -3px; } 100% { outline: 3px solid transparent; outline-offset: -3px; } }
+  .empty { padding: 60px 20px; text-align: center; font-weight: 700; font-size: 18px; }
+  .empty b { color: var(--orange-deep); }
+  .view[hidden] { display: none; }
+  .view:not([hidden]) { animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; } }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, calc(100% + 60px));
+    background: var(--navy); color: var(--paper); font-weight: 700; padding: 12px 20px; max-width: calc(100vw - 24px);
+    border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); transition: transform .2s, visibility .2s; z-index: 99; visibility: hidden;
+  }
+  .toast.show { transform: translate(-50%, 0); visibility: visible; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* Tablet */
+  @media (max-width: 1150px) {
+    :root { --lead-w: 84px; }
+    .cbar { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "back title title" "tog tog exp"; }
+    .viewtog { justify-self: start; }
+    .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stat:nth-child(3) { border-left: none; }
+    .stat:nth-child(n+3) { border-top: var(--b-thin); }
+    .pres .head, .pres .row { grid-template-columns: var(--lead-w) minmax(0, 1fr) 110px 180px 80px; grid-template-areas: "lead name att avg go"; }
+    .top-s, .head .top-h { display: none !important; }
+    .meta { display: block; }
+    .stu .row { grid-template-columns: var(--lead-w) minmax(0, 1fr) 100px 100px 80px; grid-template-areas: "lead name avg att go" "lead strip avg att go"; }
+    .stu .head { grid-template-columns: var(--lead-w) minmax(0, 1fr) 100px 100px 80px; grid-template-areas: "lead name avg att go"; }
+    .head .stripcell { display: none; }
+    .stu .who { padding-bottom: 6px; justify-content: flex-end; }
+    .stu .stripcell { padding: 0 20px 14px; }
+    .xp { padding: 14px 16px 24px; }
+    .present .head, .present .row { grid-template-columns: 130px minmax(0, 1fr) 80px; grid-template-areas: "lead name go"; }
+    .participate .head, .participate .row { grid-template-columns: 130px minmax(0, 1fr) 150px 80px; grid-template-areas: "lead name score go"; }
+    .wide { display: none !important; }
+  }
+
+  /* Phone */
+  @media (max-width: 640px) {
+    :root { --lead-w: 62px; }
+    body { padding: 12px 10px 18px; gap: 12px; }
+    .logo { font-size: 18px; }
+    .user .name { display: none; }
+    .avatar { width: 40px; height: 40px; }
+    .cbar { grid-template-columns: minmax(0, 1fr); grid-template-areas: "back" "title" "tog" "exp"; gap: 14px; padding: 12px; }
+    .back { justify-self: start; }
+    .acts { gap: 10px; }
+    .acts .btn, .acts .btn2 { flex: 1; font-size: 14px; padding: 9px 8px; }
+    .person { grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; padding: 10px 12px; }
+    .pav { width: 38px; height: 38px; font-size: 13px; }
+    .dlg-head { padding: 14px 12px; }
+    .dlg-head h2 { font-size: 20px; }
+    .dlg-sub, .dlg-foot { padding-left: 12px; padding-right: 12px; }
+    .back { padding: 8px 10px; font-size: 12px; }
+    .ctitle h1 { font-size: 20px; }
+    .viewtog { justify-self: stretch; }
+    .viewtog button { flex: 1; padding: 9px 8px; }
+    .stat { padding: 12px; }
+    .stat small { font-size: 10px; letter-spacing: .5px; }
+    .stat b { font-size: 20px; }
+    .tabs button { padding: 14px 6px; font-size: 14px; letter-spacing: 0; min-width: 0; }
+    .tabs .plus { width: 44px; font-size: 24px; }
+    .tabs .join { padding: 14px; }
+    .toolbar { gap: 10px; padding: 10px; }
+    .search span { padding: 0 6px 0 10px; }
+    .search input { font-size: 15px; }
+    .count { flex-direction: column; justify-content: center; gap: 0; padding: 4px 10px; line-height: 1.05; }
+    .count b { font-size: 20px; }
+    .count span { font-size: 10px; letter-spacing: .5px; }
+    .head { display: none !important; }
+    .who { padding: 12px; }
+    .name { font-size: 16px; }
+    .cell { padding: 10px 6px; }
+    .go, .tog { width: 42px; }
+    .date b { font-size: 20px; }
+    .date small { font-size: 10px; }
+    .pres .row { grid-template-columns: var(--lead-w) minmax(0, 1fr) 62px 56px; grid-template-areas: "lead name avg go"; }
+    .att, .avg .meter { display: none !important; }
+    .avg { padding-right: 2px; }
+    .avg .big { font-size: 17px; width: auto; }
+    .rank { font-size: 17px; }
+    .stu .row { grid-template-columns: var(--lead-w) minmax(0, 1fr) auto 56px; grid-template-areas: "lead name avg go" "lead strip strip strip"; }
+    .s-att { display: none !important; }
+    .stu .who .sub { display: block; }
+    .stu .who { justify-content: center; padding-bottom: 4px; }
+    .stu .stripcell { padding: 2px 12px 14px; }
+    .strip { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 3px; width: 100%; }
+    .strip .mk { height: 28px; font-size: 11px; }
+    .s-avg .big { font-size: 17px; }
+    .xp { padding: 10px 8px 18px; }
+    .gl-head { display: none; }
+    .gl { grid-template-columns: 44px minmax(0, 1fr) auto; }
+    .gl .d, .gl .rk, .gl .pt { display: none; }
+    .gl .q { font-size: 14px; }
+    .gl .q span { display: block; font-size: 12px; color: var(--gray); margin-top: 2px; }
+    .gl > div:last-child { grid-column: 2 / 4; justify-content: flex-start; padding-top: 0; }
+    .gl > .mk { grid-row: span 2; }
+    .present .row, .participate .row { grid-template-columns: 92px minmax(0, 1fr) 62px; grid-template-areas: "lead name go"; }
+    .participate .score-cell { display: none !important; }
+    .status { font-size: 11px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+  <header class="top">
+    <a class="logo" href="classes-main.html" aria-label="QuizBurg classes"><span class="q">QUIZ</span><span class="g">BURG</span></a>
+    <div class="user"><span class="name">Taha Sabir</span><div class="avatar">TS</div></div>
+  </header>
+
+  <main class="frame">
+    <div class="cbar">
+      <a class="back" href="classes-main.html">← Classes</a>
+      <div class="ctitle">
+        <div class="eyebrow"><span class="role">Admin</span><span id="cCode"></span><span id="cMembers"></span>
+          <button class="invite" id="inviteBtn" onclick="copyInvite()">Invite <b id="cInvite"></b> ⧉</button></div>
+        <h1 id="cName"></h1>
+      </div>
+      <div class="viewtog" role="group" aria-label="View as">
+        <span>VIEW</span>
+        <button id="v-admin" aria-pressed="true" onclick="setView('admin')">Admin</button>
+        <button id="v-user" aria-pressed="false" onclick="setView('user')">User</button>
+      </div>
+      <div class="acts" id="adminActs">
+        <button class="btn2" id="addBtn" aria-haspopup="dialog" aria-controls="addDlg" onclick="openAdd()">+ Add member</button>
+        <button class="btn" id="exportBtn" onclick="exportGrades(this)">Export grades</button>
+      </div>
+    </div>
+
+    <!-- ADMIN VIEW -->
+    <div class="view" id="adminView">
+      <section class="summary" id="summary" aria-label="Class summary"></section>
+      <nav class="tabs" role="tablist" aria-label="Class admin views">
+        <button class="tab" role="tab" id="tab-pres" aria-selected="true" aria-controls="aList" data-tab="pres">Presentations</button>
+        <button class="tab right" role="tab" id="tab-stu" aria-selected="false" aria-controls="aList" data-tab="stu">Students</button>
+      </nav>
+      <div class="toolbar">
+        <div class="search"><span aria-hidden="true">⌕</span><input id="aq" aria-label="Search presentations" placeholder="Search presentations…" oninput="aQuery=this.value;renderAdmin()"></div>
+        <span class="count" id="aCount"></span>
+      </div>
+      <div class="list" id="aList" role="tabpanel"></div>
+    </div>
+
+    <!-- USER VIEW: the regular dashboard, scoped to this class -->
+    <div class="view" id="userView" hidden>
+      <nav class="tabs with-actions" role="tablist" aria-label="Dashboard views">
+        <button class="tab" role="tab" id="tab-present" aria-selected="true" aria-controls="uList" data-utab="present">Present</button>
+        <button class="tab right" role="tab" id="tab-participate" aria-selected="false" aria-controls="uList" data-utab="participate">Participate</button>
+        <button class="plus" aria-label="New quiz" title="New quiz" onclick="location.href='quiz-editor-main.html'">+</button>
+        <button class="join" id="joinBtn" aria-expanded="false" aria-controls="joinPanel" onclick="toggleJoin()">Join</button>
+      </nav>
+      <div class="join-panel" id="joinPanel">
+        <span>SESSION CODE</span>
+        <input class="join-input" maxlength="6" placeholder="ABC123" id="joinCode" aria-label="Session code">
+        <button class="btn" onclick="location.href='participant-flow-main.html'">GO →</button>
+      </div>
+      <div class="toolbar">
+        <div class="search"><span aria-hidden="true">⌕</span><input id="uq" aria-label="Search quizzes" placeholder="Search quizzes…" oninput="uQuery=this.value;renderUser()"></div>
+        <span class="count" id="uCount"></span>
+      </div>
+      <div class="list" id="uList" role="tabpanel"></div>
+    </div>
+  </main>
+  <dialog class="dlg" id="addDlg" aria-labelledby="addTitle">
+    <div class="dlg-top"><span>Add member · <b id="dlgCode"></b></span><button class="dlg-x" aria-label="Close" onclick="closeAdd()">×</button></div>
+    <div class="dlg-head">
+      <h2 id="addTitle">Add someone to this class</h2>
+      <div class="search"><span aria-hidden="true">⌕</span><input id="pq" aria-label="Search users by name or username" placeholder="Search by name or username…" autocomplete="off" oninput="renderPeople()"></div>
+      <p>Anyone with a Gettysburg account. They're added straight in, no invite code needed.</p>
+    </div>
+    <div class="dlg-sub"><span id="pLabel">Everyone</span><span id="pCount"></span></div>
+    <div class="people" id="people"></div>
+    <div class="dlg-foot"><span id="addedCount" aria-live="polite">Nobody added yet</span><button class="btn" onclick="closeAdd()">Done</button></div>
+  </dialog>
+  <div class="menu" id="menu" role="menu"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ---- Fake data (seeded: same results every load) ---- */
+const CLASS_INFO = {
+  cs440:  { code: "CS 440", name: "Software Engineering · Fall 26", invite: "K7Q2PX" },
+  algo:   { code: "ALGO", name: "Algorithms Study Group", invite: "B3NM8Q" },
+  ihouse: { code: "I-HOUSE", name: "International House Trivia", invite: "TRV26A" },
+  hack:   { code: "HACK", name: "Hackathon Prep Crew", invite: "HX9P2L" },
+  phil:   { code: "PHIL 105", name: "Ethics Reading Group", invite: "ETH7QK" },
+};
+const CLS = CLASS_INFO[new URLSearchParams(location.search).get("c")] || CLASS_INFO.cs440;
+
+// Every presentation opens host-results-main.html (the only results mockup; its data is Quiz 4).
+const RESULTS = "host-results-main.html";
+const PRESENTATIONS = [
+  { title: "Syllabus Icebreaker",             date: "2026-09-02", qs: 8 },
+  { title: "Agile Vocab",                     date: "2026-09-09", qs: 10 },
+  { title: "Requirements & User Stories",     date: "2026-09-16", qs: 10 },
+  { title: "Git Basics Pop Quiz",             date: "2026-09-23", qs: 10 },
+  { title: "SRS Checkpoint",                  date: "2026-09-30", qs: 12 },
+  { title: "Quiz 4 — Data Structures Review", date: "2026-10-05", qs: 10, all: true },
+  { title: "Static Analysis Tools",           date: "2026-10-12", qs: 10 },
+  { title: "Engineering Productivity",        date: "2026-10-19", qs: 8 },
+];
+const NAMES = ["Maya Patel", "Jordan Lee", "Sofia Ramirez", "Ethan Brooks", "Aisha Khan", "Liam O'Connor", "Chloe Nguyen",
+  "Marcus Johnson", "Priya Shah", "Noah Fischer", "Hannah Kim", "Diego Alvarez", "Grace Okafor", "Owen Price",
+  "Zara Ahmed", "Lucas Martin", "Emma Walsh", "Kenji Sato", "Ruby Castillo", "Theo Bennett", "Amara Diallo",
+  "Sam Rivera", "Isla Murphy"];
+
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rand = mulberry32(2026);
+
+const STUDENTS = NAMES.map((name, id) => {
+  const skill = .45 + rand() * .5, showUp = .78 + rand() * .22;
+  const grades = PRESENTATIONS.map(p => {
+    if (!p.all && rand() > showUp) return null;
+    let correct = 0; for (let i = 0; i < p.qs; i++) if (rand() < Math.min(.97, skill + .1)) correct++;
+    const points = Math.round(correct * (560 + rand() * 380));
+    return { correct, total: p.qs, pct: Math.round(correct / p.qs * 100), points };
+  });
+  const taken = grades.filter(Boolean);
+  return { id, name, grades, attended: taken.length, avg: Math.round(taken.reduce((s, g) => s + g.pct, 0) / (taken.length || 1)) };
+});
+// Rank within each presentation (by points), then rank the class by average score
+PRESENTATIONS.forEach((p, pi) => {
+  const took = STUDENTS.filter(s => s.grades[pi]).sort((a, b) => b.grades[pi].points - a.grades[pi].points);
+  took.forEach((s, i) => { s.grades[pi].rank = i + 1; s.grades[pi].of = took.length; });
+  p.n = took.length;
+  p.avg = Math.round(took.reduce((x, s) => x + s.grades[pi].pct, 0) / (took.length || 1));
+  p.top = took[0];
+});
+[...STUDENTS].sort((a, b) => b.avg - a.avg || b.attended - a.attended || a.name.localeCompare(b.name)).forEach((s, i) => s.rank = i + 1);
+let NS = STUDENTS.length;
+const NP = PRESENTATIONS.length;
+
+// User view: Taha's own quizzes in this class, and ones he took here
+const MADE = [
+  { title: "Engineering Productivity", status: "published", qs: 8,  edited: "2026-10-18" },
+  { title: "Code Review Checklist",    status: "draft",     qs: 10, edited: "2026-10-20" },
+  { title: "Static Analysis Tools",    status: "published", qs: 10, edited: "2026-10-11" },
+  { title: "Final Demo Warmup",        status: "draft",     qs: 6,  edited: "2026-10-21" },
+];
+const PART = [
+  { title: "Peer Review Practice",  host: "N. Pinto",     date: "2026-10-15", correct: 7, total: 8,  rank: 3, of: 19 },
+  { title: "Sprint Retro Trivia",   host: "A. Majumder",  date: "2026-10-01", correct: 9, total: 10, rank: 1, of: 21 },
+];
+
+/* ---- Helpers ---- */
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const fmt = n => n.toLocaleString("en-US");
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const md = d => { const [, m, day] = d.split("-"); return { m: MONTHS[+m - 1], d: day }; };
+const longDate = d => { const x = md(d); return `${x.m} ${+x.d}`; };
+const tier = g => !g ? "miss" : g.pct >= 70 ? "hi" : "lo";
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let tt; function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 2000); }
+
+/* ---- Static parts ---- */
+document.title = `QuizBurg — ${CLS.code} admin`;
+document.getElementById("cCode").textContent = CLS.code;
+document.getElementById("cInvite").textContent = CLS.invite;
+document.getElementById("cName").textContent = CLS.name;
+function renderSummary() {
+  NS = STUDENTS.length;
+  const graded = STUDENTS.filter(s => s.avg != null);
+  const classAvg = Math.round(graded.reduce((x, s) => x + s.avg, 0) / (graded.length || 1));
+  const attend = Math.round(PRESENTATIONS.reduce((x, p) => x + p.n, 0) / (NP * NS) * 100);
+  document.getElementById("cMembers").textContent = `${NS} students`;
+  document.getElementById("summary").innerHTML = `
+    <div class="stat"><small>Students</small><b>${NS}</b></div>
+    <div class="stat"><small>Presentations</small><b>${NP}</b></div>
+    <div class="stat"><small>Class average</small><b>${classAvg}%</b></div>
+    <div class="stat"><small>Attendance</small><b>${attend}%</b></div>`;
+}
+renderSummary();
+
+function copyInvite() { navigator.clipboard?.writeText(CLS.invite).catch(() => {}); toast(`Invite code ${CLS.invite} copied`); }
+// Placeholder: the real app would ask FastAPI for a class gradebook .xlsx.
+function exportGrades(btn) {
+  if (btn.getAttribute("aria-busy") === "true") return;
+  btn.setAttribute("aria-busy", "true"); btn.textContent = "Preparing…";
+  setTimeout(() => { btn.removeAttribute("aria-busy"); btn.textContent = "Export grades"; toast("Gradebook export isn't connected yet (mockup)"); }, 900);
+}
+
+/* ---- View toggle ---- */
+let view = "admin";
+function setView(v, quiet) {
+  view = v;
+  document.getElementById("v-admin").setAttribute("aria-pressed", v === "admin");
+  document.getElementById("v-user").setAttribute("aria-pressed", v === "user");
+  document.getElementById("adminView").hidden = v !== "admin";
+  document.getElementById("userView").hidden = v !== "user";
+  document.getElementById("adminActs").hidden = v !== "admin";
+  document.querySelector(".eyebrow .role").textContent = v === "admin" ? "Admin" : "User view";
+  closeMenu();
+  syncHash();
+  if (!quiet) toast(v === "admin" ? "Admin view: presentations and grades" : "User view: make, present, and take quizzes");
+}
+
+/* ---- Admin view ---- */
+let aTab = "pres", aQuery = "";
+const openS = new Set();
+
+function studentDetail(s) {
+  const lines = PRESENTATIONS.map((p, pi) => {
+    const g = s.grades[pi], t = tier(g);
+    return g ? `<div class="gl">
+        <i class="mk ${t}" aria-hidden="true">Q${pi + 1}</i>
+        <div class="d">${longDate(p.date)}</div>
+        <div class="q">${esc(p.title)}<span>${longDate(p.date)} · ${g.correct}/${g.total} · #${g.rank} of ${g.of}</span></div>
+        <div class="num">${g.correct}/${g.total} · ${g.pct}%</div>
+        <div class="num p pt">${fmt(g.points)}</div>
+        <div class="num rk">#${g.rank} of ${g.of}</div>
+        <div><a class="lnk" href="${RESULTS}" onclick="event.stopPropagation()">Results →</a></div>
+      </div>`
+    : `<div class="gl missed">
+        <i class="mk miss" aria-hidden="true">Q${pi + 1}</i>
+        <div class="d">${longDate(p.date)}</div>
+        <div class="q">${esc(p.title)}<span>${longDate(p.date)} · didn't attend</span></div>
+        <div class="num">Didn't attend</div>
+        <div class="num p pt">0</div>
+        <div class="num rk">—</div>
+        <div></div>
+      </div>`;
+  }).join("");
+  return `<div class="xp" id="xp-s${s.id}"><div class="panel">
+    <div class="panel-top"><span>${esc(s.name)} · every presentation</span><span>${s.avg != null ? `Avg ${s.avg}%` : "No quizzes yet"} · ${s.attended}/${NP} attended</span></div>
+    <div class="gl-head"><div></div><div>Date</div><div>Presentation</div><div class="num">Score</div><div class="num">Points</div><div class="num">Rank</div><div></div></div>
+    ${lines}
+  </div></div>`;
+}
+
+const stripFor = s => `<span class="strip" role="img" aria-label="${s.grades.map((g, i) => `Q${i + 1} ${g ? g.pct + "%" : "didn't attend"}`).join(", ")}">${s.grades.map(g => `<i class="mk ${tier(g)}">${g ? g.pct : "—"}</i>`).join("")}</span>`;
+
+function renderAdmin() {
+  const list = document.getElementById("aList"), qq = aQuery.trim().toLowerCase();
+  list.className = "list " + aTab;
+  if (aTab === "pres") {
+    const idx = PRESENTATIONS.map((_, i) => i).filter(i => PRESENTATIONS[i].title.toLowerCase().includes(qq)).reverse();
+    document.getElementById("aCount").innerHTML = `<b>${idx.length}</b><span>${idx.length === 1 ? "presentation" : "presentations"}</span>`;
+    const head = `<div class="head" aria-hidden="true"><div style="grid-area:lead">Date</div><div style="grid-area:name">Presentation</div><div style="grid-area:att">Attended</div><div style="grid-area:avg">Avg score</div><div class="top-h" style="grid-area:top">Top score</div><div style="grid-area:go"></div></div>`;
+    list.innerHTML = idx.length ? head + idx.map(pi => {
+      const p = PRESENTATIONS[pi], d = md(p.date);
+      return `<a class="row" href="${RESULTS}" aria-label="${esc(p.title)}, ${longDate(p.date)}: open results">
+        <div class="date"><small>${d.m}</small><b>${d.d}</b></div>
+        <div class="who"><span class="name">${esc(p.title)}</span><span class="sub">Q${pi + 1} · ${p.qs} questions<span class="meta"> · ${p.n}/${NS} attended</span></span></div>
+        <div class="cell att"><span class="big">${p.n}<small>/ ${NS}</small></span></div>
+        <div class="cell avg"><span class="meter" aria-hidden="true"><i style="transform:scaleX(${p.avg / 100})"></i></span><span class="big">${p.avg}%</span></div>
+        <div class="cell top-s">${esc(p.top.name)}<small>${p.top.grades[pi].correct}/${p.qs} · ${fmt(p.top.grades[pi].points)} pts</small></div>
+        <div class="go-cell"><span class="go" aria-hidden="true">→</span></div>
+      </a>`;
+    }).join("") : `<div class="empty">No presentations match “${esc(aQuery)}”.</div>`;
+  } else {
+    const rows = STUDENTS.filter(s => s.name.toLowerCase().includes(qq)).sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9) || a.name.localeCompare(b.name));
+    document.getElementById("aCount").innerHTML = `<b>${rows.length}</b><span>${rows.length === 1 ? "student" : "students"}</span>`;
+    const head = `<div class="head" aria-hidden="true"><div style="grid-area:lead">Rank</div><div style="grid-area:name">Student</div>
+      <div class="stripcell"><span class="strip">${PRESENTATIONS.map((_, i) => `<span>Q${i + 1}</span>`).join("")}</span></div>
+      <div class="r" style="grid-area:avg">Avg</div><div class="r" style="grid-area:att">Attended</div><div style="grid-area:go"></div></div>`;
+    list.innerHTML = rows.length ? head + rows.map(s => {
+      const open = openS.has(s.id);
+      return `<div class="row" data-open="${open}" id="row-s${s.id}" onclick="toggleS(${s.id})">
+        ${s.rank ? `<div class="rank"><span><span class="sr">Rank </span>${s.rank}</span></div>` : `<div class="rank new">NEW</div>`}
+        <div class="who"><span class="name">${esc(s.name)}${s.fresh ? '<span class="new-tag">Just added</span>' : ""}</span><span class="sub">${s.attended}/${NP} attended</span></div>
+        <div class="cell stripcell">${stripFor(s)}</div>
+        <div class="cell s-avg"><span class="big">${s.avg != null ? s.avg + "%" : "—"}</span></div>
+        <div class="cell s-att"><span class="big">${s.attended}<small>/ ${NP}</small></span></div>
+        <div class="tog-cell"><button class="tog" aria-expanded="${open}" aria-controls="xp-s${s.id}" aria-label="${open ? "Hide" : "Show"} ${esc(s.name)}'s grades" onclick="event.stopPropagation();toggleS(${s.id})"></button></div>
+      </div>${open ? studentDetail(s) : ""}`;
+    }).join("") : `<div class="empty">No students match “${esc(aQuery)}”.</div>`;
+  }
+}
+function toggleS(id) { openS.has(id) ? openS.delete(id) : openS.add(id); renderAdmin(); syncHash(); }
+function setATab(t) {
+  aTab = t; aQuery = "";
+  const input = document.getElementById("aq");
+  input.value = ""; input.placeholder = t === "pres" ? "Search presentations…" : "Search students…";
+  input.setAttribute("aria-label", t === "pres" ? "Search presentations" : "Search students");
+  document.querySelectorAll("[data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
+  renderAdmin(); syncHash();
+}
+
+/* ---- User view (regular dashboard, this class only) ---- */
+let uTab = "present", uQuery = "", menuFor = null;
+function renderUser() {
+  const list = document.getElementById("uList"), qq = uQuery.trim().toLowerCase();
+  list.className = "list " + uTab;
+  if (uTab === "present") {
+    const rows = MADE.filter(q => q.title.toLowerCase().includes(qq)).sort((a, b) => b.edited.localeCompare(a.edited));
+    document.getElementById("uCount").innerHTML = `<b>${rows.length}</b><span>${rows.length === 1 ? "quiz" : "quizzes"}</span>`;
+    const head = `<div class="head" aria-hidden="true"><div style="grid-area:lead">Status</div><div style="grid-area:name">Quiz</div><div class="wide" style="grid-area:qs">Qs</div><div class="wide" style="grid-area:ed">Edited</div><div style="grid-area:go"></div></div>`;
+    list.innerHTML = rows.length ? head + rows.map((q, i) => `
+      <div class="row" style="cursor:default">
+        <div class="status ${q.status}">${q.status}</div>
+        <div class="who"><span class="name">${esc(q.title)}</span><span class="sub meta">${q.qs} questions · edited ${longDate(q.edited)}</span></div>
+        <div class="cell wide dim" style="grid-area:qs">${q.qs}</div>
+        <div class="cell wide dim" style="grid-area:ed">${longDate(q.edited)}</div>
+        <div class="kebab-wrap"><button class="kebab" id="kb${i}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(q.title)} actions" onclick="openMenu(event, ${i})">⋯</button></div>
+      </div>`).join("") : `<div class="empty">${qq ? `No quizzes match “${esc(uQuery)}”.` : "Nothing here. Hit <b>+</b> to make a quiz."}</div>`;
+  } else {
+    const rows = PART.filter(q => q.title.toLowerCase().includes(qq)).sort((a, b) => b.date.localeCompare(a.date));
+    document.getElementById("uCount").innerHTML = `<b>${rows.length}</b><span>taken</span>`;
+    const head = `<div class="head" aria-hidden="true"><div style="grid-area:lead">Rank</div><div style="grid-area:name">Quiz</div><div style="grid-area:score">Score</div><div class="wide" style="grid-area:host">Host</div><div style="grid-area:go"></div></div>`;
+    list.innerHTML = rows.length ? head + rows.map(q => `
+      <a class="row" href="participant-results-main.html" aria-label="${esc(q.title)}: review answers">
+        <div class="status rank-b"><div><b>#${q.rank}</b><br>of ${q.of}</div></div>
+        <div class="who"><span class="name">${esc(q.title)}</span><span class="sub meta">Hosted by ${esc(q.host)} · ${longDate(q.date)}</span></div>
+        <div class="cell score-cell" style="grid-area:score"><span class="score">${q.correct}/${q.total}</span><span class="bar"><i style="width:${q.correct / q.total * 100}%"></i></span></div>
+        <div class="cell wide" style="grid-area:host">${esc(q.host)}</div>
+        <div class="go-cell"><span class="go" aria-hidden="true">→</span></div>
+      </a>`).join("") : `<div class="empty">No quizzes match “${esc(uQuery)}”.</div>`;
+  }
+}
+function setUTab(t) {
+  uTab = t; uQuery = ""; document.getElementById("uq").value = ""; closeMenu();
+  document.querySelectorAll("[data-utab]").forEach(b => b.setAttribute("aria-selected", b.dataset.utab === t));
+  renderUser(); syncHash();
+}
+function openMenu(e, i) {
+  e.stopPropagation();
+  const m = document.getElementById("menu"), btn = e.currentTarget;
+  if (menuFor === i) return closeMenu();
+  closeMenu();
+  const q = MADE.filter(x => x.title.toLowerCase().includes(uQuery.trim().toLowerCase())).sort((a, b) => b.edited.localeCompare(a.edited))[i];
+  m.innerHTML = `
+    <a role="menuitem" href="presenter-flow-main.html">▶ Present to ${esc(CLS.code)}</a>
+    <a role="menuitem" href="quiz-editor-main.html">✎ Edit</a>
+    <button role="menuitem" onclick="closeMenu();toast('Share link copied')">⇪ Share</button>`;
+  m.classList.add("open"); menuFor = i; btn.setAttribute("aria-expanded", "true");
+  const r = btn.getBoundingClientRect(), h = m.offsetHeight;
+  m.style.right = Math.max(8, window.innerWidth - r.right) + "px";
+  m.style.top = (r.bottom + h + 12 > window.innerHeight ? r.top - h - 8 : r.bottom + 8) + "px";
+  m.firstElementChild.focus();
+}
+function closeMenu(refocus) {
+  if (menuFor === null) return;
+  const btn = document.getElementById("kb" + menuFor);
+  if (btn) { btn.setAttribute("aria-expanded", "false"); if (refocus) btn.focus(); }
+  document.getElementById("menu").classList.remove("open"); menuFor = null;
+}
+function toggleJoin() {
+  const p = document.getElementById("joinPanel"), open = !p.classList.contains("open");
+  p.classList.toggle("open", open); document.getElementById("joinBtn").setAttribute("aria-expanded", open);
+  if (open) document.getElementById("joinCode").focus();
+}
+
+/* ---- Add member pop-up ---- */
+// Fake user directory: everyone with an account. Current students show as "In class".
+const DIRECTORY = [...NAMES, "Kai Thompson", "Leila Haddad", "Ben Carter", "Mia Rossi", "Tomas Herrera", "Ava Lindqvist",
+  "Jamal Wright", "Nora Bauer", "Rohan Mehta", "Fatima Zahra", "Elijah Moore", "Yuki Tanaka", "Clara Dubois",
+  "Isaac Green", "Hana Lee", "Mateo Silva", "Olivia Grant", "Dev Kapoor"].map((name, i) => {
+  const parts = name.toLowerCase().replace(/'/g, "").split(" ");
+  return { id: i, name, user: parts[parts.length - 1].slice(0, 6) + parts[0][0] + (26 + i % 4), initials: name.split(" ").map(w => w[0]).join("").slice(0, 2) };
+});
+const justAdded = new Set();
+const inClass = name => STUDENTS.some(s => s.name === name);
+const hl = (text, q) => { const i = q ? text.toLowerCase().indexOf(q) : -1; return i < 0 ? esc(text) : esc(text.slice(0, i)) + "<mark>" + esc(text.slice(i, i + q.length)) + "</mark>" + esc(text.slice(i + q.length)); };
+
+function openAdd() {
+  document.getElementById("dlgCode").textContent = CLS.code;
+  document.getElementById("pq").value = ""; renderPeople();
+  document.getElementById("addDlg").showModal();
+  document.getElementById("pq").focus();
+}
+function closeAdd() { document.getElementById("addDlg").close(); }
+document.getElementById("addDlg").addEventListener("close", () => document.getElementById("addBtn").focus());
+// Clicking the dimmed backdrop closes it
+document.getElementById("addDlg").addEventListener("click", e => { if (e.target.id === "addDlg") closeAdd(); });
+
+function renderPeople() {
+  const q = document.getElementById("pq").value.trim().toLowerCase();
+  const uq = q.replace(/@.*/, "");
+  const list = DIRECTORY.filter(p => !q || p.name.toLowerCase().includes(q) || (uq && p.user.includes(uq)));
+  // People you can still add come first; existing members sink to the bottom
+  const rankOf = p => inClass(p.name) && !justAdded.has(p.name) ? 1 : 0;
+  list.sort((a, b) => rankOf(a) - rankOf(b) || a.name.localeCompare(b.name));
+  document.getElementById("pLabel").textContent = q ? `Results for “${q}”` : "Everyone";
+  document.getElementById("pCount").textContent = `${list.length} ${list.length === 1 ? "person" : "people"}`;
+  document.getElementById("people").innerHTML = list.length ? list.map(p => {
+    const member = inClass(p.name), fresh = justAdded.has(p.name);
+    return `<div class="person ${member ? "in" : ""}">
+      <div class="pav" aria-hidden="true">${esc(p.initials)}</div>
+      <div><div class="pname">${hl(p.name, q)}</div><div class="pmail">${hl(p.user, uq)}@gettysburg.edu</div></div>
+      ${fresh ? `<span class="in-tag just">Added ✓</span>` : member ? `<span class="in-tag">In class</span>`
+        : `<button class="add-one" id="add-${p.id}" onclick="addMember(${p.id})" aria-label="Add ${esc(p.name)}">+ Add</button>`}
+    </div>`;
+  }).join("") : `<div class="dlg-empty">No one matches “${esc(q)}”.<br>Check the spelling, or send them invite code ${esc(CLS.invite)}.</div>`;
+  document.getElementById("addedCount").innerHTML = justAdded.size ? `<b>${justAdded.size}</b> added to ${esc(CLS.code)}` : "Nobody added yet";
+}
+function addMember(id) {
+  const name = DIRECTORY[id].name;
+  if (inClass(name)) return;
+  STUDENTS.push({ id: STUDENTS.length, name, grades: PRESENTATIONS.map(() => null), attended: 0, avg: null, rank: null, fresh: true });
+  justAdded.add(name);
+  renderPeople(); renderSummary(); renderAdmin();
+  document.getElementById("pq").focus();
+  toast(`${name} added to ${CLS.code}`);
+}
+
+/* ---- Hash, events, init ---- */
+function syncHash() {
+  const parts = [];
+  if (view === "user") { parts.push("view=user"); if (uTab === "participate") parts.push("tab=participate"); }
+  else if (aTab === "stu") { parts.push("tab=students"); if (openS.size) parts.push("s=" + [...openS].pop()); }
+  history.replaceState(null, "", location.pathname + location.search + (parts.length ? "#" + parts.join("&") : ""));
+}
+document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => setATab(b.dataset.tab));
+document.querySelectorAll("[data-utab]").forEach(b => b.onclick = () => setUTab(b.dataset.utab));
+document.querySelectorAll(".tabs").forEach(nav => nav.addEventListener("keydown", e => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  if (nav.closest("#adminView")) { const t = aTab === "pres" ? "stu" : "pres"; setATab(t); document.getElementById("tab-" + t).focus(); }
+  else { const t = uTab === "present" ? "participate" : "present"; setUTab(t); document.getElementById("tab-" + t).focus(); }
+}));
+document.addEventListener("click", e => { if (!e.target.closest("#menu")) closeMenu(); });
+window.addEventListener("scroll", () => closeMenu(), { passive: true });
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape" || document.getElementById("addDlg").open) return;
+  if (menuFor !== null) return closeMenu(true);
+  if (document.getElementById("joinPanel").classList.contains("open")) { toggleJoin(); document.getElementById("joinBtn").focus(); }
+});
+
+renderAdmin(); renderUser();
+const hp = new URLSearchParams(location.hash.slice(1));
+if (hp.get("view") === "user") { setView("user", true); if (hp.get("tab") === "participate") setUTab("participate"); }
+else if (hp.get("tab") === "students") {
+  setATab("stu");
+  const s = +hp.get("s");
+  if (hp.has("s") && STUDENTS[s]) { openS.add(s); renderAdmin(); syncHash(); document.getElementById("row-s" + s).scrollIntoView({ block: "start" }); }
+}
+</script>
+</body>
+</html>
