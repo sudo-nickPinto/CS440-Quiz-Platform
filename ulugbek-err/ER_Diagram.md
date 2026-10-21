@@ -179,12 +179,12 @@ Migration `0006` adds classes, following the class proposal in PR #51 (`docs/CLA
 
 ```mermaid
 erDiagram
-    ACCOUNT ||--o{ CLASS : creates
-    CLASS ||--o{ CLASS_MEMBERSHIP : has
-    ACCOUNT ||--o{ CLASS_MEMBERSHIP : "belongs to"
-    ACCOUNT |o--o{ CLASS_MEMBERSHIP : "invited / decided"
+    ACCOUNT ||--o{ "CLASS" : creates
+    "CLASS" ||--o{ "CLASS_MEMBERSHIP" : has
+    ACCOUNT ||--o{ "CLASS_MEMBERSHIP" : "belongs to"
+    ACCOUNT |o--o{ "CLASS_MEMBERSHIP" : "invited / decided"
 
-    CLASS {
+    "CLASS" {
         int class_id PK
         varchar name
         int created_by_id FK
@@ -194,7 +194,7 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
-    CLASS_MEMBERSHIP {
+    "CLASS_MEMBERSHIP" {
         int membership_id PK
         int class_id FK
         int account_id FK "UK with class_id"
