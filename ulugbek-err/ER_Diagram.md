@@ -173,6 +173,57 @@ erDiagram
 - People with the same score get the same place, and the next place is skipped. For example: 1st, 2nd, 3rd, 3rd, 5th.
 - The Excel export for one session reads from `session_participant`, `question`, `response` and `result`, so it always matches what the app shows.
 
+## Classes (V2)
+
+Migration `0006` adds classes, following the class proposal in PR #51 (`docs/CLASS_APPROVAL.md`). Nothing uses these tables yet. The class API comes in the next tasks.
+
+```mermaid
+erDiagram
+    ACCOUNT ||--o{ CLASS : creates
+    CLASS ||--o{ CLASS_MEMBERSHIP : has
+    ACCOUNT ||--o{ CLASS_MEMBERSHIP : "belongs to"
+    ACCOUNT |o--o{ CLASS_MEMBERSHIP : "invited / decided"
+
+    CLASS {
+        int class_id PK
+        varchar name
+        int created_by_id FK
+        char join_code UK "8 characters, no dash; empty when archived"
+        boolean joining_open
+        datetime archived_at "empty = not archived"
+        datetime created_at
+        datetime updated_at
+    }
+    CLASS_MEMBERSHIP {
+        int membership_id PK
+        int class_id FK
+        int account_id FK "UK with class_id"
+        enum role "ORGANIZER, MEMBER"
+        enum status "INVITED, ACTIVE, LEFT, REMOVED"
+        enum joined_via "CREATOR, CODE, INVITE"
+        int invited_by_id FK "who sent the invite"
+        int decided_by_id FK "who made the last change"
+        datetime decided_at
+        datetime created_at
+        datetime updated_at
+    }
+```
+
+### How classes work
+
+- **Anyone can make a class.** They become its first organizer: a membership with `role = ORGANIZER`, `status = ACTIVE` and `joined_via = CREATOR`. The backend saves the class and that membership together, so you never get one without the other.
+- **Organizer and member are roles inside one class,** not on the account. The same person can organize one class and be a member of another. Admin still means the app-wide Admin.
+- **Joining:** someone joins with the class code (`joined_via = CODE`) or by accepting an invite (`INVITED`, then `ACTIVE`).
+- **Leaving and removal:** leaving sets `status = LEFT`. An organizer removing someone sets `status = REMOVED`, and `decided_by_id` and `decided_at` record who did it and when.
+- **One row per person per class.** Joining again, being invited again or being removed all update the same row. Past results never change, because they live in the session tables.
+- **Archiving** sets `archived_at`, clears the code and closes joining. Classes are never deleted, so their history stays.
+
+### Class rules the backend has to check
+
+- A class always keeps at least one active organizer. Removing, demoting or letting the last one leave is refused (`409 last_organizer`).
+- Roles and statuses always come from `class_membership`, never from the account or the request.
+- Generating class codes (8 characters, no look-alike letters) and rate-limiting joins by code.
+
 ## Things that must be unique
 
 - **account:** no two accounts can have the same email.
@@ -185,6 +236,8 @@ erDiagram
 - **session_question:** a question only shows up once per session.
 - **response:** a person can only answer each question once.
 - **result:** each participant gets one final result.
+- **class:** no two classes can have the same code. Any number of classes can have no code.
+- **class_membership:** a person has at most one membership row per class.
 
 ## Rules the backend has to check
 
@@ -205,20 +258,20 @@ The database can't easily check these, so the backend code has to:
 
 ## Tables the MVP doesn't use
 
-These tables exist in the database but the MVP doesn't read or write them. Please don't delete them. They'll be used when we build the features below.
+These tables exist in the database but the MVP doesn't read or write them. Please don't use them in new code.
 
-| Table | What it's for | Needed when we add |
+| Table | What it was for | What happens to it |
 |---|---|---|
-| `course_group` | A class, with one teacher | Multiple classes |
-| `group_membership` | Which students are in which class | Multiple classes |
-| `quiz_group` | Which classes a quiz belongs to | Multiple classes, private quizzes |
-| `quiz_collaborator` | Extra people who can edit a quiz | Working on a quiz together |
+| `course_group` | A class, with one teacher | Replaced by `class`. Will be dropped in a cleanup migration. |
+| `group_membership` | Which students are in which class | Replaced by `class_membership`. Will be dropped in a cleanup migration. |
+| `quiz_group` | Which classes a quiz belongs to | Will be replaced when quizzes get a class (task 5), then dropped. |
+| `quiz_collaborator` | Extra people who can edit a quiz | Kept for working on a quiz together later. |
 
-Some columns are also unused for now: `quiz.visibility`, `question.explanation`, `question.locked_by_id`, `question.locked_at`, `response.text_answer`, and `live_session.group_id`.
+Some columns are also unused for now: `quiz.visibility`, `question.explanation`, `question.locked_by_id`, `question.locked_at`, `response.text_answer`, and `live_session.group_id`. `live_session.group_id` still points at the old `course_group` table. It will be replaced when sessions become class-aware (task 6).
 
 ## Left for after the MVP
 
-- Multiple classes, adding students to a class, and class management.
+- Class management (the tables exist since `0006`; the API is next).
 - Professor roles and anything only a professor can do.
 - Private quizzes.
 - Editing a saved quiz, and working on a quiz together.
