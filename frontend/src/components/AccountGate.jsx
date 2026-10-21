@@ -18,12 +18,18 @@ export default function AccountGate({ children }) {
   useEffect(() => {
     let cancelled = false
     apiFetch('/me', getAccessTokenSilently)
-      .then(() => {
+      .then((account) => {
         if (cancelled) return
         try {
           sessionStorage.removeItem(REDIRECTED)
         } catch {
           // Storage may be unavailable.
+        }
+        // /me still answers for a deactivated account; every other route
+        // would refuse it with inactive_account.
+        if (account?.is_active === false) {
+          setDisabled(true)
+          return
         }
         setReady(true)
       })
