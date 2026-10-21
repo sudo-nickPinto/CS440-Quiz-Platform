@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuizBurg — Classes</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* V2 classes home (October 21, 2026). Every user can create classes (they become its admin)
+     and join other people's classes. Cards you created open class-admin-main.html; cards you
+     only joined open the regular dashboard (made-dashboard-main.html).
+     Page scrolls; nothing inside the frame does. */
+  :root {
+    --navy: #043371;
+    --orange: #CC4E00;
+    --orange-deep: #bf4c0c;
+    --sky: #8fdbff;
+    --sky-soft: #c2e6f8;
+    --apricot: #f6d2b6;
+    --sand: #ecdfd0;
+    --paper: #fcf9f4;
+    --ink: #222222;
+    --gray: #666666;
+    --b: 3px solid var(--ink);
+    --b-thin: 2px solid var(--ink);
+    --shadow: 6px 6px 0 var(--ink);
+    --ease-out: cubic-bezier(.22, 1, .36, 1);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  :focus-visible { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+
+  @supports not selector(::-webkit-scrollbar) {
+    html { scrollbar-width: thin; scrollbar-color: var(--ink) var(--sand); }
+    * { scrollbar-width: thin; scrollbar-color: var(--ink) transparent; }
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  html::-webkit-scrollbar, html::-webkit-scrollbar-track, body::-webkit-scrollbar, body::-webkit-scrollbar-track { background: var(--sand); }
+  ::-webkit-scrollbar-thumb { background: var(--ink); border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+
+  html { background: var(--sand); }
+  body {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    background: var(--sand); color: var(--ink);
+    min-height: 100vh; display: flex; flex-direction: column;
+    padding: 20px 24px 32px; gap: 18px;
+  }
+  button { font: inherit; color: inherit; }
+
+  /* Header */
+  header.top { display: flex; justify-content: space-between; align-items: center; }
+  /* QuizBurg logo, option 02 "Split block" (logo-variations.html): navy QUIZ | ink line | deep-orange BURG */
+  .logo {
+    font-family: "Archivo Black", sans-serif; font-size: 22px; line-height: 1.15; text-decoration: none;
+    display: inline-flex; gap: 3px; background: var(--ink); white-space: nowrap;
+    border: var(--b); box-shadow: 4px 4px 0 var(--ink); transform: rotate(-1.5deg);
+  }
+  .logo .q, .logo .g { color: var(--paper); padding: 6px 11px; }
+  .logo .q { background: var(--navy); padding-right: 9px; }
+  .logo .g { background: var(--orange-deep); padding-left: 9px; }
+  .user { display: flex; align-items: center; gap: 12px; font-weight: 700; }
+  .avatar {
+    width: 44px; height: 44px; border: var(--b); background: var(--orange-deep); color: var(--paper);
+    display: grid; place-items: center; font-weight: 700; box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  .frame { flex: 1 0 auto; min-width: 0; display: flex; flex-direction: column; border: var(--b); background: var(--paper); box-shadow: var(--shadow); }
+
+  /* Title bar: Classes | + | Join (same shape as the dashboard tab bar) */
+  .tabs { display: grid; grid-template-columns: 1fr auto auto; border-bottom: var(--b); }
+  .tabs > * { border-right: var(--b); }
+  .tabs > *:last-child { border-right: none; }
+  .tabs h1 {
+    font-family: "Archivo Black", sans-serif; font-weight: 400; font-size: clamp(16px, 2.2vw, 28px);
+    text-transform: uppercase; letter-spacing: .5px; padding: 20px 22px; display: flex; align-items: center; gap: 14px;
+  }
+  .tabs h1 small { font-family: "Space Grotesk"; font-size: 13px; font-weight: 700; letter-spacing: 1px; color: var(--gray); }
+  .tabs button {
+    border: none; cursor: pointer; font-family: "Archivo Black", sans-serif;
+    font-size: clamp(16px, 2.2vw, 28px); text-transform: uppercase; letter-spacing: .5px;
+  }
+  .tabs .plus { background: var(--sky-soft); color: var(--navy); padding: 0 26px; display: flex; align-items: center; gap: 10px; }
+  .tabs .plus b { font-size: 34px; font-weight: 400; line-height: 1; }
+  .tabs .plus span { font-size: clamp(14px, 1.6vw, 20px); }
+  .tabs .join { background: var(--navy); color: var(--paper); padding: 20px 36px; }
+  .tabs .plus:hover, .tabs .plus[aria-expanded="true"] { background: var(--sand); }
+  .tabs .join:hover, .tabs .join[aria-expanded="true"] { background: var(--ink); }
+  .tabs .plus:active, .tabs .join:active { transform: translate(2px,2px); }
+
+  /* Inline panels (create / join), one at a time */
+  .ipanel { display: none; padding: 14px 16px; border-bottom: var(--b); background: var(--sky-soft); gap: 12px; align-items: center; flex-wrap: wrap; }
+  .ipanel.open { display: flex; }
+  .ipanel > .lbl { background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 6px 10px; }
+  .ipanel input { font: inherit; font-weight: 700; border: var(--b); background: var(--paper); box-shadow: 3px 3px 0 var(--ink); padding: 8px 12px; min-width: 0; }
+  #newName { width: 340px; }
+  #joinCode { width: 180px; text-transform: uppercase; letter-spacing: 4px; }
+  .ipanel .hint { font-size: 13px; font-weight: 700; color: var(--navy); }
+  .ipanel .err { font-size: 13px; font-weight: 700; color: var(--orange-deep); background: var(--paper); border: var(--b-thin); padding: 4px 8px; }
+  .ipanel .err:empty { display: none; }
+  .btn { font: inherit; font-weight: 700; border: var(--b); background: var(--orange-deep); color: var(--paper); padding: 8px 18px; box-shadow: 3px 3px 0 var(--ink); cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--orange); }
+  .btn:active { transform: translate(3px,3px); box-shadow: none; }
+  .btn.ghost { background: var(--paper); color: var(--ink); }
+  .btn.ghost:hover { background: var(--sand); }
+
+  /* Toolbar (dashboard variant C) */
+  .toolbar {
+    display: flex; gap: 12px; padding: 12px 16px; border-bottom: var(--b); align-items: stretch;
+    background: repeating-linear-gradient(45deg, var(--paper), var(--paper) 10px, var(--sand) 10px, var(--sand) 20px);
+  }
+  .search { flex: 1; min-width: 0; display: flex; align-items: center; border: var(--b); background: var(--paper); box-shadow: 3px 3px 0 var(--ink); }
+  .search:focus-within { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+  .search span { padding: 0 10px 0 14px; font-size: 20px; font-weight: 700; color: var(--navy); }
+  .search input { flex: 1; min-width: 0; font: inherit; font-weight: 700; font-size: 16px; border: none; outline: none; padding: 10px 10px 10px 0; background: transparent; color: var(--ink); }
+  .filter-wrap { position: relative; display: flex; }
+  .filterbtn {
+    font-weight: 700; font-size: 14px; text-transform: uppercase; white-space: nowrap;
+    border: var(--b); background: var(--sky-soft); color: var(--navy); padding: 0 16px; cursor: pointer; box-shadow: 3px 3px 0 var(--ink);
+  }
+  .filterbtn .dot { display: inline-block; width: 9px; height: 9px; background: var(--orange-deep); border: 2px solid var(--ink); margin-left: 6px; }
+  .filterbtn[aria-expanded="true"] { background: var(--ink); color: var(--paper); transform: translate(3px,3px); box-shadow: none; }
+  .filterbtn[aria-expanded="true"] .dot { background: var(--apricot); }
+  .pop { position: absolute; right: 0; top: calc(100% + 10px); z-index: 15; width: 290px; padding: 14px; background: var(--paper); border: var(--b); box-shadow: var(--shadow); display: none; }
+  .pop.open { display: block; }
+  .pop h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); margin-bottom: 8px; }
+  .pop .opts + h4 { margin-top: 14px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .opt { font-weight: 700; border: var(--b-thin); background: var(--paper); color: var(--ink); padding: 5px 10px; cursor: pointer; }
+  .opt.on { background: var(--navy); color: var(--paper); }
+  .opt:not(.on):hover { background: var(--sky-soft); }
+  .count { display: flex; align-items: center; gap: 6px; border: var(--b); font-weight: 700; text-transform: uppercase; background: var(--orange-deep); color: var(--paper); padding: 5px 12px; white-space: nowrap; }
+  .count b { font-family: "Archivo Black"; font-weight: 400; }
+
+  /* One mixed grid: created and joined classes sit together, told apart by their badge and tint */
+  /* Five cards per row on desktop, stepping down with the screen */
+  .grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 24px; padding: 24px 24px 30px; }
+  @media (max-width: 1400px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 1150px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 860px)  { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  /* Class card (Moodle-style tile) */
+  .card { position: relative; display: flex; flex-direction: column; border: var(--b); background: var(--paper); box-shadow: var(--shadow); min-width: 0; }
+  .card.enter { animation: pop .35s var(--ease-out); }
+  @keyframes pop { from { opacity: 0; transform: translateY(8px); } }
+  .open-link { position: absolute; inset: 0; z-index: 1; }
+  .open-link:focus-visible { outline-offset: 4px; }
+  .card:hover .ctitle { text-decoration: underline; text-decoration-color: var(--orange-deep); text-decoration-thickness: 3px; text-underline-offset: 4px; }
+  .card:active:not(:has(.kebab:active, .confirm)) { transform: translate(3px,3px); box-shadow: 3px 3px 0 var(--ink); }
+  .banner { height: 150px; border-bottom: var(--b); position: relative; display: flex; align-items: flex-end; padding: 12px 14px; }
+  .card.owned .banner { background: var(--apricot); }
+  .card.joined .banner { background: var(--sky-soft); }
+  .banner .code { font-family: "Archivo Black"; font-size: clamp(28px, 2.4vw, 36px); line-height: 1; letter-spacing: -.5px; color: var(--ink); }
+  .card.joined .banner .code { color: var(--navy); }
+  .role {
+    position: absolute; top: 0; left: 0; padding: 5px 10px; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    border-right: var(--b-thin); border-bottom: var(--b-thin);
+  }
+  .card.owned .role { background: var(--orange-deep); color: var(--paper); }
+  .card.joined .role { background: var(--navy); color: var(--paper); }
+  .cbody { padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 7px; flex: 1; min-height: 132px; }
+  .ctitle { font-family: "Archivo Black"; font-size: 20px; line-height: 1.2; overflow-wrap: anywhere; }
+  .owner { font-size: 14px; font-weight: 700; color: var(--navy); }
+  .card.owned .owner { color: var(--orange-deep); }
+  .stats { font-size: 13px; font-weight: 700; color: var(--gray); }
+  .cfoot { border-top: var(--b-thin); background: var(--sand); display: flex; align-items: stretch; min-height: 50px; }
+  .cfoot .go { flex: 1; min-width: 0; white-space: nowrap; display: flex; align-items: center; padding: 0 16px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--navy); }
+  .card.owned .cfoot .go { color: var(--ink); }
+  .kebab-wrap { position: relative; z-index: 2; display: grid; place-items: center; padding: 0 10px; border-left: var(--b-thin); }
+  .kebab {
+    font-weight: 700; border: var(--b); background: var(--paper); width: 50px; height: 38px;
+    cursor: pointer; box-shadow: 3px 3px 0 var(--ink); font-size: 20px; line-height: 1;
+  }
+  .kebab:hover { background: var(--sky-soft); }
+  .kebab:active, .kebab[aria-expanded="true"] { transform: translate(3px,3px); box-shadow: none; }
+  .kebab[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
+  .arrow { display: grid; place-items: center; width: 70px; flex: none; border-left: var(--b-thin); font-weight: 700; font-size: 20px; }
+
+  .menu { position: fixed; z-index: 20; background: var(--paper); border: var(--b); box-shadow: var(--shadow); min-width: 230px; display: none; }
+  .menu.open { display: block; }
+  .menu button { display: block; width: 100%; text-align: left; font-weight: 700; border: none; border-bottom: var(--b-thin); background: var(--paper); padding: 11px 14px; cursor: pointer; }
+  .menu button:last-child { border-bottom: none; }
+  .menu button:hover { background: var(--sky-soft); }
+  .menu button.danger { color: var(--orange-deep); }
+  .menu button.danger:hover { background: var(--apricot); color: var(--ink); }
+
+  /* Delete confirmation replaces the card body in place (no modal) */
+  .confirm { position: absolute; inset: 0; z-index: 3; background: var(--paper); display: flex; flex-direction: column; animation: fade .2s ease; }
+  @keyframes fade { from { opacity: 0; } }
+  .confirm .panel-top { background: var(--ink); color: var(--paper); padding: 9px 14px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .confirm .cbody { justify-content: center; }
+  .confirm p { font-weight: 700; font-size: 16px; line-height: 1.35; }
+  .confirm small { font-size: 13px; font-weight: 700; color: var(--gray); line-height: 1.4; }
+  .confirm .acts { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+
+  .empty { padding: 60px 20px; text-align: center; font-weight: 700; font-size: 18px; }
+  .empty b { color: var(--orange-deep); }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, calc(100% + 60px));
+    background: var(--navy); color: var(--paper); font-weight: 700; padding: 12px 20px; max-width: calc(100vw - 24px);
+    border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); transition: transform .2s, visibility .2s; z-index: 99; visibility: hidden;
+  }
+  .toast.show { transform: translate(-50%, 0); visibility: visible; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 640px) {
+    body { padding: 12px 10px 18px; gap: 12px; }
+    .logo { font-size: 18px; }
+    .user .name { display: none; }
+    .avatar { width: 40px; height: 40px; }
+    .tabs h1 { padding: 16px 12px; font-size: 18px; }
+    .tabs h1 small { display: none; }
+    .tabs .plus { padding: 0 14px; }
+    .tabs .plus span { display: none; }
+    .tabs .plus b { font-size: 26px; }
+    .tabs .join { padding: 14px; font-size: 15px; }
+    .ipanel { padding: 12px 10px; }
+    #newName, #joinCode { flex: 1 1 160px; width: auto; }
+    .toolbar { gap: 10px; padding: 10px; position: relative; }
+    .search span { padding: 0 6px 0 10px; }
+    .search input { font-size: 15px; }
+    .filterbtn { padding: 0 10px; font-size: 12px; }
+    .filter-wrap { position: static; }
+    .pop { left: 10px; right: 10px; width: auto; top: calc(100% + 6px); }
+    .count { flex-direction: column; justify-content: center; gap: 0; padding: 4px 10px; line-height: 1.05; }
+    .count b { font-size: 20px; }
+    .count span { font-size: 10px; letter-spacing: .5px; }
+    .grid { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px 12px 22px; }
+    .banner { height: 96px; }
+    .cbody { min-height: 0; }
+    .banner .code { font-size: 24px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <header class="top">
+    <a class="logo" href="classes-main.html" aria-label="QuizBurg classes"><span class="q">QUIZ</span><span class="g">BURG</span></a>
+    <div class="user"><span class="name">Taha Sabir</span><div class="avatar">TS</div></div>
+  </header>
+
+  <main class="frame">
+    <div class="tabs">
+      <h1>Classes <small id="sub"></small></h1>
+      <button class="plus" id="plusBtn" aria-expanded="false" aria-controls="newPanel" aria-label="New class" onclick="openPanel('new')"><b>+</b><span>New class</span></button>
+      <button class="join" id="joinBtn" aria-expanded="false" aria-controls="joinPanel" onclick="openPanel('join')">Join</button>
+    </div>
+
+    <div class="ipanel" id="newPanel">
+      <span class="lbl">NEW CLASS</span>
+      <input id="newName" maxlength="60" placeholder="e.g. CS 301 · Algorithms" aria-label="Class name">
+      <button class="btn" onclick="createClass()">CREATE →</button>
+      <span class="hint">You'll be its admin. Share the invite code to let people in.</span>
+      <span class="err" id="newErr" role="alert"></span>
+    </div>
+    <div class="ipanel" id="joinPanel">
+      <span class="lbl">INVITE CODE</span>
+      <input id="joinCode" maxlength="6" placeholder="K7Q2PX" aria-label="Invite code">
+      <button class="btn" onclick="joinClass()">GO →</button>
+      <span class="hint">The class admin decides if you get in.</span>
+      <span class="err" id="joinErr" role="alert"></span>
+    </div>
+
+    <div class="toolbar" id="toolbar"></div>
+    <div id="sections"></div>
+  </main>
+  <div class="menu" id="menu" role="menu"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ---- Fake data. "owned" = created by the signed-in user (Taha), who is its admin. ---- */
+let CLASSES = [
+  { id: "cs216",  code: "CS 216",   name: "Data Structures",                owned: false, members: 31, quizzes: 6, by: "Prof. Kim",       active: "2026-10-20" },
+  { id: "cs440",  code: "CS 440",   name: "Software Engineering · Fall 26", owned: true,  members: 23, quizzes: 8, invite: "K7Q2PX", active: "2026-10-19" },
+  { id: "hist",   code: "HIST 341", name: "The Civil War Era",              owned: false, members: 24, quizzes: 7, by: "Prof. Whitman",   active: "2026-10-18" },
+  { id: "econ",   code: "ECON 103", name: "Microeconomics Review",          owned: false, members: 19, quizzes: 5, by: "Prof. Alvarez",   active: "2026-10-16" },
+  { id: "algo",   code: "ALGO",     name: "Algorithms Study Group",         owned: true,  members: 6,  quizzes: 3, invite: "B3NM8Q", active: "2026-10-14" },
+  { id: "math",   code: "MATH 211", name: "Linear Algebra",                 owned: false, members: 27, quizzes: 9, by: "Prof. Chen",      active: "2026-10-13" },
+  { id: "hack",   code: "HACK",     name: "Hackathon Prep Crew",            owned: true,  members: 9,  quizzes: 4, invite: "HX9P2L", active: "2026-10-11" },
+  { id: "cs111",  code: "CS 111",   name: "Intro to Computer Science",      owned: false, members: 28, quizzes: 4, by: "U. Khairulla",    active: "2026-10-08" },
+  { id: "span",   code: "SPAN 202", name: "Intermediate Spanish",           owned: false, members: 16, quizzes: 6, by: "Prof. Ortega",    active: "2026-10-07" },
+  { id: "ihouse", code: "I-HOUSE",  name: "International House Trivia",     owned: true,  members: 41, quizzes: 2, invite: "TRV26A", active: "2026-09-30" },
+  { id: "chem",   code: "CHEM 107", name: "General Chemistry Lab",          owned: false, members: 22, quizzes: 3, by: "Prof. Abara",     active: "2026-09-29" },
+  { id: "acm",    code: "ACM",      name: "Gettysburg ACM Chapter",         owned: false, members: 35, quizzes: 2, by: "A. Majumder",     active: "2026-09-26" },
+  { id: "phil",   code: "PHIL 105", name: "Ethics Reading Group",           owned: true,  members: 7,  quizzes: 1, invite: "ETH7QK", active: "2026-09-21" },
+  { id: "psyc",   code: "PSYC 101", name: "Intro to Psychology",            owned: false, members: 30, quizzes: 5, by: "Prof. Reyes",     active: "2026-09-18" },
+  { id: "film",   code: "FILM",     name: "Film Society Quiz Nights",       owned: false, members: 18, quizzes: 3, by: "N. Pinto",        active: "2026-09-12" },
+];
+let show = "all", sort = "recent", query = "", popOpen = false, confirmId = null, fresh = null;
+
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+let tt; function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 1800); }
+
+// Owned classes open the admin page; joined classes open the regular dashboard.
+const hrefFor = c => c.owned ? `class-admin-main.html?c=${encodeURIComponent(c.id)}` : `made-dashboard-main.html#participate`;
+
+function toolbarHTML() {
+  const changed = show !== "all" || sort !== "recent";
+  const opt = (on, click, label) => `<button class="opt ${on ? "on" : ""}" onclick="${click};popOpen=false;render()">${label}</button>`;
+  return `
+    <div class="search"><span aria-hidden="true">⌕</span><input id="q" aria-label="Search classes" placeholder="Search classes…" value="${esc(query)}" oninput="query=this.value;renderSections()"></div>
+    <div class="filter-wrap">
+      <button class="filterbtn" aria-expanded="${popOpen}" aria-controls="pop" onclick="event.stopPropagation();popOpen=!popOpen;render()">Filter${changed ? '<span class="dot"></span>' : ""} ▾</button>
+      <div class="pop ${popOpen ? "open" : ""}" id="pop" onclick="event.stopPropagation()">
+        <h4>Show</h4><div class="opts">${[["all","All"],["owned","Created by me"],["joined","Joined"]].map(([v,l]) => opt(show === v, `show='${v}'`, l)).join("")}</div>
+        <h4>Sort by</h4><div class="opts">${[["recent","Last active"],["az","A → Z"],["size","Most members"]].map(([v,l]) => opt(sort === v, `sort='${v}'`, l)).join("")}</div>
+      </div>
+    </div>
+    <span class="count" id="count"></span>`;
+}
+
+function cardHTML(c) {
+  const confirm = confirmId === c.id ? `
+    <div class="confirm" role="alertdialog" aria-labelledby="cf-${c.id}">
+      <div class="panel-top">Delete class</div>
+      <div class="cbody">
+        <p id="cf-${c.id}">Delete ${esc(c.code)} · ${esc(c.name)}?</p>
+        <small>${plural(c.members, "member")} lose access, and its ${plural(c.quizzes, "presentation")} and grades are removed. This can't be undone.</small>
+        <div class="acts">
+          <button class="btn ghost" onclick="cancelDelete()">Cancel</button>
+          <button class="btn" id="del-${c.id}" onclick="deleteClass('${c.id}')">Delete class</button>
+        </div>
+      </div>
+    </div>` : "";
+  return `<article class="card ${c.owned ? "owned" : "joined"} ${fresh === c.id ? "enter" : ""}" id="card-${c.id}">
+    <a class="open-link" href="${hrefFor(c)}" aria-label="Open ${esc(c.code)} ${esc(c.name)}${c.owned ? " (admin view)" : ""}" ${confirm ? 'tabindex="-1"' : ""}></a>
+    <div class="banner"><span class="role">${c.owned ? "Created by you · Admin" : "Member"}</span><span class="code">${esc(c.code)}</span></div>
+    <div class="cbody">
+      <div class="ctitle">${esc(c.name)}</div>
+      <div class="owner">${c.owned ? "You run this class" : "Run by " + esc(c.by)}</div>
+      <div class="stats">${plural(c.members, "member")} · ${plural(c.quizzes, "presentation")}</div>
+    </div>
+    <div class="cfoot">
+      <span class="go">${c.owned ? "Admin view" : "Dashboard"} →</span>
+      ${c.owned
+        ? `<div class="kebab-wrap"><button class="kebab" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(c.code)} actions" onclick="openMenu(event,'${c.id}')">⋯</button></div>`
+        : `<span class="arrow" aria-hidden="true">→</span>`}
+    </div>
+    ${confirm}
+  </article>`;
+}
+
+function render() { document.getElementById("toolbar").innerHTML = toolbarHTML(); renderSections(); }
+function renderSections() {
+  const qq = query.trim().toLowerCase();
+  const rows = CLASSES.filter(c => (c.code + " " + c.name + " " + (c.by || "")).toLowerCase().includes(qq))
+    .sort((a, b) => sort === "az" ? a.code.localeCompare(b.code) : sort === "size" ? b.members - a.members : b.active.localeCompare(a.active));
+  const visible = rows.filter(c => show === "all" || (show === "owned") === c.owned);
+  document.getElementById("count").innerHTML = `<b>${visible.length}</b><span>${visible.length === 1 ? "class" : "classes"}</span>`;
+  document.getElementById("sub").textContent = `${CLASSES.filter(c => c.owned).length} created · ${CLASSES.filter(c => !c.owned).length} joined`;
+  const emptyMsg = qq ? `No classes match “${esc(query)}”.`
+    : show === "owned" ? "You haven't made a class yet. Hit <b>+</b> to start one."
+    : show === "joined" ? "Not in anyone else's class yet. Hit <b>Join</b> and enter an invite code."
+    : "No classes yet. Hit <b>+</b> to make one, or <b>Join</b> with an invite code.";
+  document.getElementById("sections").innerHTML = visible.length
+    ? `<div class="grid">${visible.map(cardHTML).join("")}</div>`
+    : `<div class="empty">${emptyMsg}</div>`;
+  fresh = null;
+}
+
+/* ---- Row menu (owned cards only) ---- */
+let menuFor = null;
+function openMenu(e, id) {
+  e.preventDefault(); e.stopPropagation();
+  const m = document.getElementById("menu"), btn = e.currentTarget;
+  if (menuFor === id) return closeMenu();
+  closeMenu();
+  const c = CLASSES.find(x => x.id === id);
+  m.innerHTML = `
+    <button role="menuitem" onclick="location.href='${hrefFor(c)}'">→ Open admin view</button>
+    <button role="menuitem" onclick="copyInvite('${id}')">⧉ Copy invite code · ${c.invite}</button>
+    <button role="menuitem" class="danger" onclick="askDelete('${id}')">✕ Delete class</button>`;
+  m.classList.add("open"); menuFor = id; btn.setAttribute("aria-expanded", "true");
+  const r = btn.getBoundingClientRect(), h = m.offsetHeight;
+  m.style.right = Math.max(8, window.innerWidth - r.right) + "px";
+  m.style.top = (r.bottom + h + 12 > window.innerHeight ? r.top - h - 8 : r.bottom + 8) + "px";
+  m.querySelector("button").focus();
+}
+function closeMenu(refocus) {
+  const m = document.getElementById("menu");
+  if (!menuFor) return;
+  const btn = document.querySelector(`#card-${menuFor} .kebab`);
+  if (btn) { btn.setAttribute("aria-expanded", "false"); if (refocus) btn.focus(); }
+  m.classList.remove("open"); menuFor = null;
+}
+function copyInvite(id) { const c = CLASSES.find(x => x.id === id); closeMenu(); navigator.clipboard?.writeText(c.invite).catch(() => {}); toast(`Invite code ${c.invite} copied`); }
+function askDelete(id) { closeMenu(); confirmId = id; renderSections(); document.getElementById("del-" + id).focus(); }
+function cancelDelete() { const id = confirmId; confirmId = null; renderSections(); document.querySelector(`#card-${id} .kebab`)?.focus(); }
+function deleteClass(id) {
+  const c = CLASSES.find(x => x.id === id);
+  CLASSES = CLASSES.filter(x => x.id !== id); confirmId = null; renderSections();
+  toast(`${c.code} deleted`);
+}
+
+/* ---- Create / join (inline panels) ---- */
+function openPanel(which) {
+  const panels = { new: ["newPanel", "plusBtn", "newName"], join: ["joinPanel", "joinBtn", "joinCode"] };
+  Object.entries(panels).forEach(([k, [p, b, i]]) => {
+    const open = k === which && !document.getElementById(p).classList.contains("open");
+    document.getElementById(p).classList.toggle("open", open);
+    document.getElementById(b).setAttribute("aria-expanded", open);
+    if (open) document.getElementById(i).focus();
+  });
+}
+function createClass() {
+  const input = document.getElementById("newName"), name = input.value.trim(), err = document.getElementById("newErr");
+  if (!name) { err.textContent = "Give the class a name."; input.focus(); return; }
+  err.textContent = "";
+  const m = name.match(/^([A-Za-z]{2,5}\s?\d{2,3})\s*[·:\-–]?\s*(.*)$/);
+  const code = m ? m[1].toUpperCase() : name.split(/\s+/)[0].slice(0, 8).toUpperCase();
+  const id = "new" + Date.now();
+  const invite = Array.from({ length: 6 }, () => "ABCDEFGHJKMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 31)]).join("");
+  CLASSES.unshift({ id, code, name: (m && m[2]) || name, owned: true, members: 1, quizzes: 0, invite, active: "2026-10-21" });
+  input.value = ""; openPanel(null); fresh = id;
+  show = show === "joined" ? "all" : show; query = ""; render();
+  toast(`${code} created · invite code ${invite}`);
+}
+function joinClass() {
+  const input = document.getElementById("joinCode"), code = input.value.trim().toUpperCase(), err = document.getElementById("joinErr");
+  if (!/^[A-Z0-9]{6}$/.test(code)) { err.textContent = "Invite codes are 6 letters or numbers."; input.focus(); return; }
+  err.textContent = ""; input.value = ""; openPanel(null);
+  toast(`Request sent to join ${code}. The admin will let you in.`);
+}
+document.getElementById("newName").addEventListener("keydown", e => { if (e.key === "Enter") createClass(); });
+document.getElementById("joinCode").addEventListener("keydown", e => { if (e.key === "Enter") joinClass(); });
+
+/* ---- Global close behaviour ---- */
+document.addEventListener("click", e => {
+  if (!e.target.closest("#menu")) closeMenu();
+  if (popOpen) { popOpen = false; render(); }
+});
+window.addEventListener("scroll", () => closeMenu(), { passive: true });
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (menuFor) return closeMenu(true);
+  if (confirmId) return cancelDelete();
+  if (popOpen) { popOpen = false; render(); document.querySelector(".filterbtn").focus(); return; }
+  ["newPanel", "joinPanel"].forEach(p => document.getElementById(p).classList.contains("open") && openPanel(null));
+});
+
+render();
+</script>
+</body>
+</html>

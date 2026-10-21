@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuizBurg — Logo variations</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* QuizBurg logo study (October 21, 2026). Six takes on the current QUIZ.PLATFORM block:
+     Archivo Black, 3px ink border, 4px hard ink shadow, -1.5deg tilt. "QUIZ" is Gettysburg navy,
+     "BURG" is deep orange. Orange never touches navy directly: an ink line or paper sits between. */
+  :root {
+    --navy: #043371;
+    --orange: #CC4E00;
+    --orange-deep: #bf4c0c;
+    --sky: #8fdbff;
+    --sky-soft: #c2e6f8;
+    --apricot: #f6d2b6;
+    --sand: #ecdfd0;
+    --paper: #fcf9f4;
+    --ink: #222222;
+    --gray: #666666;
+    --b: 3px solid var(--ink);
+    --b-thin: 2px solid var(--ink);
+    --shadow: 6px 6px 0 var(--ink);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  :focus-visible { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+  @supports not selector(::-webkit-scrollbar) {
+    html { scrollbar-width: thin; scrollbar-color: var(--ink) var(--sand); }
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  html::-webkit-scrollbar, html::-webkit-scrollbar-track { background: var(--sand); }
+  ::-webkit-scrollbar-thumb { background: var(--ink); border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+
+  html { background: var(--sand); }
+  body { font-family: "Space Grotesk", system-ui, sans-serif; background: var(--sand); color: var(--ink); padding: 20px 24px 40px; }
+  .page { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+
+  /* Intro panel */
+  .intro { border: var(--b); background: var(--paper); box-shadow: var(--shadow); display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .intro .txt { padding: 22px 24px; display: flex; flex-direction: column; gap: 8px; }
+  .eyebrow { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--navy); }
+  h1 { font-family: "Archivo Black"; font-weight: 400; font-size: clamp(26px, 3vw, 38px); line-height: 1.15; letter-spacing: -.5px; }
+  h1 .hl { background: var(--sky-soft); color: var(--navy); border: var(--b); padding: 0 8px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .intro p { font-weight: 500; font-size: 16px; max-width: 64ch; line-height: 1.45; }
+  .was { border-left: var(--b); background: var(--sand); padding: 18px 26px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 12px; }
+  .was small { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); }
+
+  .old {
+    font-family: "Archivo Black", sans-serif; font-size: 22px; background: var(--navy); color: var(--paper);
+    padding: 6px 14px; border: var(--b); box-shadow: 4px 4px 0 var(--ink); transform: rotate(-1.5deg); display: inline-block;
+  }
+  .old span { color: var(--sky); }
+
+  /* Size switch */
+  .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 16px; border: var(--b); box-shadow: var(--shadow);
+    background: repeating-linear-gradient(45deg, var(--paper), var(--paper) 10px, var(--sand) 10px, var(--sand) 20px); }
+  .bar > span { background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 6px 10px; }
+  .opt { font: inherit; font-weight: 700; border: var(--b-thin); background: var(--paper); color: var(--ink); padding: 6px 12px; cursor: pointer; }
+  .opt[aria-pressed="true"] { background: var(--navy); color: var(--paper); }
+  .opt:not([aria-pressed="true"]):hover { background: var(--sky-soft); }
+
+  /* Variation cards */
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px; }
+  .card { border: var(--b); background: var(--paper); box-shadow: var(--shadow); display: flex; flex-direction: column; min-width: 0; }
+  .card-top { background: var(--ink); color: var(--paper); padding: 9px 14px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; gap: 12px; }
+  .card-top span:last-child { color: var(--apricot); white-space: nowrap; }
+  .stage { min-height: 230px; display: grid; place-items: center; padding: 34px 20px; border-bottom: var(--b-thin); background: var(--sand); }
+  .stage .scale { transform: scale(var(--zoom, 2.2)); transform-origin: center; transition: transform .25s cubic-bezier(.22, 1, .36, 1); }
+  .note { flex: 1; padding: 14px 16px; font-size: 14px; font-weight: 500; line-height: 1.45; border-bottom: var(--b-thin); }
+  .note b { font-weight: 700; }
+  /* Header + phone previews at real size */
+  .inuse { display: grid; grid-template-columns: minmax(0, 1fr) 170px; }
+  .hdr { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; background: var(--sand); min-width: 0; }
+  .hdr .user { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; }
+  .avatar { width: 40px; height: 40px; border: var(--b); background: var(--orange-deep); color: var(--paper); display: grid; place-items: center; font-weight: 700; font-size: 14px; box-shadow: 3px 3px 0 var(--ink); }
+  .phone { border-left: var(--b-thin); background: var(--sand); display: flex; flex-direction: column; justify-content: center; padding: 10px 12px; gap: 8px; }
+  .phone small, .hdr small { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); }
+  .phone .lg { --s: 16px; }
+  .mini { display: flex; flex-direction: column; gap: 4px; }
+
+  /* ---------- Shared logo base (same box as the current logo) ---------- */
+  .lg {
+    --s: 22px;
+    font-family: "Archivo Black", sans-serif; font-weight: 400; font-size: var(--s); line-height: 1.15;
+    display: inline-flex; align-items: stretch; white-space: nowrap; text-decoration: none;
+    border: var(--b); box-shadow: 4px 4px 0 var(--ink); transform: rotate(-1.5deg);
+  }
+  .lg .q { color: var(--navy); }
+  .lg .g { color: var(--orange-deep); }
+
+  /* 01 Classic: the current block in paper, two-color word */
+  .v1 { background: var(--paper); padding: .27em .64em; }
+
+  /* 02 Split: navy block | ink line | orange block, paper letters */
+  .v2 { background: var(--ink); gap: 3px; }
+  .v2 .q, .v2 .g { padding: .27em .5em; color: var(--paper); }
+  .v2 .q { background: var(--navy); padding-right: .42em; }
+  .v2 .g { background: var(--orange-deep); padding-left: .42em; }
+
+  /* 03 Dot kept: QUIZ.BURG with the sky dot, like QUIZ.PLATFORM */
+  .v3 { background: var(--paper); padding: .27em .64em; }
+  .v3 .dot { align-self: flex-end; width: .3em; height: .3em; margin: 0 .1em .26em; background: var(--sky); border: 2px solid var(--ink); flex: none; }
+
+  /* 04 Stacked badge: QUIZ over BURG, square, works as an app icon */
+  .v4 { flex-direction: column; background: var(--paper); padding: 0; line-height: 1; }
+  .v4 .q, .v4 .g { padding: .2em .45em; letter-spacing: .02em; }
+  .v4 .q { border-bottom: var(--b-thin); }
+  .v4 .g { background: var(--apricot); }
+
+  /* 05 Tag: navy QUIZ block (like today) with a BURG tag hanging off it */
+  .v5 { border: none; box-shadow: none; background: none; align-items: flex-end; }
+  .v5 .q { background: var(--navy); color: var(--paper); border: var(--b); box-shadow: 4px 4px 0 var(--ink); padding: .27em .5em; position: relative; z-index: 1; }
+  .v5 .g { background: var(--paper); border: var(--b); border-left: none; box-shadow: 4px 4px 0 var(--ink); padding: .12em .45em; font-size: .82em; transform: translateY(.38em); }
+
+  /* 06 Highlight: paper block, BURG in an orange highlight box (like the headline .hl) */
+  .v6 { background: var(--paper); padding: .27em .4em .27em .64em; align-items: center; gap: .18em; }
+  .v6 .g { background: var(--orange-deep); color: var(--paper); border: var(--b-thin); padding: 0 .2em; line-height: 1.1; }
+
+
+  @media (max-width: 1000px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 640px) {
+    body { padding: 12px 10px 24px; }
+    .intro { grid-template-columns: minmax(0, 1fr); }
+    .was { border-left: none; border-top: var(--b); }
+    .stage { min-height: 180px; }
+    .stage .scale { --zoom: 1.5 !important; }
+    .inuse { grid-template-columns: minmax(0, 1fr); }
+    .phone { border-left: none; border-top: var(--b-thin); flex-direction: row; align-items: center; justify-content: space-between; }
+    .hdr .user .name { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <section class="intro">
+    <div class="txt">
+      <span class="eyebrow">Logo study · six options</span>
+      <h1>Meet <span class="hl">QuizBurg.</span></h1>
+      <p>Each option keeps the current logo's build: Archivo Black, a 3px ink border, a 4px hard shadow and the slight tilt. <b>QUIZ</b> is Gettysburg navy and <b>BURG</b> is deep orange. Every card shows the logo large, then at real size in the app header and on a phone.</p>
+    </div>
+    <div class="was"><small>Current logo</small><span class="old">QUIZ<span>.</span>PLATFORM</span></div>
+  </section>
+
+  <div class="bar" role="group" aria-label="Preview size">
+    <span>Preview size</span>
+    <button class="opt" aria-pressed="false" data-zoom="1.4">Small</button>
+    <button class="opt" aria-pressed="true" data-zoom="2.2">Large</button>
+    <button class="opt" aria-pressed="false" data-zoom="3">Huge</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+const V = [
+  { n: "01", name: "Classic", tag: "Closest to today",
+    html: `<span class="lg v1"><span class="q">QUIZ</span><span class="g">BURG</span></span>`,
+    note: "The current block, switched to <b>paper</b> so both colors read clearly. Navy QUIZ runs straight into orange BURG as one word. The simplest swap." },
+  { n: "02", name: "Split block", tag: "Boldest",
+    html: `<span class="lg v2"><span class="q">QUIZ</span><span class="g">BURG</span></span>`,
+    note: "Two filled halves, <b>navy</b> and <b>deep orange</b>, with paper letters. A 3px ink line sits between them so orange never touches blue. Reads like the selected Present and Participate tabs." },
+  { n: "03", name: "Dot kept", tag: "Keeps the sky dot",
+    html: `<span class="lg v3"><span class="q">QUIZ</span><span class="dot" aria-hidden="true"></span><span class="g">BURG</span></span>`,
+    note: "Same as Classic, but it keeps the little <b>pale-sky dot</b> from QUIZ.PLATFORM as a square between the two words. People who know the old logo will still spot it." },
+  { n: "04", name: "Stacked badge", tag: "Doubles as app icon",
+    html: `<span class="lg v4"><span class="q">QUIZ</span><span class="g">BURG</span></span>`,
+    note: "QUIZ over BURG in a near-square block, with BURG on an <b>apricot</b> band. Compact enough for a favicon or phone home-screen icon, but it takes more header height." },
+  { n: "05", name: "Tag", tag: "Navy block stays",
+    html: `<span class="lg v5"><span class="q">QUIZ</span><span class="g">BURG</span></span>`,
+    note: "Keeps today's <b>navy block</b> for QUIZ, with a smaller paper tag reading BURG hanging off its lower right. Playful, and the most like the current logo at a glance." },
+  { n: "06", name: "Highlight", tag: "Matches the headlines",
+    html: `<span class="lg v6"><span class="q">QUIZ</span><span class="g">BURG</span></span>`,
+    note: "Navy QUIZ on paper, with BURG in a <b>deep-orange highlight box</b>, the same treatment as the highlighted word in the landing-page headline." },
+];
+
+const card = v => `<article class="card">
+  <div class="card-top"><span>${v.n} · ${v.name}</span><span>${v.tag}</span></div>
+  <div class="stage"><div class="scale">${v.html}</div></div>
+  <p class="note">${v.note}</p>
+  <div class="inuse">
+    <div class="hdr"><div class="mini"><small>App header</small>${v.html}</div>
+      <div class="user"><span class="name">Taha Sabir</span><div class="avatar">TS</div></div></div>
+    <div class="phone"><small>Phone</small>${v.html}</div>
+  </div>
+</article>`;
+document.getElementById("grid").innerHTML = V.map(card).join("");
+
+document.querySelectorAll("[data-zoom]").forEach(b => b.onclick = () => {
+  document.querySelectorAll("[data-zoom]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  document.querySelectorAll(".stage .scale").forEach(s => s.style.setProperty("--zoom", b.dataset.zoom));
+});
+</script>
+</body>
+</html>
