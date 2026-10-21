@@ -141,7 +141,7 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 - **Roster = joined, not connected.** Eligibility for a question is "had an un-left `session_participant` row when it opened" (`answer_progress()` in #35). A dropped socket does **not** shrink the roster. If someone's Wi-Fi dies, the question waits for the deadline rather than closing early without them. Only an explicit `leave` sets `left_at`.
 - **The roster is frozen for the whole question.** It is fixed when the question opens and does not change until the next one. Someone who joins mid-question is not in it. Someone who explicitly `leave`s mid-question still counts for that question, but can no longer answer it, so it may wait until the deadline. `left_at` only affects eligibility from the next question onward.
 - **Reconnect** means connect + `auth` again. The server replies with `session_state`, and the client renders from that snapshot alone. Duplicate answers are still rejected (`response_already_submitted`), so a client that retries after reconnecting is safe.
-- **Host disconnects:** the session is not ended. Open questions keep their server timers and still close on schedule. Participants get `host_status {connected:false}` and see a "waiting for host" state. When the host reconnects they get `session_state` and carry on. In the MVP a `LOBBY` or `ACTIVE` session with no host stays open indefinitely (see open question 1).
+- **Host disconnects:** the session is not ended. Open questions keep their server timers and still close on schedule. Participants get `host_status {connected:false}` and see a "waiting for host" state. When the host reconnects they get `session_state` and carry on. If no host socket comes back for **15 minutes** (`LIVE_ABANDON_AFTER_SECONDS`, default 900; 0 turns it off), the server ends the session itself. A `LOBBY` is `CANCELLED`. An `ACTIVE` session is ended exactly as the host's `end_session` would: any open question closes (`question_closed` + results), result rows are written, and it becomes `COMPLETED`. Everyone still connected then gets the usual `session_ended` and a 1000 close, so clients need no special case. The check runs every `LIVE_ABANDON_CHECK_SECONDS` (default 60). After a restart, the clock for a host-less session starts at the first check.
 - **Same account, two tabs:** the newest socket replaces the older one, which is closed with `4409`.
 
 ## 6. Closing a question exactly once
@@ -207,7 +207,9 @@ Problems with the connection itself close the socket:
 
 **Decided:** participants see the top 5 plus their own rank (`leaderboard` + `me` in the participant `question_results`, §4). The final top 5 in `session_ended` follows the same rule.
 
-1. **Abandoned sessions:** auto-cancel a `LOBBY` with no host after N minutes, and auto-end an `ACTIVE` one? Proposal: not in the MVP.
+**Decided:** abandoned sessions are cancelled or ended after 15 minutes without a host (§5).
+
+1. ~~**Abandoned sessions**~~: decided above.
 2. **Admin access to live sessions:** watch-only, or none? Proposal: none in the MVP. Admins see results afterwards (Sprint 4).
 3. **Host as player:** the schema forbids the host being a participant (`host_cannot_join`). Keep it that way.
 
