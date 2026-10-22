@@ -60,6 +60,13 @@ class LiveSession(Base):
     group_id: Mapped[int | None] = mapped_column(
         INTEGER(unsigned=True), nullable=True
     )
+    # Migration 0008: copied from the quiz's class when the session is created.
+    # NULL means anyone with the join code can join, as before classes existed.
+    class_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("class.class_id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     join_code: Mapped[str] = mapped_column(CHAR(6), nullable=False)
     status: Mapped[LiveSessionStatus] = mapped_column(
         SqlEnum(LiveSessionStatus, values_callable=enum_values),

@@ -16,6 +16,7 @@ from app.schemas.results import (
     participant_final_view,
 )
 from app.schemas.session import (
+    ClassActiveSessionResponse,
     SessionJoinRequest,
     SessionJoinResponse,
     SessionParticipantResponse,
@@ -26,6 +27,8 @@ from app.services.sessions import (
     create_session,
     get_session,
     join_session,
+    join_session_by_id,
+    list_class_active_sessions,
     list_session_participants,
 )
 
@@ -39,10 +42,16 @@ router = APIRouter(tags=["sessions"])
 )
 def create_session_route(
     quiz_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> SessionResponse:
-    return create_session(db, account, quiz_id)
+    return create_session(
+        db,
+        account,
+        quiz_id,
+        quiz_class_map=request.app.state.settings.dev_quiz_class_map,
+    )
 
 
 @router.post(
@@ -58,6 +67,33 @@ def join_session_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> SessionJoinResponse:
     joined = join_session(db, account, payload.join_code)
+    _announce_join(request, background_tasks, joined)
+    return joined
+
+
+@router.post(
+    "/sessions/{session_id}/join",
+    response_model=SessionJoinResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def join_session_by_id_route(
+    session_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> SessionJoinResponse:
+    """Join from the class page's Live button; same rules as joining by code."""
+    joined = join_session_by_id(db, account, session_id)
+    _announce_join(request, background_tasks, joined)
+    return joined
+
+
+def _announce_join(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    joined: SessionJoinResponse,
+) -> None:
     # Joining happens over REST, so tell the live host after the commit.
     background_tasks.add_task(
         request.app.state.live_hub.participant_joined,
@@ -65,7 +101,18 @@ def join_session_route(
         joined.participant.session_participant_id,
         joined.participant.display_name,
     )
-    return joined
+
+
+@router.get(
+    "/classes/{class_id}/active-sessions",
+    response_model=list[ClassActiveSessionResponse],
+)
+def list_class_active_sessions_route(
+    class_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> list[ClassActiveSessionResponse]:
+    return list_class_active_sessions(db, account, class_id)
 
 
 @router.get("/sessions/{session_id}", response_model=SessionResponse)

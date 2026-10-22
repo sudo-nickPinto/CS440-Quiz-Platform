@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     db_password: SecretStr = SecretStr("")
     db_connect_timeout: int = 5
 
+    # TEMPORARY stand-in for quiz.class_id until task 5 links quizzes to classes.
+    # Comma-separated quiz_id:class_id pairs, e.g. "12:1,15:1". Dev only; leave
+    # empty in production. See app/services/class_access.py.
+    dev_quiz_class_map: str = ""
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: object) -> object:

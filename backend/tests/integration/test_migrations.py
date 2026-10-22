@@ -105,12 +105,19 @@ def test_migration_0006_down_only_removes_class_tables(
     for path in UP_FILES:
         run_file(connection, path)
     before = tables(connection)
+    # Later migrations (0008: live_session.class_id) point at class, so they
+    # come off first and go back on afterwards.
+    later = [path for path in UP_FILES if path.name > "0006_classes.up.sql"]
+    for path in reversed(later):
+        run_file(connection, MIGRATIONS / path.name.replace(".up.", ".down."))
 
     run_file(connection, MIGRATIONS / "0006_classes.down.sql")
     assert tables(connection) == before - {"class", "class_membership"}
     assert "0006_classes" not in applied(connection)
 
     run_file(connection, MIGRATIONS / "0006_classes.up.sql")
+    for path in later:
+        run_file(connection, path)
     assert tables(connection) == before
 
 

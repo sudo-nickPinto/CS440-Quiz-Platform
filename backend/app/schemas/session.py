@@ -22,6 +22,8 @@ class SessionResponse(BaseModel):
     quiz_version_id: int
     quiz_title: str
     host_id: int
+    # The quiz's class when the session was created; None means no class.
+    class_id: int | None
     join_code: str
     status: LiveSessionStatus
     current_question_order: int | None
@@ -40,3 +42,22 @@ class SessionParticipantResponse(BaseModel):
 class SessionJoinResponse(BaseModel):
     session: SessionResponse
     participant: SessionParticipantResponse
+
+
+class ClassActiveSessionResponse(BaseModel):
+    """A lobby or running session shown on its class page."""
+
+    session_id: int
+    class_id: int
+    quiz_id: int
+    quiz_title: str
+    host_id: int
+    is_host: bool
+    # The caller already joined, so the Live button can go straight in.
+    joined: bool
+    join_code: str
+    status: LiveSessionStatus
+    current_question_order: int | None
+    question_count: int
+    created_at: datetime
+    started_at: datetime | None

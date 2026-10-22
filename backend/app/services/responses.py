@@ -16,6 +16,7 @@ from app.models import (
     SessionQuestionStatus,
 )
 from app.schemas.response import ResponseReceipt, ResponseSubmit
+from app.services.class_access import require_session_class_member
 from app.services.scoring import calculate_points
 
 
@@ -153,6 +154,8 @@ def _submit_response(
             "not_session_participant",
             "You are not an active participant in this session.",
         )
+    # A member removed from the class mid-game can no longer answer.
+    require_session_class_member(db, session, account)
     participant_id = participant.session_participant_id
 
     # A locking (current) read, so a close committed by the deadline sweep is

@@ -189,7 +189,7 @@ Problems with the connection itself close the socket:
 | `1000` | Session ended normally | Show final screen |
 | `4400` | Malformed message / first message wasn't `auth` | Bug: log it |
 | `4401` | Missing, invalid or expired token; auth timeout | Get a new token, reconnect once, then send to login |
-| `4403` | Not the host or a participant of this session, or account inactive | Send to dashboard |
+| `4403` | Not the host or a participant of this session, account inactive, or no longer an active member of the session's class (`not_class_member`) | Send to dashboard |
 | `4404` | Session not found | Send to dashboard |
 | `4409` | Replaced by a newer connection from the same account | Show "opened in another tab" |
 | `4410` | Session is `COMPLETED` / `CANCELLED` | Show final screen |
