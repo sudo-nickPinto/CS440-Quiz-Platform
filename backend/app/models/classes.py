@@ -19,6 +19,7 @@ from sqlalchemy.dialects.mysql import DATETIME, INTEGER
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.account import Account
 
 
 def enum_values(enum_class: type[Enum]) -> list[str]:
@@ -41,6 +42,7 @@ class JoinedVia(str, Enum):
     CREATOR = "CREATOR"
     CODE = "CODE"
     INVITE = "INVITE"
+    ADDED = "ADDED"
 
 
 class Class(Base):
@@ -145,3 +147,4 @@ class ClassMembership(Base):
     )
 
     class_: Mapped[Class] = relationship(back_populates="memberships")
+    account: Mapped[Account] = relationship(foreign_keys=[account_id])

@@ -72,7 +72,12 @@ def test_membership_enums_match_migration_0006() -> None:
         "LEFT",
         "REMOVED",
     ]
-    assert [via.value for via in JoinedVia] == ["CREATOR", "CODE", "INVITE"]
+    assert [via.value for via in JoinedVia] == [
+        "CREATOR",
+        "CODE",
+        "INVITE",
+        "ADDED",
+    ]
 
 
 def test_new_membership_defaults_to_active_member_joined_by_code() -> None:
