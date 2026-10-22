@@ -1,0 +1,51 @@
+.qb-brand-link {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.qb-brand-link:focus-visible {
+  outline: 3px solid #bf4c0c;
+  outline-offset: 8px;
+}
+
+.qb-logo {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 3px;
+  box-sizing: border-box;
+  border: 3px solid #222222;
+  background: #222222;
+  box-shadow: 4px 4px 0 #222222;
+  transform: rotate(-1.5deg);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.qb-logo > .qb-quiz,
+.qb-logo > .qb-burg {
+  display: block;
+  color: #fcf9f4;
+  padding: 6px 11px;
+}
+
+.qb-logo > .qb-quiz {
+  background: #043371;
+  padding-right: 9px;
+}
+
+.qb-logo > .qb-burg {
+  background: #bf4c0c;
+  padding-left: 9px;
+}
+
+@media (max-width: 640px) {
+  .qb-logo {
+    font-size: 18px;
+  }
+}

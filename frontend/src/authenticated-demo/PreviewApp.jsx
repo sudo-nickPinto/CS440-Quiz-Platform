@@ -1,5 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router";
+import ClassesPage from "../classes/ClassesPage";
+import ClassPage from "../classes/ClassPage";
+import QuizBurgLogo from "../classes/QuizBurgLogo";
 
 import { AccountContext } from "./account";
 import { useResource } from "./rest";
@@ -11,10 +14,13 @@ import LiveSessionPage from "./LiveSessionPage";
 import "./preview.css";
 import SessionResults from "./SessionResults";
 import "./taha-ui.css";
+import "../classes/classes.css";
 
 export default function PreviewApp({ onSignOut }) {
   const account = useResource("/me");
   const { pathname } = useLocation();
+  const showingClasses =
+    pathname === "/app/classes" || pathname.startsWith("/app/classes/");
   const main = useRef(null);
 
   useEffect(() => {
@@ -44,9 +50,27 @@ export default function PreviewApp({ onSignOut }) {
         </a>
 
         <header className="qp-header">
-          <Link className="qp-logo" to="/app/dashboard/present">
-            QUIZ<span>.</span>PLATFORM
+          <Link
+            className="qb-brand-link"
+            to="/app/classes"
+            aria-label="QuizBurg — Classes"
+          >
+            <QuizBurgLogo />
           </Link>
+
+          <nav className="cl-app-nav" aria-label="Application navigation">
+            <Link
+              className="qp-button"
+              to="/app/classes"
+              aria-current={showingClasses ? "page" : undefined}
+            >
+              Classes
+            </Link>
+
+            <Link className="qp-button" to="/app/dashboard/present">
+              Quiz dashboard
+            </Link>
+          </nav>
 
           <div className="ui-user">
             <span className="ui-user-name">{account.data.display_name}</span>
@@ -69,6 +93,13 @@ export default function PreviewApp({ onSignOut }) {
 
         <main id="app-main" className="qp-frame" ref={main} tabIndex={-1}>
           <Routes>
+            <Route path="classes" element={<ClassesPage />} />
+
+            <Route
+              path="classes/:classId"
+              element={<ClassPage key={pathname} />}
+            />
+
             <Route path="dashboard/:view" element={<PreviewDashboard />} />
             <Route path="quizzes/new" element={<QuizEditor />} />
             <Route
