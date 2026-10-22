@@ -1,3 +1,9 @@
+from app.schemas.class_dashboard import (
+    ClassDashboardResponse,
+    ClassQuizPage,
+    ClassSessionPage,
+    ClassStudentPage,
+)
 from app.schemas.class_membership import (
     ClassInviteCreate,
     ClassMemberResponse,
@@ -33,6 +39,10 @@ from app.schemas.session import (
 )
 
 __all__ = [
+    "ClassDashboardResponse",
+    "ClassQuizPage",
+    "ClassSessionPage",
+    "ClassStudentPage",
     "AnswerChoiceCreate",
     "AnswerChoiceResult",
     "AnswerChoiceResponse",
