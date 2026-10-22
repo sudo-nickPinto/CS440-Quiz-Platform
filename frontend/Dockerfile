@@ -19,12 +19,12 @@ ENV VITE_AUTH0_DOMAIN=${VITE_AUTH0_DOMAIN} \
 
 RUN npm run build
 
-FROM nginx:1.28-alpine AS runtime
+FROM caddy:2.10-alpine AS runtime
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/dist /srv
 
-EXPOSE 80
+EXPOSE 80 443
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://127.0.0.1/healthz || exit 1
+  CMD wget --quiet --tries=1 --spider http://127.0.0.1:2019/config/ || exit 1

@@ -2,8 +2,8 @@
 
 The deployment runs two public-application containers:
 
-- `frontend`: builds the React app, serves it with Nginx, and proxies API and
-  WebSocket traffic to the backend.
+- `frontend`: builds the React app, serves it with Caddy, terminates HTTPS, and
+  proxies API and WebSocket traffic to the backend.
 - `backend`: runs one FastAPI/Uvicorn worker on the private Docker network.
 
 MySQL can be either a separate Reclaim database node or the optional persistent
@@ -39,6 +39,17 @@ For the deployed URL, configure Auth0 with:
 Set `CORS_ORIGINS=https://YOUR-DOMAIN` as well. Normal browser API calls are
 same-origin through `/api`, but this keeps direct API access correctly scoped.
 
+Set `APP_SITE_ADDRESS` to the public hostname without a scheme. Caddy obtains
+and renews its certificate automatically. Ports 80 and 443 must reach the
+Docker host so the ACME challenge and HTTPS traffic can succeed:
+
+```dotenv
+APP_PORT=80
+APP_HTTPS_PORT=443
+APP_SITE_ADDRESS=quizburg.us.reclaim.cloud
+CORS_ORIGINS=https://quizburg.us.reclaim.cloud
+```
+
 ## Local full-stack verification
 
 To run the app plus a new persistent MySQL database:
@@ -51,7 +62,8 @@ docker compose \
   up --build -d
 ```
 
-Open `http://localhost:8080`. Check container and application health with:
+For local use, keep `APP_SITE_ADDRESS=http://localhost` and open
+`http://localhost:8080`. Check container and application health with:
 
 ```bash
 docker compose \
@@ -103,8 +115,9 @@ docker compose \
   up --build -d
 ```
 
-Set `APP_PORT=80` if the stack owns Reclaim's HTTP port. Keep the `mysql-data`
-volume and arrange database backups before entering real course data.
+Set `APP_PORT=80`, `APP_HTTPS_PORT=443`, and `APP_SITE_ADDRESS` to the Reclaim
+hostname. Keep the `mysql-data` and `caddy-data` volumes and arrange database
+backups before entering real course data.
 
 Reclaim accepts environment variables, private container networking, volumes,
 and exposed ports for custom Docker deployments. Its shared load balancer can
