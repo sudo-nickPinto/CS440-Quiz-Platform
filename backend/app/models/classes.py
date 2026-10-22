@@ -42,7 +42,6 @@ class JoinedVia(str, Enum):
     CREATOR = "CREATOR"
     CODE = "CODE"
     INVITE = "INVITE"
-    ADDED = "ADDED"
 
 
 class Class(Base):

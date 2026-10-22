@@ -4,22 +4,24 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
 from app.schemas.class_membership import (
-    ClassMemberCreate,
+    ClassInviteCreate,
     ClassMemberResponse,
     ClassMemberUpdate,
 )
 from app.services.class_memberships import (
-    add_class_member,
-    get_class_member,
+    accept_class_invite,
+    cancel_class_invite,
+    create_class_invite,
+    decline_class_invite,
     list_class_members,
     remove_class_member,
     update_class_member,
 )
 
-router = APIRouter(prefix="/classes/{class_id}/members", tags=["class members"])
+router = APIRouter(prefix="/classes/{class_id}", tags=["class members"])
 
 
-@router.get("", response_model=list[ClassMemberResponse])
+@router.get("/members", response_model=list[ClassMemberResponse])
 def list_class_members_route(
     class_id: int,
     db: Session = Depends(get_db),
@@ -28,27 +30,49 @@ def list_class_members_route(
     return list_class_members(db, account, class_id)
 
 
-@router.post("", response_model=ClassMemberResponse, status_code=status.HTTP_201_CREATED)
-def add_class_member_route(
+@router.post(
+    "/invites", response_model=ClassMemberResponse, status_code=status.HTTP_201_CREATED
+)
+def create_class_invite_route(
     class_id: int,
-    payload: ClassMemberCreate,
+    payload: ClassInviteCreate,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> ClassMemberResponse:
-    return add_class_member(db, account, class_id, payload)
+    return create_class_invite(db, account, class_id, payload)
 
 
-@router.get("/{account_id}", response_model=ClassMemberResponse)
-def get_class_member_route(
+@router.delete("/invites/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_class_invite_route(
     class_id: int,
     account_id: int,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
+) -> Response:
+    cancel_class_invite(db, account, class_id, account_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/invite/accept", response_model=ClassMemberResponse)
+def accept_class_invite_route(
+    class_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
 ) -> ClassMemberResponse:
-    return get_class_member(db, account, class_id, account_id)
+    return accept_class_invite(db, account, class_id)
 
 
-@router.patch("/{account_id}", response_model=ClassMemberResponse)
+@router.post("/invite/decline", status_code=status.HTTP_204_NO_CONTENT)
+def decline_class_invite_route(
+    class_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> Response:
+    decline_class_invite(db, account, class_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch("/members/{account_id}", response_model=ClassMemberResponse)
 def update_class_member_route(
     class_id: int,
     account_id: int,
@@ -59,7 +83,7 @@ def update_class_member_route(
     return update_class_member(db, account, class_id, account_id, payload)
 
 
-@router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/members/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_class_member_route(
     class_id: int,
     account_id: int,

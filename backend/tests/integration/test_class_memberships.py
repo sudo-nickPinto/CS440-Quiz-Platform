@@ -5,15 +5,16 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.auth import CurrentAccount
+from app.auth import CurrentAccount, get_active_account
 from app.models.account import Account, AccountRole
 from app.models.classes import (
     Class,
     ClassMembership,
     ClassRole,
+    JoinedVia,
     MembershipStatus,
 )
-from app.schemas.class_membership import ClassMemberRole, ClassMemberUpdate
+from app.schemas.class_membership import ClassMemberUpdate
 from app.services.class_memberships import remove_class_member, update_class_member
 
 
@@ -40,29 +41,47 @@ def test_class_membership_crud_uses_migrated_mysql_schema(
         db.commit()
         class_id = class_.class_id
 
-    created = client.post(
-        f"/classes/{class_id}/members",
-        json={"email": "READER@test.invalid", "role": "MEMBER"},
+    invited = client.post(
+        f"/classes/{class_id}/invites",
+        json={"email": "READER@test.invalid"},
+    )
+    client.app.dependency_overrides[get_active_account] = lambda: CurrentAccount(
+        target.account_id, AccountRole.USER, True
+    )
+    accepted = client.post(f"/classes/{class_id}/invite/accept")
+    client.app.dependency_overrides[get_active_account] = lambda: CurrentAccount(
+        class_admin.account_id, AccountRole.USER, True
     )
     promoted = client.patch(
         f"/classes/{class_id}/members/{target.account_id}",
-        json={"role": "CLASS_ADMIN"},
+        json={"role": "ORGANIZER"},
     )
     removed = client.delete(
         f"/classes/{class_id}/members/{target.account_id}"
     )
-    reactivated = client.post(
-        f"/classes/{class_id}/members",
-        json={"email": "reader@test.invalid", "role": "MEMBER"},
+    reinvited = client.post(
+        f"/classes/{class_id}/invites",
+        json={"email": "reader@test.invalid"},
     )
 
-    assert created.status_code == 201
+    assert invited.status_code == 201
+    assert invited.json()["status"] == "INVITED"
+    assert accepted.status_code == 200
     assert promoted.status_code == 200
-    assert promoted.json()["role"] == "CLASS_ADMIN"
+    assert promoted.json()["role"] == "ORGANIZER"
     assert removed.status_code == 204
-    assert reactivated.status_code == 201
-    assert reactivated.json()["membership_id"] == created.json()["membership_id"]
-    assert reactivated.json()["role"] == "MEMBER"
+    assert reinvited.status_code == 201
+    assert reinvited.json()["membership_id"] == invited.json()["membership_id"]
+    assert reinvited.json()["status"] == "INVITED"
+    with client.app.state.database.session_factory() as db:
+        stored = db.scalar(
+            select(ClassMembership).where(
+                ClassMembership.class_id == class_id,
+                ClassMembership.account_id == target.account_id,
+            )
+        )
+        assert stored is not None
+        assert stored.joined_via == JoinedVia.INVITE
 
 
 @pytest.mark.parametrize("operation", ["remove", "demote"])
@@ -113,7 +132,7 @@ def test_concurrent_admin_changes_are_serialized(mysql_quiz_client, operation) -
                     global_admin,
                     class_id,
                     account_id,
-                    ClassMemberUpdate(role=ClassMemberRole.MEMBER),
+                    ClassMemberUpdate(role=ClassRole.MEMBER),
                 )
 
     with ThreadPoolExecutor(max_workers=2) as executor:

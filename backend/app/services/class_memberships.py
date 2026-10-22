@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
@@ -15,9 +15,8 @@ from app.models.classes import (
     MembershipStatus,
 )
 from app.schemas.class_membership import (
-    ClassMemberCreate,
+    ClassInviteCreate,
     ClassMemberResponse,
-    ClassMemberRole,
     ClassMemberUpdate,
 )
 
@@ -55,7 +54,7 @@ def _load_membership(
     return membership
 
 
-def _require_roster_manager(
+def _require_class_organizer(
     db: Session,
     account: CurrentAccount,
     class_id: int,
@@ -63,7 +62,7 @@ def _require_roster_manager(
     lock_class: bool = False,
 ) -> None:
     # Every mutation takes this lock before reading actor or target
-    # memberships. Serializing roster changes per class prevents two admins
+    # memberships. Serializing roster changes per class prevents two organizers
     # from locking each other's rows in opposite order.
     _load_class(db, class_id, lock=lock_class)
     if account.is_admin:
@@ -76,21 +75,9 @@ def _require_roster_manager(
     if membership.role != ClassRole.ORGANIZER:
         raise APIError(
             403,
-            "class_roster_access_denied",
-            "Only a class administrator or global Admin can manage this roster.",
+            "not_class_organizer",
+            "Only a class organizer or global Admin can perform this action.",
         )
-
-
-def _persisted_role(role: ClassMemberRole) -> ClassRole:
-    if role == ClassMemberRole.CLASS_ADMIN:
-        return ClassRole.ORGANIZER
-    return ClassRole.MEMBER
-
-
-def _api_role(role: ClassRole) -> ClassMemberRole:
-    if role == ClassRole.ORGANIZER:
-        return ClassMemberRole.CLASS_ADMIN
-    return ClassMemberRole.MEMBER
 
 
 def _to_response(membership: ClassMembership) -> ClassMemberResponse:
@@ -100,7 +87,7 @@ def _to_response(membership: ClassMembership) -> ClassMemberResponse:
         account_id=membership.account_id,
         email=membership.account.email,
         display_name=membership.account.display_name,
-        role=_api_role(membership.role),
+        role=membership.role,
         status=membership.status,
         created_at=membership.created_at,
         updated_at=membership.updated_at,
@@ -115,7 +102,7 @@ def _commit(db: Session, code: str, message: str) -> None:
         raise APIError(500, code, message) from exc
 
 
-def _lock_active_admins(db: Session, class_id: int) -> list[ClassMembership]:
+def _lock_active_organizers(db: Session, class_id: int) -> list[ClassMembership]:
     return list(
         db.scalars(
             select(ClassMembership)
@@ -129,24 +116,24 @@ def _lock_active_admins(db: Session, class_id: int) -> list[ClassMembership]:
     )
 
 
-def _protect_final_admin(db: Session, membership: ClassMembership) -> None:
+def _protect_last_organizer(db: Session, membership: ClassMembership) -> None:
     if not (
         membership.status == MembershipStatus.ACTIVE
         and membership.role == ClassRole.ORGANIZER
     ):
         return
-    if len(_lock_active_admins(db, membership.class_id)) <= 1:
+    if len(_lock_active_organizers(db, membership.class_id)) <= 1:
         raise APIError(
             409,
-            "final_class_admin",
-            "The final active class administrator cannot be removed or demoted.",
+            "last_organizer",
+            "The last active class organizer cannot be removed or demoted.",
         )
 
 
 def list_class_members(
     db: Session, account: CurrentAccount, class_id: int
 ) -> list[ClassMemberResponse]:
-    _require_roster_manager(db, account, class_id)
+    _require_class_organizer(db, account, class_id)
     memberships = db.scalars(
         select(ClassMembership)
         .join(Account, Account.account_id == ClassMembership.account_id)
@@ -163,17 +150,17 @@ def list_class_members(
 def get_class_member(
     db: Session, account: CurrentAccount, class_id: int, account_id: int
 ) -> ClassMemberResponse:
-    _require_roster_manager(db, account, class_id)
+    _require_class_organizer(db, account, class_id)
     return _to_response(_load_membership(db, class_id, account_id))
 
 
-def add_class_member(
+def create_class_invite(
     db: Session,
     account: CurrentAccount,
     class_id: int,
-    payload: ClassMemberCreate,
+    payload: ClassInviteCreate,
 ) -> ClassMemberResponse:
-    _require_roster_manager(db, account, class_id, lock_class=True)
+    _require_class_organizer(db, account, class_id, lock_class=True)
     target = db.scalar(
         select(Account).where(func.lower(Account.email) == payload.email)
     )
@@ -186,25 +173,30 @@ def add_class_member(
     if membership and membership.status == MembershipStatus.ACTIVE:
         raise APIError(
             409,
-            "class_membership_exists",
+            "already_class_member",
             "That account is already an active class member.",
         )
+    if membership and membership.status == MembershipStatus.INVITED:
+        raise APIError(409, "invite_already_exists", "That account is already invited.")
 
     now = datetime.now(UTC).replace(tzinfo=None)
     if membership is None:
         membership = ClassMembership(
             class_id=class_id,
             account_id=target.account_id,
-            role=_persisted_role(payload.role),
-            status=MembershipStatus.ACTIVE,
-            joined_via=JoinedVia.ADDED,
+            role=ClassRole.MEMBER,
+            status=MembershipStatus.INVITED,
+            joined_via=JoinedVia.INVITE,
+            invited_by_id=account.account_id,
             decided_by_id=account.account_id,
             decided_at=now,
         )
         db.add(membership)
     else:
-        membership.role = _persisted_role(payload.role)
-        membership.status = MembershipStatus.ACTIVE
+        membership.role = ClassRole.MEMBER
+        membership.status = MembershipStatus.INVITED
+        membership.joined_via = JoinedVia.INVITE
+        membership.invited_by_id = account.account_id
         membership.decided_by_id = account.account_id
         membership.decided_at = now
 
@@ -214,16 +206,79 @@ def add_class_member(
         db.rollback()
         raise APIError(
             409,
-            "class_membership_exists",
-            "That account is already an active class member.",
+            "invite_already_exists",
+            "That account already has a membership or invitation.",
         ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
         raise APIError(
-            500, "class_member_add_failed", "Could not add the class member."
+            500, "class_invite_create_failed", "Could not create the class invite."
         ) from exc
 
     return _to_response(_load_membership(db, class_id, target.account_id))
+
+
+def cancel_class_invite(
+    db: Session, account: CurrentAccount, class_id: int, account_id: int
+) -> None:
+    _require_class_organizer(db, account, class_id, lock_class=True)
+    membership = db.scalar(
+        _membership_statement(class_id, account_id).with_for_update()
+    )
+    if membership is None or membership.status != MembershipStatus.INVITED:
+        raise APIError(404, "invite_not_found", "Class invite not found.")
+
+    membership.status = MembershipStatus.REMOVED
+    membership.decided_by_id = account.account_id
+    membership.decided_at = datetime.now(UTC).replace(tzinfo=None)
+    _commit(db, "class_invite_cancel_failed", "Could not cancel the class invite.")
+
+
+def accept_class_invite(
+    db: Session, account: CurrentAccount, class_id: int
+) -> ClassMemberResponse:
+    _load_class(db, class_id)
+    result = db.execute(
+        update(ClassMembership)
+        .where(
+            ClassMembership.class_id == class_id,
+            ClassMembership.account_id == account.account_id,
+            ClassMembership.status == MembershipStatus.INVITED,
+        )
+        .values(
+            status=MembershipStatus.ACTIVE,
+            role=ClassRole.MEMBER,
+            joined_via=JoinedVia.INVITE,
+            decided_by_id=account.account_id,
+            decided_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+    )
+    if result.rowcount != 1:
+        db.rollback()
+        raise APIError(404, "invite_not_found", "Class invite not found.")
+    _commit(db, "class_invite_accept_failed", "Could not accept the class invite.")
+    return _to_response(_load_membership(db, class_id, account.account_id))
+
+
+def decline_class_invite(db: Session, account: CurrentAccount, class_id: int) -> None:
+    _load_class(db, class_id)
+    result = db.execute(
+        update(ClassMembership)
+        .where(
+            ClassMembership.class_id == class_id,
+            ClassMembership.account_id == account.account_id,
+            ClassMembership.status == MembershipStatus.INVITED,
+        )
+        .values(
+            status=MembershipStatus.LEFT,
+            decided_by_id=account.account_id,
+            decided_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+    )
+    if result.rowcount != 1:
+        db.rollback()
+        raise APIError(404, "invite_not_found", "Class invite not found.")
+    _commit(db, "class_invite_decline_failed", "Could not decline the class invite.")
 
 
 def update_class_member(
@@ -233,17 +288,17 @@ def update_class_member(
     account_id: int,
     payload: ClassMemberUpdate,
 ) -> ClassMemberResponse:
-    _require_roster_manager(db, account, class_id, lock_class=True)
+    _require_class_organizer(db, account, class_id, lock_class=True)
     membership = _load_membership(db, class_id, account_id, lock=True)
     if membership.status != MembershipStatus.ACTIVE:
         raise APIError(409, "class_member_not_active", "Class member is not active.")
 
-    new_role = _persisted_role(payload.role)
+    new_role = payload.role
     if (
         membership.role == ClassRole.ORGANIZER
         and new_role == ClassRole.MEMBER
     ):
-        _protect_final_admin(db, membership)
+        _protect_last_organizer(db, membership)
 
     if membership.role != new_role:
         membership.role = new_role
@@ -261,12 +316,12 @@ def update_class_member(
 def remove_class_member(
     db: Session, account: CurrentAccount, class_id: int, account_id: int
 ) -> None:
-    _require_roster_manager(db, account, class_id, lock_class=True)
+    _require_class_organizer(db, account, class_id, lock_class=True)
     membership = _load_membership(db, class_id, account_id, lock=True)
     if membership.status != MembershipStatus.ACTIVE:
         raise APIError(409, "class_member_not_active", "Class member is not active.")
 
-    _protect_final_admin(db, membership)
+    _protect_last_organizer(db, membership)
     membership.status = MembershipStatus.REMOVED
     membership.decided_by_id = account.account_id
     membership.decided_at = datetime.now(UTC).replace(tzinfo=None)
