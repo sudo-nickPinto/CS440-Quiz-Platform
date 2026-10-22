@@ -1,4 +1,11 @@
 from app.models.account import Account, AccountRole, effective_role
+from app.models.classes import (
+    Class,
+    ClassMembership,
+    ClassRole,
+    JoinedVia,
+    MembershipStatus,
+)
 from app.models.quiz import (
     AnswerChoice,
     Question,
@@ -22,6 +29,11 @@ __all__ = [
     "Account",
     "AccountRole",
     "AnswerChoice",
+    "Class",
+    "ClassMembership",
+    "ClassRole",
+    "JoinedVia",
+    "MembershipStatus",
     "Question",
     "QuestionType",
     "Quiz",
