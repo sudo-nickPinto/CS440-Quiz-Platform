@@ -344,6 +344,55 @@ def test_outsider_and_nonactive_memberships_receive_hidden_404(
         assert response.json()["error"]["code"] == "class_not_found"
 
 
+@pytest.mark.parametrize(
+    ("account_name", "status"),
+    [
+        ("outsider", None),
+        ("invited", MembershipStatus.INVITED),
+        ("left", MembershipStatus.LEFT),
+        ("removed", MembershipStatus.REMOVED),
+    ],
+)
+def test_outsider_and_nonactive_memberships_cannot_mutate_class(
+    class_client,
+    account_name: str,
+    status: MembershipStatus | None,
+) -> None:
+    client, identities = class_client
+    memberships = (
+        ()
+        if status is None
+        else (
+            (
+                identities[account_name],
+                ClassRole.MEMBER,
+                status,
+                (
+                    JoinedVia.INVITE
+                    if status == MembershipStatus.INVITED
+                    else JoinedVia.CODE
+                ),
+            ),
+        )
+    )
+    class_id = seed_class(
+        client,
+        identities["organizer"],
+        memberships=memberships,
+    )
+    act_as(client, identities[account_name])
+
+    responses = (
+        client.patch(f"/classes/{class_id}", json={"name": "Hidden"}),
+        client.post(f"/classes/{class_id}/code"),
+        client.post(f"/classes/{class_id}/archive"),
+    )
+
+    for response in responses:
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "class_not_found"
+
+
 def test_member_cannot_rename_rotate_or_archive(class_client) -> None:
     client, identities = class_client
     class_id = seed_class(
@@ -386,6 +435,27 @@ def test_organizer_and_global_admin_can_rename(class_client) -> None:
     assert organizer_update.json()["name"] == "Organizer Name"
     assert admin_update.status_code == 200
     assert admin_update.json()["name"] == "Admin Name"
+
+
+def test_global_admin_can_rotate_code_and_archive(class_client) -> None:
+    client, identities = class_client
+    class_id = seed_class(client, identities["organizer"])
+    act_as(client, identities["admin"])
+
+    with patch(
+        "app.services.classes.generate_class_code",
+        return_value="JKMNPQRS",
+    ):
+        rotated = client.post(f"/classes/{class_id}/code")
+    archived = client.post(f"/classes/{class_id}/archive")
+
+    assert rotated.status_code == 200
+    assert rotated.json()["join_code"] == "JKMN-PQRS"
+    assert rotated.json()["joining_open"] is True
+    assert archived.status_code == 200
+    assert archived.json()["archived_at"] is not None
+    assert archived.json()["join_code"] is None
+    assert archived.json()["joining_open"] is False
 
 
 def test_joining_can_be_closed_and_reopened_when_not_archived(class_client) -> None:
@@ -446,6 +516,7 @@ def test_archive_is_idempotent_and_preserves_memberships(class_client) -> None:
 
     assert first.status_code == 200
     assert first.json()["archived_at"] is not None
+    assert datetime.fromisoformat(first.json()["archived_at"]).microsecond % 1000 == 0
     assert first.json()["join_code"] is None
     assert first.json()["joining_open"] is False
     assert second.status_code == 200
@@ -491,6 +562,29 @@ def test_archived_class_stays_readable_but_cannot_reopen_or_rotate(
     for response in (reopened, rotated):
         assert response.status_code == 409
         assert response.json()["error"]["code"] == "class_archived"
+
+
+def test_class_code_generation_failure_is_stable_and_safe(class_client) -> None:
+    client, identities = class_client
+    seed_class(client, identities["organizer"], join_code="ABCDEFGH")
+
+    with patch(
+        "app.services.classes.generate_class_code",
+        return_value="ABCDEFGH",
+    ):
+        response = client.post("/classes", json={"name": "No Available Code"})
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": {
+            "code": "class_create_failed",
+            "message": "Could not create the class.",
+        }
+    }
+    with client.app.state.database.session_factory() as db:
+        assert (
+            db.scalar(select(Class).where(Class.name == "No Available Code")) is None
+        )
 
 
 def test_inactive_account_is_blocked_by_route_dependency(class_client) -> None:

@@ -26,6 +26,11 @@ CLASS_CODE_LENGTH = 8
 CLASS_CODE_ATTEMPTS = 20
 
 
+def _utc_now_milliseconds() -> datetime:
+    now = datetime.now(UTC).replace(tzinfo=None)
+    return now.replace(microsecond=(now.microsecond // 1000) * 1000)
+
+
 def generate_class_code() -> str:
     return "".join(
         secrets.choice(CLASS_CODE_ALPHABET) for _ in range(CLASS_CODE_LENGTH)
@@ -229,7 +234,7 @@ def archive_class(
     if class_.archived_at is not None:
         return _access_response(access)
 
-    class_.archived_at = datetime.now(UTC).replace(tzinfo=None)
+    class_.archived_at = _utc_now_milliseconds()
     class_.joining_open = False
     class_.join_code = None
     _commit(db, "class_archive_failed", "Could not archive the class.")
