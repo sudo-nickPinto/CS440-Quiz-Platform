@@ -202,6 +202,21 @@ def test_accept_decline_and_cancel_require_an_active_invite(class_client) -> Non
         assert response.json()["error"]["code"] == "invite_not_found"
 
 
+@pytest.mark.parametrize("action", ["accept", "decline"])
+def test_invite_response_does_not_reveal_class_existence(
+    class_client, action: str
+) -> None:
+    client, identities, class_id = class_client
+    act_as(client, identities["target"])
+
+    existing_class = client.post(f"/classes/{class_id}/invite/{action}")
+    unknown_class = client.post(f"/classes/999999/invite/{action}")
+
+    assert existing_class.status_code == unknown_class.status_code == 404
+    assert existing_class.json() == unknown_class.json()
+    assert existing_class.json()["error"]["code"] == "invite_not_found"
+
+
 def test_organizer_can_promote_and_demote_other_organizers(class_client) -> None:
     client, identities, class_id = class_client
     target_id = identities["target"].account_id

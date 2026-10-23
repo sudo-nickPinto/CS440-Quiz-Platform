@@ -237,7 +237,6 @@ def cancel_class_invite(
 def accept_class_invite(
     db: Session, account: CurrentAccount, class_id: int
 ) -> ClassMemberResponse:
-    _load_class(db, class_id)
     result = db.execute(
         update(ClassMembership)
         .where(
@@ -261,7 +260,6 @@ def accept_class_invite(
 
 
 def decline_class_invite(db: Session, account: CurrentAccount, class_id: int) -> None:
-    _load_class(db, class_id)
     result = db.execute(
         update(ClassMembership)
         .where(
