@@ -75,3 +75,24 @@ def require_class_organizer(
             "Only a class organizer or global Admin can perform this action.",
         )
     return access
+
+
+def require_class_host(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+) -> ClassAccess:
+    """Allow starting a live session for a class: an active organizer or a
+    global Admin, and the class must not be archived.
+
+    This only checks the class. Session creation still has to check that the
+    account is the quiz's author.
+    """
+    access = require_class_organizer(db, account, class_id)
+    if access.class_.archived_at is not None:
+        raise APIError(
+            409,
+            "class_archived",
+            "An archived class cannot start new sessions.",
+        )
+    return access
