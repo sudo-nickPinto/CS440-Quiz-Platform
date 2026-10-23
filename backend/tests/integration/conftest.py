@@ -58,8 +58,10 @@ def mysql_quiz_client() -> Iterator[tuple[TestClient, CurrentAccount, CurrentAcc
 
 
 def cleanup_database(app) -> None:
-    # Child-first order respects every foreign key in migrations 0001-0006.
+    # Child-first order respects every foreign key in migrations 0001-0007.
     tables = [
+        "class_membership",
+        "class",
         "result",
         "response",
         "session_question",
@@ -73,8 +75,6 @@ def cleanup_database(app) -> None:
         "quiz",
         "group_membership",
         "course_group",
-        "class_membership",
-        "class",
         "account_identity",
         "account",
     ]

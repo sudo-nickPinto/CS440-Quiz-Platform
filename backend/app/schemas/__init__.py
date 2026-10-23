@@ -1,3 +1,8 @@
+from app.schemas.class_membership import (
+    ClassInviteCreate,
+    ClassMemberResponse,
+    ClassMemberUpdate,
+)
 from app.schemas.live_question import (
     QuestionChoiceEvent,
     QuestionClosedEvent,
@@ -31,6 +36,9 @@ __all__ = [
     "AnswerChoiceCreate",
     "AnswerChoiceResult",
     "AnswerChoiceResponse",
+    "ClassInviteCreate",
+    "ClassMemberResponse",
+    "ClassMemberUpdate",
     "ClosedQuestionResultsSnapshot",
     "ParticipantQuestionResult",
     "QuestionChoiceEvent",
