@@ -223,6 +223,7 @@ erDiagram
 - A class always keeps at least one active organizer. Removing, demoting or letting the last one leave is refused (`409 last_organizer`).
 - Roles and statuses always come from `class_membership`, never from the account or the request.
 - Generating class codes (8 characters, no look-alike letters) and rate-limiting joins by code.
+- Only an active organizer (or a global Admin) can start a session for a class, and not in an archived class. Use `require_class_host()` in `backend/app/services/class_authorization.py`. The host must also be the quiz's author.
 
 ## Things that must be unique
 
@@ -264,10 +265,10 @@ These tables exist in the database but the MVP doesn't read or write them. Pleas
 |---|---|---|
 | `course_group` | A class, with one teacher | Replaced by `class`. Will be dropped in a cleanup migration. |
 | `group_membership` | Which students are in which class | Replaced by `class_membership`. Will be dropped in a cleanup migration. |
-| `quiz_group` | Which classes a quiz belongs to | Will be replaced when quizzes get a class (task 5), then dropped. |
+| `quiz_group` | Which classes a quiz belongs to | Not used for now. The team decided quizzes don't belong to classes yet: the host picks a class for each session instead. |
 | `quiz_collaborator` | Extra people who can edit a quiz | Kept for working on a quiz together later. |
 
-Some columns are also unused for now: `quiz.visibility`, `question.explanation`, `question.locked_by_id`, `question.locked_at`, `response.text_answer`, and `live_session.group_id`. `live_session.group_id` still points at the old `course_group` table. It will be replaced when sessions become class-aware (task 6).
+Some columns are also unused for now: `quiz.visibility`, `question.explanation`, `question.locked_by_id`, `question.locked_at`, `response.text_answer`, and `live_session.group_id`. `live_session.group_id` still points at the old `course_group` table. It will be replaced by `live_session.class_id`, which the host sets when starting a class session (task 6, PR #61).
 
 ## Left for after the MVP
 

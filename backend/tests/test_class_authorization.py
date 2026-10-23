@@ -18,6 +18,7 @@ from app.models import (
 )
 from app.services.class_authorization import (
     get_class,
+    require_class_host,
     require_class_member,
     require_class_organizer,
 )
@@ -223,3 +224,82 @@ def test_archived_class_remains_readable_to_active_member_and_global_admin(
     assert member_access.membership.status == MembershipStatus.ACTIVE
     assert admin_access.class_.archived_at is not None
     assert admin_access.is_global_admin is True
+
+
+def test_active_organizer_can_host_class_sessions(authorization_context) -> None:
+    db, accounts, class_id, _ = authorization_context
+
+    access = require_class_host(db, accounts["organizer"], class_id)
+
+    assert access.class_.class_id == class_id
+    assert access.membership is not None
+    assert access.membership.role == ClassRole.ORGANIZER
+    assert access.is_global_admin is False
+
+
+def test_global_admin_can_host_class_sessions(authorization_context) -> None:
+    db, accounts, class_id, _ = authorization_context
+
+    access = require_class_host(db, accounts["admin"], class_id)
+
+    assert access.class_.class_id == class_id
+    assert access.membership is None
+    assert access.is_global_admin is True
+
+
+def test_active_member_cannot_host_class_sessions(authorization_context) -> None:
+    db, accounts, class_id, _ = authorization_context
+
+    assert_api_error(
+        403,
+        "not_class_organizer",
+        lambda: require_class_host(db, accounts["member"], class_id),
+    )
+
+
+@pytest.mark.parametrize(
+    "account_name", ["outsider", "invited", "left", "removed"]
+)
+def test_non_members_cannot_host_or_see_class(
+    authorization_context,
+    account_name: str,
+) -> None:
+    db, accounts, class_id, _ = authorization_context
+
+    assert_api_error(
+        404,
+        "class_not_found",
+        lambda: require_class_host(db, accounts[account_name], class_id),
+    )
+
+
+def test_missing_class_cannot_host_sessions(authorization_context) -> None:
+    db, accounts, _, _ = authorization_context
+
+    assert_api_error(
+        404,
+        "class_not_found",
+        lambda: require_class_host(db, accounts["admin"], 999_999),
+    )
+
+
+def test_archived_class_cannot_host_sessions(authorization_context) -> None:
+    db, accounts, _, archived_class_id = authorization_context
+    db.add(
+        ClassMembership(
+            class_id=archived_class_id,
+            account_id=accounts["organizer"].account_id,
+            role=ClassRole.ORGANIZER,
+            joined_via=JoinedVia.CREATOR,
+        )
+    )
+    db.commit()
+
+    for account_name in ("organizer", "admin"):
+        assert_api_error(
+            409,
+            "class_archived",
+            lambda: require_class_host(
+                db, accounts[account_name], archived_class_id
+            ),
+        )
