@@ -24,9 +24,26 @@ def get_session_report(
     db: Session,
     account: CurrentAccount,
     session_id: int,
+    *,
+    personal: bool = False,
 ) -> dict:
-    # Reuse PR #47's membership checks and ended-session requirement.
+    # Keep the existing session authorization and ended-session requirement.
     final, viewer_id = get_final_results(db, account, session_id)
+
+    if personal:
+        viewer_id = db.scalar(
+            select(SessionParticipant.session_participant_id).where(
+                SessionParticipant.session_id == session_id,
+                SessionParticipant.account_id == account.account_id,
+            )
+        )
+
+        if viewer_id is None:
+            raise APIError(
+                403,
+                "participant_report_denied",
+                "You did not participate in this session.",
+            )
 
     session = db.get(LiveSession, session_id)
     version = db.get(QuizVersion, session.quiz_version_id)
@@ -39,9 +56,7 @@ def get_session_report(
         )
 
     host_name = db.scalar(
-        select(Account.display_name).where(
-            Account.account_id == session.host_id
-        )
+        select(Account.display_name).where(Account.account_id == session.host_id)
     )
 
     total = db.scalar(
@@ -52,14 +67,11 @@ def get_session_report(
 
     ended_at = final.ended_at
     if ended_at is not None:
-        ended_at = (
-            ended_at.replace(tzinfo=UTC)
-            if ended_at.tzinfo is None
-            else ended_at
-        )
+        ended_at = ended_at.replace(tzinfo=UTC) if ended_at.tzinfo is None else ended_at
 
     report = {
         "session_id": session_id,
+        "quiz_id": version.quiz_id,
         "view": "host" if viewer_id is None else "participant",
         "status": final.status,
         "quiz_title": version.title,
@@ -120,8 +132,7 @@ def get_session_report(
         select(Response)
         .join(
             SessionQuestion,
-            SessionQuestion.session_question_id
-            == Response.session_question_id,
+            SessionQuestion.session_question_id == Response.session_question_id,
         )
         .join(
             SessionParticipant,
@@ -136,9 +147,7 @@ def get_session_report(
     )
 
     if viewer_id is not None:
-        query = query.where(
-            Response.session_participant_id == viewer_id
-        )
+        query = query.where(Response.session_participant_id == viewer_id)
 
     responses = {
         (r.session_participant_id, r.session_question_id): r
@@ -148,8 +157,7 @@ def get_session_report(
     standings = [
         row
         for row in final.standings
-        if viewer_id is None
-        or row.session_participant_id == viewer_id
+        if viewer_id is None or row.session_participant_id == viewer_id
     ]
 
     for row in standings:
@@ -172,11 +180,11 @@ def get_session_report(
             state = (
                 "not_played"
                 if sq is None
-                else "missed"
-                if response is None
-                else "correct"
-                if response.is_correct
-                else "wrong"
+                else (
+                    "missed"
+                    if response is None
+                    else "correct" if response.is_correct else "wrong"
+                )
             )
 
             answers.append(
@@ -219,10 +227,7 @@ def export_session_report(
 
     def safe(value):
         # Prevent spreadsheet formulas in names and question/answer text.
-        if (
-            isinstance(value, str)
-            and value.lstrip().startswith(("=", "+", "-", "@"))
-        ):
+        if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
             return "'" + value
 
         return value
@@ -276,9 +281,7 @@ def export_session_report(
         ):
             choices = {c["id"]: c["text"] for c in q["choices"]}
 
-            correct = " / ".join(
-                c["text"] for c in q["choices"] if c["correct"]
-            )
+            correct = " / ".join(c["text"] for c in q["choices"] if c["correct"])
 
             write(
                 [
@@ -288,11 +291,7 @@ def export_session_report(
                     answer["state"],
                     choices.get(answer["choice_id"], ""),
                     correct,
-                    (
-                        answer["time_ms"] / 1000
-                        if answer["time_ms"] is not None
-                        else ""
-                    ),
+                    (answer["time_ms"] / 1000 if answer["time_ms"] is not None else ""),
                     answer["points"],
                 ]
             )

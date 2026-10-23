@@ -1136,3 +1136,16 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Match the selected-tab treatment in made-dashboard-main.html. */
+.qp .ui-tabs > a.active {
+  text-decoration: underline;
+  text-decoration-thickness: 4px;
+  text-underline-offset: 7px;
+}
+
+/* Archived quizzes should not use the published navy status block. */
+.qp .ui-published.ui-archived {
+  background: var(--sand);
+  color: var(--ink);
+}

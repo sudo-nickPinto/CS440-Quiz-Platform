@@ -4,7 +4,7 @@ import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router";
 import { useAccount } from "./account";
 import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
-import { ResumeSession } from "./SessionPages";
+import ParticipantHistory from "./ParticipantHistory";
 
 function displayDate(value) {
   const date = new Date(value);
@@ -25,6 +25,10 @@ export default function PreviewDashboard() {
   const presenting = view === "present";
   const resource = useResource(presenting ? "/quizzes" : null);
 
+  if (view === "taken") {
+    return <Navigate to="/app/dashboard/participate" replace />;
+  }
+
   if (!["present", "participate"].includes(view)) {
     return <Navigate to="/app/dashboard/present" replace />;
   }
@@ -33,7 +37,7 @@ export default function PreviewDashboard() {
     .filter(
       (quiz) =>
         (isAdmin || quiz.author_id === account.account_id) &&
-        quiz.status === "PUBLISHED" &&
+        ["PUBLISHED", "ARCHIVED"].includes(quiz.status) &&
         quiz.title.toLowerCase().includes(query.trim().toLowerCase()),
     )
     .sort((a, b) => {
@@ -106,10 +110,12 @@ export default function PreviewDashboard() {
           <input
             type="search"
             aria-label={
-              isAdmin ? "Search all published quizzes" : "Search your quizzes"
+              isAdmin
+                ? "Search published and archived quizzes"
+                : "Search your published and archived quizzes"
             }
             placeholder={
-              isAdmin ? "Search all published quizzes…" : "Search your quizzes…"
+              isAdmin ? "Search all quizzes…" : "Search your quizzes…"
             }
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -133,8 +139,8 @@ export default function PreviewDashboard() {
 
               <p>
                 {isAdmin
-                  ? "Showing all published quizzes."
-                  : "Showing your published quizzes."}
+                  ? "Showing all published and archived quizzes."
+                  : "Showing your published and archived quizzes."}
               </p>
 
               <button
@@ -193,13 +199,23 @@ export default function PreviewDashboard() {
 
             {quizzes.map((quiz) => (
               <article className="ui-quiz-row" key={quiz.quiz_id}>
-                <span className="ui-published">Published</span>
+                <span
+                  className={
+                    quiz.status === "ARCHIVED"
+                      ? "ui-published ui-archived"
+                      : "ui-published"
+                  }
+                >
+                  {quiz.status === "ARCHIVED" ? "Archived" : "Published"}
+                </span>
 
                 <div className="ui-quiz-title">
                   <Link to={`/app/quizzes/${quiz.quiz_id}`}>{quiz.title}</Link>
 
                   <small>
-                    Public · Read-only · {quiz.question_count} questions
+                    {quiz.status === "ARCHIVED" ? "Archived" : "Published"}
+                    {" · "}
+                    {quiz.question_count} questions
                   </small>
                 </div>
 
@@ -214,52 +230,48 @@ export default function PreviewDashboard() {
 
                   <div className="ui-row-options">
                     <Link to={`/app/quizzes/${quiz.quiz_id}`}>View quiz</Link>
+                    {(quiz.author_id === account.account_id || isAdmin) && (
+                      <Link to={`/app/quizzes/${quiz.quiz_id}/reports`}>
+                        Report
+                      </Link>
+                    )}
 
-                    {quiz.author_id === account.account_id && (
+                    {quiz.author_id === account.account_id &&
+                      quiz.status === "PUBLISHED" && (
+                        <Link to={`/app/quizzes/${quiz.quiz_id}/edit`}>
+                          Edit quiz
+                        </Link>
+                      )}
+
+                    {quiz.author_id === account.account_id &&
+                      quiz.status === "PUBLISHED" && (
+                        <button
+                          type="button"
+                          disabled={action.busy}
+                          onClick={() => void host(quiz)}
+                        >
+                          Host live session
+                        </button>
+                      )}
+
+                    {quiz.status === "PUBLISHED" && (
                       <button
                         type="button"
                         disabled={action.busy}
-                        onClick={() => void host(quiz)}
+                        onClick={() => void archive(quiz)}
                       >
-                        Host live session
+                        Archive quiz
                       </button>
                     )}
-
-                    <button
-                      type="button"
-                      disabled={action.busy}
-                      onClick={() => void archive(quiz)}
-                    >
-                      Archive quiz
-                    </button>
                   </div>
                 </details>
               </article>
             ))}
           </>
         ) : (
-          <div className="ui-empty">
-            <p className="ui-eyebrow">Participate</p>
-            <h1>
-              Pull up a <span className="ui-highlight">seat.</span>
-            </h1>
-            <p>Enter the code displayed on your host’s screen.</p>
-
-            <Link className="qp-button qp-primary" to="/app/join">
-              Join a live quiz →
-            </Link>
-          </div>
+          <ParticipantHistory />
         )}
       </div>
-
-      <details className="ui-return">
-        <summary>Return to a previous session</summary>
-        <p>
-          Enter the session ID from its URL. This is different from the
-          six-digit join code.
-        </p>
-        <ResumeSession mode={presenting ? "host" : "participant"} />
-      </details>
     </section>
   );
 }

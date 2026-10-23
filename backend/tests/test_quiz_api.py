@@ -10,7 +10,6 @@ from app.database import Base
 from app.main import create_app
 from app.models.account import Account, AccountRole
 
-
 QUIZ_PAYLOAD = {
     "title": "MVP Quiz",
     "description": "A complete saved quiz",
@@ -152,7 +151,7 @@ def test_admin_can_control_and_access_every_quiz(
     assert detail.status_code == 200
 
 
-def test_saved_quiz_has_no_edit_or_publish_endpoint(
+def test_partial_patch_and_separate_publish_are_not_supported(
     quiz_client: tuple[TestClient, CurrentAccount, CurrentAccount],
 ) -> None:
     client, _, _ = quiz_client
@@ -176,6 +175,7 @@ def test_inactive_account_cannot_use_quiz_endpoints(
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "inactive_account"
+
 
 @pytest.mark.parametrize(
     ("explanation", "expected"),
@@ -223,4 +223,169 @@ def test_explanation_over_limit_is_rejected(quiz_client) -> None:
     response = client.post("/quizzes", json=payload)
 
     assert response.status_code == 422
-    
+
+
+def revision_payload(base_version: int = 1) -> dict:
+    payload = deepcopy(QUIZ_PAYLOAD)
+    payload["base_version"] = base_version
+    payload["title"] = "Revised Quiz"
+    payload["description"] = "Updated description"
+
+    payload["questions"][0]["question_text"] = "Updated question?"
+    payload["questions"][0]["explanation"] = "Updated explanation."
+    payload["questions"][0]["base_points"] = 750
+
+    return payload
+
+
+def test_edit_creates_new_version_without_changing_original(quiz_client):
+    from app.models.quiz import QuizVersion
+    from app.schemas.quiz import QuizVersionResponse
+
+    client, _, _ = quiz_client
+    original = create_quiz(client)
+
+    response = client.put(
+        f"/quizzes/{original['quiz_id']}",
+        json=revision_payload(),
+    )
+
+    assert response.status_code == 200
+    revised = response.json()
+
+    assert revised["quiz_id"] == original["quiz_id"]
+    assert revised["author_id"] == original["author_id"]
+    assert revised["version"]["version_number"] == 2
+    assert revised["version"]["title"] == "Revised Quiz"
+    assert revised["version"]["description"] == "Updated description"
+
+    new_question = revised["version"]["questions"][0]
+    old_question = original["version"]["questions"][0]
+
+    assert new_question["explanation"] == "Updated explanation."
+    assert new_question["base_points"] == 750
+    assert new_question["question_id"] != old_question["question_id"]
+
+    old_choices = {choice["choice_id"] for choice in old_question["choices"]}
+    new_choices = {choice["choice_id"] for choice in new_question["choices"]}
+    assert old_choices.isdisjoint(new_choices)
+
+    with client.app.state.database.session_factory() as db:
+        stored_original = db.get(
+            QuizVersion,
+            original["version"]["quiz_version_id"],
+        )
+
+        assert (
+            QuizVersionResponse.model_validate(stored_original).model_dump(mode="json")
+            == original["version"]
+        )
+
+    fetched = client.get(f"/quizzes/{original['quiz_id']}").json()
+    assert fetched["version"]["version_number"] == 2
+
+    listing = client.get("/quizzes").json()
+    assert listing[0]["title"] == "Revised Quiz"
+
+
+def test_stale_edit_is_rejected_without_overwriting_newer_version(quiz_client):
+    client, _, _ = quiz_client
+    original = create_quiz(client)
+    path = f"/quizzes/{original['quiz_id']}"
+
+    assert client.put(path, json=revision_payload()).status_code == 200
+
+    stale = revision_payload()
+    stale["title"] = "Must not overwrite the saved title"
+
+    response = client.put(path, json=stale)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "quiz_version_conflict"
+
+    current = client.get(path).json()
+    assert current["version"]["version_number"] == 2
+    assert current["version"]["title"] == "Revised Quiz"
+
+
+@pytest.mark.parametrize("role", [AccountRole.USER, AccountRole.ADMIN])
+def test_only_creator_can_edit_even_if_other_user_is_admin(quiz_client, role):
+    client, _, reader = quiz_client
+    original = create_quiz(client)
+
+    other = CurrentAccount(reader.account_id, role, True)
+    client.app.dependency_overrides[get_active_account] = lambda: other
+
+    response = client.put(
+        f"/quizzes/{original['quiz_id']}",
+        json=revision_payload(),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "quiz_edit_denied"
+
+
+def test_archived_quiz_cannot_be_edited(quiz_client):
+    client, _, _ = quiz_client
+    original = create_quiz(client)
+    path = f"/quizzes/{original['quiz_id']}"
+
+    assert client.patch(f"{path}/archive").status_code == 200
+
+    response = client.put(path, json=revision_payload())
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "quiz_not_editable"
+
+
+def test_invalid_edit_does_not_publish_a_version(quiz_client):
+    client, _, _ = quiz_client
+    original = create_quiz(client)
+    path = f"/quizzes/{original['quiz_id']}"
+
+    invalid = revision_payload()
+    invalid["questions"][0]["choices"] = []
+
+    assert client.put(path, json=invalid).status_code == 422
+
+    current = client.get(path).json()
+    assert current["version"]["version_number"] == 1
+
+
+@pytest.mark.parametrize("session_status", ["LOBBY", "ACTIVE", "COMPLETED"])
+def test_old_sessions_keep_version_and_new_sessions_use_revision(
+    quiz_client,
+    session_status,
+):
+    from app.models.session import LiveSession, LiveSessionStatus
+
+    client, _, _ = quiz_client
+    original = create_quiz(client)
+    quiz_id = original["quiz_id"]
+
+    response = client.post(f"/quizzes/{quiz_id}/sessions")
+    assert response.status_code == 201
+    old_session = response.json()
+
+    with client.app.state.database.session_factory() as db:
+        session = db.get(LiveSession, old_session["session_id"])
+        session.status = LiveSessionStatus(session_status)
+        db.commit()
+
+    updated = client.put(
+        f"/quizzes/{quiz_id}",
+        json=revision_payload(),
+    )
+    assert updated.status_code == 200
+
+    response = client.post(f"/quizzes/{quiz_id}/sessions")
+    assert response.status_code == 201
+    new_session = response.json()
+
+    assert (
+        new_session["quiz_version_id"] == updated.json()["version"]["quiz_version_id"]
+    )
+
+    with client.app.state.database.session_factory() as db:
+        stored_old = db.get(LiveSession, old_session["session_id"])
+        assert stored_old.quiz_version_id == original["version"]["quiz_version_id"]

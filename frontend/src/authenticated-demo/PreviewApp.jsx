@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router";
 import ClassesPage from "../classes/ClassesPage";
-import ClassPage from "../classes/ClassPage";
+import ClassPage, { ClassLayoutReview } from "../classes/ClassPage";
 import QuizBurgLogo from "../classes/QuizBurgLogo";
 
 import { AccountContext } from "./account";
@@ -9,8 +9,10 @@ import { useResource } from "./rest";
 import RequestError from "./RequestError";
 import PreviewDashboard from "./PreviewDashboard";
 import { QuizEditor, QuizViewer } from "./QuizEditor";
+import { QuizHostingHistory } from "./QuizHistory";
 import JoinSessionPage from "./JoinSessionPage";
 import LiveSessionPage from "./LiveSessionPage";
+import EditQuizPage from "./EditQuizPage";
 import "./preview.css";
 import SessionResults from "./SessionResults";
 import "./taha-ui.css";
@@ -95,30 +97,51 @@ export default function PreviewApp({ onSignOut }) {
           <Routes>
             <Route path="classes" element={<ClassesPage />} />
 
+            {import.meta.env.DEV && (
+              <Route path="classes/layout" element={<ClassLayoutReview />} />
+            )}
+
             <Route
               path="classes/:classId"
               element={<ClassPage key={pathname} />}
             />
 
             <Route path="dashboard/:view" element={<PreviewDashboard />} />
+
             <Route path="quizzes/new" element={<QuizEditor />} />
+
+            <Route
+              path="quizzes/:quizId/reports"
+              element={<QuizHostingHistory key={pathname} />}
+            />
+
+            <Route
+              path="quizzes/:quizId/edit"
+              element={<EditQuizPage key={pathname} />}
+            />
+
             <Route
               path="quizzes/:quizId"
               element={<QuizViewer key={pathname} />}
             />
+
             <Route path="join" element={<JoinSessionPage />} />
+
             <Route
               path="host/:sessionId"
               element={<LiveSessionPage key={pathname} />}
             />
+
             <Route
               path="play/:sessionId"
               element={<LiveSessionPage key={pathname} />}
             />
+
             <Route
               path="results/:view/:sessionId"
               element={<SessionResults key={pathname} />}
             />
+
             <Route
               path="*"
               element={<Navigate to="/app/dashboard/present" replace />}
