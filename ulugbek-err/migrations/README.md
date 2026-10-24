@@ -11,6 +11,7 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0003_live_sessions` | `live_session`, `session_participant`, `session_question`, `response`, `result` |
 | `0004_account_identity` | `account_identity` (one account, several Auth0 logins); copies existing `account.auth0_sub` values into it |
 | `0005_optional_session_group` | Makes `live_session.group_id` optional. The MVP has one shared class, so sessions don't belong to a group |
+| `0006_classes` | `class`, `class_membership` (classes with organizers and members, from PR #51) |
 
 Each migration comes in two files:
 
@@ -69,5 +70,6 @@ See [`../LOCAL_DATABASE_SETUP.md`](../LOCAL_DATABASE_SETUP.md). It sets up a MyS
 - **Reordering questions or answers:** two questions in the same version can't have the same position, and neither can two answers to the same question. To swap two of them, move one to a temporary position first, or renumber them all in one `UPDATE`.
 - **Replacing a question's answers:** delete the old answers before adding the new ones. If the new ones are added first, they clash with the old ones that have the same position, and the database rejects them.
 - **Sessions and groups:** leave `live_session.group_id` empty for the MVP.
+- **Classes:** use `class` and `class_membership`, not the old `course_group` and `group_membership`. Classes are archived, never deleted: a class with members can't be deleted.
 - **Deleting quizzes:** you can't delete a quiz that has already been played. Set its `status` to `'ARCHIVED'` instead.
 - **Rules the database doesn't check:** some rules have to be checked in the backend code. They're listed at the top of `0003_live_sessions.up.sql` and in the "Rules the backend has to check" section of `ER_Diagram.md`.

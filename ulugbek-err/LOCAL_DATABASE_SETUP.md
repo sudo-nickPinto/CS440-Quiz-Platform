@@ -67,7 +67,7 @@ Two things that are normal:
 docker exec quizdb-dev mysql -uroot -pdevpass quizdb -e "SHOW TABLES; SELECT version FROM schema_migrations;"
 ```
 
-You should see 16 tables (`account`, `quiz`, `live_session` and so on), and one row for each migration that has been run.
+You should see 18 tables (`account`, `quiz`, `live_session` and so on), and one row for each migration that has been run.
 
 ## Step 4: Point the backend at your database
 

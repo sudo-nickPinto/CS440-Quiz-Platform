@@ -1,19 +1,60 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
+import { useAccount } from "./account";
 
 import { blankEditor, LETTERS, newQuestion } from "./model";
 import { toQuizCreate } from "./quizPayload";
 import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 
-export function QuizEditor() {
-  const [editor, setEditor] = useState(blankEditor);
+export function QuizEditor({
+  initialEditor = null,
+  existingQuiz = null,
+  onReload,
+}) {
+  const [initial] = useState(() => initialEditor ?? blankEditor());
+  const [editor, setEditor] = useState(initial);
   const [reviewing, setReviewing] = useState(false);
   const [validation, setValidation] = useState("");
 
   const api = useApi();
   const action = useAction();
   const navigate = useNavigate();
+
+  const editing = existingQuiz !== null;
+  const dirty = JSON.stringify(editor) !== JSON.stringify(initial);
+
+  const conflict = action.error?.code === "quiz_version_conflict";
+
+  const backTo = editing
+    ? `/app/quizzes/${existingQuiz.quiz_id}`
+    : "/app/dashboard/present";
+
+  useEffect(() => {
+    if (!dirty) return;
+
+    function warnBeforeUnload(event) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", warnBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+    };
+  }, [dirty]);
+
+  function leaveEditor(event) {
+    if (action.busy) {
+      event.preventDefault();
+      return;
+    }
+
+    if (dirty && !window.confirm("Discard your unsaved changes?")) {
+      event.preventDefault();
+    }
+  }
 
   function edit(next) {
     setEditor(next);
@@ -53,12 +94,20 @@ export function QuizEditor() {
   }
 
   async function save() {
-    const quiz = await action.run(() =>
-      api("/quizzes", {
-        method: "POST",
-        body: JSON.stringify(toQuizCreate(editor)),
-      }),
-    );
+    if (conflict) return;
+
+    const quiz = await action.run(() => {
+      const payload = toQuizCreate(editor);
+
+      if (editing) {
+        payload.base_version = existingQuiz.version.version_number;
+      }
+
+      return api(editing ? `/quizzes/${existingQuiz.quiz_id}` : "/quizzes", {
+        method: editing ? "PUT" : "POST",
+        body: JSON.stringify(payload),
+      });
+    });
 
     if (quiz) {
       navigate(`/app/quizzes/${quiz.quiz_id}`, {
@@ -71,14 +120,23 @@ export function QuizEditor() {
     <form noValidate onSubmit={review}>
       <fieldset disabled={action.busy} className="qp-form-fields">
         <div className="qp-toolbar">
-          <Link to="/app/dashboard/present">← Dashboard</Link>
-          <strong>Create a quiz</strong>
+          <Link to={backTo} onClick={leaveEditor}>
+            {editing ? "← Cancel editing" : "← Dashboard"}
+          </Link>
+
+          <strong>{editing ? "Edit quiz" : "Create a quiz"}</strong>
         </div>
 
         <div className="qp-content">
           <p>
-            Unsaved work stays on this page only. Refreshing or leaving discards
-            it. Saving publishes a read-only quiz to the database.
+            {editing
+              ? "Save changes to publish an updated version. Existing sessions and results keep their original content."
+              : "Save to publish your quiz. You can return later to edit it."}
+          </p>
+
+          <p>
+            Unsaved changes stay on this page only. Leaving without saving
+            discards them.
           </p>
 
           <label>
@@ -96,11 +154,26 @@ export function QuizEditor() {
           </label>
 
           <label>
+            Description (optional)
+            <textarea
+              rows={3}
+              value={editor.description ?? ""}
+              onChange={(event) =>
+                edit({
+                  ...editor,
+                  description: event.target.value,
+                })
+              }
+            />
+          </label>
+
+          <label>
             Default time (seconds)
             <input
               type="number"
-              min={5}
-              max={300}
+              min={1}
+              max={65535}
+              step={1}
               value={editor.defaultTime}
               onChange={(event) =>
                 edit({
@@ -267,8 +340,9 @@ export function QuizEditor() {
                   Question time (blank uses default)
                   <input
                     type="number"
-                    min={5}
-                    max={300}
+                    min={1}
+                    max={65535}
+                    step={1}
                     value={question.limit ?? ""}
                     placeholder={String(editor.defaultTime)}
                     onChange={(event) =>
@@ -280,9 +354,23 @@ export function QuizEditor() {
                   />
                 </label>
 
-                <p>
-                  Base points: 1,000. The server calculates the awarded score.
-                </p>
+                <label>
+                  Base points
+                  <input
+                    type="number"
+                    min={1}
+                    max={4294967295}
+                    step={1}
+                    value={question.basePoints ?? 1000}
+                    onChange={(event) =>
+                      changeQuestion(question.id, {
+                        basePoints: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                <p>The server calculates the awarded score.</p>
               </div>
             </article>
           ))}
@@ -309,7 +397,11 @@ export function QuizEditor() {
         <div className="qp-savebar">
           {reviewing ? (
             <>
-              <p>Saving publishes this quiz. It cannot be edited afterward.</p>
+              <p>
+                {editing
+                  ? "Publish these changes for future sessions?"
+                  : "Publish this quiz?"}
+              </p>
 
               <button type="button" onClick={() => setReviewing(false)}>
                 Keep editing
@@ -318,13 +410,18 @@ export function QuizEditor() {
               <button
                 type="button"
                 className="qp-primary"
+                disabled={conflict}
                 onClick={() => void save()}
               >
-                {action.busy ? "Saving…" : "Save for good"}
+                {action.busy
+                  ? "Saving…"
+                  : editing
+                    ? "Save changes"
+                    : "Publish quiz"}
               </button>
             </>
           ) : (
-            <button type="submit" className="qp-primary">
+            <button type="submit" className="qp-primary" disabled={conflict}>
               Review and save
             </button>
           )}
@@ -332,12 +429,38 @@ export function QuizEditor() {
       </fieldset>
 
       <RequestError error={action.error} />
+
+      {conflict && (
+        <div className="qp-content">
+          <p>
+            Your edits are still on this page. Copy anything you want to keep
+            before loading the latest saved version.
+          </p>
+
+          <button
+            type="button"
+            disabled={action.busy}
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Discard the changes on this page and load the latest version?",
+                )
+              ) {
+                onReload?.();
+              }
+            }}
+          >
+            Reload latest version
+          </button>
+        </div>
+      )}
     </form>
   );
 }
 
 export function QuizViewer() {
   const { quizId } = useParams();
+  const account = useAccount();
   const validId = /^[1-9][0-9]*$/.test(quizId);
 
   const resource = useResource(validId ? `/quizzes/${quizId}` : null);
@@ -364,8 +487,18 @@ export function QuizViewer() {
 
       <h1>{quiz.version.title}</h1>
       <p>
-        {quiz.status} · {quiz.visibility} · Read-only · Saved to the database
+        {quiz.status} · {quiz.visibility} · Version{" "}
+        {quiz.version.version_number}
       </p>
+
+      {quiz.status === "PUBLISHED" && quiz.author_id === account.account_id && (
+        <Link
+          className="qp-button qp-primary"
+          to={`/app/quizzes/${quiz.quiz_id}/edit`}
+        >
+          Edit quiz
+        </Link>
+      )}
 
       {quiz.version.questions.map((question, index) => (
         <article className="qp-card qp-content" key={question.question_id}>
