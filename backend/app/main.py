@@ -25,6 +25,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await application.state.live_hub.sweep()
         except Exception:
             logger.exception("Startup sweep of open questions failed")
+        if settings.live_abandon_after_seconds > 0:
+            application.state.live_hub.start_reaper(
+                settings.live_abandon_after_seconds,
+                settings.live_abandon_check_seconds,
+            )
         yield
         await application.state.live_hub.shutdown()
         application.state.database.dispose()

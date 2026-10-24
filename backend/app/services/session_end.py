@@ -45,14 +45,18 @@ def _utc_now() -> datetime:
     return now.replace(microsecond=(now.microsecond // 1_000) * 1_000)
 
 
-def _lock_hosted_session(
-    db: Session, account: CurrentAccount, session_id: int
-) -> LiveSession:
-    session = db.scalar(
+def _lock_session(db: Session, session_id: int) -> LiveSession | None:
+    return db.scalar(
         select(LiveSession)
         .where(LiveSession.session_id == session_id)
         .with_for_update()
     )
+
+
+def _lock_hosted_session(
+    db: Session, account: CurrentAccount, session_id: int
+) -> LiveSession:
+    session = _lock_session(db, session_id)
     if session is None:
         raise APIError(404, "session_not_found", "Session not found.")
     if session.host_id != account.account_id:
@@ -144,7 +148,15 @@ def _end_session(
             "session_not_started",
             "Start the quiz before ending it, or cancel it instead.",
         )
+    return _complete_session(db, session, ended_at)
 
+
+def _complete_session(
+    db: Session, session: LiveSession, ended_at: datetime
+) -> SessionEnded:
+    """Close any open question, write results, and mark the locked ACTIVE
+    session COMPLETED. Commits."""
+    session_id = session.session_id
     closed_question = None
     open_question_id = db.scalar(
         select(SessionQuestion.session_question_id).where(
@@ -229,6 +241,13 @@ def _cancel_session(
             "session_not_cancellable",
             "Only a session that has not started can be cancelled. End it instead.",
         )
+    return _mark_cancelled(db, session, ended_at)
+
+
+def _mark_cancelled(
+    db: Session, session: LiveSession, ended_at: datetime
+) -> FinalResults:
+    session_id = session.session_id
     session.status = LiveSessionStatus.CANCELLED
     session.ended_at = ended_at
     db.commit()
@@ -254,6 +273,55 @@ def cancel_session(
         "Could not cancel the session.",
         _cancel_session,
         account,
+        session_id,
+        ended_at or _utc_now(),
+    )
+
+
+def live_session_ids(db: Session) -> list[int]:
+    """Every LOBBY or ACTIVE session, for the abandoned-session reaper."""
+    return list(
+        db.scalars(
+            select(LiveSession.session_id).where(
+                LiveSession.status.in_(
+                    (LiveSessionStatus.LOBBY, LiveSessionStatus.ACTIVE)
+                )
+            )
+        )
+    )
+
+
+def _abandon_session(
+    db: Session, session_id: int, ended_at: datetime
+) -> SessionEnded | None:
+    session = _lock_session(db, session_id)
+    if session is None or session.status in ENDED_STATUSES:
+        db.rollback()
+        return None
+    if session.status == LiveSessionStatus.LOBBY:
+        return SessionEnded(
+            closed_question=None,
+            results=_mark_cancelled(db, session, ended_at),
+        )
+    return _complete_session(db, session, ended_at)
+
+
+def abandon_session(
+    db: Session,
+    session_id: int,
+    *,
+    ended_at: datetime | None = None,
+) -> SessionEnded | None:
+    """End a session whose host has gone (system action, no host check).
+
+    A LOBBY session is CANCELLED; an ACTIVE one is ended exactly as the host's
+    End would. Returns None if it already ended.
+    """
+    return _run(
+        db,
+        "session_end_failed",
+        "Could not end the session.",
+        _abandon_session,
         session_id,
         ended_at or _utc_now(),
     )
