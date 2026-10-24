@@ -27,6 +27,11 @@ from app.services.session_report import (
     export_session_report,
 )
 
+from app.services.session_history import (
+    list_quiz_hosting_history,
+    list_taken_sessions,
+)
+
 HOST = CurrentAccount(1, AccountRole.USER, True)
 ALICE = CurrentAccount(2, AccountRole.USER, True)
 OUTSIDER = CurrentAccount(4, AccountRole.USER, True)
@@ -40,9 +45,7 @@ def db():
     Base.metadata.create_all(database.engine)
 
     with database.session_factory() as session:
-        for id_, name in enumerate(
-            ["Host", "Alice", "Bob", "Outsider", "Admin"], 1
-        ):
+        for id_, name in enumerate(["Host", "Alice", "Bob", "Outsider", "Admin"], 1):
             session.add(
                 Account(
                     account_id=id_,
@@ -237,10 +240,141 @@ def test_csv_contains_saved_scores_and_escapes_formulas(db):
     db.get(Account, 2).display_name = "=1+1"
     db.commit()
 
-    rows = list(
-        csv.reader(
-            StringIO(export_session_report(db, HOST, 10))
-        )
-    )
+    rows = list(csv.reader(StringIO(export_session_report(db, HOST, 10))))
 
     assert ["1", "'=1+1", "875", "1"] in rows
+
+
+def test_publishing_revision_preserves_historical_report(db):
+    from app.schemas.quiz import QuizUpdate
+    from app.services.quizzes import update_quiz
+
+    # This existing report fixture creates version 1 without a
+    # publication timestamp. Mark it published for this edit test.
+    original_version = db.get(QuizVersion, 1)
+    original_version.published_at = NOW
+    db.commit()
+
+    before = get_session_report(db, HOST, 10)
+
+    payload = QuizUpdate(
+        base_version=1,
+        title="Changed title for future sessions",
+        description="New description",
+        questions=[
+            {
+                "question_text": "A completely different question?",
+                "explanation": "A new explanation.",
+                "time_limit_seconds": 30,
+                "base_points": 2000,
+                "choices": [
+                    {"choice_text": "New correct answer", "is_correct": True},
+                    {"choice_text": "New wrong answer", "is_correct": False},
+                ],
+            }
+        ],
+    )
+
+    result = update_quiz(db, HOST, 1, payload)
+    assert result.version.version_number == 2
+
+    db.expire_all()
+    after = get_session_report(db, HOST, 10)
+
+    assert after == before
+
+def test_taken_history_is_scoped_to_the_current_account(db):
+    alice_history = list_taken_sessions(db, ALICE)
+    outsider_history = list_taken_sessions(db, OUTSIDER)
+    host_history = list_taken_sessions(db, HOST)
+
+    assert [
+        row["session_id"] for row in alice_history["items"]
+    ] == [10]
+
+    assert outsider_history["items"] == []
+    assert host_history["items"] == []
+
+
+def test_quiz_history_is_restricted_to_author_or_admin(db):
+    history = list_quiz_hosting_history(db, HOST, 1)
+
+    assert [row["session_id"] for row in history["items"]] == [10]
+
+    with pytest.raises(APIError):
+        list_quiz_hosting_history(db, OUTSIDER, 1)
+
+
+def test_history_preserves_the_version_used_by_the_session(db):
+    db.add(
+        QuizVersion(
+            quiz_version_id=2,
+            quiz_id=1,
+            version_number=2,
+            title="Edited quiz title",
+        )
+    )
+    db.commit()
+
+    history = list_taken_sessions(db, ALICE)
+    row = history["items"][0]
+
+    assert row["quiz_title"] == "Report test"
+    assert row["version_number"] == 1
+
+
+def test_cancelled_session_is_only_in_host_history(db):
+    session = db.get(LiveSession, 10)
+    session.status = LiveSessionStatus.CANCELLED
+    db.commit()
+
+    assert list_taken_sessions(db, ALICE)["items"] == []
+
+    history = list_quiz_hosting_history(db, HOST, 1)
+    assert history["items"][0]["status"] == "CANCELLED"
+
+
+def test_history_pagination(db):
+    db.add(
+        LiveSession(
+            session_id=11,
+            quiz_version_id=1,
+            host_id=HOST.account_id,
+            join_code="654321",
+            status=LiveSessionStatus.COMPLETED,
+            ended_at=NOW,
+        )
+    )
+    db.commit()
+
+    first = list_quiz_hosting_history(db, HOST, 1, limit=1, offset=0)
+    second = list_quiz_hosting_history(db, HOST, 1, limit=1, offset=1)
+
+    assert first["items"][0]["session_id"] == 11
+    assert first["has_more"] is True
+    assert second["items"][0]["session_id"] == 10
+    assert second["has_more"] is False
+
+
+def test_admin_who_participated_can_request_personal_report(db):
+    admin_participant = CurrentAccount(
+        ALICE.account_id,
+        AccountRole.ADMIN,
+        True,
+    )
+
+    report = get_session_report(
+        db,
+        admin_participant,
+        10,
+        personal=True,
+    )
+
+    assert report["view"] == "participant"
+    assert len(report["players"]) == 1
+    assert report["players"][0]["id"] == 20
+
+
+def test_personal_report_requires_actual_participation(db):
+    with pytest.raises(APIError):
+        get_session_report(db, HOST, 10, personal=True)

@@ -72,6 +72,10 @@ class QuizCreate(QuizRequestModel):
         value = value.strip()
         return value or None
 
+class QuizUpdate(QuizCreate):
+    # The published version originally loaded by the editor.
+    base_version: int = Field(ge=1, strict=True)
+
 
 class AnswerChoiceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

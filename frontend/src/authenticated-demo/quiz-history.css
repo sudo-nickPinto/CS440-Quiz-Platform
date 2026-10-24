@@ -1,0 +1,103 @@
+.qp .qh {
+  padding: clamp(16px, 3vw, 32px);
+  background: var(--paper);
+}
+
+.qp .qh-heading,
+.qp .qh-card,
+.qp .qh-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.qp .qh-heading {
+  margin-bottom: 24px;
+}
+
+.qp .qh-heading h1 {
+  margin: 0 0 10px;
+}
+
+.qp .qh-heading p {
+  margin-bottom: 0;
+}
+
+.qp .qh-list {
+  display: grid;
+  gap: 18px;
+}
+
+.qp .qh-card {
+  padding: 22px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.qp .qh-card > div {
+  min-width: 0;
+}
+
+.qp .qh-card h2 {
+  margin: 12px 0;
+  color: var(--navy);
+  overflow-wrap: anywhere;
+}
+
+.qp .qh-card p {
+  margin: 6px 0;
+}
+
+.qp .qh-card > .qp-button {
+  flex-shrink: 0;
+}
+
+.qp .qh-status {
+  display: inline-block;
+  padding: 5px 10px;
+  border: 2px solid var(--ink);
+  background: var(--sky-soft);
+  color: var(--navy);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.qp .qh-note {
+  max-width: 240px;
+  font-weight: 700;
+}
+
+.qp .qh-message {
+  padding: 28px 0;
+}
+
+.qp .qh-pagination {
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 30px;
+}
+
+.qp .qh-back {
+  padding: 20px 24px 0;
+}
+
+.qp .qh a:focus-visible,
+.qp .qh button:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 4px;
+}
+
+@media (max-width: 640px) {
+  .qp .qh-heading,
+  .qp .qh-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .qp .qh-card > .qp-button {
+    text-align: center;
+  }
+}

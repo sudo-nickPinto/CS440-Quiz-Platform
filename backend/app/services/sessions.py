@@ -36,9 +36,7 @@ JOINABLE_STATUSES = (LiveSessionStatus.LOBBY, LiveSessionStatus.ACTIVE)
 
 
 def _generate_join_code() -> str:
-    return "".join(
-        secrets.choice(JOIN_CODE_ALPHABET) for _ in range(JOIN_CODE_LENGTH)
-    )
+    return "".join(secrets.choice(JOIN_CODE_ALPHABET) for _ in range(JOIN_CODE_LENGTH))
 
 
 def _load_session(db: Session, session_id: int) -> LiveSession:
@@ -124,17 +122,19 @@ def create_session(
         raise APIError(409, "quiz_not_hostable", "Only a published quiz can be hosted.")
 
     version = db.scalar(
-        select(QuizVersion).where(
+        select(QuizVersion)
+        .where(
             QuizVersion.quiz_id == quiz_id,
-            QuizVersion.version_number == 1,
             QuizVersion.published_at.is_not(None),
         )
+        .order_by(QuizVersion.version_number.desc())
+        .limit(1)
     )
     if version is None:
         raise APIError(
             409,
             "quiz_not_hostable",
-            "The quiz does not have a saved MVP version.",
+            "The quiz does not have a published version.",
         )
     # The session keeps the class the quiz had when it was created.
     class_id = class_id_for_quiz(db, quiz, quiz_class_map)
@@ -289,13 +289,16 @@ def get_session(
     session = _load_session(db, session_id)
     permitted = session.host_id == account.account_id or account.is_admin
     if not permitted:
-        permitted = db.scalar(
-            select(SessionParticipant.session_participant_id).where(
-                SessionParticipant.session_id == session_id,
-                SessionParticipant.account_id == account.account_id,
-                SessionParticipant.left_at.is_(None),
+        permitted = (
+            db.scalar(
+                select(SessionParticipant.session_participant_id).where(
+                    SessionParticipant.session_id == session_id,
+                    SessionParticipant.account_id == account.account_id,
+                    SessionParticipant.left_at.is_(None),
+                )
             )
-        ) is not None
+            is not None
+        )
     if not permitted:
         raise APIError(
             403,
