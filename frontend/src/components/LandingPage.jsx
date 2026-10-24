@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
+import { returnToState } from "../api";
 import QuizBurgLogo from "../classes/QuizBurgLogo";
 import "./LandingPage.css";
 
@@ -300,6 +301,7 @@ export default function LandingPage({ authError = "" }) {
 
     try {
       await loginWithRedirect({
+        appState: returnToState(),
         authorizationParams,
         // Keep the existing application's back-button behavior.
         openUrl: (url) => window.location.replace(url),
