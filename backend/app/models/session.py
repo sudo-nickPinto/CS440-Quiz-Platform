@@ -60,8 +60,8 @@ class LiveSession(Base):
     group_id: Mapped[int | None] = mapped_column(
         INTEGER(unsigned=True), nullable=True
     )
-    # Migration 0008: copied from the quiz's class when the session is created.
-    # NULL means anyone with the join code can join, as before classes existed.
+    # Migration 0007: the class the host picked when creating the session. NULL
+    # (an open session) means anyone with the join code can join.
     class_id: Mapped[int | None] = mapped_column(
         INTEGER(unsigned=True),
         ForeignKey("class.class_id", ondelete="RESTRICT"),

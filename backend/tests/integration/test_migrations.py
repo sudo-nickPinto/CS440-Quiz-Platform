@@ -105,7 +105,7 @@ def test_migration_0006_down_only_removes_class_tables(
     for path in UP_FILES:
         run_file(connection, path)
     before = tables(connection)
-    # Later migrations (0008: live_session.class_id) point at class, so they
+    # Later migrations (0007: live_session.class_id) point at class, so they
     # come off first and go back on afterwards.
     later = [path for path in UP_FILES if path.name > "0006_classes.up.sql"]
     for path in reversed(later):

@@ -17,6 +17,7 @@ from app.schemas.results import (
 )
 from app.schemas.session import (
     ClassActiveSessionResponse,
+    SessionCreateRequest,
     SessionJoinRequest,
     SessionJoinResponse,
     SessionParticipantResponse,
@@ -42,16 +43,13 @@ router = APIRouter(tags=["sessions"])
 )
 def create_session_route(
     quiz_id: int,
-    request: Request,
+    payload: SessionCreateRequest | None = None,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> SessionResponse:
-    return create_session(
-        db,
-        account,
-        quiz_id,
-        quiz_class_map=request.app.state.settings.dev_quiz_class_map,
-    )
+    # The body is optional: no body (or no class_id) creates an open session.
+    class_id = payload.class_id if payload is not None else None
+    return create_session(db, account, quiz_id, class_id=class_id)
 
 
 @router.post(

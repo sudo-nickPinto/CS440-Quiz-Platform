@@ -8,7 +8,6 @@ from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models import (
     Account,
-    Class,
     LiveSession,
     LiveSessionStatus,
     Quiz,
@@ -23,11 +22,8 @@ from app.schemas.session import (
     SessionParticipantResponse,
     SessionResponse,
 )
-from app.services.class_access import (
-    class_id_for_quiz,
-    is_active_member,
-    require_session_class_member,
-)
+from app.services.class_access import may_play, require_session_class_member
+from app.services.class_authorization import require_class_host, require_class_member
 
 JOIN_CODE_ALPHABET = "0123456789"
 JOIN_CODE_LENGTH = 6
@@ -106,9 +102,10 @@ def create_session(
     db: Session,
     account: CurrentAccount,
     quiz_id: int,
-    *,
-    quiz_class_map: str = "",
+    class_id: int | None = None,
 ) -> SessionResponse:
+    """Host a quiz. class_id=None creates an open session anyone with the
+    code can join; otherwise only that class's active members can."""
     quiz = db.get(Quiz, quiz_id)
     if quiz is None:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
@@ -120,6 +117,8 @@ def create_session(
         )
     if quiz.status != QuizStatus.PUBLISHED:
         raise APIError(409, "quiz_not_hostable", "Only a published quiz can be hosted.")
+    if class_id is not None:
+        require_class_host(db, account, class_id)
 
     version = db.scalar(
         select(QuizVersion)
@@ -136,9 +135,6 @@ def create_session(
             "quiz_not_hostable",
             "The quiz does not have a published version.",
         )
-    # The session keeps the class the quiz had when it was created.
-    class_id = class_id_for_quiz(db, quiz, quiz_class_map)
-
     for _ in range(JOIN_CODE_ATTEMPTS):
         join_code = _generate_join_code()
         if _active_session_for_code(db, join_code) is not None:
@@ -198,10 +194,18 @@ def join_session_by_id(
     account: CurrentAccount,
     session_id: int,
 ) -> SessionJoinResponse:
-    """Join from the class page's Live button instead of typing the code."""
+    """Join from the class page's Live button instead of typing the code.
+
+    Only class sessions can be joined this way, and only by active members.
+    Open sessions still need the six-digit code. Anyone else gets the same 404
+    as a missing session, so session ids reveal nothing.
+    """
     session = _load_session(db, session_id)
-    if session.host_id != account.account_id:
-        require_session_class_member(db, session, account)
+    if session.class_id is None or (
+        session.host_id != account.account_id
+        and not may_play(db, session, account.account_id)
+    ):
+        raise APIError(404, "session_not_found", "Session not found.")
     if session.status not in JOINABLE_STATUSES:
         raise APIError(409, "session_not_joinable", "This session has ended.")
     return _join(db, account, session)
@@ -341,12 +345,8 @@ def list_class_active_sessions(
     class_id: int,
 ) -> list[ClassActiveSessionResponse]:
     """Sessions in the lobby or running for a class, for its Live button."""
-    class_ = db.get(Class, class_id)
     # Outsiders get the same 404 as a missing class, so ids reveal nothing.
-    if class_ is None or not (
-        account.is_admin or is_active_member(db, class_id, account.account_id)
-    ):
-        raise APIError(404, "class_not_found", "Class not found.")
+    require_class_member(db, account, class_id)
 
     question_count = (
         select(func.count(Question.question_id))

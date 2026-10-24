@@ -1,9 +1,9 @@
--- 0008: a live session belongs to the class of the quiz it plays (task 6).
+-- 0007: a live session can belong to a class (task 6).
 --
--- class_id is copied from the quiz when the session is created, so later
--- changes to the quiz never move a running or finished game to another class.
--- NULL means the session has no class and anyone with the join code can join,
--- exactly as before. (0007 is taken by the class membership PR, #58.)
+-- The host picks the class when creating the session (quizzes have no class).
+-- Only an active organizer of a non-archived class, or a global Admin, may pick
+-- it. NULL is an open session: anyone with the join code can join, exactly as
+-- before classes existed.
 --
 -- Rules the backend enforces (not expressible here):
 --   * Only an ACTIVE class_membership in class_id may join or answer; a
@@ -18,4 +18,4 @@ ALTER TABLE live_session
     -- The class page's "active sessions" lookup.
     ADD INDEX idx_live_session_class_status (class_id, status);
 
-INSERT INTO schema_migrations (version) VALUES ('0008_session_class');
+INSERT INTO schema_migrations (version) VALUES ('0007_session_class');
