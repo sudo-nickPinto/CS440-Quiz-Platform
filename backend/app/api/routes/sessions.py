@@ -113,11 +113,18 @@ def get_final_results_route(
 def session_report_route(
     session_id: int,
     response: HTTPResponse,
+    personal: bool = False,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> dict:
     response.headers["Cache-Control"] = "no-store"
-    return get_session_report(db, account, session_id)
+
+    return get_session_report(
+        db,
+        account,
+        session_id,
+        personal=personal,
+    )
 
 
 @router.get("/sessions/{session_id}/results/export.csv")

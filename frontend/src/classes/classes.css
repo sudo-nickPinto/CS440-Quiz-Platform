@@ -1,0 +1,613 @@
+/* Scoped to the new class pages and shared QuizBurg components.
+   Uses the existing theme variables and fonts. */
+
+.qp .cl-page {
+  min-width: 0;
+}
+
+.qp .cl-page h1,
+.qp .cl-page h2,
+.qp .cl-page p {
+  margin: 0;
+}
+
+.qp .cl-page h1 {
+  font-size: clamp(22px, 2.5vw, 30px);
+  line-height: 1.2;
+}
+
+.qp .cl-page h2 {
+  font-size: clamp(18px, 2vw, 24px);
+  line-height: 1.3;
+}
+
+.qp .cl-page button,
+.qp .cl-button {
+  min-height: 44px;
+  border: var(--b);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-weight: 700;
+}
+
+.qp .cl-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--orange-deep);
+  color: var(--paper);
+  text-decoration: none;
+}
+
+.qp .cl-button:hover {
+  background: var(--orange);
+}
+
+.qp .cl-button.cl-secondary {
+  background: var(--paper);
+  color: var(--navy);
+}
+
+.qp .cl-button.cl-secondary:hover {
+  background: var(--sky-soft);
+}
+
+.qp .cl-page button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.qp .cl-titlebar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  border-bottom: var(--b);
+}
+
+.qp .cl-titlebar h1 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 20px 22px;
+  text-transform: uppercase;
+}
+
+.qp .cl-titlebar small {
+  font: 700 13px "Space Grotesk", sans-serif;
+  color: var(--gray);
+}
+
+.qp .cl-titlebar button {
+  border: 0;
+  border-left: var(--b);
+  box-shadow: none;
+  padding: 20px 24px;
+  font-family: "Archivo Black", sans-serif;
+  text-transform: uppercase;
+}
+
+.qp .cl-titlebar .cl-new {
+  background: var(--sky-soft);
+  color: var(--navy);
+}
+
+.qp .cl-titlebar .cl-join {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.qp .cl-titlebar .cl-new:hover {
+  background: var(--sand);
+}
+
+.qp .cl-titlebar .cl-join:hover {
+  background: var(--ink);
+}
+
+.qp .cl-inline-panel {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 18px;
+  border-bottom: var(--b);
+  background: var(--sky-soft);
+}
+
+.qp .cl-inline-panel h2 {
+  flex-basis: 100%;
+}
+
+.qp .cl-inline-panel label {
+  flex: 1 1 220px;
+  max-width: 380px;
+}
+
+.qp .cl-inline-panel p {
+  flex-basis: 100%;
+  font-size: 14px;
+  color: var(--navy);
+}
+
+.qp .cl-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: var(--b);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--paper),
+    var(--paper) 10px,
+    var(--sand) 10px,
+    var(--sand) 20px
+  );
+}
+
+.qp .cl-search {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.qp .cl-page input,
+.qp .cl-page select {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.qp .cl-page input:disabled,
+.qp .cl-page select:disabled {
+  color: var(--gray);
+  cursor: not-allowed;
+}
+
+.qp .cl-count {
+  padding: 9px 12px;
+  border: var(--b);
+  background: var(--orange-deep);
+  color: var(--paper);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.qp .cl-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 24px;
+  padding: 24px;
+}
+
+.qp .cl-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.qp .cl-card-banner {
+  position: relative;
+  display: flex;
+  align-items: end;
+  min-height: 150px;
+  padding: 42px 14px 14px;
+  border-bottom: var(--b);
+  background: var(--sky-soft);
+}
+
+.qp .cl-card-managed .cl-card-banner {
+  background: var(--apricot);
+}
+
+.qp .cl-role {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 5px 9px;
+  border-right: var(--b-thin);
+  border-bottom: var(--b-thin);
+  background: var(--navy);
+  color: var(--paper);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.qp .cl-card-managed .cl-role {
+  background: var(--orange-deep);
+}
+
+.qp .cl-card-code {
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(24px, 2.4vw, 36px);
+  overflow-wrap: anywhere;
+}
+
+.qp .cl-card-body {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  flex: 1;
+  padding: 18px 16px;
+}
+
+.qp .cl-card-body h2 {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.qp .cl-card-body h2 a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.qp .cl-card-body h2 a:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--orange-deep);
+}
+
+.qp .cl-owner {
+  color: var(--navy);
+  font-weight: 700;
+}
+
+.qp .cl-muted {
+  color: var(--gray);
+  font-size: 14px;
+}
+
+.qp .cl-card-footer {
+  padding: 14px 16px;
+  border-top: var(--b-thin);
+  background: var(--sand);
+}
+
+.qp .cl-card-footer a {
+  color: var(--navy);
+  font-weight: 700;
+}
+
+.qp .cl-state {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 16px;
+  min-height: 260px;
+  padding: 48px 22px;
+  text-align: center;
+}
+
+.qp .cl-state p {
+  max-width: 60ch;
+}
+
+.qp .cl-classbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 20px;
+  border-bottom: var(--b);
+}
+
+.qp .cl-class-title {
+  flex: 1 1 250px;
+  min-width: 0;
+}
+
+.qp .cl-class-title h1 {
+  overflow-wrap: anywhere;
+}
+
+.qp .cl-eyebrow {
+  margin-bottom: 6px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.qp .cl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.qp .cl-view-switch {
+  display: flex;
+  border: var(--b);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.qp .cl-view-switch > span {
+  display: grid;
+  place-items: center;
+  padding: 0 10px;
+  background: var(--ink);
+  color: var(--paper);
+  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qp .cl-view-switch button {
+  border: 0;
+  border-left: var(--b-thin);
+  box-shadow: none;
+}
+
+.qp .cl-view-switch button[aria-pressed="true"] {
+  background: var(--apricot);
+  text-decoration: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
+
+.qp .cl-section-note {
+  padding: 12px 20px;
+  border-bottom: var(--b-thin);
+  color: var(--gray);
+  font-size: 14px;
+}
+
+.qp .cl-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: var(--b);
+  background: var(--sky-soft);
+}
+
+.qp .cl-stat {
+  display: grid;
+  gap: 6px;
+  padding: 18px 20px;
+}
+
+.qp .cl-stat + .cl-stat {
+  border-left: var(--b-thin);
+}
+
+.qp .cl-stat span {
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.qp .cl-stat strong {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 30px;
+}
+
+.qp .cl-section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  border-bottom: var(--b);
+}
+
+.qp .cl-section-tabs > [role="group"] {
+  display: flex;
+  flex: 1 1 300px;
+}
+
+.qp .cl-section-tabs > [role="group"] button {
+  flex: 1;
+  border: 0;
+  border-right: var(--b);
+  box-shadow: none;
+  padding: 20px 14px;
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(16px, 2vw, 26px);
+  text-transform: uppercase;
+}
+
+.qp .cl-section-tabs button[aria-pressed="true"] {
+  background: var(--orange-deep);
+  color: var(--paper);
+}
+
+.qp .cl-section-tabs button:nth-child(2)[aria-pressed="true"] {
+  background: var(--navy);
+}
+
+.qp .cl-section-tabs > .cl-actions {
+  align-items: center;
+  padding: 12px;
+}
+
+.qp .cl-table-wrap {
+  overflow-x: auto;
+}
+
+.qp .cl-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.qp .cl-table th {
+  padding: 12px 16px;
+  background: var(--ink);
+  color: var(--paper);
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qp .cl-table td {
+  padding: 0;
+  border-bottom: var(--b-thin);
+}
+
+.qp .cl-existing-flow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 20px;
+}
+
+.qp .cl-existing-flow p {
+  max-width: 65ch;
+}
+
+.qp .cl-dialog {
+  width: min(580px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  margin: auto;
+  padding: 0;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 8px 8px 0 var(--ink);
+}
+
+.qp .cl-dialog::backdrop {
+  background: rgb(34 34 34 / 50%);
+}
+
+.qp .cl-dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.qp .cl-dialog-heading h2 {
+  font-size: 22px;
+}
+
+.qp .cl-dialog-body {
+  display: grid;
+  gap: 20px;
+  padding: 22px;
+}
+
+.qp .cl-dialog-footer {
+  display: flex;
+  justify-content: end;
+  padding: 14px 22px;
+  border-top: var(--b-thin);
+}
+
+.qp .cl-review-notice,
+.qp .cl-dev-links {
+  padding: 14px 20px;
+  background: var(--sand);
+  border-bottom: var(--b-thin);
+  font-size: 14px;
+}
+
+.qp .cl-dev-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-top: var(--b-thin);
+  border-bottom: 0;
+}
+
+.qp .cl-dev-links span {
+  flex-basis: 100%;
+}
+
+.qp .cl-app-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.qp .cl-brand-link {
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.qp .cl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 1400px) {
+  .qp .cl-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1150px) {
+  .qp .cl-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .qp .cl-grid,
+  .qp .cl-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .qp .cl-stat:nth-child(3) {
+    border-left: 0;
+  }
+
+  .qp .cl-stat:nth-child(n + 3) {
+    border-top: var(--b-thin);
+  }
+}
+
+@media (max-width: 640px) {
+  .qp .cl-titlebar h1 {
+    padding: 16px 12px;
+    font-size: 20px;
+  }
+
+  .qp .cl-titlebar button {
+    padding: 14px 10px;
+    font-size: 13px;
+  }
+
+  .qp .cl-titlebar small {
+    display: none;
+  }
+
+  .qp .cl-grid {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .qp .cl-card-banner {
+    min-height: 100px;
+  }
+
+  .qp .cl-classbar {
+    align-items: start;
+    padding: 16px;
+  }
+
+  .qp .cl-class-title {
+    flex-basis: 100%;
+  }
+
+  .qp .cl-section-tabs > [role="group"] button {
+    padding: 16px 8px;
+    font-size: 16px;
+  }
+
+  .qp .cl-state {
+    padding: 36px 16px;
+  }
+}

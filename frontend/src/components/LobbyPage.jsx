@@ -52,7 +52,7 @@ export default function LobbyPage({ user, headingRef }) {
     </div>
     <div className="lobby-grid">
       <section className="card session-card" aria-labelledby="session-title">
-        <p className="eyebrow">{isHost ? 'JOIN CLASSROOM QUIZ WITH THIS CODE' : joined ? 'YOU’VE JOINED THE SESSION' : 'JOIN A LIVE QUIZ'}</p>
+        <p className="eyebrow">{isHost ? 'JOIN QUIZBURG WITH THIS CODE' : joined ? 'YOU’VE JOINED THE SESSION' : 'JOIN A LIVE QUIZ'}</p>
         <h2 id="session-title" ref={stateHeading} tabIndex={-1}>
           {started ? 'Get ready!' : isHost ? 'Session code' : joined ? 'You’re in!' : 'Session code'}
         </h2>

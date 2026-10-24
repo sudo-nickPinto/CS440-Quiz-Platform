@@ -79,9 +79,13 @@ http://127.0.0.1:8000/health
 
 ## Authentication
 
-Login uses Auth0 email/password (no Google sign-in); new signups wait for approval on the Approve users page. The frontend needs `frontend/.env` (copy `frontend/.env.example`); the backend needs `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` in `backend/.env`. On first login the backend creates the user's row in the `account` table. See [docs/AUTH.md](docs/AUTH.md) for diagrams, local setup with a Docker MySQL, error codes and how to protect a new route.
+Login uses Auth0 email/password (no Google sign-in); new signups verify their email, then can use the app right away. The frontend needs `frontend/.env` (copy `frontend/.env.example`); the backend needs `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` in `backend/.env`. On first login the backend creates the user's row in the `account` table. See [docs/AUTH.md](docs/AUTH.md) for diagrams, local setup with a Docker MySQL, error codes and how to protect a new route.
 
 Note: `frontend/.env.example` points at the backend on port `8001`, so run `uvicorn app.main:app --reload --port 8001`.
+
+## API
+
+Every REST route, who may call it and its error codes: [docs/API.md](docs/API.md). The live WebSocket: [docs/LIVE_PROTOCOL.md](docs/LIVE_PROTOCOL.md).
 
 ## Development Workflow
 
@@ -119,3 +123,10 @@ Then create a pull request to merge the feature into `main`.
 Do not commit passwords, API keys, database credentials, or other secrets.
 
 Local environment variables should be stored in `.env` files, which are ignored by Git.
+
+## Docker deployment
+
+Production-ready Dockerfiles and Compose configuration are included for the
+React frontend, FastAPI backend, and an optional persistent MySQL container.
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for local verification and Reclaim
+deployment instructions.
