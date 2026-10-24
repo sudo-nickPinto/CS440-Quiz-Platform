@@ -60,6 +60,13 @@ class LiveSession(Base):
     group_id: Mapped[int | None] = mapped_column(
         INTEGER(unsigned=True), nullable=True
     )
+    # Migration 0007: the class the host picked when creating the session. NULL
+    # (an open session) means anyone with the join code can join.
+    class_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("class.class_id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     join_code: Mapped[str] = mapped_column(CHAR(6), nullable=False)
     status: Mapped[LiveSessionStatus] = mapped_column(
         SqlEnum(LiveSessionStatus, values_callable=enum_values),

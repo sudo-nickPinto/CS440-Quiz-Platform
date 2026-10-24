@@ -1,6 +1,6 @@
 import secrets
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -12,14 +12,18 @@ from app.models import (
     LiveSessionStatus,
     Quiz,
     QuizStatus,
+    Question,
     QuizVersion,
     SessionParticipant,
 )
 from app.schemas.session import (
+    ClassActiveSessionResponse,
     SessionJoinResponse,
     SessionParticipantResponse,
     SessionResponse,
 )
+from app.services.class_access import may_play, require_session_class_member
+from app.services.class_authorization import require_class_host, require_class_member
 
 JOIN_CODE_ALPHABET = "0123456789"
 JOIN_CODE_LENGTH = 6
@@ -63,6 +67,7 @@ def _to_session_response(db: Session, session: LiveSession) -> SessionResponse:
         quiz_version_id=session.quiz_version_id,
         quiz_title=version.title,
         host_id=session.host_id,
+        class_id=session.class_id,
         join_code=session.join_code,
         status=session.status,
         current_question_order=session.current_question_order,
@@ -97,7 +102,10 @@ def create_session(
     db: Session,
     account: CurrentAccount,
     quiz_id: int,
+    class_id: int | None = None,
 ) -> SessionResponse:
+    """Host a quiz. class_id=None creates an open session anyone with the
+    code can join; otherwise only that class's active members can."""
     quiz = db.get(Quiz, quiz_id)
     if quiz is None:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
@@ -109,6 +117,8 @@ def create_session(
         )
     if quiz.status != QuizStatus.PUBLISHED:
         raise APIError(409, "quiz_not_hostable", "Only a published quiz can be hosted.")
+    if class_id is not None:
+        require_class_host(db, account, class_id)
 
     version = db.scalar(
         select(QuizVersion)
@@ -125,7 +135,6 @@ def create_session(
             "quiz_not_hostable",
             "The quiz does not have a published version.",
         )
-
     for _ in range(JOIN_CODE_ATTEMPTS):
         join_code = _generate_join_code()
         if _active_session_for_code(db, join_code) is not None:
@@ -134,6 +143,7 @@ def create_session(
             quiz_version_id=version.quiz_version_id,
             host_id=account.account_id,
             group_id=None,
+            class_id=class_id,
             join_code=join_code,
             status=LiveSessionStatus.LOBBY,
         )
@@ -176,12 +186,44 @@ def join_session(
     session = _active_session_for_code(db, join_code)
     if session is None:
         raise APIError(404, "join_code_not_found", "No active session uses this code.")
+    return _join(db, account, session)
+
+
+def join_session_by_id(
+    db: Session,
+    account: CurrentAccount,
+    session_id: int,
+) -> SessionJoinResponse:
+    """Join from the class page's Live button instead of typing the code.
+
+    Only class sessions can be joined this way, and only by active members.
+    Open sessions still need the six-digit code. Anyone else gets the same 404
+    as a missing session, so session ids reveal nothing.
+    """
+    session = _load_session(db, session_id)
+    if session.class_id is None or (
+        session.host_id != account.account_id
+        and not may_play(db, session, account.account_id)
+    ):
+        raise APIError(404, "session_not_found", "Session not found.")
+    if session.status not in JOINABLE_STATUSES:
+        raise APIError(409, "session_not_joinable", "This session has ended.")
+    return _join(db, account, session)
+
+
+def _join(
+    db: Session,
+    account: CurrentAccount,
+    session: LiveSession,
+) -> SessionJoinResponse:
     if session.host_id == account.account_id:
         raise APIError(
             409,
             "host_cannot_join",
             "The host cannot join their own session as a participant.",
         )
+    # Knowing the code is not enough for a class session.
+    require_session_class_member(db, session, account)
 
     existing = db.scalar(
         select(SessionParticipant).where(
@@ -295,3 +337,56 @@ def list_session_participants(
         )
     ).all()
     return [_participant_response(db, participant) for participant in participants]
+
+
+def list_class_active_sessions(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+) -> list[ClassActiveSessionResponse]:
+    """Sessions in the lobby or running for a class, for its Live button."""
+    # Outsiders get the same 404 as a missing class, so ids reveal nothing.
+    require_class_member(db, account, class_id)
+
+    question_count = (
+        select(func.count(Question.question_id))
+        .where(Question.quiz_version_id == LiveSession.quiz_version_id)
+        .correlate(LiveSession)
+        .scalar_subquery()
+    )
+    joined = (
+        select(SessionParticipant.session_participant_id)
+        .where(
+            SessionParticipant.session_id == LiveSession.session_id,
+            SessionParticipant.account_id == account.account_id,
+        )
+        .correlate(LiveSession)
+        .exists()
+    )
+    rows = db.execute(
+        select(LiveSession, QuizVersion, question_count, joined)
+        .join(QuizVersion, QuizVersion.quiz_version_id == LiveSession.quiz_version_id)
+        .where(
+            LiveSession.class_id == class_id,
+            LiveSession.status.in_(JOINABLE_STATUSES),
+        )
+        .order_by(LiveSession.created_at.desc(), LiveSession.session_id.desc())
+    ).all()
+    return [
+        ClassActiveSessionResponse(
+            session_id=session.session_id,
+            class_id=class_id,
+            quiz_id=version.quiz_id,
+            quiz_title=version.title,
+            host_id=session.host_id,
+            is_host=session.host_id == account.account_id,
+            joined=bool(has_joined),
+            join_code=session.join_code,
+            status=session.status,
+            current_question_order=session.current_question_order,
+            question_count=int(count or 0),
+            created_at=session.created_at,
+            started_at=session.started_at,
+        )
+        for session, version, count, has_joined in rows
+    ]
