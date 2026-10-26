@@ -314,7 +314,9 @@ def test_outsider_and_removed_member_cannot_discover_class(class_client) -> None
     unknown = client.get("/classes/999999/members")
 
     assert removed.status_code == 204
-    assert outsider.status_code == former_member.status_code == unknown.status_code == 404
+    assert (
+        outsider.status_code == former_member.status_code == unknown.status_code == 404
+    )
     assert outsider.json() == former_member.json() == unknown.json()
     assert outsider.json()["error"]["code"] == "class_not_found"
 
@@ -347,3 +349,89 @@ def test_unknown_member_and_invalid_role_errors(class_client) -> None:
     assert unknown_member.status_code == 404
     assert unknown_member.json()["error"]["code"] == "class_member_not_found"
     assert invalid_role.status_code == 422
+
+
+@pytest.mark.parametrize("actor", ["organizer", "global_admin"])
+def test_pending_invites_can_be_loaded_again(class_client, actor) -> None:
+    client, identities, class_id = class_client
+
+    assert invite_target(client, class_id).status_code == 201
+    act_as(client, identities[actor])
+
+    # Separate requests represent reopening or refreshing the page.
+    for _ in range(2):
+        response = client.get(f"/classes/{class_id}/invites")
+
+        assert response.status_code == 200
+        rows = response.json()
+        assert len(rows) == 1
+        assert rows[0]["account_id"] == identities["target"].account_id
+        assert rows[0]["status"] == "INVITED"
+
+    members = client.get(f"/classes/{class_id}/members")
+    assert members.status_code == 200
+    assert identities["target"].account_id not in {
+        row["account_id"] for row in members.json()
+    }
+
+
+@pytest.mark.parametrize(
+    ("actor", "expected_status"),
+    [
+        ("member", 403),
+        ("target", 404),
+        ("other_organizer", 404),
+    ],
+)
+def test_pending_invites_require_class_organizer(
+    class_client, actor, expected_status
+) -> None:
+    client, identities, class_id = class_client
+
+    assert invite_target(client, class_id).status_code == 201
+    act_as(client, identities[actor])
+
+    response = client.get(f"/classes/{class_id}/invites")
+
+    assert response.status_code == expected_status
+
+
+@pytest.mark.parametrize("decision", ["accept", "decline", "cancel"])
+def test_resolved_invites_disappear_from_pending_list(class_client, decision) -> None:
+    client, identities, class_id = class_client
+
+    assert invite_target(client, class_id).status_code == 201
+
+    if decision == "cancel":
+        response = client.delete(
+            f"/classes/{class_id}/invites/" f"{identities['target'].account_id}"
+        )
+        assert response.status_code == 204
+    else:
+        act_as(client, identities["target"])
+        response = client.post(f"/classes/{class_id}/invite/{decision}")
+        assert response.status_code == (200 if decision == "accept" else 204)
+
+    act_as(client, identities["organizer"])
+    pending = client.get(f"/classes/{class_id}/invites")
+
+    assert pending.status_code == 200
+    assert pending.json() == []
+
+
+def test_pending_invites_are_scoped_to_the_requested_class(
+    class_client,
+) -> None:
+    client, _, class_id = class_client
+
+    assert invite_target(client, class_id).status_code == 201
+
+    created = client.post("/classes", json={"name": "Another class"})
+    assert created.status_code == 201
+    other_class_id = created.json()["class_id"]
+
+    response = client.get(f"/classes/{other_class_id}/invites")
+
+    assert response.status_code == 200
+    assert response.json() == []
+

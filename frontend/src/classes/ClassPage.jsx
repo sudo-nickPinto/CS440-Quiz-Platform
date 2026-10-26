@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { useClassResource } from "./classResources";
 import { ResourceMessage } from "./ClassUI";
+import { ClassMembers, ClassSettings } from "./ClassManagement";
 
 const SECTION_LAYOUTS = {
   Presentations: {
@@ -25,7 +26,7 @@ const SECTION_LAYOUTS = {
       "Attendance",
       "Details",
     ],
-    message: "Class membership and student reports are not available yet.",
+    message: "Student grades and class reports are not available yet.",
   },
   Present: {
     headers: ["Status", "Quiz", "Questions", "Actions"],
@@ -70,39 +71,32 @@ function UnavailableTable({ section }) {
   );
 }
 
-function ClassWorkspace({ classInfo = null, layoutOnly = false }) {
+function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
   const canManage = classInfo?.canManage === true;
 
   // Layout review contains no class record or student data.
   // This flag controls only the development design-review screen.
   const showAdminLayout = layoutOnly || canManage;
 
-  const [view, setView] = useState(
-    showAdminLayout ? "admin" : "user",
-  );
+  const [view, setView] = useState(showAdminLayout ? "admin" : "user");
 
   const [section, setSection] = useState(
     showAdminLayout ? "Presentations" : "Present",
   );
 
   const [joinOpen, setJoinOpen] = useState(false);
-  const memberDialog = useRef(null);
 
   const adminView = showAdminLayout && view === "admin";
 
   const sections = adminView
-    ? ["Presentations", "Students"]
+    ? ["Presentations", "Students", "Members", "Settings"]
     : ["Present", "Participate"];
 
-  const activeSection = sections.includes(section)
-    ? section
-    : sections[0];
+  const activeSection = sections.includes(section) ? section : sections[0];
 
   function changeView(nextView) {
     setView(nextView);
-    setSection(
-      nextView === "admin" ? "Presentations" : "Present",
-    );
+    setSection(nextView === "admin" ? "Presentations" : "Present");
     setJoinOpen(false);
   }
 
@@ -110,9 +104,9 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false }) {
     <section className="cl-page" aria-labelledby="class-heading">
       {layoutOnly && (
         <div className="cl-review-notice">
-          <strong>Development layout review.</strong>{" "}
-          No class is selected. Values and actions remain unavailable.
-          Switching views here does not change account permissions.
+          <strong>Development layout review.</strong> No class is selected.
+          Values and actions remain unavailable. Switching views here does not
+          change account permissions.
         </div>
       )}
 
@@ -163,10 +157,10 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false }) {
           <div className="cl-actions">
             <button
               type="button"
-              aria-haspopup="dialog"
-              onClick={() => memberDialog.current?.showModal()}
+              disabled={layoutOnly || classInfo?.archived}
+              onClick={() => setSection("Members")}
             >
-              + Add member
+              + Invite member
             </button>
 
             <button
@@ -181,22 +175,23 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false }) {
       </div>
 
       <p id="class-actions-note" className="cl-section-note">
-        Class changes, grades, and downloads are not available yet.
+        {layoutOnly
+          ? "This is a layout preview. Select a real class to use its features."
+          : classInfo.archived
+            ? "This class is archived."
+            : "Class grades and grade downloads are not available yet."}
       </p>
 
       {adminView && (
         <section className="cl-summary" aria-label="Class summary">
-          {[
-            "Students",
-            "Presentations",
-            "Class average",
-            "Attendance",
-          ].map((label) => (
-            <div className="cl-stat" key={label}>
-              <span>{label}</span>
-              <strong aria-label="Not available">—</strong>
-            </div>
-          ))}
+          {["Students", "Presentations", "Class average", "Attendance"].map(
+            (label) => (
+              <div className="cl-stat" key={label}>
+                <span>{label}</span>
+                <strong aria-label="Not available">—</strong>
+              </div>
+            ),
+          )}
         </section>
       )}
 
@@ -216,11 +211,7 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false }) {
 
         {!adminView && (
           <div className="cl-actions">
-            <button
-              type="button"
-              disabled
-              aria-describedby="class-quiz-note"
-            >
+            <button type="button" disabled aria-describedby="class-quiz-note">
               + New quiz
             </button>
 
@@ -238,8 +229,8 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false }) {
 
       {!adminView && (
         <p id="class-quiz-note" className="cl-section-note">
-          Creating and joining quizzes within a class will be available
-          when class-based quizzes and sessions are connected.
+          Creating and joining quizzes within a class will be available when
+          class-based quizzes and sessions are connected.
         </p>
       )}
 
@@ -272,75 +263,56 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false }) {
         </section>
       )}
 
-      <div className="cl-toolbar">
-        <label className="cl-search">
-          <span className="cl-sr">
-            Search {activeSection.toLowerCase()}
-          </span>
+      {activeSection === "Members" ? (
+        layoutOnly ? (
+          <div className="cl-state">
+            <h2>Members</h2>
+            <p>Select a real class to view and manage its members.</p>
+          </div>
+        ) : (
+          <ClassMembers classInfo={classInfo} onChange={onChange} />
+        )
+      ) : activeSection === "Settings" ? (
+        layoutOnly ? (
+          <div className="cl-state">
+            <h2>Class settings</h2>
+            <p>Select a real class to change its settings.</p>
+          </div>
+        ) : (
+          <ClassSettings classInfo={classInfo} onChange={onChange} />
+        )
+      ) : (
+        <>
+          <div className="cl-toolbar">
+            <label className="cl-search">
+              <span className="cl-sr">
+                Search {activeSection.toLowerCase()}
+              </span>
 
-          <input
-            type="search"
-            placeholder={`Search ${activeSection.toLowerCase()}…`}
-            disabled
-          />
-        </label>
+              <input
+                type="search"
+                placeholder={`Search ${activeSection.toLowerCase()}…`}
+                disabled
+              />
+            </label>
 
-        <span className="cl-count">— records</span>
-      </div>
+            <span className="cl-count">— records</span>
+          </div>
 
-      <UnavailableTable section={activeSection} />
+          <UnavailableTable section={activeSection} />
+        </>
+      )}
 
       <div className="cl-existing-flow">
         <p>
-          Your existing quiz dashboard remains available separately
-          while class features are being connected.
+          Your existing quiz dashboard remains available separately while class
+          features are being connected.
         </p>
 
         <Link className="cl-button" to="/app/dashboard/present">
           Open quiz dashboard →
         </Link>
       </div>
-
-      {showAdminLayout && (
-        <dialog
-          ref={memberDialog}
-          className="cl-dialog"
-          aria-labelledby="member-dialog-heading"
-          aria-describedby="member-dialog-note"
-        >
-          <div className="cl-dialog-heading">
-            <h2 id="member-dialog-heading">Add a member</h2>
-
-            <button
-              type="button"
-              aria-label="Close add member"
-              onClick={() => memberDialog.current?.close()}
-            >
-              ×
-            </button>
-          </div>
-
-          <div className="cl-dialog-body">
-            <p id="member-dialog-note">
-              Adding existing users by email is not available yet.
-              No changes will be saved.
-            </p>
-
-            <label>
-              Account email
-              <input type="email" disabled />
-            </label>
-
-            <button type="button" disabled>
-              Add member
-            </button>
-          </div>
-
-          <form method="dialog" className="cl-dialog-footer">
-            <button type="submit">Close</button>
-          </form>
-        </dialog>
-      )}
     </section>
   );
 }
@@ -379,6 +351,7 @@ export default function ClassPage() {
     <ClassWorkspace
       key={classId}
       classInfo={resource.data}
+      onChange={resource.reload}
     />
   );
 }
