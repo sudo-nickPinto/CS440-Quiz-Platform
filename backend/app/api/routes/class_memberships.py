@@ -15,6 +15,7 @@ from app.services.class_memberships import (
     decline_class_invite,
     list_class_members,
     remove_class_member,
+    list_class_invites,
     update_class_member,
 )
 
@@ -28,6 +29,15 @@ def list_class_members_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> list[ClassMemberResponse]:
     return list_class_members(db, account, class_id)
+
+
+@router.get("/invites", response_model=list[ClassMemberResponse])
+def list_class_invites_route(
+    class_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> list[ClassMemberResponse]:
+    return list_class_invites(db, account, class_id)
 
 
 @router.post(

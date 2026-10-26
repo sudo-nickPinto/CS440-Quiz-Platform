@@ -1,20 +1,34 @@
 import { useState } from "react";
+import { useAccount } from "../authenticated-demo/account";
 
-import {
-  useAction,
-  useApi,
-  useResource,
-} from "../authenticated-demo/rest";
+import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import { ResourceMessage } from "./ClassUI";
 
 export function ClassMembers({ classInfo, onChange }) {
+  const account = useAccount();
   const api = useApi();
   const action = useAction();
+
   const resource = useResource(`/classes/${classInfo.id}/members`);
+  const invitesResource = useResource(`/classes/${classInfo.id}/invites`);
 
   const [email, setEmail] = useState("");
   const [query, setQuery] = useState("");
-  const [sentInvites, setSentInvites] = useState([]);
+
+  function refreshLists() {
+    resource.reload();
+    invitesResource.reload();
+  }
+
+  function refreshAfterMemberChange(member) {
+    if (Number(member.account_id) === Number(account.account_id)) {
+      // Recheck access when the signed-in user's own membership changes.
+      onChange();
+    } else {
+      // Keep the workspace and its selected Members tab mounted.
+      resource.reload();
+    }
+  }
 
   const members = Array.isArray(resource.data) ? resource.data : [];
 
@@ -36,36 +50,25 @@ export function ClassMembers({ classInfo, onChange }) {
 
     if (invited) {
       setEmail("");
-      setSentInvites((current) => [
-        ...current.filter(
-          (item) => item.account_id !== invited.account_id,
-        ),
-        invited,
-      ]);
+      invitesResource.reload();
     }
   }
 
   async function cancelInvitation(invitation) {
     const succeeded = await action.run(async () => {
-      await api(
-        `/classes/${classInfo.id}/invites/${invitation.account_id}`,
-        { method: "DELETE" },
-      );
+      await api(`/classes/${classInfo.id}/invites/${invitation.account_id}`, {
+        method: "DELETE",
+      });
+
       return true;
     });
 
     if (succeeded) {
-      setSentInvites((current) =>
-        current.filter(
-          (item) => item.account_id !== invitation.account_id,
-        ),
-      );
+      refreshLists();
     }
   }
-
   async function changeRole(member) {
-    const nextRole =
-      member.role === "ORGANIZER" ? "MEMBER" : "ORGANIZER";
+    const nextRole = member.role === "ORGANIZER" ? "MEMBER" : "ORGANIZER";
 
     const confirmed = window.confirm(
       `Change ${member.display_name || member.email} to ${
@@ -76,19 +79,16 @@ export function ClassMembers({ classInfo, onChange }) {
     if (!confirmed) return;
 
     const succeeded = await action.run(async () => {
-      await api(
-        `/classes/${classInfo.id}/members/${member.account_id}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ role: nextRole }),
-        },
-      );
+      await api(`/classes/${classInfo.id}/members/${member.account_id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role: nextRole }),
+      });
       return true;
     });
 
-    // Reload class permissions too: the caller may have changed
-    // their own organizer role.
-    if (succeeded) onChange();
+    if (succeeded) {
+      refreshAfterMemberChange(member);
+    }
   }
 
   async function removeMember(member) {
@@ -99,15 +99,15 @@ export function ClassMembers({ classInfo, onChange }) {
     if (!confirmed) return;
 
     const succeeded = await action.run(async () => {
-      await api(
-        `/classes/${classInfo.id}/members/${member.account_id}`,
-        { method: "DELETE" },
-      );
+      await api(`/classes/${classInfo.id}/members/${member.account_id}`, {
+        method: "DELETE",
+      });
       return true;
     });
 
-    // This also handles the caller removing their own membership.
-    if (succeeded) onChange();
+    if (succeeded) {
+      refreshAfterMemberChange(member);
+    }
   }
 
   if (resource.loading) {
@@ -167,16 +167,14 @@ export function ClassMembers({ classInfo, onChange }) {
 
         <button
           type="submit"
-          disabled={
-            action.busy || classInfo.archived || !email.trim()
-          }
+          disabled={action.busy || classInfo.archived || !email.trim()}
         >
           Invite member
         </button>
 
         <p>
-          Invite someone who already has a QuizBurg account.
-          They must accept the invitation before joining the class.
+          Invite someone who already has a QuizBurg account. They must accept
+          the invitation before joining the class.
         </p>
 
         {classInfo.archived && (
@@ -184,19 +182,47 @@ export function ClassMembers({ classInfo, onChange }) {
         )}
       </form>
 
-      {sentInvites.length > 0 && (
-        <section className="cl-invitations">
-          <h2>Invitations created during this visit</h2>
-          <p>
-            Refresh the member list after an invitation is accepted.
-          </p>
+      <section
+        className="cl-invitations"
+        aria-labelledby="pending-invitations-heading"
+      >
+        <h2 id="pending-invitations-heading">Pending invitations</h2>
 
-          {sentInvites.map((invitation) => (
-            <div
-              className="cl-invitation"
-              key={invitation.account_id}
+        {invitesResource.loading ? (
+          <p role="status">Loading invitations…</p>
+        ) : invitesResource.error ? (
+          <div>
+            <p role="alert">{invitesResource.error.message}</p>
+
+            <button
+              type="button"
+              onClick={invitesResource.reload}
+              disabled={action.busy}
             >
-              <span>{invitation.email}</span>
+              Retry invitations
+            </button>
+          </div>
+        ) : !Array.isArray(invitesResource.data) ? (
+          <div>
+            <p role="alert">The invitation list could not be read.</p>
+
+            <button
+              type="button"
+              onClick={invitesResource.reload}
+              disabled={action.busy}
+            >
+              Retry invitations
+            </button>
+          </div>
+        ) : invitesResource.data.length === 0 ? (
+          <p>No pending invitations.</p>
+        ) : (
+          invitesResource.data.map((invitation) => (
+            <div className="cl-invitation" key={invitation.account_id}>
+              <div>
+                <strong>{invitation.display_name || invitation.email}</strong>
+                <p>{invitation.email}</p>
+              </div>
 
               <button
                 type="button"
@@ -206,9 +232,9 @@ export function ClassMembers({ classInfo, onChange }) {
                 Cancel invitation
               </button>
             </div>
-          ))}
-        </section>
-      )}
+          ))
+        )}
+      </section>
 
       <div className="cl-toolbar">
         <label className="cl-search">
@@ -221,16 +247,14 @@ export function ClassMembers({ classInfo, onChange }) {
           />
         </label>
 
-        <span className="cl-count">
-          {visible.length} members
-        </span>
+        <span className="cl-count">{visible.length} members</span>
 
         <button
           type="button"
-          onClick={resource.reload}
-          disabled={action.busy}
+          onClick={refreshLists}
+          disabled={action.busy || invitesResource.loading}
         >
-          Refresh members
+          Refresh members and invitations
         </button>
       </div>
 
@@ -252,11 +276,7 @@ export function ClassMembers({ classInfo, onChange }) {
               <tr key={member.account_id}>
                 <td>{member.display_name || member.email}</td>
                 <td>{member.email}</td>
-                <td>
-                  {member.role === "ORGANIZER"
-                    ? "Organizer"
-                    : "Member"}
-                </td>
+                <td>{member.role === "ORGANIZER" ? "Organizer" : "Member"}</td>
                 <td>
                   <div className="cl-actions">
                     <button
@@ -291,8 +311,7 @@ export function ClassMembers({ classInfo, onChange }) {
       </div>
 
       <p className="cl-section-note">
-        The last active organizer cannot be removed or changed to a
-        member.
+        The last active organizer cannot be removed or changed to a member.
       </p>
     </section>
   );
@@ -303,9 +322,7 @@ export function ClassSettings({ classInfo, onChange }) {
   const action = useAction();
 
   const [name, setName] = useState(classInfo.name);
-  const [joiningOpen, setJoiningOpen] = useState(
-    classInfo.joiningOpen,
-  );
+  const [joiningOpen, setJoiningOpen] = useState(classInfo.joiningOpen);
 
   async function saveSettings(event) {
     event.preventDefault();
@@ -372,9 +389,7 @@ export function ClassSettings({ classInfo, onChange }) {
         </p>
       )}
 
-      {classInfo.archived && (
-        <p role="status">This class is archived.</p>
-      )}
+      {classInfo.archived && <p role="status">This class is archived.</p>}
 
       <form className="cl-settings-form" onSubmit={saveSettings}>
         <label>
@@ -393,9 +408,7 @@ export function ClassSettings({ classInfo, onChange }) {
           <input
             type="checkbox"
             checked={joiningOpen}
-            onChange={(event) =>
-              setJoiningOpen(event.target.checked)
-            }
+            onChange={(event) => setJoiningOpen(event.target.checked)}
             disabled={action.busy || classInfo.archived}
           />
           Class code enabled
@@ -403,9 +416,7 @@ export function ClassSettings({ classInfo, onChange }) {
 
         <button
           type="submit"
-          disabled={
-            action.busy || classInfo.archived || !name.trim()
-          }
+          disabled={action.busy || classInfo.archived || !name.trim()}
         >
           Save settings
         </button>
@@ -413,12 +424,10 @@ export function ClassSettings({ classInfo, onChange }) {
 
       <div className="cl-settings-block">
         <h3>Class code</h3>
-        <p className="cl-code-value">
-          {classInfo.code || "No class code"}
-        </p>
+        <p className="cl-code-value">{classInfo.code || "No class code"}</p>
         <p>
-          Joining by class code is not available yet. Use invitations
-          to add members.
+          Joining by class code is not available yet. Use invitations to add
+          members.
         </p>
 
         <button
@@ -433,8 +442,7 @@ export function ClassSettings({ classInfo, onChange }) {
       <div className="cl-settings-block">
         <h3>Archive class</h3>
         <p>
-          Archiving disables the class code and marks the class as
-          archived.
+          Archiving disables the class code and marks the class as archived.
         </p>
 
         <button

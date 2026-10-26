@@ -147,6 +147,25 @@ def list_class_members(
     return [_to_response(membership) for membership in memberships]
 
 
+def list_class_invites(
+    db: Session, account: CurrentAccount, class_id: int
+) -> list[ClassMemberResponse]:
+    _require_class_organizer(db, account, class_id)
+
+    memberships = db.scalars(
+        select(ClassMembership)
+        .join(Account, Account.account_id == ClassMembership.account_id)
+        .where(
+            ClassMembership.class_id == class_id,
+            ClassMembership.status == MembershipStatus.INVITED,
+        )
+        .options(joinedload(ClassMembership.account))
+        .order_by(Account.display_name, ClassMembership.account_id)
+    ).all()
+
+    return [_to_response(membership) for membership in memberships]
+
+
 def get_class_member(
     db: Session, account: CurrentAccount, class_id: int, account_id: int
 ) -> ClassMemberResponse:
@@ -292,10 +311,7 @@ def update_class_member(
         raise APIError(409, "class_member_not_active", "Class member is not active.")
 
     new_role = payload.role
-    if (
-        membership.role == ClassRole.ORGANIZER
-        and new_role == ClassRole.MEMBER
-    ):
+    if membership.role == ClassRole.ORGANIZER and new_role == ClassRole.MEMBER:
         _protect_last_organizer(db, membership)
 
     if membership.role != new_role:
