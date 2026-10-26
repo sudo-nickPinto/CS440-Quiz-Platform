@@ -15,8 +15,7 @@ export function ResourceMessage({ resource }) {
       <div className="cl-state" role="alert">
         <h2>Unable to load this page</h2>
         <p>
-          {resource.error?.message ||
-            "Something went wrong. Please try again."}
+          {resource.error?.message || "Something went wrong. Please try again."}
         </p>
 
         {typeof resource.reload === "function" && (
@@ -52,8 +51,8 @@ export function ResourceMessage({ resource }) {
     <div className="cl-state" role="status">
       <h2>Classes are coming soon</h2>
       <p>
-        Class information is not available yet. Your existing quiz
-        dashboard is still available.
+        Class information is not available yet. Your existing quiz dashboard is
+        still available.
       </p>
       <Link className="cl-button" to="/app/dashboard/present">
         Open quiz dashboard →
@@ -81,13 +80,9 @@ export function ClassCard({ item }) {
       }`}
     >
       <div className="cl-card-banner">
-        <span className="cl-role">
-          {item.roleLabel || "Class member"}
-        </span>
+        <span className="cl-role">{item.roleLabel || "Class member"}</span>
 
-        <span className="cl-card-code">
-          {item.code || "Class"}
-        </span>
+        <span className="cl-card-code">{item.code || "Class"}</span>
       </div>
 
       <div className="cl-card-body">
@@ -97,14 +92,10 @@ export function ClassCard({ item }) {
           </Link>
         </h2>
 
-        {item.ownerName && (
-          <p className="cl-owner">{item.ownerName}</p>
-        )}
+        {item.ownerName && <p className="cl-owner">{item.ownerName}</p>}
 
         <p className="cl-muted">
-          {item.memberCount ?? "—"} members
-          {" · "}
-          {item.quizCount ?? "—"} quizzes
+          {item.archived ? "Archived class" : "Active class"}
         </p>
       </div>
 
