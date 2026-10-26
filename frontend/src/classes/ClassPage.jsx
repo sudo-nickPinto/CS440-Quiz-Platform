@@ -1,7 +1,10 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 
+import { useAction, useApi } from "../authenticated-demo/rest";
+import RequestError from "../authenticated-demo/RequestError";
 import { useClassResource } from "./classResources";
+import { copyText } from "./classHelpers";
 import { ResourceMessage } from "./ClassUI";
 import { ClassMembers, ClassSettings } from "./ClassManagement";
 
@@ -85,6 +88,37 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
   );
 
   const [joinOpen, setJoinOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const api = useApi();
+  const joinAction = useAction();
+  const navigate = useNavigate();
+
+  // Session codes are not tied to a class, so this is the same request as
+  // the dashboard's Join strip.
+  async function join(event) {
+    event.preventDefault();
+
+    if (!/^\d{6}$/.test(code)) return;
+
+    const joined = await joinAction.run(() =>
+      api("/sessions/join", {
+        method: "POST",
+        body: JSON.stringify({ join_code: code }),
+      }),
+    );
+
+    if (joined) {
+      navigate(`/app/play/${joined.session.session_id}`);
+    }
+  }
+
+  async function copyCode() {
+    await copyText(classInfo.code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  }
 
   const adminView = showAdminLayout && view === "admin";
 
@@ -117,9 +151,23 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
 
         <div className="cl-class-title">
           <p className="cl-eyebrow">
-            {layoutOnly
-              ? "Class dashboard layout"
-              : classInfo.roleLabel || "Class"}
+            <span className={`cl-chip${canManage ? "" : " cl-chip-member"}`}>
+              {layoutOnly
+                ? "Class dashboard layout"
+                : classInfo.roleLabel || "Class"}
+            </span>
+
+            {canManage && classInfo.code && (
+              <button
+                type="button"
+                className="cl-code-chip"
+                onClick={copyCode}
+                aria-label={`Copy class code ${classInfo.code}`}
+              >
+                {copied ? "Copied" : `Code ${classInfo.code}`}
+                <span aria-hidden="true"> ⧉</span>
+              </button>
+            )}
           </p>
 
           <h1 id="class-heading">
@@ -211,9 +259,19 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
 
         {!adminView && (
           <div className="cl-actions">
-            <button type="button" disabled aria-describedby="class-quiz-note">
-              + New quiz
-            </button>
+            {layoutOnly ? (
+              <button type="button" disabled>
+                + New quiz
+              </button>
+            ) : (
+              <Link
+                className="cl-button cl-secondary"
+                to="/app/quizzes/new"
+                aria-describedby="class-quiz-note"
+              >
+                + New quiz
+              </Link>
+            )}
 
             <button
               type="button"
@@ -229,38 +287,45 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
 
       {!adminView && (
         <p id="class-quiz-note" className="cl-section-note">
-          Creating and joining quizzes within a class will be available when
-          class-based quizzes and sessions are connected.
+          Quizzes are not linked to classes yet. New quizzes and joined
+          sessions appear on your main quiz dashboard.
         </p>
       )}
 
       {!adminView && joinOpen && (
-        <section
+        <form
           id="class-session-panel"
-          className="cl-inline-panel"
-          aria-labelledby="class-session-heading"
+          className="ui-join-strip"
+          onSubmit={join}
         >
-          <h2 id="class-session-heading">Join a live session</h2>
+          <label htmlFor="class-session-code">Session code</label>
 
-          <label>
-            Six-digit session code
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              disabled
-              aria-describedby="class-session-note"
-            />
-          </label>
+          <input
+            id="class-session-code"
+            autoFocus
+            required
+            inputMode="numeric"
+            autoComplete="off"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            placeholder="000000"
+            value={code}
+            disabled={layoutOnly || joinAction.busy}
+            onChange={(event) =>
+              setCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+            }
+          />
 
-          <button type="button" disabled>
-            Join session →
+          <button
+            type="submit"
+            className="qp-primary"
+            disabled={layoutOnly || code.length !== 6 || joinAction.busy}
+          >
+            {joinAction.busy ? "Joining…" : "Go →"}
           </button>
 
-          <p id="class-session-note">
-            Joining a session within this class is not available yet.
-          </p>
-        </section>
+          <RequestError error={joinAction.error} />
+        </form>
       )}
 
       {activeSection === "Members" ? (

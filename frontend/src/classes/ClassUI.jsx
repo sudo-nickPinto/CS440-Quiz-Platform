@@ -1,5 +1,7 @@
 import { Link } from "react-router";
 
+import { copyText, shortName } from "./classHelpers";
+
 export function ResourceMessage({ resource }) {
   if (resource.status === "loading") {
     return (
@@ -72,6 +74,7 @@ export function EmptyMessage({ title, children }) {
 
 export function ClassCard({ item }) {
   const managesClass = item.canManage === true;
+  const href = `/app/classes/${encodeURIComponent(item.id)}`;
 
   return (
     <article
@@ -82,17 +85,17 @@ export function ClassCard({ item }) {
       <div className="cl-card-banner">
         <span className="cl-role">{item.roleLabel || "Class member"}</span>
 
-        <span className="cl-card-code">{item.code || "Class"}</span>
+        <span className="cl-card-code">{shortName(item.name)}</span>
       </div>
 
       <div className="cl-card-body">
         <h2>
-          <Link to={`/app/classes/${encodeURIComponent(item.id)}`}>
-            {item.name}
-          </Link>
+          <Link to={href}>{item.name}</Link>
         </h2>
 
         {item.ownerName && <p className="cl-owner">{item.ownerName}</p>}
+
+        {managesClass && <p className="cl-owner cl-you">You run this class</p>}
 
         <p className="cl-muted">
           {item.archived ? "Archived class" : "Active class"}
@@ -100,10 +103,41 @@ export function ClassCard({ item }) {
       </div>
 
       <div className="cl-card-footer">
-        <Link to={`/app/classes/${encodeURIComponent(item.id)}`}>
-          {managesClass ? "Manage class" : "Open class"}
+        <Link to={href}>
+          {managesClass ? "Admin view" : "Dashboard"}
           <span aria-hidden="true"> →</span>
         </Link>
+
+        {managesClass ? (
+          <details className="ui-row-menu">
+            <summary aria-label={`Actions for ${item.name}`}>⋯</summary>
+
+            <div className="ui-row-options" role="menu">
+              <Link role="menuitem" to={href}>
+                <span aria-hidden="true">→</span> Open admin view
+              </Link>
+
+              {item.code && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => copyText(item.code)}
+                >
+                  <span aria-hidden="true">⧉</span> Copy class code ·{" "}
+                  {item.code}
+                </button>
+              )}
+            </div>
+          </details>
+        ) : (
+          <Link
+            className="cl-card-go"
+            to={href}
+            aria-label={`Open ${item.name}`}
+          >
+            →
+          </Link>
+        )}
       </div>
     </article>
   );
