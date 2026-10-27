@@ -13,6 +13,7 @@ export default function ClassesPage() {
 
   const [panel, setPanel] = useState(null);
   const [name, setName] = useState("");
+  const [code, setCode] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("name");
@@ -63,6 +64,21 @@ export default function ClassesPage() {
 
     if (created) {
       navigate(`/app/classes/${created.class_id}`);
+    }
+  }
+
+  async function joinClass(event) {
+    event.preventDefault();
+
+    const joined = await action.run(() =>
+      api("/classes/join", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
+    );
+
+    if (joined) {
+      navigate(`/app/classes/${joined.class_id}`);
     }
   }
 
@@ -159,16 +175,41 @@ export default function ClassesPage() {
       )}
 
       {panel === "join" && (
-        <section id="class-join-panel" className="cl-inline-panel">
+        <form
+          id="class-join-panel"
+          className="cl-inline-panel"
+          onSubmit={joinClass}
+        >
           <h2>Join a class</h2>
-          <p>
-            Accept an invitation below to join a class. Joining by
-            class code is not available yet.
-          </p>
-          <button type="button" onClick={() => setPanel(null)}>
+
+          <label>
+            Class code
+            <input
+              type="text"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              placeholder="ABCD-2345"
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={20}
+              required
+              disabled={action.busy}
+            />
+          </label>
+
+          <button type="submit" disabled={action.busy || !code.trim()}>
+            {action.busy ? "Joining…" : "Join class →"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPanel(null)}
+            disabled={action.busy}
+          >
             Close
           </button>
-        </section>
+        </form>
       )}
 
       {ready && invitations.length > 0 && (

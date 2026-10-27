@@ -442,21 +442,46 @@
 }
 
 .qp .cl-table td {
-  padding: 0;
+  padding: 12px 14px;
   border-bottom: var(--b-thin);
+  vertical-align: middle;
 }
 
-.qp .cl-existing-flow {
+/* The empty-state block brings its own padding. */
+.qp .cl-table td:has(> .cl-state) {
+  padding: 0;
+}
+
+.qp .cl-table td small {
+  color: var(--gray);
+}
+
+.qp .cl-table td a {
+  color: var(--navy);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Recent scores, newest first; a dash in a dotted box means absent. */
+.qp .cl-recent {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 18px;
-  padding: 20px;
+  gap: 4px;
 }
 
-.qp .cl-existing-flow p {
-  max-width: 65ch;
+.qp .cl-recent > span {
+  min-width: 44px;
+  padding: 2px 6px;
+  border: var(--b-thin);
+  background: var(--sky-soft);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.qp .cl-recent > span[data-absent="true"] {
+  border-style: dotted;
+  background: var(--paper);
+  color: var(--gray);
 }
 
 .qp .cl-dialog {
