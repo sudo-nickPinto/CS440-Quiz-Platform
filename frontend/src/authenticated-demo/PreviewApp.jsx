@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router";
 import ClassesPage from "../classes/ClassesPage";
-import ClassPage, { ClassLayoutReview } from "../classes/ClassPage";
+import ClassPage from "../classes/ClassPage";
 import QuizBurgLogo from "../classes/QuizBurgLogo";
 
 import { AccountContext } from "./account";
@@ -96,10 +96,6 @@ export default function PreviewApp({ onSignOut }) {
         <main id="app-main" className="qp-frame" ref={main} tabIndex={-1}>
           <Routes>
             <Route path="classes" element={<ClassesPage />} />
-
-            {import.meta.env.DEV && (
-              <Route path="classes/layout" element={<ClassLayoutReview />} />
-            )}
 
             <Route
               path="classes/:classId"

@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router";
+import { Link, Navigate, NavLink, useParams } from "react-router";
 
+import { useClassesResource } from "../classes/classResources";
 import { useAccount } from "./account";
+import HostQuizButton from "./HostQuizButton";
 import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 import ParticipantHistory from "./ParticipantHistory";
@@ -16,7 +18,6 @@ export default function PreviewDashboard() {
   const account = useAccount();
   const isAdmin = account.role === "ADMIN";
   const api = useApi();
-  const navigate = useNavigate();
   const action = useAction();
 
   const [query, setQuery] = useState("");
@@ -24,6 +25,11 @@ export default function PreviewDashboard() {
 
   const presenting = view === "present";
   const resource = useResource(presenting ? "/quizzes" : null);
+  const classes = useClassesResource();
+  const hostClasses =
+    classes.status === "ready"
+      ? classes.data.filter((item) => item.canManage && !item.archived)
+      : [];
 
   if (view === "taken") {
     return <Navigate to="/app/dashboard/participate" replace />;
@@ -54,18 +60,6 @@ export default function PreviewDashboard() {
         b.quiz_id - a.quiz_id
       );
     });
-
-  async function host(quiz) {
-    const session = await action.run(() =>
-      api(`/quizzes/${quiz.quiz_id}/sessions`, {
-        method: "POST",
-      }),
-    );
-
-    if (session) {
-      navigate(`/app/host/${session.session_id}`);
-    }
-  }
 
   async function archive(quiz) {
     if (
@@ -245,13 +239,11 @@ export default function PreviewDashboard() {
 
                     {quiz.author_id === account.account_id &&
                       quiz.status === "PUBLISHED" && (
-                        <button
-                          type="button"
-                          disabled={action.busy}
-                          onClick={() => void host(quiz)}
-                        >
-                          Host live session
-                        </button>
+                        <HostQuizButton
+                          quiz={quiz}
+                          action={action}
+                          hostClasses={hostClasses}
+                        />
                       )}
 
                     {quiz.status === "PUBLISHED" && (

@@ -1,8 +1,13 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
+import { useAccount } from "../authenticated-demo/account";
+import HostQuizButton from "../authenticated-demo/HostQuizButton";
+import RequestError from "../authenticated-demo/RequestError";
+import { useAction, useResource } from "../authenticated-demo/rest";
+import ClassLiveButton from "./ClassLiveButton";
 import { useClassResource } from "./classResources";
-import { ResourceMessage } from "./ClassUI";
+import { EmptyMessage, ResourceMessage } from "./ClassUI";
 import { ClassMembers, ClassSettings } from "./ClassManagement";
 
 const SECTION_LAYOUTS = {
@@ -27,10 +32,6 @@ const SECTION_LAYOUTS = {
       "Details",
     ],
     message: "Student grades and class reports are not available yet.",
-  },
-  Present: {
-    headers: ["Status", "Quiz", "Questions", "Actions"],
-    message: "Quizzes for this class are not available yet.",
   },
   Participate: {
     headers: ["Date", "Session", "Score", "Results"],
@@ -71,20 +72,131 @@ function UnavailableTable({ section }) {
   );
 }
 
-function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
-  const canManage = classInfo?.canManage === true;
+// Quizzes the caller wrote and may host as a session of this class.
+function PresentTable({ classInfo }) {
+  const account = useAccount();
+  const action = useAction();
+  const resource = useResource(classInfo.canManage ? "/quizzes" : null);
+  const [query, setQuery] = useState("");
 
-  // Layout review contains no class record or student data.
-  // This flag controls only the development design-review screen.
-  const showAdminLayout = layoutOnly || canManage;
+  if (!classInfo.canManage) {
+    return (
+      <EmptyMessage title="Present">
+        Only organizers of this class can host its sessions. When one starts,
+        a Live button appears at the top of this page.
+      </EmptyMessage>
+    );
+  }
+
+  if (classInfo.archived) {
+    return (
+      <EmptyMessage title="Present">
+        This class is archived, so no new sessions can start in it.
+      </EmptyMessage>
+    );
+  }
+
+  if (resource.loading) {
+    return <ResourceMessage resource={{ status: "loading" }} />;
+  }
+
+  if (resource.error) {
+    return (
+      <ResourceMessage
+        resource={{
+          status: "error",
+          error: resource.error,
+          reload: resource.reload,
+        }}
+      />
+    );
+  }
+
+  const needle = query.trim().toLowerCase();
+  const quizzes = (resource.data || []).filter(
+    (quiz) =>
+      quiz.author_id === account.account_id &&
+      quiz.status === "PUBLISHED" &&
+      quiz.title.toLowerCase().includes(needle),
+  );
+
+  return (
+    <>
+      <div className="cl-toolbar">
+        <label className="cl-search">
+          <span className="cl-sr">Search quizzes</span>
+          <input
+            type="search"
+            placeholder="Search quizzes…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+
+        <span className="cl-count" aria-live="polite">
+          {quizzes.length} {quizzes.length === 1 ? "quiz" : "quizzes"}
+        </span>
+      </div>
+
+      <RequestError error={action.error} />
+
+      <div className="cl-table-wrap">
+        <table className="cl-table">
+          <caption className="cl-sr">Quizzes you can host</caption>
+          <thead>
+            <tr>
+              <th scope="col">Quiz</th>
+              <th scope="col">Questions</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {quizzes.length === 0 ? (
+              <tr>
+                <td colSpan={3}>
+                  <div className="cl-state" role="status">
+                    <h2>No quizzes to host</h2>
+                    <p>
+                      {needle
+                        ? "No published quiz matches your search."
+                        : "Publish a quiz to host it in this class."}
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              quizzes.map((quiz) => (
+                <tr key={quiz.quiz_id}>
+                  <td>
+                    <Link to={`/app/quizzes/${quiz.quiz_id}`}>{quiz.title}</Link>
+                  </td>
+                  <td>{quiz.question_count}</td>
+                  <td>
+                    <HostQuizButton
+                      quiz={quiz}
+                      action={action}
+                      classId={classInfo.id}
+                      label="Host in this class"
+                    />
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function ClassWorkspace({ classInfo, onChange }) {
+  const showAdminLayout = classInfo.canManage === true;
 
   const [view, setView] = useState(showAdminLayout ? "admin" : "user");
 
   const [section, setSection] = useState(
     showAdminLayout ? "Presentations" : "Present",
   );
-
-  const [joinOpen, setJoinOpen] = useState(false);
 
   const adminView = showAdminLayout && view === "admin";
 
@@ -97,34 +209,19 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
   function changeView(nextView) {
     setView(nextView);
     setSection(nextView === "admin" ? "Presentations" : "Present");
-    setJoinOpen(false);
   }
 
   return (
     <section className="cl-page" aria-labelledby="class-heading">
-      {layoutOnly && (
-        <div className="cl-review-notice">
-          <strong>Development layout review.</strong> No class is selected.
-          Values and actions remain unavailable. Switching views here does not
-          change account permissions.
-        </div>
-      )}
-
       <div className="cl-classbar">
         <Link className="cl-button cl-secondary" to="/app/classes">
           ← Classes
         </Link>
 
         <div className="cl-class-title">
-          <p className="cl-eyebrow">
-            {layoutOnly
-              ? "Class dashboard layout"
-              : classInfo.roleLabel || "Class"}
-          </p>
+          <p className="cl-eyebrow">{classInfo.roleLabel || "Class"}</p>
 
-          <h1 id="class-heading">
-            {layoutOnly ? "Class dashboard" : classInfo.name}
-          </h1>
+          <h1 id="class-heading">{classInfo.name}</h1>
         </div>
 
         {showAdminLayout && (
@@ -157,7 +254,7 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
           <div className="cl-actions">
             <button
               type="button"
-              disabled={layoutOnly || classInfo?.archived}
+              disabled={classInfo.archived}
               onClick={() => setSection("Members")}
             >
               + Invite member
@@ -174,12 +271,12 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
         )}
       </div>
 
+      <ClassLiveButton classId={classInfo.id} />
+
       <p id="class-actions-note" className="cl-section-note">
-        {layoutOnly
-          ? "This is a layout preview. Select a real class to use its features."
-          : classInfo.archived
-            ? "This class is archived."
-            : "Class grades and grade downloads are not available yet."}
+        {classInfo.archived
+          ? "This class is archived."
+          : "Class grades and grade downloads are not available yet."}
       </p>
 
       {adminView && (
@@ -209,78 +306,21 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
           ))}
         </div>
 
-        {!adminView && (
+        {!adminView && classInfo.canManage && (
           <div className="cl-actions">
-            <button type="button" disabled aria-describedby="class-quiz-note">
+            <Link className="cl-button" to="/app/quizzes/new">
               + New quiz
-            </button>
-
-            <button
-              type="button"
-              aria-expanded={joinOpen}
-              aria-controls="class-session-panel"
-              onClick={() => setJoinOpen((current) => !current)}
-            >
-              Join
-            </button>
+            </Link>
           </div>
         )}
       </div>
 
-      {!adminView && (
-        <p id="class-quiz-note" className="cl-section-note">
-          Creating and joining quizzes within a class will be available when
-          class-based quizzes and sessions are connected.
-        </p>
-      )}
-
-      {!adminView && joinOpen && (
-        <section
-          id="class-session-panel"
-          className="cl-inline-panel"
-          aria-labelledby="class-session-heading"
-        >
-          <h2 id="class-session-heading">Join a live session</h2>
-
-          <label>
-            Six-digit session code
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              disabled
-              aria-describedby="class-session-note"
-            />
-          </label>
-
-          <button type="button" disabled>
-            Join session →
-          </button>
-
-          <p id="class-session-note">
-            Joining a session within this class is not available yet.
-          </p>
-        </section>
-      )}
-
       {activeSection === "Members" ? (
-        layoutOnly ? (
-          <div className="cl-state">
-            <h2>Members</h2>
-            <p>Select a real class to view and manage its members.</p>
-          </div>
-        ) : (
-          <ClassMembers classInfo={classInfo} onChange={onChange} />
-        )
+        <ClassMembers classInfo={classInfo} onChange={onChange} />
       ) : activeSection === "Settings" ? (
-        layoutOnly ? (
-          <div className="cl-state">
-            <h2>Class settings</h2>
-            <p>Select a real class to change its settings.</p>
-          </div>
-        ) : (
-          <ClassSettings classInfo={classInfo} onChange={onChange} />
-        )
+        <ClassSettings classInfo={classInfo} onChange={onChange} />
+      ) : activeSection === "Present" ? (
+        <PresentTable classInfo={classInfo} />
       ) : (
         <>
           <div className="cl-toolbar">
@@ -354,8 +394,4 @@ export default function ClassPage() {
       onChange={resource.reload}
     />
   );
-}
-
-export function ClassLayoutReview() {
-  return <ClassWorkspace layoutOnly />;
 }

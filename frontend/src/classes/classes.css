@@ -502,25 +502,8 @@
   border-top: var(--b-thin);
 }
 
-.qp .cl-review-notice,
-.qp .cl-dev-links {
-  padding: 14px 20px;
-  background: var(--sand);
-  border-bottom: var(--b-thin);
-  font-size: 14px;
-}
 
-.qp .cl-dev-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  border-top: var(--b-thin);
-  border-bottom: 0;
-}
 
-.qp .cl-dev-links span {
-  flex-basis: 100%;
-}
 
 .qp .cl-app-nav {
   display: flex;
@@ -761,5 +744,74 @@
 
   .qp .cl-invitation > .cl-actions button {
     flex: 1;
+  }
+}
+
+/* Live button (task 6). One wide bar per lobby or running class session. */
+.qp .cl-live-list {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: var(--b);
+}
+
+.qp .cl-page button.cl-live {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 18px;
+  background: var(--orange-deep);
+  color: var(--paper);
+  text-align: left;
+}
+
+.qp .cl-page button.cl-live:hover {
+  background: var(--orange);
+}
+
+.qp .cl-live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "Archivo Black", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.qp .cl-live-dot {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--paper);
+  background: var(--paper);
+  animation: cl-live-pulse 1.6s ease-in-out infinite;
+}
+
+.qp .cl-live-text {
+  display: grid;
+  min-width: 0;
+}
+
+.qp .cl-live-text strong {
+  overflow: hidden;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qp .cl-live-text small {
+  font-size: 14px;
+}
+
+@keyframes cl-live-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp .cl-live-dot {
+    animation: none;
   }
 }
