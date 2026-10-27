@@ -22,7 +22,11 @@ from app.schemas.live_question import QuestionClosedEvent
 from app.schemas.results import FinalResults, participant_final_view
 from app.services.live_questions import answer_progress, close_question_if_ready
 from app.services.results import get_closed_question_results
-from app.services.session_end import ParticipantLeft
+from app.services.session_end import (
+    ParticipantLeft,
+    abandon_session,
+    live_session_ids,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +63,9 @@ class LiveHub:
         self._app = app
         self._sessions: dict[int, dict[int, LiveConnection]] = {}
         self._timers: dict[int, asyncio.Task] = {}
+        # When each live session was last seen without a host socket (§5).
+        self._host_away_since: dict[int, datetime] = {}
+        self._reaper: asyncio.Task | None = None
 
     # Database -----------------------------------------------------------
 
@@ -101,6 +108,7 @@ class LiveHub:
             await conn.websocket.send_text(encode(state))
             conn.ready = True
         if conn.role == "host":
+            self._host_away_since.pop(conn.session_id, None)
             await self.broadcast(
                 conn.session_id,
                 {"type": "host_status", "connected": True},
@@ -114,6 +122,8 @@ class LiveHub:
         del connections[conn.account.account_id]
         if not connections:
             del self._sessions[conn.session_id]
+        if conn.role == "host" and not self.host_connected(conn.session_id):
+            self._host_away_since[conn.session_id] = _utc_now()
         if conn.role == "host" and conn.ready:
             await self.broadcast(
                 conn.session_id,
@@ -255,6 +265,7 @@ class LiveHub:
     async def session_ended(self, session_id: int, results: FinalResults) -> None:
         """Send everyone their final view, then close every socket with 1000."""
         connections = self._sessions.pop(session_id, {})
+        self._host_away_since.pop(session_id, None)
         await asyncio.gather(
             *(
                 self._finish(
@@ -339,7 +350,55 @@ class LiveHub:
             else:
                 self.schedule_deadline(sid, sqid, closes_at)
 
+    # Abandoned sessions -------------------------------------------------
+
+    async def reap_abandoned(self, abandon_after_seconds: float) -> None:
+        """End every LOBBY/ACTIVE session whose host has been away too long.
+
+        The clock starts when the host socket leaves, or, for a session never
+        seen with a host since this process started, at the first pass that
+        finds it host-less. A host who reconnects resets it (§5).
+        """
+        now = _utc_now()
+        live = set(await self.run_db(live_session_ids))
+        for session_id in list(self._host_away_since):
+            if session_id not in live:
+                del self._host_away_since[session_id]
+        for session_id in live:
+            if self.host_connected(session_id):
+                continue
+            away_since = self._host_away_since.setdefault(session_id, now)
+            if (now - away_since).total_seconds() < abandon_after_seconds:
+                continue
+            try:
+                ended = await self.run_db(abandon_session, session_id)
+                if ended is None:
+                    continue
+                logger.info("Ended abandoned session %s", session_id)
+                if ended.closed_question is not None:
+                    await self.question_closed(session_id, ended.closed_question)
+                await self.session_ended(session_id, ended.results)
+            except Exception:
+                logger.exception("Could not end abandoned session %s", session_id)
+
+    def start_reaper(
+        self, abandon_after_seconds: float, check_every_seconds: float
+    ) -> None:
+        async def loop() -> None:
+            while True:
+                await asyncio.sleep(check_every_seconds)
+                try:
+                    await self.reap_abandoned(abandon_after_seconds)
+                except Exception:
+                    logger.exception("Abandoned-session check failed")
+
+        self._reaper = asyncio.create_task(loop())
+
     async def shutdown(self) -> None:
+        if self._reaper is not None:
+            self._reaper.cancel()
+            await asyncio.gather(self._reaper, return_exceptions=True)
+            self._reaper = None
         timers = list(self._timers.values())
         self._timers.clear()
         for timer in timers:

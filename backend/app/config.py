@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     db_password: SecretStr = SecretStr("")
     db_connect_timeout: int = 5
 
+    # A LOBBY/ACTIVE session whose host socket has been gone this long is
+    # cancelled or ended (docs/LIVE_PROTOCOL.md §5). 0 turns this off.
+    live_abandon_after_seconds: int = 900
+    live_abandon_check_seconds: int = 60
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: object) -> object:

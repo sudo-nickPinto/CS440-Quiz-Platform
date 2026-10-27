@@ -611,3 +611,155 @@
     padding: 36px 16px;
   }
 }
+
+.qp .cl-feedback {
+  padding: 14px 20px;
+  border-bottom: var(--b-thin);
+  background: var(--sky-soft);
+  color: var(--ink);
+}
+
+.qp .cl-feedback.cl-error {
+  background: var(--apricot);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.qp .cl-inline-panel label,
+.qp .cl-settings-form > label:not(.cl-checkbox) {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.qp .cl-inline-panel input,
+.qp .cl-settings-form input[type="text"] {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.qp .cl-invitations {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-bottom: var(--b);
+  background: var(--sand);
+}
+
+.qp .cl-invitation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.qp .cl-invitation h3 {
+  margin: 0 0 8px;
+}
+
+.qp .cl-invitation p,
+.qp .cl-invitation span {
+  overflow-wrap: anywhere;
+}
+
+.qp .cl-members-table td {
+  padding: 16px;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.qp .cl-members-table .cl-actions {
+  min-width: 200px;
+}
+
+.qp .cl-settings {
+  display: grid;
+  gap: 24px;
+  padding: 24px;
+}
+
+.qp .cl-settings-form {
+  display: grid;
+  gap: 18px;
+  max-width: 540px;
+}
+
+.qp .cl-settings-form > button {
+  justify-self: start;
+}
+
+.qp .cl-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+}
+
+.qp .cl-checkbox input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--navy);
+}
+
+.qp .cl-settings-block {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  padding-top: 20px;
+  border-top: var(--b-thin);
+}
+
+.qp .cl-settings-block h3 {
+  margin: 0;
+}
+
+.qp .cl-code-value {
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(24px, 4vw, 36px);
+  color: var(--navy);
+  overflow-wrap: anywhere;
+}
+
+.qp .cl-section-tabs > [role="group"] {
+  flex-wrap: wrap;
+}
+
+.qp .cl-section-tabs > [role="group"] button {
+  flex: 1 1 150px;
+}
+
+.qp .cl-page button:focus-visible,
+.qp .cl-page input:focus-visible,
+.qp .cl-page select:focus-visible,
+.qp .cl-page a:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 4px;
+}
+
+@media (max-width: 640px) {
+  .qp .cl-settings,
+  .qp .cl-invitations {
+    padding: 16px;
+  }
+
+  .qp .cl-invitation {
+    align-items: stretch;
+  }
+
+  .qp .cl-invitation > .cl-actions {
+    width: 100%;
+  }
+
+  .qp .cl-invitation > .cl-actions button {
+    flex: 1;
+  }
+}
