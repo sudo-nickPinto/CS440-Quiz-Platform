@@ -1,6 +1,8 @@
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from fastapi import Response as HTTPResponse
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
@@ -16,6 +18,7 @@ from app.schemas.class_dashboard import (
     StudentSort,
 )
 from app.services.class_dashboard import (
+    export_class_grades,
     get_class_dashboard,
     list_class_quizzes,
     list_class_sessions,
@@ -78,4 +81,23 @@ def class_students_route(
 ) -> ClassStudentPage:
     return list_class_students(
         db, account, class_id, page=page, page_size=page_size, sort=sort, order=order
+    )
+
+
+@router.get("/grades/export.csv")
+def class_grades_export_route(
+    class_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> HTTPResponse:
+    content, class_name = export_class_grades(db, account, class_id)
+    # Keep the filename to safe ASCII so the header can't be broken.
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", class_name).strip("-").lower() or "class"
+    return HTTPResponse(
+        content="\ufeff" + content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{slug}-grades.csv"',
+            "Cache-Control": "no-store",
+        },
     )

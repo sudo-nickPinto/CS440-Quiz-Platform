@@ -38,6 +38,18 @@ class ClassUpdate(ClassRequestModel):
         return self
 
 
+class ClassJoin(ClassRequestModel):
+    code: str = Field(min_length=1, max_length=20)
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def normalize_code(cls, value):
+        # Accept "abcd-2345", "ABCD 2345" or "abcd2345" for stored "ABCD2345".
+        if not isinstance(value, str):
+            return value
+        return "".join(value.split()).replace("-", "").upper()
+
+
 class ClassResponse(BaseModel):
     class_id: int
     name: str

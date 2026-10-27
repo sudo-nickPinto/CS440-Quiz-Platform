@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.models.classes import ClassRole
 
@@ -36,11 +36,6 @@ class PageInfo(BaseModel):
     total_pages: int
 
 
-class DependencyState(BaseModel):
-    is_complete: bool
-    blocked_by: list[str] = Field(default_factory=list)
-
-
 class ClassQuizSummary(BaseModel):
     quiz_id: int
     title: str
@@ -55,10 +50,17 @@ class ClassSessionSummary(BaseModel):
     quiz_id: int
     quiz_title: str
     status: str
+    host_name: str
+    is_host: bool
     started_at: datetime | None
     ended_at: datetime | None
     participant_count: int
+    # Class-wide scores are for organizers; members get null here.
     average_score: float | None
+    top_score: int | None
+    # The caller's own result, or null if they didn't play.
+    my_score: int | None
+    my_rank: int | None
 
 
 class ClassStudentSummary(BaseModel):
@@ -66,30 +68,31 @@ class ClassStudentSummary(BaseModel):
     display_name: str
     email: str
     role: ClassRole
-    session_count: int | None
+    session_count: int
     average_score: float | None
-    total_points: int | None
+    total_points: int
+    # Share of the class's completed sessions this student played, 0 to 1.
+    attendance_rate: float | None
+    # Up to five most recent scores, newest first; null where they were absent.
+    recent_scores: list[int | None]
 
 
 class ClassQuizPage(BaseModel):
     class_id: int
     items: list[ClassQuizSummary]
     pagination: PageInfo
-    dependency: DependencyState
 
 
 class ClassSessionPage(BaseModel):
     class_id: int
     items: list[ClassSessionSummary]
     pagination: PageInfo
-    dependency: DependencyState
 
 
 class ClassStudentPage(BaseModel):
     class_id: int
     items: list[ClassStudentSummary]
     pagination: PageInfo
-    dependency: DependencyState
 
 
 class ClassDashboardResponse(BaseModel):
@@ -99,8 +102,12 @@ class ClassDashboardResponse(BaseModel):
     is_global_admin: bool
     is_archived: bool
     active_member_count: int
+    student_count: int
+    completed_session_count: int
+    # Organizer-only aggregates; null for members.
+    class_average: float | None
+    attendance_rate: float | None
     active_sessions: list[ClassSessionSummary]
     completed_sessions: list[ClassSessionSummary]
     presented_quizzes: list[ClassQuizSummary]
     students: list[ClassStudentSummary] | None
-    dependency: DependencyState
