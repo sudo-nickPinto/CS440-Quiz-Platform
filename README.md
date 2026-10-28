@@ -85,7 +85,7 @@ Note: `frontend/.env.example` points at the backend on port `8001`, so run `uvic
 
 ## API
 
-Every REST route, who may call it and its error codes: [docs/API.md](docs/API.md). The live WebSocket: [docs/LIVE_PROTOCOL.md](docs/LIVE_PROTOCOL.md).
+Every REST route, who may call it and its error codes: [docs/API.md](docs/API.md). The live WebSocket: [docs/LIVE_PROTOCOL.md](docs/LIVE_PROTOCOL.md). For an end-to-end explanation of how response scoring, question lifecycle, results, WebSockets, and the frontend connect, see [docs/LIVE_QUIZ_PR_FLOW.md](docs/LIVE_QUIZ_PR_FLOW.md).
 
 ## Development Workflow
 
