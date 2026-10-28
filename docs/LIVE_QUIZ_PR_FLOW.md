@@ -290,3 +290,52 @@ The live quiz is trustworthy because the browser sends only identifiers while th
 - [Live protocol](LIVE_PROTOCOL.md) - complete wire protocol and state rules
 - [WebSockets explained](WEBSOCKETS_EXPLAINED.md) - beginner-friendly WebSocket overview
 - [REST API reference](API.md) - HTTP endpoints, payloads, and errors
+
+## Questions and answers
+
+### How does the authenticated account reach my response service?
+
+The browser's first WebSocket message contains its Auth0 token. Nick's WebSocket code calls `authenticate_token()`, which validates the token and returns a `CurrentAccount`. The connection stores it as `conn.account`. When a `submit_answer` message arrives, the handler passes `conn.account`, the session ID, the session-question ID, and the selected choice ID into my `submit_response()` service. The browser therefore cannot claim to be another account by putting a different account ID in the answer message.
+
+### How does my response service check the account and database state?
+
+My service uses SQLAlchemy queries to check trusted rows rather than trusting the frontend:
+
+1. It finds `LiveSession` using the session ID, proving the session exists.
+2. It finds `SessionParticipant` using both the session ID and `account.account_id`, with `left_at` empty, proving the authenticated account is an active participant.
+3. It finds `SessionQuestion` using the session and session-question IDs, then checks that the session and question are active.
+4. It loads `AnswerChoice` and verifies that its `question_id` matches the current question.
+5. It compares the server receipt time with the stored opening time and deadline.
+6. It searches `Response` for the same participant and session question. If one already exists, the new answer is rejected. The database uniqueness constraint also protects against simultaneous duplicates.
+
+### Is `LiveHub.after_answer()` part of Nick's WebSocket layer?
+
+Yes. `after_answer()` lives in `backend/app/live/hub.py` and is orchestration code in Nick's WebSocket layer. After my response transaction commits, it calls my `answer_progress()` function, broadcasts the returned answer count to the host, and then calls `try_close()`. `try_close()` calls my `close_question_if_ready()` service.
+
+My PR #35 functions live in `backend/app/services/live_questions.py`:
+
+- `answer_progress()` counts eligible participants and accepted answers;
+- `close_question_if_ready()` decides whether the deadline or all-answered condition is satisfied; and
+- `_mark_closed()` performs the conditional `OPEN` to `CLOSED` database update.
+
+### What starts my PR #34 results service?
+
+There is no database trigger. The connection is an ordinary Python call chain:
+
+```text
+my close_question_if_ready()
+        ↓ returns QuestionClosedEvent
+Nick's hub.question_closed()
+        ↓ broadcasts question_closed
+Nick's hub.publish_results()
+        ↓ calls
+my get_closed_question_results()
+```
+
+The same chain works whether closure is caused by the final answer, the server deadline timer, or a host action. PR #34 begins only after a close operation succeeds and returns a close event.
+
+### How do my services send information through Nick's WebSocket layer?
+
+My services do not call browser sockets directly. They return structured values such as `ResponseReceipt`, `AnswerProgress`, `QuestionClosedEvent`, and `ClosedQuestionResultsSnapshot`. Nick's hub receives those values and calls `send()` for one connection or `broadcast()` for the relevant group. For results, the hub calls my results service, converts the snapshot into the appropriate host or participant view, and sends that view to each connected React frontend.
+
+This boundary keeps the responsibilities clear: my services decide and save the quiz state, while Nick's WebSocket layer delivers the committed state to the frontend.
