@@ -17,6 +17,7 @@ from app.models import (
     SessionQuestion,
     SessionQuestionStatus,
 )
+from app.schemas.results import FinalResults
 from app.services.session_end import get_final_results
 
 
@@ -45,7 +46,21 @@ def get_session_report(
                 "You did not participate in this session.",
             )
 
-    session = db.get(LiveSession, session_id)
+    return build_session_report(db, db.get(LiveSession, session_id), final, viewer_id)
+
+
+def build_session_report(
+    db: Session,
+    session: LiveSession,
+    final: FinalResults,
+    viewer_id: int | None,
+) -> dict:
+    """The report body, without access checks.
+
+    viewer_id None means every player's rows (host view); otherwise only that
+    session_participant_id's rows (participant view).
+    """
+    session_id = session.session_id
     version = db.get(QuizVersion, session.quiz_version_id)
 
     if version is None:

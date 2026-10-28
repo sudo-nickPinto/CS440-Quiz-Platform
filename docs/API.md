@@ -270,6 +270,24 @@ Built from the class's `COMPLETED` sessions only; open sessions never count. Sco
 
 All four use the same paging shape: `{ class_id, items, pagination: { page, page_size, total_items, total_pages } }`.
 
+### Detailed class reports
+For one session, one quiz or one student. Like the lists above, they only count the class's `COMPLETED` sessions and use stored scores. All three are sent with `Cache-Control: no-store`.
+
+Organizers and Admins see everyone. Members see only their own rows, and class-wide numbers come back null for them. People without an active membership get `404 class_not_found`.
+
+- `GET /classes/{class_id}/sessions/{session_id}/results`: the same body as `GET /sessions/{session_id}/report`, plus `class_id` and `started_at`. Any organizer gets every player (`view: "host"`), not just the one who hosted. A member gets `view: "participant"` with only their own row.
+  - Errors: `404 session_not_found` (a session from another class, an open session, or one that isn't `COMPLETED`), `403 participant_report_denied` (a member who didn't play it).
+- `GET /classes/{class_id}/quizzes/{quiz_id}/results`: every completed presentation of the quiz in this class, newest first. It returns `{ class_id, quiz_id, title, session_count, participant_count, average_score, sessions }`.
+  - Each session has the same fields as a `/sessions` item, plus `results: [{ account_id, name, rank, points, correct }]`. Members only get their own result.
+  - `average_score` is averaged over every player in every session (organizers only).
+  - Errors: `404 quiz_not_found`. A quiz that was never presented here returns an empty `sessions` list.
+- `GET /classes/{class_id}/students/{account_id}/results`: one student's history in the class. Members can only ask for themselves (`403 not_class_organizer` otherwise). It returns:
+  - `display_name`, `email` (organizers only), `role` and `status`. Removed and departed students keep their history;
+  - `class_session_count`, `session_count`, `attendance_rate`, `total_points`, `average_score`, `correct_count` and `incorrect_count`;
+  - `class_average`, organizers only, using the same formula as the dashboard;
+  - `sessions`: every completed class session, newest first, with `played, points, rank, question_count, correct, incorrect`. The last four are null when the student missed it. Unanswered questions count as incorrect.
+  - Errors: `404 student_not_found` (never in this class).
+
 ### `GET /classes/{class_id}/grades/export.csv` → `200 text/csv`
 Organizers only. Returns `{class-name}-grades.csv`, a gradebook (UTF-8 with BOM, `no-store`):
 - one row per student, sorted by name;
