@@ -425,10 +425,19 @@ export function ClassSettings({ classInfo, onChange }) {
       <div className="cl-settings-block">
         <h3>Class code</h3>
         <p className="cl-code-value">{classInfo.code || "No class code"}</p>
-        <p>
-          Joining by class code is not available yet. Use invitations to add
-          members.
-        </p>
+        {classInfo.code && classInfo.joiningOpen ? (
+          <p>
+            Members join from <strong>Classes → Join</strong> with this code,
+            or by opening{" "}
+            <code>{`${window.location.origin}/app/join/class/${classInfo.code}`}</code>
+            .
+          </p>
+        ) : (
+          <p>
+            The class code is turned off. Turn it on above, or invite members
+            by email.
+          </p>
+        )}
 
         <button
           type="button"

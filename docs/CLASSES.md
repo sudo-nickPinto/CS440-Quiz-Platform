@@ -57,9 +57,39 @@ A member removed mid-game is refused on their next answer and can't rejoin. Timi
 
 Code: `backend/app/services/class_access.py` (`may_play`, `require_session_class_member`).
 
-## 5. Deploying
+## 5. Joining and leaving
 
-Migration `0007_session_class` must be applied to the production database before the new backend starts. Apply it the same way as earlier migrations (`ulugbek-err/migrations/README.md`), then redeploy as described in [DEPLOYMENT.md](DEPLOYMENT.md):
+- **By code:** on **Classes → Join**, the member types the code an organizer gave them (`ABCD-2345`; the dash and case don't matter). That calls `POST /classes/join`.
+- **By link:** an organizer can share `/app/join/class/ABCD-2345` (shown in **Settings → Class code**). Opening it joins straight away. Signed-out visitors sign in first and come back to the link.
+- **By invite:** organizers can still invite by email from **Members**.
+- **Who can't join:** turning the code off, or archiving the class, stops new joins. Someone an organizer removed can't come back with the code; they need a new invite.
+- **Leaving:** the User view of a class has a **Leave class** button (`DELETE /classes/{id}/membership`). The last organizer can't leave.
+- **Rate limit:** each account gets 10 join attempts a minute, counted in memory per server process.
+
+Code: `join_class` and `leave_class` in `backend/app/services/classes.py`, `frontend/src/classes/ClassesPage.jsx`, `frontend/src/classes/JoinClassPage.jsx`.
+
+## 6. History, reports and grades
+
+Every number below comes from the class's **completed** sessions (`live_session.class_id` set, status `COMPLETED`), using each player's final `result` row. Open sessions never show up in a class.
+
+| Where | Who | What |
+|---|---|---|
+| Summary bar (Admin view) | Organizers | Students, presentations, class average (mean of student averages), attendance (mean of student attendance) |
+| **Presentations** tab | Organizers | Each session: date, quiz, attendance (players / students), average, top score, and a link to the full report when the viewer hosted it |
+| **Students** tab | Organizers | Each student ranked by average: last five scores (dotted dash = absent), average, attendance, total points |
+| **Participate** tab | Everyone | Each session with the viewer's own score and rank, and a link to their results |
+| **Export grades** | Organizers | CSV gradebook: a row per student, a column per session, and the totals |
+
+- **Members never see classmates' scores.** For them the class-wide fields come back null.
+- **Who counts as a student:** active members with the `MEMBER` role. Organizers aren't graded.
+- **Attendance** is sessions played divided by the class's completed sessions.
+- **Report links:** the per-session report (`/app/results/host/:id`) is limited to the host and Admins, the same rule as before classes. A co-organizer who didn't host sees "Hosted by …" instead of a link.
+
+Code: `backend/app/services/class_dashboard.py` and the report tables in `frontend/src/classes/ClassPage.jsx`.
+
+## 7. Deploying
+
+Migration `0007_session_class` must be applied to the production database before the new backend starts. Nothing after 0007 needs a migration. Apply it the same way as earlier migrations (`ulugbek-err/migrations/README.md`), then redeploy as described in [DEPLOYMENT.md](DEPLOYMENT.md):
 
 ```bash
 docker compose --env-file deploy/.env up --build -d

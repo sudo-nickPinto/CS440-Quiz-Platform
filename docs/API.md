@@ -232,3 +232,48 @@ Extra errors: `403 results_export_denied` (a participant), `500 results_incomple
 ## Classes
 
 How the class features fit together is in [CLASSES.md](CLASSES.md); the original design is [CLASS_APPROVAL.md](CLASS_APPROVAL.md). Class-aware session routes are listed under [Sessions](#sessions) above.
+
+### `POST /classes/join` → `200 ClassResponse`
+Join a class by its code. Body: `{"code": "ABCD-2345"}`. Case, spaces and the dash don't matter. The caller becomes an active `MEMBER` (`joined_via: CODE`). A pending invite or an earlier membership they left is reactivated. The invite link `/app/join/class/{code}` in the frontend calls this route.
+
+| Status | Code | When |
+|---|---|---|
+| 403 | `class_joining_closed` | The code is turned off, or the class is archived |
+| 403 | `class_member_removed` | An organizer removed them; only a new invite lets them back |
+| 404 | `class_code_not_found` | No class has that code |
+| 409 | `already_class_member` | Already an active member |
+| 429 | `too_many_join_attempts` | More than 10 tries in a minute from one account (counted per server process) |
+
+### `DELETE /classes/{class_id}/membership` → `204`
+Leave a class. The membership becomes `LEFT`, and the code brings them back. Errors: `404 class_not_found` (not a member), `409 not_class_member` (an Admin who never joined), `409 last_organizer`.
+
+### Class reports
+Built from the class's `COMPLETED` sessions only; open sessions never count. Scores are each player's `result.total_score`.
+
+- `GET /classes/{class_id}/dashboard`: for any member. It returns:
+  - `student_count` and `completed_session_count`;
+  - `class_average` and `attendance_rate`, which are organizers only and null for members;
+  - `active_sessions`;
+  - the five most recent `completed_sessions` and `presented_quizzes`;
+  - the first ten `students`, for organizers.
+- `GET /classes/{class_id}/sessions`: for any member. It takes `page`, `page_size` (1–100), `sort=started_at|participant_count|average_score` and `order`. Each item has:
+  - `session_id, quiz_id, quiz_title, status, host_name, is_host, started_at, ended_at, participant_count`;
+  - `average_score` and `top_score`, which are organizers only;
+  - `my_score` and `my_rank`, the caller's own result or null.
+- `GET /classes/{class_id}/quizzes`: for any member. Completed sessions grouped by quiz, with `presented_at, session_count, participant_count` and `average_score` (organizers only). It takes `sort=presented_at|title|participant_count`.
+- `GET /classes/{class_id}/students`: organizers only (`403 not_class_organizer`). Active `MEMBER`s, with:
+  - `session_count, average_score, total_points`;
+  - `attendance_rate` (0–1);
+  - `recent_scores`, the last five sessions newest first, with null where they were absent.
+
+  It takes `sort=name|average_score|session_count`.
+
+All four use the same paging shape: `{ class_id, items, pagination: { page, page_size, total_items, total_pages } }`.
+
+### `GET /classes/{class_id}/grades/export.csv` → `200 text/csv`
+Organizers only. Returns `{class-name}-grades.csv`, a gradebook (UTF-8 with BOM, `no-store`):
+- one row per student, sorted by name;
+- one column per completed session, oldest first (`Quiz title (YYYY-MM-DD)`), where an empty cell means absent;
+- then `Sessions played, Attendance %, Average points, Total points`.
+
+Cells get the same formula escaping as the session export.

@@ -1,8 +1,11 @@
+from collections import defaultdict, deque
 from datetime import UTC, datetime
 import secrets
+from threading import Lock
+from time import monotonic
 
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount
@@ -14,16 +17,26 @@ from app.models.classes import (
     JoinedVia,
     MembershipStatus,
 )
-from app.schemas.classes import ClassCreate, ClassResponse, ClassUpdate
+from app.schemas.classes import ClassCreate, ClassJoin, ClassResponse, ClassUpdate
 from app.services.class_authorization import (
     ClassAccess,
     require_class_member,
     require_class_organizer,
 )
+from app.services.class_memberships import _load_class, _protect_last_organizer
 
 CLASS_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CLASS_CODE_LENGTH = 8
 CLASS_CODE_ATTEMPTS = 20
+# Class codes are 8 characters from a 31-letter alphabet, so guessing is
+# already impractical; this just stops one account hammering the endpoint.
+JOIN_ATTEMPTS_PER_WINDOW = 10
+JOIN_WINDOW_SECONDS = 60.0
+
+# Per-process, so each worker keeps its own window. Good enough for a limit
+# whose job is slowing scripts down, not exact accounting.
+_join_attempts: dict[int, deque[float]] = defaultdict(deque)
+_join_attempts_lock = Lock()
 
 
 def _utc_now_milliseconds() -> datetime:
@@ -239,3 +252,118 @@ def archive_class(
     class_.join_code = None
     _commit(db, "class_archive_failed", "Could not archive the class.")
     return _access_response(access)
+
+
+def _check_join_rate(account_id: int) -> None:
+    now = monotonic()
+    with _join_attempts_lock:
+        attempts = _join_attempts[account_id]
+        while attempts and now - attempts[0] > JOIN_WINDOW_SECONDS:
+            attempts.popleft()
+        if len(attempts) >= JOIN_ATTEMPTS_PER_WINDOW:
+            raise APIError(
+                429,
+                "too_many_join_attempts",
+                "Too many class codes tried. Wait a minute and try again.",
+            )
+        attempts.append(now)
+
+
+def join_class(
+    db: Session,
+    account: CurrentAccount,
+    payload: ClassJoin,
+) -> ClassResponse:
+    _check_join_rate(account.account_id)
+    class_ = db.scalar(
+        select(Class).where(Class.join_code == payload.code).with_for_update()
+    )
+    if class_ is None:
+        raise APIError(404, "class_code_not_found", "No class has that code.")
+    if class_.archived_at is not None or not class_.joining_open:
+        raise APIError(
+            403, "class_joining_closed", "This class isn't accepting new members."
+        )
+
+    membership = db.scalar(
+        select(ClassMembership)
+        .where(
+            ClassMembership.class_id == class_.class_id,
+            ClassMembership.account_id == account.account_id,
+        )
+        .with_for_update()
+    )
+    if membership is None:
+        membership = ClassMembership(
+            class_id=class_.class_id,
+            account_id=account.account_id,
+            role=ClassRole.MEMBER,
+            status=MembershipStatus.ACTIVE,
+            joined_via=JoinedVia.CODE,
+        )
+        db.add(membership)
+    elif membership.status == MembershipStatus.ACTIVE:
+        raise APIError(
+            409, "already_class_member", "You're already in this class."
+        )
+    elif membership.status == MembershipStatus.REMOVED:
+        # Only an organizer can undo a removal, by inviting them again.
+        raise APIError(
+            403,
+            "class_member_removed",
+            "You were removed from this class. Ask an organizer to invite you.",
+        )
+    else:
+        # A pending invite or a past membership; the code works for both.
+        membership.status = MembershipStatus.ACTIVE
+        membership.role = ClassRole.MEMBER
+        membership.joined_via = JoinedVia.CODE
+        membership.decided_by_id = account.account_id
+        membership.decided_at = _utc_now_milliseconds()
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # Two join requests raced; the other one already added the row.
+        db.rollback()
+        raise APIError(
+            409, "already_class_member", "You're already in this class."
+        ) from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(500, "class_join_failed", "Could not join the class.") from exc
+    return _to_response(class_, membership, is_global_admin=False)
+
+
+def leave_class(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+) -> None:
+    # Roster mutations lock the class before any membership rows. Following
+    # the same order here serializes leave with organizer removal/demotion and
+    # prevents a stale ACTIVE read from overwriting REMOVED with LEFT.
+    _load_class(db, class_id, lock=True)
+    membership = db.scalar(
+        select(ClassMembership)
+        .where(
+            ClassMembership.class_id == class_id,
+            ClassMembership.account_id == account.account_id,
+        )
+        .with_for_update()
+    )
+    if membership is None or membership.status != MembershipStatus.ACTIVE:
+        # An Admin browsing a class they never joined has nothing to leave.
+        if account.is_admin:
+            raise APIError(
+                409, "not_class_member", "You aren't a member of this class."
+            )
+        # Match the class authorization behavior for removed members and
+        # outsiders so this endpoint does not reveal that the class exists.
+        raise APIError(404, "class_not_found", "Class not found.")
+
+    _protect_last_organizer(db, membership)
+    membership.status = MembershipStatus.LEFT
+    membership.decided_by_id = account.account_id
+    membership.decided_at = _utc_now_milliseconds()
+    _commit(db, "class_leave_failed", "Could not leave the class.")

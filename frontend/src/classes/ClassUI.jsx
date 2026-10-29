@@ -47,18 +47,8 @@ export function ResourceMessage({ resource }) {
     );
   }
 
-  return (
-    <div className="cl-state" role="status">
-      <h2>Classes are coming soon</h2>
-      <p>
-        Class information is not available yet. Your existing quiz dashboard is
-        still available.
-      </p>
-      <Link className="cl-button" to="/app/dashboard/present">
-        Open quiz dashboard →
-      </Link>
-    </div>
-  );
+  // "ready": the caller renders the data itself.
+  return null;
 }
 
 export function EmptyMessage({ title, children }) {
