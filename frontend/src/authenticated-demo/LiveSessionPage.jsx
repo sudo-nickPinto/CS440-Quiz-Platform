@@ -4,6 +4,9 @@ import { Link, Navigate, useParams } from "react-router";
 import { useLiveSession } from "../live/useLiveSession";
 import { useAction, useResource } from "./rest";
 import RequestError from "./RequestError";
+import ConfirmDialog from "./ConfirmDialog";
+import { useConfirm } from "./useConfirm";
+import { HostFinal, ParticipantFinal } from "./LiveFinal";
 
 const CONNECTION_ERRORS = {
   unauthorized: "Your login needs to be renewed.",
@@ -18,6 +21,12 @@ function letter(index) {
   return index < 26 ? String.fromCharCode(65 + index) : String(index + 1);
 }
 
+// "482913" → "482 913", as on the mockup's projector screen
+function spacedCode(code) {
+  const text = String(code || "");
+  return text.length === 6 ? `${text.slice(0, 3)} ${text.slice(3)}` : text;
+}
+
 function Dots() {
   return (
     <span className="ui-dots" aria-hidden="true">
@@ -28,131 +37,165 @@ function Dots() {
   );
 }
 
-function Score({ label, value }) {
+// ■■□□□ progress marks (done · current · to come)
+function Marks({ total, current }) {
+  const count = Math.min(Number(total) || 0, 20);
+
   return (
-    <div className="ui-score">
+    <span className="lv-marks" aria-hidden="true">
+      {Array.from({ length: count }, (_, index) => (
+        <i
+          key={index}
+          className={
+            index + 1 < current ? "done" : index + 1 === current ? "cur" : ""
+          }
+        />
+      ))}
+    </span>
+  );
+}
+
+function Stat({ label, value, small }) {
+  return (
+    <div className="lv-stat">
       <span>{label}</span>
-      <strong>{value ?? "—"}</strong>
+      <strong>
+        {value ?? "—"}
+        {small && <small>{small}</small>}
+      </strong>
     </div>
   );
 }
 
 function Leaderboard({ rows }) {
-  return (
-    <section className="ui-board" aria-label="Current leaderboard">
-      <div className="ui-titlebar">
-        <span>Leaderboard</span>
-        <span>Current standings</span>
-      </div>
+  if (!rows.length) {
+    return <p className="lv-final-empty">No standings available yet.</p>;
+  }
 
-      {!rows.length ? (
-        <p className="ui-message">No standings available yet.</p>
-      ) : (
-        <ol>
-          {rows.map((row) => (
-            <li key={row.session_participant_id}>
-              <strong className="ui-rank">{row.rank}</strong>
-              <span>{row.display_name}</span>
-              <strong>
-                {row.cumulative_score.toLocaleString()} pts
-              </strong>
-            </li>
-          ))}
-        </ol>
-      )}
-    </section>
+  return (
+    <ol className="lv-board" aria-label="Current leaderboard">
+      {rows.map((row, index) => (
+        <li
+          key={row.session_participant_id ?? `${row.rank}-${row.display_name}`}
+          style={{ "--i": index }}
+        >
+          <span className="lv-rank">{row.rank}</span>
+          <strong>{row.display_name}</strong>
+          <span className="lv-pts">
+            {row.cumulative_score.toLocaleString()} pts
+          </span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
-function HostLobby({ state, title }) {
-  const code = String(state.session.join_code || "");
-  const formattedCode =
-    code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
+function HostLobby({ state, title, actions }) {
+  const code = spacedCode(state.session.join_code);
+  const count = state.participantCount;
 
   return (
-    <section className="ui-panel">
-      <div className="ui-lobby-top">
-        <p className="ui-eyebrow">Live session · Waiting room</p>
-        <h1>{title}</h1>
+    <section className="lv-lobby">
+      <div className="lv-card">
+        <div className="lv-lobby-top">
+          <p className="lv-eyebrow">Live session · Waiting room</p>
+          <h1>{title}</h1>
 
-        <div className="ui-join-row">
-          <p>
-            Open <strong>{window.location.host}/app/join</strong>
-            <br />
-            and enter the code
-          </p>
+          <div className="lv-join-row">
+            <p className="lv-join-step">
+              Go to <b>{window.location.host}/app/join</b>
+              <br />
+              and enter the code
+            </p>
 
-          <div className="ui-join-code">
-            <span>Join code</span>
-            <strong>{formattedCode || "Loading…"}</strong>
+            <div className="lv-join-code">
+              <small>Join code</small>
+              {code || "Loading…"}
+            </div>
+
+            <div className="lv-count">
+              <strong>{count}</strong>
+              <span>{count === 1 ? "Player" : "Players"}</span>
+            </div>
           </div>
+        </div>
 
-          <Score label="Players" value={state.participantCount} />
+        <div className="qb-panel-top">
+          <span>Players</span>
+          <span>Late joiners welcome</span>
+        </div>
+
+        <div className="lv-players">
+          {state.participants.map((person) => (
+            <span className="lv-chip" key={person.session_participant_id}>
+              {person.display_name}
+            </span>
+          ))}
+
+          {!state.participants.length && (
+            <div className="lv-players-empty">
+              <span>
+                {count
+                  ? `${count} players joined. Loading names…`
+                  : "Waiting for players to join…"}
+              </span>
+              <Dots />
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="ui-titlebar">
-        <span>Players</span>
-        <span>Lobby open</span>
-      </div>
-
-      <div className="ui-player-chips">
-        {state.participants.map((person) => (
-          <span key={person.session_participant_id}>
-            {person.display_name}
-          </span>
-        ))}
-
-        {!state.participants.length && (
-          <p>
-            {state.participantCount
-              ? `${state.participantCount} players joined. Loading names…`
-              : "Waiting for players to join…"}
-          </p>
-        )}
-      </div>
+      {actions}
     </section>
   );
 }
 
-function ParticipantLobby({ state, title }) {
+function ParticipantLobby({ state, title, actions }) {
+  const code = spacedCode(state.session.join_code);
+  const count = state.participantCount;
+
   return (
-    <section className="ui-participant-lobby">
-      <div>
-        <p className="ui-eyebrow">Live session</p>
+    <section className="lv-plobby">
+      <div className="lv-plobby-main">
+        <p className="lv-eyebrow">{code ? `Session ${code}` : "Live session"}</p>
         <h1>
           You’re <span className="ui-highlight">in!</span>
         </h1>
 
-        <div className="ui-panel">
-          <div className="ui-titlebar">Live quiz</div>
-          <div className="ui-message">
-            <h2>{title}</h2>
-            <p>{state.session.total_questions} questions</p>
+        <div className="lv-quizcard">
+          <div className="lv-quizcard-top">Live quiz</div>
+          <div className="lv-quizcard-body">
+            <strong>{title}</strong>
+            <p>
+              {state.session.total_questions}{" "}
+              {state.session.total_questions === 1 ? "question" : "questions"}
+            </p>
           </div>
         </div>
 
-        <p className="ui-waiting" role="status">
+        <p className="lv-wait" role="status">
           <Dots />
           Waiting for the host to start…
         </p>
+
+        {actions}
       </div>
 
-      <div className="ui-panel">
-        <div className="ui-titlebar">
+      <div className="lv-panel">
+        <div className="qb-panel-top">
           <span>Players</span>
           <span>Lobby open</span>
         </div>
-        <div className="ui-lobby-total">
-          <strong>{state.participantCount}</strong>
-          <span>players joined</span>
-        </div>
+        <p className="lv-count-line">
+          <strong>{count}</strong>
+          <span>{count === 1 ? "player" : "players"} joined</span>
+        </p>
       </div>
     </section>
   );
 }
 
-function QuestionScreen({ state, host, busy, canAct, submit }) {
+function QuestionScreen({ state, host, busy, canAct, submit, controls }) {
   const question = state.currentQuestion;
   const [now, setNow] = useState(() => Date.now());
 
@@ -179,108 +222,159 @@ function QuestionScreen({ state, host, busy, canAct, submit }) {
 
   if (!host && state.myAnswer) {
     return (
-      <section className="ui-centered" aria-label="Answer submitted">
-        <p className="ui-eyebrow">Your answer</p>
-        <div className="ui-answer-stamp">
+      <section className="lv-centered" aria-label="Answer submitted">
+        <p className="lv-pick-label">Your answer</p>
+        <div
+          className={`lv-my-pick ui-tone-${Math.max(submittedIndex, 0) % 4}`}
+        >
           {submittedIndex >= 0 ? letter(submittedIndex) : "✓"}
         </div>
         <h1>Answer submitted!</h1>
-        <p role="status">Waiting for the question to close…</p>
+        <p role="status">Waiting for everyone else to answer…</p>
         <Dots />
       </section>
     );
   }
 
+  if (host) {
+    const answered = state.answerProgress?.answered_count ?? 0;
+    const eligible =
+      state.answerProgress?.eligible_count ?? state.participantCount;
+
+    return (
+      <section
+        className="lv-hq"
+        aria-label={`Question ${question.question_order}`}
+      >
+        <div className="lv-hq-top">
+          <div
+            className={"lv-timer" + (seconds !== null && seconds <= 5 ? " is-urgent" : "")}
+            role="timer"
+            aria-label="Seconds remaining"
+          >
+            {seconds ?? "—"}
+          </div>
+
+          <div className="lv-hq-text">
+            <h1>{question.question_text}</h1>
+          </div>
+
+          <div className="lv-answer-count" aria-live="polite">
+            <strong>
+              {answered}
+              <small>/{eligible}</small>
+            </strong>
+            <span>Answers</span>
+          </div>
+        </div>
+
+        <div className="lv-track" aria-hidden="true">
+          <div style={{ width: `${progress}%` }} />
+        </div>
+
+        <div className="lv-host-answers">
+          {question.choices.map((choice, index) => (
+            <div
+              key={choice.choice_id}
+              className={`lv-host-answer ui-tone-${index % 4}`}
+            >
+              <span className="lv-index">{letter(index)}</span>
+              <span>{choice.choice_text}</span>
+            </div>
+          ))}
+        </div>
+
+        {seconds === 0 && (
+          <p className="lv-note" role="status">
+            Time’s up. Closing the question…
+          </p>
+        )}
+
+        {controls}
+      </section>
+    );
+  }
+
+  const me = state.lastResults?.me;
+
   return (
     <section
-      className={`ui-question ${host ? "ui-host-question" : "ui-player-question"}`}
+      className="lv-pq"
       aria-label={`Question ${question.question_order}`}
     >
-      <div className="ui-question-top">
-        <div className="ui-timer" role="timer" aria-label="Seconds remaining">
+      <div className="lv-pq-top">
+        <div className="lv-q-label">
+          <span>
+            Question {question.question_order} of {question.total_questions}
+          </span>
+          <Marks
+            total={question.total_questions}
+            current={question.question_order}
+          />
+          <small>The question is on the host’s screen.</small>
+        </div>
+
+        <div
+          className={"lv-ptimer" + (seconds !== null && seconds <= 5 ? " is-urgent" : "")}
+          role="timer"
+          aria-label="Seconds remaining"
+        >
           {seconds ?? "—"}
         </div>
-
-        <div>
-          <p className="ui-eyebrow">
-            Question {question.question_order} of {question.total_questions}
-          </p>
-
-          {host ? (
-            <h1>{question.question_text}</h1>
-          ) : (
-            <>
-              <h1>Choose your answer</h1>
-              <p>The question is on the host’s screen.</p>
-            </>
-          )}
-        </div>
-
-        {host && (
-          <Score
-            label="Answers"
-            value={
-              state.answerProgress
-                ? `${state.answerProgress.answered_count}/${state.answerProgress.eligible_count}`
-                : "—"
-            }
-          />
-        )}
       </div>
 
-      <div className="ui-time-track" aria-hidden="true">
-        <div style={{ width: `${progress}%` }} />
+      <div className="lv-tbar" aria-hidden="true">
+        <i style={{ width: `${progress}%` }} />
       </div>
 
       <div
-        className="ui-answer-grid"
-        role={host ? undefined : "group"}
-        aria-label={host ? undefined : "Answer choices"}
+        className="lv-ptiles"
+        role="group"
+        aria-label="Answer choices"
       >
-        {question.choices.map((choice, index) =>
-          host ? (
-            <div
-              key={choice.choice_id}
-              className={`ui-answer ui-tone-${index % 4}`}
-            >
-              <span className="ui-letter">{letter(index)}</span>
-              <span>{choice.choice_text}</span>
-            </div>
-          ) : (
-            <button
-              key={choice.choice_id}
-              type="button"
-              className={`ui-answer ui-tone-${index % 4}`}
-              disabled={!canAct || seconds === 0}
-              aria-label={`Answer ${letter(index)}`}
-              onClick={() => submit(choice.choice_id)}
-            >
-              {letter(index)}
-            </button>
-          ),
-        )}
+        {question.choices.map((choice, index) => (
+          <button
+            key={choice.choice_id}
+            type="button"
+            className={`ui-answer ui-tone-${index % 4}`}
+            disabled={!canAct || seconds === 0}
+            aria-label={`Answer ${letter(index)}`}
+            onClick={() => submit(choice.choice_id)}
+          >
+            {letter(index)}
+          </button>
+        ))}
       </div>
 
-      {busy && !host && (
-        <p className="ui-message" role="status">
+      <div className="lv-stat-row lv-pbottom">
+        <Stat label="Score" value={(me?.cumulative_score ?? 0).toLocaleString()} />
+        <Stat label="Rank" value={me?.rank == null ? "—" : `#${me.rank}`} />
+      </div>
+
+      {busy && (
+        <p className="lv-note" role="status">
           Submitting your answer…
         </p>
       )}
 
       {seconds === 0 && (
-        <p className="ui-message" role="status">
-          Waiting for the server to close the question…
+        <p className="lv-note" role="status">
+          Time’s up. Waiting for the server to close the question…
         </p>
       )}
     </section>
   );
 }
 
-function HostQuestionResults({ question, results }) {
+function HostQuestionResults({ question, results, controls }) {
   const [showBoard, setShowBoard] = useState(false);
 
   if (!results) {
-    return <p role="status">Loading question results…</p>;
+    return (
+      <p className="lv-centered" role="status">
+        Loading question results…
+      </p>
+    );
   }
 
   const choices = question.choices.map((choice, index) => {
@@ -299,55 +393,77 @@ function HostQuestionResults({ question, results }) {
   });
 
   const maximum = Math.max(1, ...choices.map((choice) => choice.count));
+  const answered = choices.reduce((sum, choice) => sum + choice.count, 0);
+  const correct = choices
+    .filter((choice) => choice.correct)
+    .reduce((sum, choice) => sum + choice.count, 0);
+  const players = results.participants?.length ?? answered;
+  const percent = answered ? Math.round((correct / answered) * 100) : 0;
 
   return (
-    <section>
-      <div className="ui-results-heading">
-        <p className="ui-eyebrow">
-          Question {question.question_order} results
+    <section className="lv-results">
+      <div className="lv-r-head">
+        <p className="lv-eyebrow">
+          {showBoard ? "After question" : "Question"} {question.question_order}{" "}
+          of {question.total_questions}
         </p>
-        <h1>
-          {showBoard ? "The leaderboard" : "How did everyone answer?"}
-        </h1>
-        <p>{question.question_text}</p>
+        <h1>{showBoard ? "Leaderboard" : "How did everyone answer?"}</h1>
+        {!showBoard && <p className="lv-r-q">{question.question_text}</p>}
       </div>
 
       {showBoard ? (
-        <Leaderboard rows={results.participants || []} />
+        <div className="lv-board-wrap">
+          <Leaderboard rows={results.participants || []} />
+        </div>
       ) : (
-        <div className="ui-distribution">
-          {choices.map((choice) => (
+        <div className="lv-dist" style={{ "--n": choices.length }}>
+          {choices.map((choice, index) => (
             <div
               key={choice.choice_id}
-              className={`ui-distribution-column ${choice.correct ? "is-correct" : ""}`}
+              className={"lv-dist-col" + (choice.correct ? " is-correct" : "")}
             >
-              <strong>{choice.count}</strong>
-
-              <div className="ui-bar-space" aria-hidden="true">
+              <div className="lv-bar-area">
                 <div
-                  style={{
-                    height: `${(choice.count / maximum) * 100}%`,
-                  }}
-                />
+                  className="lv-dbar"
+                  style={{ "--h": `${(choice.count / maximum) * 100}%` }}
+                >
+                  <span className="lv-bar-num">{choice.count}</span>
+                </div>
               </div>
 
-              <div className="ui-distribution-label">
-                <strong>{choice.label}</strong>
-                <span>{choice.choice_text}</span>
-                {choice.correct && <b>✓ Correct</b>}
+              <div className="lv-dist-label">
+                <span className={`lv-index ui-tone-${index % 4}`}>
+                  {choice.label}
+                </span>
+                <span className="lv-dl-text">{choice.choice_text}</span>
+                {choice.correct && (
+                  <span className="lv-check" aria-label="Correct">
+                    ✓
+                  </span>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      <div className="ui-controls">
-        <button
-          type="button"
-          onClick={() => setShowBoard((value) => !value)}
-        >
-          {showBoard ? "← Answer distribution" : "Show leaderboard →"}
-        </button>
+      <div className="lv-strip">
+        <p className="lv-meta">
+          <b>{answered}</b> of {players} answered · <b>{correct}</b> correct (
+          {percent}%)
+        </p>
+
+        <div className="lv-strip-actions">
+          <button
+            type="button"
+            className="qb-btn qb-btn-paper"
+            onClick={() => setShowBoard((value) => !value)}
+          >
+            {showBoard ? "← Answers" : "Show leaderboard"}
+          </button>
+
+          {controls}
+        </div>
       </div>
     </section>
   );
@@ -355,7 +471,11 @@ function HostQuestionResults({ question, results }) {
 
 function ParticipantFeedback({ question, results }) {
   if (!results) {
-    return <p role="status">Loading your result…</p>;
+    return (
+      <p className="lv-centered" role="status">
+        Loading your result…
+      </p>
+    );
   }
 
   const me = results.me;
@@ -363,14 +483,14 @@ function ParticipantFeedback({ question, results }) {
     (choice) => choice.choice_id === me?.selected_choice_id,
   );
   const selected = question.choices[selectedIndex];
-  const correct = question.choices.filter((choice) =>
-    results.correct_choice_ids?.includes(choice.choice_id),
-  );
+  const correct = question.choices
+    .map((choice, index) => ({ ...choice, index }))
+    .filter((choice) => results.correct_choice_ids?.includes(choice.choice_id));
 
   return (
-    <section className="ui-centered">
-      <div className={`ui-feedback-mark ${me?.is_correct ? "is-correct" : ""}`}>
-        {me?.is_correct ? "✓" : "—"}
+    <section className="lv-centered lv-feedback">
+      <div className={`lv-feedback-mark ${me?.is_correct ? "is-correct" : ""}`}>
+        {me?.is_correct ? "✓" : me?.selected_choice_id == null ? "—" : "✗"}
       </div>
 
       <h1>
@@ -383,32 +503,42 @@ function ParticipantFeedback({ question, results }) {
               : "Not quite"}
       </h1>
 
-      {selected && (
-        <p>
-          You picked <strong>{letter(selectedIndex)} · {selected.choice_text}</strong>
-        </p>
-      )}
-
-      {correct.length > 0 && (
-        <p>
-          Correct answer:{" "}
-          <strong>
-            {correct.map((choice) => choice.choice_text).join(" / ")}
-          </strong>
-        </p>
-      )}
+      <p className="lv-picked">
+        {selected && (
+          <>
+            You picked{" "}
+            <b>
+              {letter(selectedIndex)} · {selected.choice_text}
+            </b>
+          </>
+        )}
+        {correct.length > 0 && !me?.is_correct && (
+          <>
+            {selected ? " · " : ""}The answer was{" "}
+            <b>
+              {correct
+                .map((choice) => `${letter(choice.index)} · ${choice.choice_text}`)
+                .join(" / ")}
+            </b>
+          </>
+        )}
+      </p>
 
       {me && (
         <>
-          <div className="ui-points">+{me.points_awarded} points</div>
-          <div className="ui-score-row">
-            <Score label="Score" value={me.cumulative_score} />
-            <Score label="Rank" value={me.rank == null ? "—" : `#${me.rank}`} />
+          <div className={"lv-points" + (me.points_awarded ? "" : " is-zero")}>
+            +{me.points_awarded.toLocaleString()}
+          </div>
+          <div className="lv-stat-row">
+            <Stat label="Score" value={me.cumulative_score.toLocaleString()} />
+            <Stat label="Rank" value={me.rank == null ? "—" : `#${me.rank}`} />
           </div>
         </>
       )}
 
-      <p role="status">Look at the host’s screen. The next question will appear here.</p>
+      <p className="lv-sub" role="status">
+        Look at the host’s screen for the leaderboard.
+      </p>
       <Dots />
     </section>
   );
@@ -417,6 +547,7 @@ function ParticipantFeedback({ question, results }) {
 function ConnectedSession({ sessionId }) {
   const live = useLiveSession(sessionId);
   const action = useAction();
+  const confirmer = useConfirm();
   const { state, phase } = live;
 
   // Optional metadata. Live state and controls still come from the socket.
@@ -445,11 +576,52 @@ function ConnectedSession({ sessionId }) {
     void action.run(command);
   }
 
-  function confirmAndRun(message, command) {
-    if (window.confirm(message)) run(command);
+  async function confirmAndRun(options, command) {
+    if (await confirmer.confirm(options)) run(command);
   }
 
+  const total = state.session?.total_questions;
+  const order =
+    state.currentQuestion?.question_order ??
+    state.lastQuestion?.question_order ??
+    null;
+
   if (phase === "ended") {
+    const completed = state.final?.status === "COMPLETED";
+
+    if (completed && host && Array.isArray(state.final.standings)) {
+      return (
+        <section className="ui-live">
+          <div className="lv-bar">
+            <strong>{title}</strong>
+            <span className="lv-bar-label">Final results</span>
+          </div>
+          <HostFinal
+            final={state.final}
+            title={title}
+            totalQuestions={total ?? "—"}
+            sessionId={sessionId}
+          />
+        </section>
+      );
+    }
+
+    if (completed && !host && "me" in state.final) {
+      return (
+        <section className="ui-live">
+          <div className="lv-bar">
+            <strong>{title}</strong>
+            <span className="lv-bar-label">Complete</span>
+          </div>
+          <ParticipantFinal
+            final={state.final}
+            totalQuestions={total ?? "—"}
+            sessionId={sessionId}
+          />
+        </section>
+      );
+    }
+
     const view =
       host || Array.isArray(state.final?.standings) ? "host" : "me";
 
@@ -461,68 +633,207 @@ function ConnectedSession({ sessionId }) {
     );
   }
 
+  const code = spacedCode(state.session?.join_code);
+  const where =
+    phase === "lobby"
+      ? "Lobby"
+      : phase === "question" && order
+        ? `Question ${order} of ${total}`
+        : phase === "results" && order
+          ? `Question ${order} results`
+          : phase === "waiting"
+            ? "Up next"
+            : phase === "left"
+              ? "Left"
+              : "Connecting";
+
+  const startOrNext =
+    host &&
+    ["lobby", "waiting", "results"].includes(phase) &&
+    live.nextQuestionOrder !== null ? (
+      <button
+        className="qb-btn"
+        type="button"
+        disabled={!canAdvance}
+        onClick={() => run(live.openNextQuestion)}
+      >
+        {phase === "lobby" ? "Start quiz →" : "Next question →"}
+      </button>
+    ) : null;
+
+  const allDone =
+    host && phase === "results" && live.nextQuestionOrder === null ? (
+      <button
+        type="button"
+        className="qb-btn"
+        disabled={!canAct}
+        onClick={() =>
+          void confirmAndRun(
+            {
+              label: "End session",
+              title: "That was the last question.",
+              message: "End the session and save the final results?",
+              confirmLabel: "End session",
+              cancelLabel: "Not yet",
+            },
+            live.end,
+          )
+        }
+      >
+        Finish quiz →
+      </button>
+    ) : null;
+
+  const leave = (
+    <button
+      type="button"
+      className="qb-btn qb-btn-paper lv-leave"
+      disabled={!canAct}
+      onClick={() =>
+        void confirmAndRun(
+          {
+            label: "Leave session",
+            title: "Leave this session?",
+            message:
+              "You can rejoin with the same code while the session is still open.",
+            confirmLabel: "Leave",
+            cancelLabel: "Stay",
+          },
+          live.leave,
+        )
+      }
+    >
+      Leave
+    </button>
+  );
+
   return (
-    <section className="ui-live">
-      <div className="ui-titlebar">
-        <strong>{host ? "Presenter" : "Participant"} · {title}</strong>
-        <span>
-          {phase} · {state.connection}
-        </span>
+    <section className={"ui-live lv" + (host ? " is-host" : " is-player")}>
+      <ConfirmDialog confirmer={confirmer} />
+
+      <div className="lv-bar">
+        <strong>{title}</strong>
+
+        <div className="lv-bar-right">
+          <span className="lv-bar-label">
+            {host && code && phase !== "left" ? (
+              <>
+                Code <b>{code}</b> · {where}
+              </>
+            ) : (
+              where
+            )}
+          </span>
+
+          {host && state.session?.status === "ACTIVE" && (
+            <button
+              type="button"
+              className="lv-bar-btn"
+              disabled={!canAct}
+              onClick={() =>
+                void confirmAndRun(
+                  {
+                    label: "End session",
+                    title: "End the session now?",
+                    message:
+                      "The open question closes, results are saved, and everyone sees the final standings.",
+                    confirmLabel: "End session",
+                    cancelLabel: "Keep going",
+                  },
+                  live.end,
+                )
+              }
+            >
+              End session
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="ui-live-body">
-        <Link to={dashboard}>← Dashboard</Link>
-
-        <RequestError
-          error={
-            terminalMessage
-              ? {
-                  message: terminalMessage,
-                  status: state.connection === "unauthorized" ? 401 : undefined,
-                }
-              : null
-          }
-          retry={
-            ["replaced", "failed", "closed"].includes(state.connection)
-              ? () => window.location.reload()
-              : undefined
-          }
-        />
+      <div className="lv-body">
+        {terminalMessage && (
+          <div className="lv-centered">
+            <RequestError
+              error={{
+                message: terminalMessage,
+                status: state.connection === "unauthorized" ? 401 : undefined,
+              }}
+              retry={
+                ["replaced", "failed", "closed"].includes(state.connection)
+                  ? () => window.location.reload()
+                  : undefined
+              }
+            />
+            <Link className="qb-btn qb-btn-paper" to={dashboard}>
+              Back to dashboard
+            </Link>
+          </div>
+        )}
 
         {!terminalMessage && (
           <>
             {state.connection === "reconnecting" && (
-              <p className="qp-notice" role="status">
+              <p className="lv-notice" role="status">
                 Reconnecting… Controls are paused until the connection returns.
               </p>
             )}
 
             {!host && state.session && !state.hostConnected && (
-              <p className="qp-notice" role="status">
+              <p className="lv-notice" role="status">
                 The host disconnected. An open question still follows the server timer.
               </p>
             )}
 
             {phase === "connecting" && (
-              <div className="ui-centered" role="status">
+              <div className="lv-centered" role="status">
                 <h1>Connecting…</h1>
                 <Dots />
               </div>
             )}
 
             {phase === "left" && (
-              <div className="ui-centered">
+              <div className="lv-centered">
                 <h1>You left the session</h1>
-                <Link className="qp-button" to="/app/dashboard/participate">
+                <Link className="qb-btn" to="/app/dashboard/participate">
                   Back to dashboard
                 </Link>
               </div>
             )}
 
             {phase === "lobby" && state.session && (
-              host
-                ? <HostLobby state={state} title={title} />
-                : <ParticipantLobby state={state} title={title} />
+              host ? (
+                <HostLobby
+                  state={state}
+                  title={title}
+                  actions={
+                    <div className="lv-actions">
+                      <button
+                        type="button"
+                        className="qb-btn qb-btn-paper"
+                        disabled={!canAct}
+                        onClick={() =>
+                          void confirmAndRun(
+                            {
+                              label: "Cancel session",
+                              title: "Cancel this lobby?",
+                              message:
+                                "Everyone who joined is sent back and nothing is recorded.",
+                              confirmLabel: "Cancel lobby",
+                              cancelLabel: "Keep it open",
+                            },
+                            live.cancel,
+                          )
+                        }
+                      >
+                        Cancel
+                      </button>
+                      {startOrNext}
+                    </div>
+                  }
+                />
+              ) : (
+                <ParticipantLobby state={state} title={title} actions={leave} />
+              )
             )}
 
             {phase === "question" && state.currentQuestion && (
@@ -535,6 +846,23 @@ function ConnectedSession({ sessionId }) {
                 submit={(choiceId) =>
                   run(() => live.submitAnswer(choiceId))
                 }
+                controls={
+                  <div className="lv-strip">
+                    <p className="lv-meta">
+                      The question closes when time runs out or everyone answers.
+                    </p>
+                    <div className="lv-strip-actions">
+                      <button
+                        className="qb-btn"
+                        type="button"
+                        disabled={!canAct}
+                        onClick={() => run(live.skip)}
+                      >
+                        Close question
+                      </button>
+                    </div>
+                  </div>
+                }
               />
             )}
 
@@ -544,6 +872,7 @@ function ConnectedSession({ sessionId }) {
                   key={state.lastQuestion.session_question_id}
                   question={state.lastQuestion}
                   results={state.lastResults}
+                  controls={startOrNext ?? allDone}
                 />
               ) : (
                 <ParticipantFeedback
@@ -554,87 +883,29 @@ function ConnectedSession({ sessionId }) {
             )}
 
             {phase === "waiting" && (
-              <div className="ui-centered">
-                <h1>Get ready!</h1>
-                <p role="status">Waiting for the next question…</p>
-                <Dots />
+              <div className="lv-centered lv-ready">
+                <p className="lv-eyebrow">Up next</p>
+                <h1>
+                  {live.nextQuestionOrder
+                    ? `Question ${live.nextQuestionOrder} of ${total}`
+                    : "Get ready!"}
+                </h1>
+                <Marks total={total} current={live.nextQuestionOrder ?? 0} />
+                <p role="status">Get ready…</p>
+                {host && <div className="lv-actions">{startOrNext}</div>}
               </div>
             )}
 
-            {state.session && !["left", "connecting"].includes(phase) && (
-              <div className="ui-controls">
-                {host ? (
-                  <>
-                    {state.session.status === "LOBBY" && (
-                      <button
-                        type="button"
-                        disabled={!canAct}
-                        onClick={() =>
-                          confirmAndRun("Cancel this lobby for everyone?", live.cancel)
-                        }
-                      >
-                        Cancel session
-                      </button>
-                    )}
-
-                    {state.session.status === "ACTIVE" && (
-                      <button
-                        type="button"
-                        disabled={!canAct}
-                        onClick={() =>
-                          confirmAndRun(
-                            "End this session and save the final results?",
-                            live.end,
-                          )
-                        }
-                      >
-                        End session
-                      </button>
-                    )}
-
-                    {phase === "question" && (
-                      <button
-                        className="qp-primary"
-                        type="button"
-                        disabled={!canAct}
-                        onClick={() => run(live.skip)}
-                      >
-                        Close question
-                      </button>
-                    )}
-
-                    {["lobby", "waiting", "results"].includes(phase) &&
-                      live.nextQuestionOrder !== null && (
-                        <button
-                          className="qp-primary"
-                          type="button"
-                          disabled={!canAdvance}
-                          onClick={() => run(live.openNextQuestion)}
-                        >
-                          {phase === "lobby" ? "Start quiz →" : "Next question →"}
-                        </button>
-                      )}
-
-                    {phase === "results" && live.nextQuestionOrder === null && (
-                      <p>All questions are complete. Select End session to view the final report.</p>
-                    )}
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={!canAct}
-                    onClick={() =>
-                      confirmAndRun("Leave this session?", live.leave)
-                    }
-                  >
-                    Leave session
-                  </button>
-                )}
-              </div>
-            )}
+            {!host &&
+              state.session &&
+              !["left", "connecting", "lobby"].includes(phase) && (
+                <div className="lv-foot">{leave}</div>
+              )}
 
             {action.busy && (
-              <p role="status">Waiting for server confirmation…</p>
+              <p className="lv-note" role="status">
+                Waiting for server confirmation…
+              </p>
             )}
 
             <RequestError error={action.error} />

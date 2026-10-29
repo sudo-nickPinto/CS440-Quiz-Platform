@@ -30,6 +30,8 @@ const fmt = (value) => Number(value).toLocaleString();
 const seconds = (value) =>
   value == null ? "—" : (value / 1000).toFixed(1) + "s";
 
+const letterOf = (index) => String.fromCharCode(65 + index);
+
 function Mark({ answer, order }) {
   return (
     <span
@@ -81,13 +83,19 @@ function Title({ report, host, children }) {
   );
 }
 
-function AnswerDetail({ question, answer }) {
+function AnswerDetail({ question, answer, total, nav }) {
   return (
-    <section className="rr-answer-detail">
+    <section className="rr-answer-detail" aria-live="polite">
       <div className="rr-panel-heading">
-        <span>Question {question.order}</span>
         <span>
-          {GLYPH[answer.state]} {LABEL[answer.state]} · {fmt(answer.points)} pts
+          Question {question.order} of {total}
+        </span>
+        <span className="rr-detail-tools">
+          <span className={"rr-result " + answer.state}>
+            {GLYPH[answer.state]} {LABEL[answer.state]} · {fmt(answer.points)}{" "}
+            pts
+          </span>
+          {nav}
         </span>
       </div>
 
@@ -107,20 +115,21 @@ function AnswerDetail({ question, answer }) {
                 key={choice.id}
                 className={
                   "rr-choice " +
-                  (choice.correct ? "correct" : selected ? "wrong" : "")
+                  (choice.correct ? "correct" : selected ? "wrong" : "dim")
                 }
               >
-                <b>{String.fromCharCode(65 + index)}</b>
+                <b>{letterOf(index)}</b>
 
                 <div>
                   <strong>{choice.text}</strong>
                   <small>
-                    {choice.correct ? "✓ Correct answer" : ""}
-                    {selected
-                      ? choice.correct
-                        ? " · Selected answer"
-                        : "✗ Selected answer"
-                      : ""}
+                    {choice.correct && selected
+                      ? "✓ Your answer · correct"
+                      : choice.correct
+                        ? "✓ Correct answer"
+                        : selected
+                          ? "✗ Your answer"
+                          : ""}
                   </small>
                 </div>
               </div>
@@ -140,13 +149,18 @@ function AnswerDetail({ question, answer }) {
           />
 
           <div className="rr-explanation">
-            <small>Explanation</small>
-            <p>{question.explanation || "No explanation was provided."}</p>
+            <small>Why</small>
+            <p className={question.explanation ? "" : "rr-none"}>
+              {question.explanation ||
+                "The host didn’t add an explanation for this one."}
+            </p>
           </div>
         </div>
 
         {answer.state === "missed" && (
-          <p>No answer was recorded for this question.</p>
+          <p className="rr-missed-note">
+            No answer was recorded. A missed question counts as 0 points.
+          </p>
         )}
       </div>
     </section>
@@ -156,57 +170,83 @@ function AnswerDetail({ question, answer }) {
 function PlayerAnswers({ report, player }) {
   return (
     <div className="rr-expanded">
-      <div className="rr-panel-heading">{player.name} · Answer review</div>
+      <div className="rr-xp">
+        <div className="rr-panel-heading">
+          <span>{player.name}</span>
+          <span>
+            {player.correct}/{report.played_count} · {fmt(player.points)} pts
+          </span>
+        </div>
 
-      {report.questions.map((q, i) => {
-        const answer = player.answers[i];
-        const selected = q.choices.find((c) => c.id === answer.choice_id);
-        const correct = q.choices
-          .filter((c) => c.correct)
-          .map((c) => c.text)
-          .join(" / ");
+        <div className="rr-al-head" aria-hidden="true">
+          <span />
+          <span>Q</span>
+          <span>Question · their answer</span>
+          <span>Time</span>
+          <span>Points</span>
+        </div>
 
-        return (
-          <div className="rr-answer-line" key={q.question_id}>
-            <Mark answer={answer} order={q.order} />
-            <strong>Q{q.order}</strong>
+        {report.questions.map((q, i) => {
+          const answer = player.answers[i];
+          const selectedIndex = q.choices.findIndex(
+            (c) => c.id === answer.choice_id,
+          );
+          const selected = q.choices[selectedIndex];
+          const correct = q.choices
+            .map((c, index) => ({ ...c, index }))
+            .filter((c) => c.correct)
+            .map((c) => letterOf(c.index) + ". " + c.text)
+            .join(" / ");
 
-            <div>
-              <strong>{q.text}</strong>
-              <p>
-                {selected ? "Selected: " + selected.text : LABEL[answer.state]}
-              </p>
-              <small>Correct: {correct}</small>
+          return (
+            <div className="rr-answer-line" key={q.question_id}>
+              <Mark answer={answer} order={q.order} />
+              <strong>Q{q.order}</strong>
+
+              <div>
+                <strong>{q.text}</strong>
+                <p>
+                  {selected
+                    ? letterOf(selectedIndex) + ". " + selected.text
+                    : LABEL[answer.state]}
+                </p>
+                {answer.state !== "correct" && <small>Correct: {correct}</small>}
+              </div>
+
+              <span>{seconds(answer.time_ms)}</span>
+              <strong>{fmt(answer.points)}</strong>
             </div>
-
-            <span>{seconds(answer.time_ms)}</span>
-            <strong>{fmt(answer.points)} pts</strong>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function People({ title, people, questionIndex, onPerson }) {
+function People({ title, kind, people, questionIndex, onPerson }) {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? people : people.slice(0, 8);
 
   return (
     <section className="rr-people">
       <h4>
-        {title} · {people.length}
+        <span className={"rr-mark " + kind} aria-hidden="true">
+          {GLYPH[kind]}
+        </span>
+        {title} · <b>{people.length}</b>
       </h4>
 
       <div className="rr-chips">
         {visible.map((p) => (
           <button type="button" key={p.id} onClick={() => onPerson(p.id)}>
             {p.name}
-            <span>{seconds(p.answers[questionIndex].time_ms)}</span>
+            {kind === "correct" && (
+              <span>{seconds(p.answers[questionIndex].time_ms)}</span>
+            )}
           </button>
         ))}
 
-        {!people.length && <p>None</p>}
+        {!people.length && <p>Nobody.</p>}
 
         {people.length > 8 && (
           <button type="button" onClick={() => setExpanded(!expanded)}>
@@ -234,75 +274,112 @@ function QuestionBreakdown({ question, index, players, onPerson }) {
   const groups = [
     ...question.choices.map((choice, i) => ({
       key: choice.id,
-      label:
-        String.fromCharCode(65 + i) +
-        ". " +
-        choice.text +
-        (choice.correct ? " — Correct" : ""),
+      letter: choice.correct ? "✓" : letterOf(i),
+      label: letterOf(i) + ". " + choice.text,
       count: players.filter((p) => p.answers[index].choice_id === choice.id)
         .length,
       correct: choice.correct,
     })),
     {
       key: "missed",
+      letter: "—",
       label: "No answer",
       count: byState("missed").length,
+      missed: true,
     },
   ];
+
+  const share = (count) =>
+    players.length ? Math.round((count / players.length) * 100) : 0;
 
   return (
     <details className="rr-question">
       <summary>
         <span className="rr-rank pale">Q{question.order}</span>
         <strong>{question.text}</strong>
-        <span>{question.played ? percentage + "% correct" : "Not played"}</span>
+        <span className="rr-pct">
+          {question.played ? (
+            <>
+              <span className="rr-meter" aria-hidden="true">
+                <i style={{ width: percentage + "%" }} />
+              </span>
+              <b>{percentage}%</b>
+              <span className="ui-sr"> correct</span>
+            </>
+          ) : (
+            "Not played"
+          )}
+        </span>
+        <i className="rr-tog" aria-hidden="true" />
       </summary>
 
       {!question.played ? (
         <p className="rr-padding">This question was not played.</p>
       ) : (
-        <div className="rr-breakdown">
-          <div className="rr-padding">
-            <h3>Answer distribution</h3>
-            <p>Counts include everyone who joined this session.</p>
+        <div className="rr-expanded">
+          <div className="rr-xp">
+            <div className="rr-panel-heading">
+              <span>Q{question.order} · Answer split</span>
+              <span>
+                {right.length}/{players.length} correct
+              </span>
+            </div>
 
-            {groups.map((group) => (
-              <div
-                className={"rr-bar-row " + (group.correct ? "correct" : "")}
-                key={group.key}
-              >
-                <strong>{group.label}</strong>
-                <span>
-                  {group.count} / {players.length}
-                </span>
-                <progress
-                  value={group.count}
-                  max={Math.max(1, players.length)}
-                  aria-label={group.label}
+            <div className="rr-breakdown">
+              <div className="rr-padding">
+                {groups.map((group) => (
+                  <div
+                    className={
+                      "rr-bar-row" +
+                      (group.correct ? " correct" : "") +
+                      (group.missed ? " is-missed" : "")
+                    }
+                    key={group.key}
+                  >
+                    <span className="rr-let" aria-hidden="true">
+                      {group.letter}
+                    </span>
+                    <strong>
+                      {group.label}
+                      {group.correct && <em> Correct</em>}
+                    </strong>
+                    <span className="rr-track" aria-hidden="true">
+                      <i style={{ width: share(group.count) + "%" }} />
+                    </span>
+                    <span className="rr-n">
+                      <b>{share(group.count)}%</b>
+                      <small>
+                        {group.count} / {players.length}
+                      </small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <People
+                  title="Got it right"
+                  kind="correct"
+                  people={right}
+                  questionIndex={index}
+                  onPerson={onPerson}
+                />
+                <People
+                  title="Got it wrong"
+                  kind="wrong"
+                  people={byState("wrong")}
+                  questionIndex={index}
+                  onPerson={onPerson}
+                />
+                <People
+                  title="No answer"
+                  kind="missed"
+                  people={byState("missed")}
+                  questionIndex={index}
+                  onPerson={onPerson}
                 />
               </div>
-            ))}
-          </div>
-
-          <div>
-            <People
-              title="Correct · fastest first"
-              people={right}
-              questionIndex={index}
-              onPerson={onPerson}
-            />
-            <People
-              title="Wrong"
-              people={byState("wrong")}
-              questionIndex={index}
-              onPerson={onPerson}
-            />
-            <People
-              title="No answer"
-              people={byState("missed")}
-              questionIndex={index}
-              onPerson={onPerson}
-            />
+            </div>
           </div>
         </div>
       )}
@@ -383,8 +460,10 @@ function HostResults({ report }) {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  const shown = questionsTab ? filteredQuestions.length : filteredPlayers.length;
+
   return (
-    <div className="rr">
+    <div className="rr" style={{ "--q": report.questions.length }}>
       <Title report={report} host>
         <button
           type="button"
@@ -402,7 +481,12 @@ function HostResults({ report }) {
         <Stat label="Participants" value={report.total_participants} />
         <Stat
           label="Average correct"
-          value={average("correct").toFixed(1) + " / " + report.played_count}
+          value={
+            <>
+              {average("correct").toFixed(1)}
+              <small> / {report.played_count}</small>
+            </>
+          }
         />
         <Stat
           label="Average points"
@@ -430,6 +514,7 @@ function HostResults({ report }) {
       <div className="rr-toolbar">
         <input
           type="search"
+          className="ui-search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label={questionsTab ? "Search questions" : "Search participants"}
@@ -437,14 +522,29 @@ function HostResults({ report }) {
             questionsTab ? "Search questions…" : "Search participants…"
           }
         />
-        <strong>
-          {questionsTab ? filteredQuestions.length : filteredPlayers.length}{" "}
-          shown
-        </strong>
+        <span className="ui-count" aria-live="polite">
+          <strong>{shown}</strong>
+          <span>
+            {questionsTab
+              ? shown === 1
+                ? "question"
+                : "questions"
+              : shown === 1
+                ? "player"
+                : "players"}
+          </span>
+        </span>
       </div>
 
       {questionsTab ? (
         <section aria-label="Question breakdowns">
+          <div className="rr-list-heading rr-q-head" aria-hidden="true">
+            <span>#</span>
+            <span>Question</span>
+            <span>Correct</span>
+            <span />
+          </div>
+
           {filteredQuestions.map((q) => (
             <QuestionBreakdown
               key={q.question_id}
@@ -461,8 +561,17 @@ function HostResults({ report }) {
         </section>
       ) : (
         <section aria-label="Leaderboard">
-          <div className="rr-list-heading">
-            Rank · Participant · Answers · Correct · Points
+          <div className="rr-list-heading rr-lb-head" aria-hidden="true">
+            <span>Rank</span>
+            <span>Participant</span>
+            <span className="rr-strip">
+              {report.questions.map((q) => (
+                <span key={q.question_id}>{q.order}</span>
+              ))}
+            </span>
+            <span>Correct</span>
+            <span>Points</span>
+            <span />
           </div>
 
           {filteredPlayers.map((p) => (
@@ -486,12 +595,16 @@ function HostResults({ report }) {
                   ))}
                 </span>
 
-                <span>
-                  <b>{p.correct}</b> / {report.played_count} correct
+                <span className="rr-correct">
+                  <b>{p.correct}</b>
+                  <small> / {report.played_count}</small>
+                  <span className="ui-sr"> correct</span>
                 </span>
-                <span>
-                  <b>{fmt(p.points)}</b> pts
+                <span className="rr-points">
+                  <b>{fmt(p.points)}</b>
+                  <span className="ui-sr"> points</span>
                 </span>
+                <i className="rr-tog" aria-hidden="true" />
               </summary>
 
               <PlayerAnswers report={report} player={p} />
@@ -551,89 +664,168 @@ function ParticipantResults({ report }) {
     }
   }
 
+  const last = report.questions.length - 1;
+  const nav = (
+    <span className="rr-tbtns">
+      <button
+        type="button"
+        disabled={selected === 0}
+        aria-label="Previous question"
+        onClick={() => selectQuestion(selected - 1)}
+      >
+        ← {selected === 0 ? "Prev" : "Q" + report.questions[selected - 1].order}
+      </button>
+      <button
+        type="button"
+        disabled={!question || selected >= last}
+        aria-label="Next question"
+        onClick={() => selectQuestion(selected + 1)}
+      >
+        {selected >= last ? "Next" : "Q" + report.questions[selected + 1].order}{" "}
+        →
+      </button>
+    </span>
+  );
+
   return (
-    <div className="rr">
-      <Title report={report} host={false} />
+    <div className="rr rr-me">
+      <nav className="rr-crumbs" aria-label="Breadcrumb">
+        <Link className="rr-crumb-back" to="/app/dashboard/participate">
+          ← Participate
+        </Link>
+        <div className="rr-trail">
+          <span>Dashboard /</span>
+          <span>Results /</span>
+          <b>{report.quiz_title}</b>
+        </div>
+        <div className="rr-private">You, the host &amp; admins</div>
+      </nav>
 
-      <div className="rr-report-band">
-        <Stat label="Speed points" value={fmt(player.points)} />
-        <Stat
-          label="Correct"
-          value={player.correct + " / " + report.played_count}
-        />
-        <Stat label="Average answer time" value={seconds(average)} />
-        <Stat
-          label="Fastest correct"
-          value={
-            fastestQ
-              ? "Q" + fastestQ.order + " · " + seconds(fastest.time_ms)
-              : "—"
-          }
-        />
-        <Stat
-          label="Your rank"
-          value={"#" + player.rank + " of " + report.total_participants}
-        />
-      </div>
-
-      <p className="rr-padding">
-        Your answers are shown here. The host and Admins can also review session
-        results.
-      </p>
-
-      <div className="rr-reader">
-        <section className="rr-answer-map" aria-label="Your answers">
-          <div className="rr-panel-heading">Your answers</div>
-
-          <p className="rr-padding">
-            ✓ {count("correct")} correct · ✗ {count("wrong")} wrong · —{" "}
-            {count("missed")} unanswered · {count("not_played")} not played
-          </p>
-
-          <div className="rr-tiles">
-            {report.questions.map((q, i) => (
-              <button
-                type="button"
-                key={q.question_id}
-                className={"rr-tile " + player.answers[i].state}
-                aria-pressed={selected === i}
-                aria-label={
-                  "Question " + q.order + ": " + LABEL[player.answers[i].state]
-                }
-                onClick={() => selectQuestion(i)}
-              >
-                <strong>Q{q.order}</strong>
-                <span>{GLYPH[player.answers[i].state]}</span>
-                <small>{fmt(player.answers[i].points)} pts</small>
-              </button>
-            ))}
+      <div className="rr-me-content">
+        <section className="rr-band" aria-label="Report card">
+          <div className="rr-band-title">
+            <small>Report card</small>
+            <h1>{report.quiz_title}</h1>
+            <p>
+              Hosted by <b>{report.host_name}</b> ·{" "}
+              {report.ended_at
+                ? new Date(report.ended_at).toLocaleString()
+                : "Session ended"}
+            </p>
           </div>
 
-          <p className="rr-padding">Select a question to review your answer.</p>
+          <div className="rr-bstat">
+            <b>
+              {fmt(player.points)}
+              <small>pts</small>
+            </b>
+            <span>Speed points</span>
+          </div>
+
+          <div className="rr-bstat">
+            <b>
+              {player.correct}
+              <small>/ {report.played_count}</small>
+            </b>
+            <span>
+              Correct · {count("wrong")} wrong · {count("missed")} missed
+            </span>
+          </div>
+
+          <div className="rr-bstat">
+            <b>{seconds(average)}</b>
+            <span>Avg. time</span>
+          </div>
+
+          <div className="rr-bstat">
+            <b>
+              {fastestQ ? (
+                <>
+                  Q{fastestQ.order}
+                  <small>{seconds(fastest.time_ms)}</small>
+                </>
+              ) : (
+                "—"
+              )}
+            </b>
+            <span>Fastest right</span>
+          </div>
+
+          <div className="rr-bstat">
+            <span className="rr-rank-tag">
+              #{player.rank} <small>of {report.total_participants}</small>
+            </span>
+            <span>Your rank</span>
+          </div>
         </section>
 
-        <div>
-          {question && answer && (
-            <AnswerDetail question={question} answer={answer} />
-          )}
+        <div className="rr-reader">
+          <section className="rr-answer-map" aria-label="Your answers">
+            <div className="rr-panel-heading">
+              <span>Your answers</span>
+              <span className="rr-key">
+                <span aria-label={`${count("correct")} correct`}>
+                  <i className="correct" aria-hidden="true">✓</i>
+                  {count("correct")}
+                </span>
+                <span aria-label={`${count("wrong")} wrong`}>
+                  <i className="wrong" aria-hidden="true">✗</i>
+                  {count("wrong")}
+                </span>
+                <span aria-label={`${count("missed")} missed`}>
+                  <i className="missed" aria-hidden="true">—</i>
+                  {count("missed")}
+                </span>
+              </span>
+            </div>
 
-          <nav className="rr-question-nav" aria-label="Question navigation">
-            <button
-              type="button"
-              disabled={selected === 0}
-              onClick={() => selectQuestion(selected - 1)}
-            >
-              ← Previous
-            </button>
+            <div className="rr-tiles">
+              {report.questions.map((q, i) => (
+                <button
+                  type="button"
+                  key={q.question_id}
+                  className={"rr-tile " + player.answers[i].state}
+                  aria-pressed={selected === i}
+                  aria-label={
+                    "Question " + q.order + ": " + LABEL[player.answers[i].state]
+                  }
+                  onClick={() => selectQuestion(i)}
+                >
+                  <span className="rr-tile-top">
+                    <strong>Q{q.order}</strong>
+                    <span>{GLYPH[player.answers[i].state]}</span>
+                  </span>
+                  <span className="rr-tile-bottom">
+                    <small>
+                      {player.answers[i].points
+                        ? "+" + fmt(player.answers[i].points)
+                        : "0"}
+                    </small>
+                    <small>
+                      {player.answers[i].time_ms == null
+                        ? LABEL[player.answers[i].state]
+                        : seconds(player.answers[i].time_ms)}
+                    </small>
+                  </span>
+                </button>
+              ))}
+            </div>
 
-            <button
-              type="button"
-              disabled={!question || selected >= report.questions.length - 1}
-              onClick={() => selectQuestion(selected + 1)}
-            >
-              Next →
-            </button>
-          </nav>
+            <p className="rr-hint">
+              Pick a question to see your answer and the correct one.
+            </p>
+          </section>
+
+          <div>
+            {question && answer && (
+              <AnswerDetail
+                question={question}
+                answer={answer}
+                total={report.questions.length}
+                nav={nav}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

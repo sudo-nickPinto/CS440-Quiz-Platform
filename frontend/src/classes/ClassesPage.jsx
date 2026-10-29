@@ -90,7 +90,12 @@ export default function ClassesPage() {
       <div className="cl-titlebar">
         <h1 id="classes-heading">
           Classes
-          {ready && <small>{classes.length} total</small>}
+          {ready && (
+            <small>
+              {classes.filter((item) => item.canManage).length} managed ·{" "}
+              {classes.filter((item) => !item.canManage).length} joined
+            </small>
+          )}
         </h1>
 
         <button
@@ -253,7 +258,9 @@ export default function ClassesPage() {
         </label>
 
         <span className="cl-count" aria-live="polite">
-          {ready ? `${visible.length} classes` : "— classes"}
+          {ready
+            ? `${visible.length} ${visible.length === 1 ? "class" : "classes"}`
+            : "— classes"}
         </span>
 
         <button
