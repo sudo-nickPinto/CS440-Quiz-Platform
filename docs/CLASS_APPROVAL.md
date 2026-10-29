@@ -1,6 +1,8 @@
 # Classes (after the MVP)
 
-A proposal for how classes should work once we add them. **Nothing here is built yet, and none of it is in the MVP.** The schema changes are proposals for Ulugbek, who owns the database files. This doc adds no migration.
+> **Status (2026-10-27): built.** This is the original design proposal, kept for its reasoning. What shipped is described in [CLASSES.md](CLASSES.md). The tables shipped as `class` and `class_membership` (migration `0006_classes`), and sessions point at a class through `live_session.class_id` (migration `0007_session_class`), so read `group_id` below as `class_id`.
+
+A proposal for how classes should work once we add them. The schema changes are proposals for Ulugbek, who owns the database files. This doc adds no migration.
 
 This replaces two earlier ideas:
 

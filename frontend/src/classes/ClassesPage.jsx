@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 
 import { useAction, useApi } from "../authenticated-demo/rest";
 import { useClassesResource } from "./classResources";
@@ -281,14 +281,6 @@ export default function ClassesPage() {
             <ClassCard key={item.id} item={item} />
           ))}
         </div>
-      )}
-
-      {import.meta.env.DEV && (
-        <aside className="cl-dev-links">
-          <strong>Layout review:</strong>
-          <Link to="/app/classes/layout">Class dashboard</Link>
-          <span>Available in development only.</span>
-        </aside>
       )}
     </section>
   );

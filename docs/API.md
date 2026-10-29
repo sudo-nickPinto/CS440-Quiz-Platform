@@ -117,14 +117,19 @@ Errors: `403 quiz_access_denied`, `404 quiz_not_found`, `500 quiz_archive_failed
 
 Statuses: `LOBBY → ACTIVE → COMPLETED`, or `LOBBY → CANCELLED`. Starting, advancing, ending and answering all happen over the WebSocket ([LIVE_PROTOCOL.md](LIVE_PROTOCOL.md) §1, §4). A session whose host is gone for 15 minutes is ended automatically (§5, PR #53).
 
-`SessionResponse`: `session_id, quiz_id, quiz_version_id, quiz_title, host_id, join_code, status, current_question_order, created_at, started_at, ended_at`.
+`SessionResponse`: `session_id, quiz_id, quiz_version_id, quiz_title, host_id, class_id, join_code, status, current_question_order, created_at, started_at, ended_at`. `class_id` is `null` for an open session.
 
 ### `POST /quizzes/{quiz_id}/sessions` → `201 SessionResponse`
 Only the quiz's author can host it (Admins can't host other people's quizzes). Creates a `LOBBY` session with a fresh 6-digit `join_code`.
 
+Optional body: `{"class_id": 12}`. No body, or `{"class_id": null}`, creates an **open session** that anyone with the code can join. With a `class_id` it creates a **class session**: the caller must also be an active organizer of that class (or an Admin), and only the class's active members can join it.
+
 | Status | Code | When |
 |---|---|---|
 | 403 | `session_host_denied` | Caller isn't the quiz author |
+| 403 | `not_class_organizer` | `class_id` given and the caller isn't an active organizer or Admin |
+| 404 | `class_not_found` | `class_id` given and the class doesn't exist or the caller isn't in it |
+| 409 | `class_archived` | `class_id` given and the class is archived |
 | 404 | `quiz_not_found` | |
 | 409 | `quiz_not_hostable` | Quiz is archived, or has no published version |
 | 500 | `session_creation_failed` | |
@@ -137,10 +142,19 @@ Response: `{ "session": SessionResponse, "participant": { "session_participant_i
 
 | Status | Code | When |
 |---|---|---|
+| 403 | `not_class_member` | It's a class session and the caller isn't an active member, even with the right code |
 | 404 | `join_code_not_found` | No LOBBY/ACTIVE session uses the code |
 | 409 | `host_cannot_join` | The host tried to join their own session |
 | 409 | `session_already_joined` | This account already has a participant row, even one that has left |
 | 500 | `session_join_failed` | |
+
+### `POST /sessions/{session_id}/join` → `201 SessionJoinResponse`
+The class page's Live button: join a **class session** by id, with no code. Same response, errors and late-join rules as joining by code. Only active members of the session's class can use it. Open sessions answer `404 session_not_found` so they still need their code.
+
+### `GET /classes/{class_id}/active-sessions` → `200 ClassActiveSession[]`
+Any active member. The class's `LOBBY` and `ACTIVE` sessions, newest first; the class page polls it every 5 seconds to draw the Live button.
+
+`ClassActiveSession`: `session_id, class_id, quiz_id, quiz_title, host_id, is_host, joined, left, join_code, status, current_question_order, question_count, created_at, started_at`. `joined` is true when the caller has an active participant row (`left_at IS NULL`), so the button goes straight to the game. `left` is true when the caller previously participated but left; that participant row is permanent, so the Live button is disabled and they cannot rejoin. Nonmembers get `404 class_not_found`.
 
 ### `GET /sessions/{session_id}` → `200 SessionResponse`
 Host, Admin, or a participant who hasn't left.
@@ -213,8 +227,8 @@ Extra errors: `403 results_export_denied` (a participant), `500 results_incomple
 
 ## WebSocket
 
-`/ws/sessions/{session_id}`: the host and participant live channel. Authentication is the first message, not the URL. See [LIVE_PROTOCOL.md](LIVE_PROTOCOL.md) for events, close codes and reconnects.
+`/ws/sessions/{session_id}`: the host and participant live channel. Authentication is the first message, not the URL. See [LIVE_PROTOCOL.md](LIVE_PROTOCOL.md) for events, close codes and reconnects. In a class session the socket re-checks membership; a member removed mid-game is closed with `4403 not_class_member`, and their answers are refused with `403 not_class_member`.
 
-## Planned: classes
+## Classes
 
-Classes, membership, class-aware sessions and the class Live button are proposed in [CLASS_APPROVAL.md](CLASS_APPROVAL.md) (rewritten in PR #51: organizers, class codes, `GET /classes/{id}/active-sessions`, `POST /sessions/{id}/join`). Add those routes here when they ship.
+How the class features fit together is in [CLASSES.md](CLASSES.md); the original design is [CLASS_APPROVAL.md](CLASS_APPROVAL.md). Class-aware session routes are listed under [Sessions](#sessions) above.
