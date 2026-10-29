@@ -359,12 +359,23 @@ def list_class_active_sessions(
         .where(
             SessionParticipant.session_id == LiveSession.session_id,
             SessionParticipant.account_id == account.account_id,
+            SessionParticipant.left_at.is_(None),
+        )
+        .correlate(LiveSession)
+        .exists()
+    )
+    left = (
+        select(SessionParticipant.session_participant_id)
+        .where(
+            SessionParticipant.session_id == LiveSession.session_id,
+            SessionParticipant.account_id == account.account_id,
+            SessionParticipant.left_at.is_not(None),
         )
         .correlate(LiveSession)
         .exists()
     )
     rows = db.execute(
-        select(LiveSession, QuizVersion, question_count, joined)
+        select(LiveSession, QuizVersion, question_count, joined, left)
         .join(QuizVersion, QuizVersion.quiz_version_id == LiveSession.quiz_version_id)
         .where(
             LiveSession.class_id == class_id,
@@ -381,6 +392,7 @@ def list_class_active_sessions(
             host_id=session.host_id,
             is_host=session.host_id == account.account_id,
             joined=bool(has_joined),
+            left=bool(has_left),
             join_code=session.join_code,
             status=session.status,
             current_question_order=session.current_question_order,
@@ -388,5 +400,5 @@ def list_class_active_sessions(
             created_at=session.created_at,
             started_at=session.started_at,
         )
-        for session, version, count, has_joined in rows
+        for session, version, count, has_joined, has_left in rows
     ]

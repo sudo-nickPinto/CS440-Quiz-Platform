@@ -10,6 +10,7 @@ const POLL_MS = 5000;
 // (docs/CLASS_APPROVAL.md §5).
 function liveSubtext(session) {
   if (session.is_host) return "Return to hosting";
+  if (session.left) return "You left this session";
   if (session.status === "ACTIVE" && session.current_question_order) {
     return `Join @ Q${session.current_question_order}`;
   }
@@ -37,6 +38,7 @@ export default function ClassLiveButton({ classId }) {
   }, [reload]);
 
   async function open(session) {
+    if (session.left) return;
     if (session.is_host) {
       navigate(`/app/host/${session.session_id}`);
       return;
@@ -58,6 +60,14 @@ export default function ClassLiveButton({ classId }) {
     navigate(`/app/play/${session.session_id}`);
   }
 
+  if (sessions.error) {
+    return (
+      <div className="cl-live-list">
+        <RequestError error={sessions.error} retry={reload} />
+      </div>
+    );
+  }
+
   if (!sessions.data?.length) return null;
 
   return (
@@ -67,7 +77,7 @@ export default function ClassLiveButton({ classId }) {
           key={session.session_id}
           className="cl-live"
           type="button"
-          disabled={action.busy}
+          disabled={action.busy || session.left}
           onClick={() => open(session)}
         >
           <span className="cl-live-tag">

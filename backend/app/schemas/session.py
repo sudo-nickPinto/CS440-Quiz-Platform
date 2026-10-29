@@ -62,6 +62,9 @@ class ClassActiveSessionResponse(BaseModel):
     is_host: bool
     # The caller already joined, so the Live button can go straight in.
     joined: bool
+    # A participant row is permanent. Once the caller leaves, they cannot
+    # rejoin this session and the class page must not offer a working button.
+    left: bool
     join_code: str
     status: LiveSessionStatus
     current_question_order: int | None
