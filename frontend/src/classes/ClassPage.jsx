@@ -46,29 +46,48 @@ function reportResource(resource) {
 
 // A searchable report table; `rows` are { key, text, cells } where `text`
 // is what the search box matches.
-function ReportTable({ caption, noun, headers, rows, emptyTitle, emptyText }) {
+function ReportTable({
+  caption,
+  noun,
+  headers,
+  rows,
+  pagination,
+  onPageChange,
+  emptyTitle,
+  emptyText,
+}) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
   const visible = rows.filter((row) =>
     row.text.toLowerCase().includes(needle),
   );
-  const plural = visible.length === 1 ? noun : `${noun}s`;
+  const totalItems = pagination?.total_items ?? rows.length;
+  const page = pagination?.page ?? 1;
+  const totalPages = pagination?.total_pages ?? (totalItems ? 1 : 0);
+  const pageSize = pagination?.page_size ?? Math.max(rows.length, 1);
+  const firstItem = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastItem = Math.min(firstItem + rows.length - 1, totalItems);
+  const nounLabel = totalItems === 1 ? noun : `${noun}s`;
 
   return (
     <>
       <div className="cl-toolbar">
         <label className="cl-search">
-          <span className="cl-sr">Search {caption.toLowerCase()}</span>
+          <span className="cl-sr">
+            Search this page of {caption.toLowerCase()}
+          </span>
           <input
             type="search"
-            placeholder={`Search ${caption.toLowerCase()}…`}
+            placeholder={`Search this page of ${caption.toLowerCase()}…`}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
 
         <span className="cl-count" aria-live="polite">
-          {visible.length} {plural}
+          {needle
+            ? `${visible.length} of ${rows.length} ${nounLabel} on this page`
+            : `${firstItem}–${lastItem} of ${totalItems} ${nounLabel}`}
         </span>
       </div>
 
@@ -108,6 +127,28 @@ function ReportTable({ caption, noun, headers, rows, emptyTitle, emptyText }) {
           </tbody>
         </table>
       </div>
+
+      {onPageChange && totalPages > 1 && (
+        <nav className="cl-pagination" aria-label={`${caption} pages`}>
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+          >
+            ← Previous
+          </button>
+          <span>
+            Page {page} of {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+          >
+            Next →
+          </button>
+        </nav>
+      )}
     </>
   );
 }
@@ -115,7 +156,8 @@ function ReportTable({ caption, noun, headers, rows, emptyTitle, emptyText }) {
 // Organizer view: every completed session of the class.
 function PresentationsTable({ classInfo, studentCount }) {
   const account = useAccount();
-  const resource = useClassSessions(classInfo.id);
+  const [page, setPage] = useState(1);
+  const resource = useClassSessions(classInfo.id, page);
   const pending = reportResource(resource);
   if (pending) return pending;
 
@@ -136,6 +178,8 @@ function PresentationsTable({ classInfo, studentCount }) {
       ]}
       emptyTitle="No presentations yet"
       emptyText="Host a quiz in this class and it shows up here once it ends."
+      pagination={resource.data.pagination}
+      onPageChange={setPage}
       rows={resource.data.items.map((session) => ({
         key: session.session_id,
         text: `${session.quiz_title} ${session.host_name}`,
@@ -161,7 +205,8 @@ function PresentationsTable({ classInfo, studentCount }) {
 }
 
 function StudentsTable({ classInfo }) {
-  const resource = useClassStudents(classInfo.id);
+  const [page, setPage] = useState(1);
+  const resource = useClassStudents(classInfo.id, page);
   const pending = reportResource(resource);
   if (pending) return pending;
 
@@ -179,11 +224,18 @@ function StudentsTable({ classInfo }) {
       ]}
       emptyTitle="No students yet"
       emptyText="Share the class code or invite members to get started."
+      pagination={resource.data.pagination}
+      onPageChange={setPage}
       rows={resource.data.items.map((student, index) => ({
         key: student.account_id,
         text: `${student.display_name} ${student.email}`,
         cells: [
-          student.average_score === null ? "—" : index + 1,
+          student.average_score === null
+            ? "—"
+            : (resource.data.pagination.page - 1) *
+                resource.data.pagination.page_size +
+              index +
+              1,
           <>
             <strong>{student.display_name}</strong>
             <br />
@@ -216,7 +268,8 @@ function StudentsTable({ classInfo }) {
 
 // Member view: the class's sessions and how the caller did in each.
 function ParticipateTable({ classInfo }) {
-  const resource = useClassSessions(classInfo.id);
+  const [page, setPage] = useState(1);
+  const resource = useClassSessions(classInfo.id, page);
   const pending = reportResource(resource);
   if (pending) return pending;
 
@@ -230,6 +283,8 @@ function ParticipateTable({ classInfo }) {
         "When an organizer hosts a quiz here, a Live button appears at " +
         "the top of this page."
       }
+      pagination={resource.data.pagination}
+      onPageChange={setPage}
       rows={resource.data.items.map((session) => ({
         key: session.session_id,
         text: session.quiz_title,
