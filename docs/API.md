@@ -154,7 +154,7 @@ The class page's Live button: join a **class session** by id, with no code. Same
 ### `GET /classes/{class_id}/active-sessions` → `200 ClassActiveSession[]`
 Any active member. The class's `LOBBY` and `ACTIVE` sessions, newest first; the class page polls it every 5 seconds to draw the Live button.
 
-`ClassActiveSession`: `session_id, class_id, quiz_id, quiz_title, host_id, is_host, joined, join_code, status, current_question_order, question_count, created_at, started_at`. `joined` is true when the caller already has a participant row, so the button goes straight to the game. Nonmembers get `404 class_not_found`.
+`ClassActiveSession`: `session_id, class_id, quiz_id, quiz_title, host_id, is_host, joined, left, join_code, status, current_question_order, question_count, created_at, started_at`. `joined` is true when the caller has an active participant row (`left_at IS NULL`), so the button goes straight to the game. `left` is true when the caller previously participated but left; that participant row is permanent, so the Live button is disabled and they cannot rejoin. Nonmembers get `404 class_not_found`.
 
 ### `GET /sessions/{session_id}` → `200 SessionResponse`
 Host, Admin, or a participant who hasn't left.

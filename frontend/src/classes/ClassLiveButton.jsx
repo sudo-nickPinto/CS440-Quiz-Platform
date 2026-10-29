@@ -60,6 +60,14 @@ export default function ClassLiveButton({ classId }) {
     navigate(`/app/play/${session.session_id}`);
   }
 
+  if (sessions.error) {
+    return (
+      <div className="cl-live-list">
+        <RequestError error={sessions.error} retry={reload} />
+      </div>
+    );
+  }
+
   if (!sessions.data?.length) return null;
 
   return (
