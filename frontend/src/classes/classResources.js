@@ -107,9 +107,7 @@ export function useClassResource(classId) {
   return resourceState(result, (data) => normalizeClass(data, account));
 }
 
-// Report endpoints page at 100; a class rarely has more sessions or
-// students than that, and the tables search what they've loaded.
-const REPORT_PAGE_SIZE = 100;
+export const REPORT_PAGE_SIZE = 25;
 
 function useClassReport(classId, path) {
   const result = useResource(`/classes/${classId}/${path}`);
@@ -127,17 +125,17 @@ export function useClassDashboard(classId) {
   return useClassReport(classId, "dashboard");
 }
 
-export function useClassSessions(classId) {
+export function useClassSessions(classId, page = 1) {
   return useClassReport(
     classId,
-    `sessions?page_size=${REPORT_PAGE_SIZE}`,
+    `sessions?page=${page}&page_size=${REPORT_PAGE_SIZE}`,
   );
 }
 
 // Organizer-only; best average first, so row order is the class rank.
-export function useClassStudents(classId) {
+export function useClassStudents(classId, page = 1) {
   return useClassReport(
     classId,
-    `students?page_size=${REPORT_PAGE_SIZE}&sort=average_score&order=desc`,
+    `students?page=${page}&page_size=${REPORT_PAGE_SIZE}&sort=average_score&order=desc`,
   );
 }

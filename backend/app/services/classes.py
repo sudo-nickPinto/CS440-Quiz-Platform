@@ -23,7 +23,7 @@ from app.services.class_authorization import (
     require_class_member,
     require_class_organizer,
 )
-from app.services.class_memberships import _protect_last_organizer
+from app.services.class_memberships import _load_class, _protect_last_organizer
 
 CLASS_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CLASS_CODE_LENGTH = 8
@@ -340,11 +340,27 @@ def leave_class(
     account: CurrentAccount,
     class_id: int,
 ) -> None:
-    access = require_class_member(db, account, class_id)
-    membership = access.membership
+    # Roster mutations lock the class before any membership rows. Following
+    # the same order here serializes leave with organizer removal/demotion and
+    # prevents a stale ACTIVE read from overwriting REMOVED with LEFT.
+    _load_class(db, class_id, lock=True)
+    membership = db.scalar(
+        select(ClassMembership)
+        .where(
+            ClassMembership.class_id == class_id,
+            ClassMembership.account_id == account.account_id,
+        )
+        .with_for_update()
+    )
     if membership is None or membership.status != MembershipStatus.ACTIVE:
         # An Admin browsing a class they never joined has nothing to leave.
-        raise APIError(409, "not_class_member", "You aren't a member of this class.")
+        if account.is_admin:
+            raise APIError(
+                409, "not_class_member", "You aren't a member of this class."
+            )
+        # Match the class authorization behavior for removed members and
+        # outsiders so this endpoint does not reveal that the class exists.
+        raise APIError(404, "class_not_found", "Class not found.")
 
     _protect_last_organizer(db, membership)
     membership.status = MembershipStatus.LEFT

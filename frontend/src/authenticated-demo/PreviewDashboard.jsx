@@ -243,6 +243,9 @@ export default function PreviewDashboard() {
                           quiz={quiz}
                           action={action}
                           hostClasses={hostClasses}
+                          hostClassesStatus={classes.status}
+                          hostClassesError={classes.error}
+                          reloadHostClasses={classes.reload}
                         />
                       )}
 

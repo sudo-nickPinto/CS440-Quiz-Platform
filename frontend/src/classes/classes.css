@@ -175,6 +175,21 @@
   white-space: nowrap;
 }
 
+.qp .cl-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: var(--b);
+  background: var(--paper);
+  font-weight: 700;
+}
+
+.qp .cl-pagination button {
+  min-height: 40px;
+}
+
 .qp .cl-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

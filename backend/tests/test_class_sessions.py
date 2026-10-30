@@ -1,17 +1,25 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.auth import CurrentAccount
 from app.models import (
     Account,
     AccountRole,
+    AnswerChoice,
     Class,
     ClassMembership,
     ClassRole,
     JoinedVia,
+    LiveSession,
+    LiveSessionStatus,
     MembershipStatus,
+    Question,
+    SessionParticipant,
+    SessionQuestion,
+    SessionQuestionStatus,
 )
 from tests.test_session_api import create_quiz, session_client, use_account
 
@@ -144,6 +152,97 @@ def test_active_members_join_a_class_session(class_setup) -> None:
     assert listed.status_code == 200
     assert [row["session_id"] for row in listed.json()] == [session["session_id"]]
     assert listed.json()[0]["joined"] is True
+    assert listed.json()[0]["left"] is False
+
+
+def test_departed_participant_is_labeled_and_cannot_rejoin(class_setup) -> None:
+    client, accounts, class_id = class_setup
+    quiz = create_quiz(client)
+    session = host(client, quiz["quiz_id"], class_id).json()
+    use_account(client, accounts["participant"])
+    joined = client.post(
+        "/sessions/join", json={"join_code": session["join_code"]}
+    )
+    assert joined.status_code == 201
+
+    with client.app.state.database.session_factory() as db:
+        participant = db.scalar(
+            select(SessionParticipant).where(
+                SessionParticipant.session_id == session["session_id"],
+                SessionParticipant.account_id == accounts["participant"].account_id,
+            )
+        )
+        assert participant is not None
+        participant.left_at = datetime.now(UTC).replace(tzinfo=None)
+        db.commit()
+
+    listed = client.get(f"/classes/{class_id}/active-sessions")
+    assert listed.status_code == 200
+    assert listed.json()[0]["joined"] is False
+    assert listed.json()[0]["left"] is True
+
+    rejoin = client.post(f"/sessions/{session['session_id']}/join")
+    assert rejoin.status_code == 409
+    assert error_code(rejoin) == "session_already_joined"
+
+
+def test_removed_member_cannot_answer_after_joining(class_setup) -> None:
+    client, accounts, class_id = class_setup
+    quiz = create_quiz(client)
+    session = host(client, quiz["quiz_id"], class_id).json()
+    use_account(client, accounts["participant"])
+    joined = client.post(
+        "/sessions/join", json={"join_code": session["join_code"]}
+    )
+    assert joined.status_code == 201
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    with client.app.state.database.session_factory() as db:
+        live_session = db.get(LiveSession, session["session_id"])
+        assert live_session is not None
+        question = db.scalar(
+            select(Question).where(
+                Question.quiz_version_id == live_session.quiz_version_id,
+                Question.question_order == 1,
+            )
+        )
+        assert question is not None
+        choice = db.scalar(
+            select(AnswerChoice).where(
+                AnswerChoice.question_id == question.question_id,
+                AnswerChoice.choice_order == 1,
+            )
+        )
+        assert choice is not None
+        membership = db.scalar(
+            select(ClassMembership).where(
+                ClassMembership.class_id == class_id,
+                ClassMembership.account_id == accounts["participant"].account_id,
+            )
+        )
+        assert membership is not None
+        membership.status = MembershipStatus.REMOVED
+        live_session.status = LiveSessionStatus.ACTIVE
+        live_session.current_question_order = 1
+        played = SessionQuestion(
+            session_id=live_session.session_id,
+            question_id=question.question_id,
+            status=SessionQuestionStatus.OPEN,
+            opened_at=now - timedelta(seconds=1),
+            closes_at=now + timedelta(seconds=29),
+        )
+        db.add(played)
+        db.commit()
+        session_question_id = played.session_question_id
+        choice_id = choice.choice_id
+
+    response = client.post(
+        f"/sessions/{session['session_id']}/questions/"
+        f"{session_question_id}/responses",
+        json={"choice_id": choice_id},
+    )
+    assert response.status_code == 403
+    assert error_code(response) == "not_class_member"
 
 
 @pytest.mark.parametrize("name", ["invited", "removed", "other"])

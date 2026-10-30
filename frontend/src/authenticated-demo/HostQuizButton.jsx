@@ -11,12 +11,16 @@ export default function HostQuizButton({
   quiz,
   action,
   hostClasses = [],
+  hostClassesStatus = "ready",
+  hostClassesError = null,
+  reloadHostClasses,
   classId = null,
   label = "Host live session",
 }) {
   const api = useApi();
   const navigate = useNavigate();
   const [target, setTarget] = useState(classId ? String(classId) : "");
+  const choicesReady = Boolean(classId) || hostClassesStatus === "ready";
 
   async function host() {
     const chosen = target ? Number(target) : null;
@@ -35,11 +39,12 @@ export default function HostQuizButton({
 
   return (
     <>
-      {!classId && hostClasses.length > 0 && (
+      {!classId && (
         <label className="ui-host-for">
           For
           <select
             value={target}
+            disabled={!choicesReady || action.busy}
             onChange={(event) => setTarget(event.target.value)}
           >
             <option value="">Open session</option>
@@ -52,9 +57,22 @@ export default function HostQuizButton({
         </label>
       )}
 
+      {!classId && hostClassesStatus === "loading" && (
+        <small role="status">Loading class choices…</small>
+      )}
+
+      {!classId && hostClassesError && (
+        <span>
+          Could not load class choices.{" "}
+          <button type="button" onClick={reloadHostClasses}>
+            Retry
+          </button>
+        </span>
+      )}
+
       <button
         type="button"
-        disabled={action.busy}
+        disabled={action.busy || !choicesReady}
         onClick={() => void host()}
       >
         {label}
