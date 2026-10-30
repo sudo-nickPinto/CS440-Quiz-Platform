@@ -24,7 +24,7 @@ from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models.account import Account
 from app.models.classes import ClassMembership
-from app.models.quiz import Quiz, QuizVersion
+from app.models.quiz import QuizVersion
 from app.models.session import (
     LiveSession,
     LiveSessionStatus,
@@ -101,13 +101,16 @@ def get_class_quiz_results(
 ) -> dict:
     access = require_class_member(db, account, class_id)
     organizer = _is_organizer(access)
-    if db.get(Quiz, quiz_id) is None:
-        raise APIError(404, "quiz_not_found", "Quiz not found.")
 
     sessions, _ = _session_summaries(
         db, account, class_id, access, (LiveSessionStatus.COMPLETED,)
     )
     sessions = [s for s in sessions if s.quiz_id == quiz_id]
+
+    # Only expose quizzes presented to completion in this class.
+    if not sessions:
+        raise APIError(404, "quiz_not_found", "Quiz not found.")
+
     session_ids = [s.session_id for s in sessions]
 
     # Every player's final row for these sessions in one query.
@@ -141,16 +144,7 @@ def get_class_quiz_results(
             }
         )
 
-    title = (
-        sessions[0].quiz_title
-        if sessions
-        else db.scalar(
-            select(QuizVersion.title)
-            .where(QuizVersion.quiz_id == quiz_id)
-            .order_by(QuizVersion.version_number.desc())
-            .limit(1)
-        )
-    )
+    title = sessions[0].quiz_title
     score_sum = sum(p["points"] for rows in results.values() for p in rows)
     result_count = sum(len(rows) for rows in results.values())
 

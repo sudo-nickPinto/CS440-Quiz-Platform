@@ -416,6 +416,69 @@ def test_unknown_quiz_is_not_found(reports) -> None:
     assert response.json()["error"]["code"] == "quiz_not_found"
 
 
+@pytest.mark.parametrize("viewer", ["member", "owner", "global"])
+@pytest.mark.parametrize(
+    "presentation",
+    ["never_presented", "other_class", "cancelled", "active"],
+)
+def test_quiz_without_completed_class_session_is_not_found(
+    reports, viewer, presentation
+) -> None:
+    client, identities, data = reports
+
+    with client.app.state.database.session_factory() as db:
+        quiz = Quiz(author_id=data["ids"]["nonmember"])
+        db.add(quiz)
+        db.flush()
+
+        version = QuizVersion(
+            quiz_id=quiz.quiz_id,
+            version_number=1,
+            title="Unrelated private quiz",
+        )
+        db.add(version)
+        db.flush()
+
+        if presentation != "never_presented":
+            target_class_id = data["class_id"]
+            status = LiveSessionStatus.COMPLETED
+
+            if presentation == "other_class":
+                other_class = Class(
+                    name="Unrelated class",
+                    created_by_id=data["ids"]["nonmember"],
+                    join_code="HIDE0001",
+                )
+                db.add(other_class)
+                db.flush()
+                target_class_id = other_class.class_id
+            elif presentation == "cancelled":
+                status = LiveSessionStatus.CANCELLED
+            else:
+                status = LiveSessionStatus.ACTIVE
+
+            add_session(
+                db,
+                version,
+                data["ids"]["nonmember"],
+                class_id=target_class_id,
+                day=5,
+                status=status,
+                code="900001",
+            )
+
+        quiz_id = quiz.quiz_id
+        db.commit()
+
+    act_as(client, identities[viewer])
+
+    response = client.get(f"/classes/{data['class_id']}/quizzes/{quiz_id}/results")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "quiz_not_found"
+    assert "Unrelated private quiz" not in response.text
+
+
 # Student report
 
 
