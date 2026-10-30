@@ -443,6 +443,15 @@ def get_final_results(
             "Final results are available once the session ends.",
         )
 
+    return load_final_results(db, session), viewer_participant_id
+
+
+def load_final_results(db: Session, session: LiveSession) -> FinalResults:
+    """Stored final results for an ended session, without access checks.
+
+    Callers check who may see the session first.
+    """
+    session_id = session.session_id
     rows = db.execute(
         select(
             Result.session_participant_id,
@@ -476,12 +485,9 @@ def get_final_results(
             row.session_participant_id,
         ),
     )
-    return (
-        FinalResults(
-            session_id=session_id,
-            status=session.status.value,
-            ended_at=session.ended_at,
-            standings=standings,
-        ),
-        viewer_participant_id,
+    return FinalResults(
+        session_id=session_id,
+        status=session.status.value,
+        ended_at=session.ended_at,
+        standings=standings,
     )

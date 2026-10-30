@@ -85,6 +85,12 @@ Every number below comes from the class's **completed** sessions (`live_session.
 - **Attendance** is sessions played divided by the class's completed sessions.
 - **Report links:** the per-session report (`/app/results/host/:id`) is limited to the host and Admins, the same rule as before classes. A co-organizer who didn't host sees "Hosted by …" instead of a link.
 
+**Class average formula.** Used by the dashboard, the Students tab and the student report:
+1. A student's average is their total points divided by the completed sessions they played. Missed sessions are left out, not counted as 0. Attendance covers those.
+2. The class average is the mean of those student averages, over students who played at least once. Each student counts once, however often they played.
+
+**Detailed reports.** Organizers can open a full report for one session, one quiz (every time it was presented), or one student. Members can open the same reports but only see their own rows. See "Detailed class reports" in [API.md](API.md). Code: `backend/app/services/class_reports.py`.
+
 Code: `backend/app/services/class_dashboard.py` and the report tables in `frontend/src/classes/ClassPage.jsx`.
 
 ## 7. Deploying
