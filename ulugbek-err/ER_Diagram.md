@@ -45,8 +45,9 @@ erDiagram
     QUIZ {
         int quiz_id PK
         int author_id FK "the creator; only they can host it"
+        int class_id FK "V3 (0008): the class that owns the quiz"
         enum status "DRAFT, PUBLISHED, ARCHIVED"
-        enum visibility "not used in MVP; every quiz is public"
+        enum visibility "not used; new quizzes are PRIVATE"
         datetime created_at
         datetime updated_at
     }
@@ -146,7 +147,7 @@ erDiagram
 - A quiz is saved as `quiz` → `quiz_version` → `question` → `answer_choice`.
 - Saved quizzes can't be edited in the MVP, so every quiz has just one version (version 1).
 - We're keeping the version table because the quiz code is already built on it, and it's what will let us add editing later without changing old results.
-- Every quiz is public to everyone. The backend should ignore the `visibility` column for now.
+- **Since V3 (0008), every quiz belongs to a class** (`quiz.class_id`). Any active member of a class can create quizzes in it, and only the quiz's owner and the class's organizers can see it. The `visibility` column is ignored: `PUBLIC` doesn't show a quiz outside its class. Quizzes made before V3 can have no class until someone gives them one (see the migrations README).
 - Only the person who made the quiz (`author_id`) can host it. Being able to see a quiz doesn't mean you can host it.
 - Each question has its own timer (`time_limit_seconds`), its answer choices, and which choices are correct.
 
@@ -224,6 +225,7 @@ erDiagram
 - Roles and statuses always come from `class_membership`, never from the account or the request.
 - Generating class codes (8 characters, no look-alike letters) and rate-limiting joins by code.
 - Only an active organizer (or a global Admin) can start a session for a class, and not in an archived class. Use `require_class_host()` in `backend/app/services/class_authorization.py`. The host must also be the quiz's author.
+- Only active members can create quizzes in a class (`quiz.class_id`), and not in an archived class. A quiz is visible only to its owner and the class's organizers, and only while they're active in the class.
 
 ## Things that must be unique
 

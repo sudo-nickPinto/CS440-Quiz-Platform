@@ -83,7 +83,8 @@ const phase = (name) => (state) => livePhase(state) === name
 const choice = (state, correct) => state.currentQuestion.choices[correct ? 0 : 1].choice_id
 
 async function newGame() {
-  const quiz = await rest('host', 'POST', '/quizzes', QUIZ)
+  const course = await rest('host', 'POST', '/classes', { name: 'E2E class' })
+  const quiz = await rest('host', 'POST', `/classes/${course.class_id}/quizzes`, QUIZ)
   return rest('host', 'POST', `/quizzes/${quiz.quiz_id}/sessions`)
 }
 

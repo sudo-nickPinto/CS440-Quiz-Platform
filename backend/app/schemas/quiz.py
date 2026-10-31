@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.quiz import QuestionType, QuizStatus, QuizVisibility
+from app.schemas.class_dashboard import PageInfo
 
 
 class QuizRequestModel(BaseModel):
@@ -114,6 +115,7 @@ class QuizVersionResponse(BaseModel):
 class QuizResponse(BaseModel):
     quiz_id: int
     author_id: int
+    class_id: int | None
     status: QuizStatus
     visibility: QuizVisibility
     created_at: datetime
@@ -124,8 +126,21 @@ class QuizResponse(BaseModel):
 class QuizListItem(BaseModel):
     quiz_id: int
     author_id: int
+    class_id: int | None
     status: QuizStatus
     title: str
     description: str | None
     question_count: int
     created_at: datetime
+
+
+class ClassQuizListItem(QuizListItem):
+    author_name: str
+    version_number: int
+    updated_at: datetime
+
+
+class ClassQuizListPage(BaseModel):
+    class_id: int
+    items: list[ClassQuizListItem]
+    pagination: PageInfo

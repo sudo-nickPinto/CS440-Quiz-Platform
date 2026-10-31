@@ -142,7 +142,7 @@ def test_member_can_access_paginated_quiz_and_session_contracts(
     act_as(client, identities["member"])
 
     quizzes = client.get(
-        f"/classes/{class_id}/quizzes?page=2&page_size=5&sort=title&order=asc"
+        f"/classes/{class_id}/presented-quizzes?page=2&page_size=5&sort=title&order=asc"
     )
     sessions = client.get(
         f"/classes/{class_id}/sessions?page=3&page_size=10&sort=started_at"
@@ -198,7 +198,7 @@ def test_nonmember_cannot_discover_class(dashboard_client) -> None:
     client, identities, class_id = dashboard_client
     act_as(client, identities["nonmember"])
 
-    for suffix in ("dashboard", "quizzes", "sessions", "students"):
+    for suffix in ("dashboard", "presented-quizzes", "sessions", "students"):
         response = client.get(f"/classes/{class_id}/{suffix}")
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "class_not_found"
@@ -362,7 +362,7 @@ def test_students_and_dashboard_aggregate_class_results(dashboard_client) -> Non
         f"/classes/{class_id}/students?sort=average_score&order=desc"
     ).json()["items"]
     dashboard = client.get(f"/classes/{class_id}/dashboard").json()
-    quizzes = client.get(f"/classes/{class_id}/quizzes").json()["items"]
+    quizzes = client.get(f"/classes/{class_id}/presented-quizzes").json()["items"]
 
     amy, zoe, member = students
     assert amy["display_name"] == "Amy Student"

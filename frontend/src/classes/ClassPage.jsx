@@ -620,7 +620,10 @@ function ClassWorkspace({ classInfo, onChange }) {
         {!adminView && (
           <div className="cl-actions">
             {classInfo.canManage && (
-              <Link className="cl-button" to="/app/quizzes/new">
+              <Link
+                className="cl-button"
+                to={`/app/quizzes/new?class=${classInfo.id}`}
+              >
                 + New quiz
               </Link>
             )}
