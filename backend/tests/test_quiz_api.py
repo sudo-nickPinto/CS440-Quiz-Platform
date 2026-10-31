@@ -301,7 +301,8 @@ def test_stale_edit_is_rejected_without_overwriting_newer_version(quiz_client):
     response = client.put(path, json=stale)
 
     assert response.status_code == 409
-    assert response.json()["error"]["code"] == "quiz_version_conflict"
+    assert response.json()["error"]["code"] == "quiz_edit_conflict"
+    assert response.json()["error"]["details"]["current_revision"] == 2
 
     current = client.get(path).json()
     assert current["version"]["version_number"] == 2

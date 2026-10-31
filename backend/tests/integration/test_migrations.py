@@ -15,7 +15,7 @@ from pymysql.constants import CLIENT
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import make_url
 
-from app.models import Class, ClassMembership
+from app.models import Class, ClassMembership, Quiz, QuizCollaborator
 
 MIGRATIONS = Path(__file__).resolve().parents[3] / "ulugbek-err" / "migrations"
 UP_FILES = sorted(MIGRATIONS.glob("*.up.sql"))
@@ -121,7 +121,7 @@ def test_migration_0006_down_only_removes_class_tables(
     assert tables(connection) == before
 
 
-def test_class_models_match_migrated_tables(
+def test_models_match_migrated_tables(
     scratch_database: tuple[pymysql.Connection, str],
 ) -> None:
     connection, database_url = scratch_database
@@ -131,7 +131,7 @@ def test_class_models_match_migrated_tables(
     engine = create_engine(database_url)
     try:
         inspector = inspect(engine)
-        for model in (Class, ClassMembership):
+        for model in (Class, ClassMembership, Quiz, QuizCollaborator):
             table = model.__table__
             columns = {
                 column["name"]: column for column in inspector.get_columns(table.name)

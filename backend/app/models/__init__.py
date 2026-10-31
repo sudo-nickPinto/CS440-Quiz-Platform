@@ -8,9 +8,11 @@ from app.models.classes import (
 )
 from app.models.quiz import (
     AnswerChoice,
+    CollaboratorPermission,
     Question,
     QuestionType,
     Quiz,
+    QuizCollaborator,
     QuizStatus,
     QuizVersion,
     QuizVisibility,
@@ -29,6 +31,7 @@ __all__ = [
     "Account",
     "AccountRole",
     "AnswerChoice",
+    "CollaboratorPermission",
     "Class",
     "ClassMembership",
     "ClassRole",
@@ -37,6 +40,7 @@ __all__ = [
     "Question",
     "QuestionType",
     "Quiz",
+    "QuizCollaborator",
     "QuizStatus",
     "QuizVersion",
     "QuizVisibility",
