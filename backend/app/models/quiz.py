@@ -37,6 +37,10 @@ class QuestionType(str, Enum):
     FILL_IN_BLANK = "FILL_IN_BLANK"
 
 
+class CollaboratorPermission(str, Enum):
+    EDITOR = "EDITOR"
+
+
 def enum_values(enum_class: type[Enum]) -> list[str]:
     return [member.value for member in enum_class]
 
@@ -47,6 +51,16 @@ class Quiz(Base):
     quiz_id: Mapped[int] = mapped_column(INTEGER(unsigned=True), primary_key=True)
     author_id: Mapped[int] = mapped_column(
         INTEGER(unsigned=True), ForeignKey("account.account_id"), nullable=False
+    )
+    # Nullable only so installations with pre-V3 quizzes can apply the
+    # migration before those rows are assigned to classes. Every quiz created
+    # through the V3 class-scoped endpoint has a class_id.
+    class_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("class.class_id", ondelete="RESTRICT"),
+    )
+    revision: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True), nullable=False, default=1, server_default="1"
     )
     status: Mapped[QuizStatus] = mapped_column(
         SqlEnum(QuizStatus, values_callable=enum_values),
@@ -76,6 +90,47 @@ class Quiz(Base):
         order_by="QuizVersion.version_number",
         passive_deletes=True,
     )
+    collaborators: Mapped[list[QuizCollaborator]] = relationship(
+        back_populates="quiz",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class QuizCollaborator(Base):
+    __tablename__ = "quiz_collaborator"
+
+    quiz_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("quiz.quiz_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    account_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    permission: Mapped[CollaboratorPermission] = mapped_column(
+        SqlEnum(CollaboratorPermission, values_callable=enum_values),
+        nullable=False,
+        default=CollaboratorPermission.EDITOR,
+        server_default=CollaboratorPermission.EDITOR.value,
+    )
+    shared_by_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DATETIME(fsp=3), nullable=False, server_default=func.now()
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
+    revoked_by_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="RESTRICT"),
+    )
+
+    quiz: Mapped[Quiz] = relationship(back_populates="collaborators")
 
 
 class QuizVersion(Base):
