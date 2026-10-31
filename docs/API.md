@@ -58,13 +58,13 @@ The caller's account, created on first call.
 
 ## Quizzes
 
-A quiz is saved and published in one step (one version, `version_number` 1). There are no drafts yet.
-
 Since V3, **every quiz belongs to a class** (`class_id`), and there is no app-wide quiz list. Who can do what:
 - **Create:** any active member or organizer of the class. The creator becomes the quiz's owner (`author_id`). Nobody needs a special permission.
-- **See:** the owner and the class's organizers, and only while they're active in the class. Other classmates and outsiders get `404`.
+- **See:** the owner and the class's organizers (the class-level `ORGANIZER` role), and only while they're active in the class. Other classmates and outsiders get `404`. Being an Admin doesn't help: there is no app-wide authority over classes.
+- **New quizzes are drafts:** `status: "DRAFT"`, and `version.published_at` is null. A draft can't be hosted. Publishing (task 3) makes an unchangeable version, and doesn't approve it for hosting (task 4).
 - `visibility` is always `PRIVATE` for new quizzes. `PUBLIC` no longer shows a quiz outside its class.
-- Publishing doesn't approve a quiz for hosting.
+
+Responses show the version people work on: the newest draft if there is one, otherwise the newest published version.
 
 Quizzes made before V3 may have `class_id: null` until someone gives them a class ([migrations README](../ulugbek-err/migrations/README.md#quizzes-without-a-class)). Only their owner can see them.
 
@@ -136,9 +136,9 @@ Full quiz, including correct answers. Same rule as above: only the owner or an o
 Errors: `404 quiz_not_found`, `500 invalid_quiz`.
 
 ### `PATCH /quizzes/{quiz_id}/archive` → `200 QuizResponse`
-Author or Admin, who must also be able to see the quiz. Sets `status` to `ARCHIVED`.
+The quiz's owner only. Sets `status` to `ARCHIVED`.
 
-Errors: `403 quiz_access_denied`, `404 quiz_not_found`, `500 quiz_archive_failed`.
+Errors: `403 quiz_access_denied` (an organizer who isn't the owner), `404 quiz_not_found`, `500 quiz_archive_failed`.
 
 ## Sessions
 

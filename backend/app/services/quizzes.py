@@ -27,7 +27,7 @@ from app.schemas.quiz import (
     QuizUpdate,
     QuizVersionResponse,
 )
-from app.services.class_authorization import ClassAccess, require_class_member
+from app.services.class_authorization import get_class, get_class_membership
 
 
 def _quiz_query(quiz_id: int):
@@ -49,8 +49,21 @@ def _load_quiz(db: Session, quiz_id: int) -> Quiz:
     return quiz
 
 
-def _is_organizer(access: ClassAccess) -> bool:
-    return access.is_global_admin or access.membership.role == ClassRole.ORGANIZER
+def _require_active_membership(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+) -> ClassMembership:
+    """The caller's ACTIVE membership in the class, or 404 class_not_found.
+
+    V3 has no app-wide authority over classes: being an Admin (faculty)
+    doesn't let anyone into a class they aren't an active member of.
+    """
+    get_class(db, class_id)
+    membership = get_class_membership(db, class_id, account.account_id)
+    if membership is None or membership.status != MembershipStatus.ACTIVE:
+        raise APIError(404, "class_not_found", "Class not found.")
+    return membership
 
 
 def _can_read(db: Session, account: CurrentAccount, quiz: Quiz) -> bool:
@@ -62,10 +75,13 @@ def _can_read(db: Session, account: CurrentAccount, quiz: Quiz) -> bool:
     if quiz.class_id is None:
         return quiz.author_id == account.account_id
     try:
-        access = require_class_member(db, account, quiz.class_id)
+        membership = _require_active_membership(db, account, quiz.class_id)
     except APIError:
         return False
-    return quiz.author_id == account.account_id or _is_organizer(access)
+    return (
+        quiz.author_id == account.account_id
+        or membership.role == ClassRole.ORGANIZER
+    )
 
 
 def _load_readable_quiz(db: Session, account: CurrentAccount, quiz_id: int) -> Quiz:
@@ -94,6 +110,15 @@ def _latest_published_version(quiz: Quiz) -> QuizVersion:
     )
 
 
+def _latest_editor_version(quiz: Quiz) -> QuizVersion:
+    """The version people work on: the newest draft, else the newest
+    published version."""
+    drafts = [version for version in quiz.versions if version.published_at is None]
+    if drafts:
+        return max(drafts, key=lambda version: version.version_number)
+    return _latest_published_version(quiz)
+
+
 def _to_response(quiz: Quiz) -> QuizResponse:
     return QuizResponse(
         quiz_id=quiz.quiz_id,
@@ -103,12 +128,12 @@ def _to_response(quiz: Quiz) -> QuizResponse:
         visibility=quiz.visibility,
         created_at=quiz.created_at,
         updated_at=quiz.updated_at,
-        version=QuizVersionResponse.model_validate(_latest_published_version(quiz)),
+        version=QuizVersionResponse.model_validate(_latest_editor_version(quiz)),
     )
 
 
 def _to_list_item(quiz: Quiz) -> QuizListItem:
-    version = _latest_published_version(quiz)
+    version = _latest_editor_version(quiz)
     return QuizListItem(
         quiz_id=quiz.quiz_id,
         author_id=quiz.author_id,
@@ -127,27 +152,23 @@ def create_quiz(
     class_id: int,
     payload: QuizCreate,
 ) -> QuizResponse:
-    """Atomically save a complete, immutable quiz owned by a class.
+    """Atomically save a new quiz draft owned by a class.
 
     Any active member or organizer may create one, and becomes its owner.
-    Publishing here doesn't approve the quiz for hosting.
+    The draft can't be hosted until it's published, and publishing doesn't
+    approve it for hosting either.
     """
-    access = require_class_member(db, account, class_id)
-    # An Admin passes require_class_member without joining, but the owner
-    # must be a member of the class the quiz belongs to.
-    if access.membership is None or access.membership.status != MembershipStatus.ACTIVE:
-        raise APIError(404, "class_not_found", "Class not found.")
-    if access.class_.archived_at is not None:
+    _require_active_membership(db, account, class_id)
+    if get_class(db, class_id).archived_at is not None:
         raise APIError(
             409, "class_archived", "An archived class cannot get new quizzes."
         )
 
-    published_at = datetime.now(UTC).replace(tzinfo=None)
     version = QuizVersion(
         version_number=1,
         title=payload.title,
         description=payload.description,
-        published_at=published_at,
+        published_at=None,
         questions=[
             Question(
                 question_order=question_order,
@@ -170,7 +191,7 @@ def create_quiz(
     quiz = Quiz(
         author_id=account.account_id,
         class_id=class_id,
-        status=QuizStatus.PUBLISHED,
+        status=QuizStatus.DRAFT,
         # Visibility no longer reaches outside the class; keep it private.
         visibility=QuizVisibility.PRIVATE,
         versions=[version],
@@ -384,9 +405,9 @@ def list_class_quizzes(
 
     Organizers see every quiz in the class; members see the ones they own.
     """
-    access = require_class_member(db, account, class_id)
+    membership = _require_active_membership(db, account, class_id)
     condition = Quiz.class_id == class_id
-    if not _is_organizer(access):
+    if membership.role != ClassRole.ORGANIZER:
         condition = condition & (Quiz.author_id == account.account_id)
 
     total = db.scalar(select(func.count(Quiz.quiz_id)).where(condition)) or 0
@@ -402,7 +423,7 @@ def list_class_quizzes(
 
     items = []
     for quiz, author_name in rows:
-        version = _latest_published_version(quiz)
+        version = _latest_editor_version(quiz)
         items.append(
             ClassQuizListItem(
                 **_to_list_item(quiz).model_dump(),
@@ -429,7 +450,7 @@ def get_class_quiz(
     class_id: int,
     quiz_id: int,
 ) -> QuizResponse:
-    require_class_member(db, account, class_id)
+    _require_active_membership(db, account, class_id)
     quiz = _load_readable_quiz(db, account, quiz_id)
     if quiz.class_id != class_id:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
@@ -442,11 +463,12 @@ def archive_quiz(
     quiz_id: int,
 ) -> QuizResponse:
     quiz = _load_readable_quiz(db, account, quiz_id)
-    if quiz.author_id != account.account_id and not account.is_admin:
+    # Only the owner; being an Admin or a class organizer isn't enough.
+    if quiz.author_id != account.account_id:
         raise APIError(
             403,
             "quiz_access_denied",
-            "Only the quiz author or an Admin can archive it.",
+            "Only the quiz owner can archive it.",
         )
     if quiz.status == QuizStatus.ARCHIVED:
         return _to_response(quiz)

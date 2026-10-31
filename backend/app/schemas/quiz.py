@@ -108,7 +108,8 @@ class QuizVersionResponse(BaseModel):
     title: str
     description: str | None
     created_at: datetime
-    published_at: datetime
+    # Null while the version is still a draft.
+    published_at: datetime | None
     questions: list[QuestionResponse]
 
 

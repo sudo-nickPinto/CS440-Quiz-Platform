@@ -147,7 +147,7 @@ erDiagram
 - A quiz is saved as `quiz` → `quiz_version` → `question` → `answer_choice`.
 - Saved quizzes can't be edited in the MVP, so every quiz has just one version (version 1).
 - We're keeping the version table because the quiz code is already built on it, and it's what will let us add editing later without changing old results.
-- **Since V3 (0008), every quiz belongs to a class** (`quiz.class_id`). Any active member of a class can create quizzes in it, and only the quiz's owner and the class's organizers can see it. The `visibility` column is ignored: `PUBLIC` doesn't show a quiz outside its class. Quizzes made before V3 can have no class until someone gives them one (see the migrations README).
+- **Since V3 (0008), every quiz belongs to a class** (`quiz.class_id`). Any active member of a class can create quizzes in it (they start as drafts), and only the quiz's owner and the class's organizers can see it. Being an Admin doesn't count. The `visibility` column is ignored: `PUBLIC` doesn't show a quiz outside its class. Quizzes made before V3 can have no class until someone gives them one (see the migrations README).
 - Only the person who made the quiz (`author_id`) can host it. Being able to see a quiz doesn't mean you can host it.
 - Each question has its own timer (`time_limit_seconds`), its answer choices, and which choices are correct.
 

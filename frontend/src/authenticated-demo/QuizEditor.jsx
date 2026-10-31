@@ -156,7 +156,7 @@ export function QuizEditor({
           <p>
             {editing
               ? "Save changes to publish an updated version. Existing sessions and results keep their original content."
-              : "Save to publish your quiz. You can return later to edit it."}
+              : "Save to create a draft of your quiz in this class. A draft can't be hosted until it's published."}
           </p>
 
           <p>

@@ -85,6 +85,8 @@ const choice = (state, correct) => state.currentQuestion.choices[correct ? 0 : 1
 async function newGame() {
   const course = await rest('host', 'POST', '/classes', { name: 'E2E class' })
   const quiz = await rest('host', 'POST', `/classes/${course.class_id}/quizzes`, QUIZ)
+  // New quizzes are drafts; the e2e server publishes them directly.
+  await rest('host', 'POST', `/e2e/quizzes/${quiz.quiz_id}/publish`)
   return rest('host', 'POST', `/quizzes/${quiz.quiz_id}/sessions`)
 }
 

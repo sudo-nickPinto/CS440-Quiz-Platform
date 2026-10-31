@@ -136,9 +136,20 @@ def test_student_member_and_faculty_organizer_can_create_quizzes(classes, name) 
 
     assert body["class_id"] == data["main"]
     assert body["author_id"] == identities[name].account_id
-    assert body["status"] == "PUBLISHED"
+    assert body["status"] == "DRAFT"
     assert body["visibility"] == "PRIVATE"
     assert body["version"]["version_number"] == 1
+    assert body["version"]["published_at"] is None
+
+
+def test_a_new_draft_cannot_be_hosted(classes) -> None:
+    client, identities, data = classes
+    act_as(client, identities["prof"])
+    quiz = create(client, data["main"])
+
+    response = client.post(f"/quizzes/{quiz['quiz_id']}/sessions")
+
+    assert response.status_code == 409
 
 
 @pytest.mark.parametrize("name", ["invited", "left", "removed", "outsider"])
@@ -356,3 +367,51 @@ def test_quiz_from_before_classes_is_visible_only_to_its_owner(classes) -> None:
     assert mine.status_code == 200
     assert mine.json()["class_id"] is None
     assert theirs.status_code == 404
+
+
+# No app-wide Admin authority (V3)
+
+
+def as_admin(identity: CurrentAccount) -> CurrentAccount:
+    return CurrentAccount(identity.account_id, AccountRole.ADMIN, True)
+
+
+def test_admin_outside_the_class_gets_nothing(classes) -> None:
+    client, identities, data = classes
+    quiz = create(client, data["main"])
+    act_as(client, as_admin(identities["outsider"]))
+
+    created = client.post(f"/classes/{data['main']}/quizzes", json=QUIZ_PAYLOAD)
+    listing = client.get(f"/classes/{data['main']}/quizzes")
+    by_class = client.get(f"/classes/{data['main']}/quizzes/{quiz['quiz_id']}")
+    direct = client.get(f"/quizzes/{quiz['quiz_id']}")
+
+    assert [r.status_code for r in (created, listing, by_class, direct)] == [404] * 4
+    assert listing.json()["error"]["code"] == "class_not_found"
+
+
+def test_admin_who_is_a_plain_member_sees_only_their_own(classes) -> None:
+    client, identities, data = classes
+    quiz = create(client, data["main"])
+    act_as(client, as_admin(identities["zoe"]))
+
+    listing = client.get(f"/classes/{data['main']}/quizzes").json()
+    detail = client.get(f"/quizzes/{quiz['quiz_id']}")
+
+    assert listing["items"] == []
+    assert detail.status_code == 404
+
+
+def test_only_the_owner_can_archive(classes) -> None:
+    client, identities, data = classes
+    quiz = create(client, data["main"])
+    act_as(client, as_admin(identities["prof"]))
+
+    denied = client.patch(f"/quizzes/{quiz['quiz_id']}/archive")
+    act_as(client, identities["amy"])
+    archived = client.patch(f"/quizzes/{quiz['quiz_id']}/archive")
+
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "quiz_access_denied"
+    assert archived.status_code == 200
+    assert archived.json()["status"] == "ARCHIVED"
