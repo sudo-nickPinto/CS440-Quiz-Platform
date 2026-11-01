@@ -609,3 +609,119 @@ def test_delete_class_endpoint_is_not_implemented(class_client) -> None:
     response = client.delete(f"/classes/{class_id}")
 
     assert response.status_code == 405
+
+
+@pytest.fixture(autouse=True)
+def reset_join_rate_limit():
+    from app.services import classes as class_service
+
+    class_service._join_attempts.clear()
+    yield
+    class_service._join_attempts.clear()
+
+
+def test_join_by_code_accepts_any_spacing_or_case(class_client) -> None:
+    client, identities = class_client
+    class_id = seed_class(client, identities["creator"])
+    act_as(client, identities["outsider"])
+
+    response = client.post("/classes/join", json={"code": " abcd-efgh "})
+
+    assert response.status_code == 200
+    assert response.json()["class_id"] == class_id
+    assert response.json()["current_role"] == "MEMBER"
+    # Members never see the code, even right after typing it.
+    assert response.json()["join_code"] is None
+    with client.app.state.database.session_factory() as db:
+        membership = db.scalar(
+            select(ClassMembership).where(
+                ClassMembership.class_id == class_id,
+                ClassMembership.account_id == identities["outsider"].account_id,
+            )
+        )
+        assert membership.joined_via == JoinedVia.CODE
+
+
+@pytest.mark.parametrize(
+    ("who", "setup", "status_code", "error_code"),
+    [
+        ("outsider", {"join_code": "ZZZZZZZZ"}, 404, "class_code_not_found"),
+        ("outsider", {"joining_open": False}, 403, "class_joining_closed"),
+        ("member", {}, 409, "already_class_member"),
+        ("removed", {}, 403, "class_member_removed"),
+    ],
+)
+def test_join_by_code_refusals(
+    class_client, who, setup, status_code, error_code
+) -> None:
+    client, identities = class_client
+    seed_class(
+        client,
+        identities["creator"],
+        memberships=(
+            (identities["member"], ClassRole.MEMBER, MembershipStatus.ACTIVE, JoinedVia.CODE),
+            (identities["removed"], ClassRole.MEMBER, MembershipStatus.REMOVED, JoinedVia.CODE),
+        ),
+        **setup,
+    )
+    act_as(client, identities[who])
+
+    response = client.post("/classes/join", json={"code": "ABCDEFGH"})
+
+    assert response.status_code == status_code
+    assert response.json()["error"]["code"] == error_code
+
+
+def test_left_and_invited_people_can_join_by_code(class_client) -> None:
+    client, identities = class_client
+    seed_class(
+        client,
+        identities["creator"],
+        memberships=(
+            (identities["left"], ClassRole.MEMBER, MembershipStatus.LEFT, JoinedVia.CODE),
+            (identities["invited"], ClassRole.MEMBER, MembershipStatus.INVITED, JoinedVia.INVITE),
+        ),
+    )
+
+    for who in ("left", "invited"):
+        act_as(client, identities[who])
+        response = client.post("/classes/join", json={"code": "ABCDEFGH"})
+        assert response.status_code == 200
+        assert response.json()["membership_status"] == "ACTIVE"
+
+
+def test_join_by_code_is_rate_limited_per_account(class_client) -> None:
+    client, identities = class_client
+    act_as(client, identities["outsider"])
+
+    codes = [
+        client.post("/classes/join", json={"code": "NOPE0000"}).status_code
+        for _ in range(11)
+    ]
+
+    assert codes[:10] == [404] * 10
+    assert codes[10] == 429
+    act_as(client, identities["member"])
+    assert client.post("/classes/join", json={"code": "NOPE0000"}).status_code == 404
+
+
+def test_member_can_leave_but_last_organizer_cannot(class_client) -> None:
+    client, identities = class_client
+    class_id = seed_class(
+        client,
+        identities["creator"],
+        memberships=(
+            (identities["member"], ClassRole.MEMBER, MembershipStatus.ACTIVE, JoinedVia.CODE),
+        ),
+    )
+
+    act_as(client, identities["member"])
+    left = client.delete(f"/classes/{class_id}/membership")
+    after = client.get(f"/classes/{class_id}")
+    act_as(client, identities["creator"])
+    organizer = client.delete(f"/classes/{class_id}/membership")
+
+    assert left.status_code == 204
+    assert after.status_code == 404
+    assert organizer.status_code == 409
+    assert organizer.json()["error"]["code"] == "last_organizer"

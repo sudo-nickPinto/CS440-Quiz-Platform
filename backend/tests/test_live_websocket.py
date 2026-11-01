@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import jwt
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 from starlette.concurrency import run_in_threadpool
 from starlette.websockets import WebSocketDisconnect
 
@@ -27,7 +27,15 @@ from app.api.routes import live as live_routes
 from app.live.hub import LiveConnection, LiveHub
 from app.live.protocol import CloseCode
 from app.main import create_app
-from app.models import Account, AccountRole
+from app.models import (
+    Account,
+    AccountRole,
+    Class,
+    ClassMembership,
+    ClassRole,
+    JoinedVia,
+    MembershipStatus,
+)
 from tests.test_accounts import AUDIENCE, DOMAIN, PRIVATE_KEY, make_token
 
 QUIZ_PAYLOAD = {
@@ -351,6 +359,61 @@ def test_non_member_closes_with_4403(live) -> None:
     sid = make_session(client, people)["session_id"]
     with client.websocket_connect(ws_url(sid)) as ws:
         ws.send_json({"type": "auth", "token": make_token(sub="test|outsider")})
+        assert_closed_with(ws, CloseCode.FORBIDDEN)
+
+
+def test_removed_class_member_closes_with_4403_after_joining(live) -> None:
+    client, people = live
+    with client.app.state.database.session_factory() as db:
+        class_ = Class(
+            name="Socket class",
+            created_by_id=people["host"].account_id,
+            join_code="WSCLASS1",
+        )
+        db.add(class_)
+        db.flush()
+        for name, role in (
+            ("host", ClassRole.ORGANIZER),
+            ("alice", ClassRole.MEMBER),
+        ):
+            db.add(
+                ClassMembership(
+                    class_id=class_.class_id,
+                    account_id=people[name].account_id,
+                    role=role,
+                    status=MembershipStatus.ACTIVE,
+                    joined_via=(
+                        JoinedVia.CREATOR if name == "host" else JoinedVia.CODE
+                    ),
+                )
+            )
+        db.commit()
+        class_id = class_.class_id
+
+    as_account(client, people["host"])
+    quiz = client.post("/quizzes", json=QUIZ_PAYLOAD)
+    assert quiz.status_code == 201
+    session = client.post(
+        f"/quizzes/{quiz.json()['quiz_id']}/sessions",
+        json={"class_id": class_id},
+    )
+    assert session.status_code == 201
+    joined = join(client, people["alice"], session.json()["join_code"])
+    assert joined["participant"]["account_id"] == people["alice"].account_id
+
+    with client.app.state.database.session_factory() as db:
+        membership = db.scalar(
+            select(ClassMembership).where(
+                ClassMembership.class_id == class_id,
+                ClassMembership.account_id == people["alice"].account_id,
+            )
+        )
+        assert membership is not None
+        membership.status = MembershipStatus.REMOVED
+        db.commit()
+
+    with client.websocket_connect(ws_url(session.json()["session_id"])) as ws:
+        ws.send_json({"type": "auth", "token": make_token(sub="test|alice")})
         assert_closed_with(ws, CloseCode.FORBIDDEN)
 
 

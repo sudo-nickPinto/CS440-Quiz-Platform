@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router";
 
+import { useClassesResource } from "../classes/classResources";
 import { useAccount } from "./account";
+import HostQuizButton from "./HostQuizButton";
 import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 import ParticipantHistory from "./ParticipantHistory";
@@ -39,6 +41,11 @@ export default function PreviewDashboard() {
 
   const presenting = view === "present";
   const resource = useResource(presenting ? "/quizzes" : null);
+  const classes = useClassesResource();
+  const hostClasses =
+    classes.status === "ready"
+      ? classes.data.filter((item) => item.canManage && !item.archived)
+      : [];
 
   if (view === "taken") {
     return <Navigate to="/app/dashboard/participate" replace />;
@@ -69,18 +76,6 @@ export default function PreviewDashboard() {
         b.quiz_id - a.quiz_id
       );
     });
-
-  async function host(quiz) {
-    const session = await action.run(() =>
-      api(`/quizzes/${quiz.quiz_id}/sessions`, {
-        method: "POST",
-      }),
-    );
-
-    if (session) {
-      navigate(`/app/host/${session.session_id}`);
-    }
-  }
 
   async function archive(quiz) {
     if (
@@ -347,14 +342,16 @@ export default function PreviewDashboard() {
                       )}
 
                       {quiz.author_id === account.account_id && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          disabled={action.busy}
-                          onClick={() => void host(quiz)}
-                        >
-                          <span aria-hidden="true">▶</span> Host live session
-                        </button>
+                        <div className="ui-host-item" role="group" aria-label="Host live session">
+                          <HostQuizButton
+                            quiz={quiz}
+                            action={action}
+                            hostClasses={hostClasses}
+                            hostClassesStatus={classes.status}
+                            hostClassesError={classes.error}
+                            reloadHostClasses={classes.reload}
+                          />
+                        </div>
                       )}
 
                       <button

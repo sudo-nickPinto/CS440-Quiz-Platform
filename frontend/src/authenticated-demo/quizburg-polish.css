@@ -712,6 +712,56 @@
   text-decoration: none;
 }
 
+/* Host live session inside the menu: "For [class ▾]" above the button */
+.qp .ui-row-options > .ui-host-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: var(--b-thin);
+  background: var(--paper);
+}
+
+.qp .ui-host-item .ui-host-for {
+  display: flex;
+  justify-content: space-between;
+  color: var(--gray);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .ui-host-item .ui-host-for select {
+  flex: 1;
+  max-width: none;
+  min-height: 34px;
+  color: var(--ink);
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.qp .ui-host-item > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border: var(--b);
+  background: var(--orange-deep);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+}
+
+.qp .ui-host-item > button:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.qp .ui-host-item > button::before {
+  content: "▶";
+  margin-right: 8px;
+  font-size: 11px;
+}
+
 .qp .ui-row-options > :last-child {
   border-bottom: 0;
 }
@@ -5210,6 +5260,19 @@
 .qp .cl-section-tabs > .cl-actions > button:hover:not(:disabled),
 .qp .cl-section-tabs > .cl-actions > button[aria-expanded="true"] {
   background: var(--ink);
+}
+
+/* "Leave class" sits where JOIN was, but it is a quiet secondary action */
+.qp .cl-section-tabs > .cl-actions > button.cl-secondary {
+  padding: 0 24px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 700 14px "Space Grotesk", sans-serif;
+  letter-spacing: 1px;
+}
+
+.qp .cl-section-tabs > .cl-actions > button.cl-secondary:hover:not(:disabled) {
+  background: var(--apricot);
 }
 
 /* Members */

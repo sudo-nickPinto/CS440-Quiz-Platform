@@ -16,6 +16,7 @@ from app.models import (
     SessionQuestionStatus,
 )
 from app.schemas.results import LEADERBOARD_SIZE, ClosedQuestionResultsSnapshot
+from app.services.class_access import may_play
 from app.services.live_questions import _opened_event
 from app.services.results import get_closed_question_results
 
@@ -45,6 +46,8 @@ def resolve_membership(
     )
     if participant_id is None:
         raise LiveCloseError(CloseCode.FORBIDDEN, "session_access_denied")
+    if not may_play(db, session, account.account_id):
+        raise LiveCloseError(CloseCode.FORBIDDEN, "not_class_member")
     return "participant", participant_id
 
 

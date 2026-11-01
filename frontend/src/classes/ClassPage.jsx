@@ -1,124 +1,512 @@
 import { useState } from "react";
+import { useAuth0 } from "@auth0/auth0-react";
 import { Link, useNavigate, useParams } from "react-router";
 
-import { useAction, useApi } from "../authenticated-demo/rest";
+import { useAccount } from "../authenticated-demo/account";
+import HostQuizButton from "../authenticated-demo/HostQuizButton";
+import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import RequestError from "../authenticated-demo/RequestError";
-import { useClassResource } from "./classResources";
+import { useConfirm } from "../authenticated-demo/useConfirm";
+import { useAction, useApi, useResource } from "../authenticated-demo/rest";
+import ClassLiveButton from "./ClassLiveButton";
 import { copyText } from "./classHelpers";
-import { ResourceMessage } from "./ClassUI";
+import {
+  useClassDashboard,
+  useClassResource,
+  useClassSessions,
+  useClassStudents,
+} from "./classResources";
+import { EmptyMessage, ResourceMessage } from "./ClassUI";
 import { ClassMembers, ClassSettings } from "./ClassManagement";
 
-const SECTION_LAYOUTS = {
-  Presentations: {
-    headers: [
-      "Date",
-      "Presentation",
-      "Attendance",
-      "Average",
-      "Top score",
-      "Results",
-    ],
-    message: "Presentation history is not available yet.",
-  },
-  Students: {
-    headers: [
-      "Rank",
-      "Student",
-      "Recent scores",
-      "Average",
-      "Attendance",
-      "Details",
-    ],
-    message: "Student grades and class reports are not available yet.",
-  },
-  Present: {
-    headers: ["Status", "Quiz", "Questions", "Actions"],
-    message: "Quizzes for this class are not available yet.",
-  },
-  Participate: {
-    headers: ["Date", "Session", "Score", "Results"],
-    message: "Class sessions and participation history are not available yet.",
-  },
-};
+const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
 
-function UnavailableTable({ section }) {
-  const layout = SECTION_LAYOUTS[section];
+function formatDate(value) {
+  return value ? DATE_FORMAT.format(new Date(value)) : "—";
+}
 
-  return (
-    <div className="cl-table-wrap">
-      <table className="cl-table">
-        <caption className="cl-sr">{section}</caption>
+function formatScore(value) {
+  return value === null || value === undefined
+    ? "—"
+    : Number(value).toLocaleString();
+}
 
-        <thead>
-          <tr>
-            {layout.headers.map((heading) => (
-              <th key={heading} scope="col">
-                {heading}
-              </th>
-            ))}
-          </tr>
-        </thead>
+function formatRate(value) {
+  return value === null || value === undefined
+    ? "—"
+    : `${Math.round(value * 100)}%`;
+}
 
-        <tbody>
-          <tr>
-            <td colSpan={layout.headers.length}>
-              <div className="cl-state" role="status">
-                <h2>{section}</h2>
-                <p>{layout.message}</p>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+function reportResource(resource) {
+  return resource.status === "ready" ? null : (
+    <ResourceMessage resource={resource} />
   );
 }
 
-function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
-  const canManage = classInfo?.canManage === true;
+// A searchable report table; `rows` are { key, text, cells } where `text`
+// is what the search box matches.
+function ReportTable({
+  caption,
+  noun,
+  headers,
+  rows,
+  pagination,
+  onPageChange,
+  emptyTitle,
+  emptyText,
+}) {
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const visible = rows.filter((row) =>
+    row.text.toLowerCase().includes(needle),
+  );
+  const totalItems = pagination?.total_items ?? rows.length;
+  const page = pagination?.page ?? 1;
+  const totalPages = pagination?.total_pages ?? (totalItems ? 1 : 0);
+  const pageSize = pagination?.page_size ?? Math.max(rows.length, 1);
+  const firstItem = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastItem = Math.min(firstItem + rows.length - 1, totalItems);
+  const nounLabel = totalItems === 1 ? noun : `${noun}s`;
 
-  // Layout review contains no class record or student data.
-  // This flag controls only the development design-review screen.
-  const showAdminLayout = layoutOnly || canManage;
+  return (
+    <>
+      <div className="cl-toolbar">
+        <label className="cl-search">
+          <span className="cl-sr">
+            Search this page of {caption.toLowerCase()}
+          </span>
+          <input
+            type="search"
+            placeholder={`Search this page of ${caption.toLowerCase()}…`}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+
+        <span className="cl-count" aria-live="polite">
+          {needle
+            ? `${visible.length} of ${rows.length} ${nounLabel} on this page`
+            : `${firstItem}–${lastItem} of ${totalItems} ${nounLabel}`}
+        </span>
+      </div>
+
+      <div className="cl-table-wrap">
+        <table className="cl-table">
+          <caption className="cl-sr">{caption}</caption>
+
+          <thead>
+            <tr>
+              {headers.map((heading) => (
+                <th key={heading} scope="col">
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody>
+            {visible.length === 0 ? (
+              <tr>
+                <td colSpan={headers.length}>
+                  <div className="cl-state" role="status">
+                    <h2>{needle ? "No matches" : emptyTitle}</h2>
+                    <p>{needle ? "Try another search." : emptyText}</p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              visible.map((row) => (
+                <tr key={row.key}>
+                  {row.cells.map((cell, index) => (
+                    <td key={headers[index]}>{cell}</td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {onPageChange && totalPages > 1 && (
+        <nav className="cl-pagination" aria-label={`${caption} pages`}>
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+          >
+            ← Previous
+          </button>
+          <span>
+            Page {page} of {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+          >
+            Next →
+          </button>
+        </nav>
+      )}
+    </>
+  );
+}
+
+// Organizer view: every completed session of the class.
+function PresentationsTable({ classInfo, studentCount }) {
+  const account = useAccount();
+  const [page, setPage] = useState(1);
+  const resource = useClassSessions(classInfo.id, page);
+  const pending = reportResource(resource);
+  if (pending) return pending;
+
+  // Session reports are open to the host and Admins only.
+  const mayOpen = (session) => session.is_host || account.role === "ADMIN";
+
+  return (
+    <ReportTable
+      caption="Presentations"
+      noun="presentation"
+      headers={[
+        "Date",
+        "Presentation",
+        "Attendance",
+        "Average",
+        "Top score",
+        "Results",
+      ]}
+      emptyTitle="No presentations yet"
+      emptyText="Host a quiz in this class and it shows up here once it ends."
+      pagination={resource.data.pagination}
+      onPageChange={setPage}
+      rows={resource.data.items.map((session) => ({
+        key: session.session_id,
+        text: `${session.quiz_title} ${session.host_name}`,
+        cells: [
+          formatDate(session.started_at),
+          session.quiz_title,
+          studentCount
+            ? `${session.participant_count} / ${studentCount}`
+            : session.participant_count,
+          formatScore(session.average_score),
+          formatScore(session.top_score),
+          mayOpen(session) ? (
+            <Link to={`/app/results/host/${session.session_id}`}>
+              Report →
+            </Link>
+          ) : (
+            `Hosted by ${session.host_name}`
+          ),
+        ],
+      }))}
+    />
+  );
+}
+
+function StudentsTable({ classInfo }) {
+  const [page, setPage] = useState(1);
+  const resource = useClassStudents(classInfo.id, page);
+  const pending = reportResource(resource);
+  if (pending) return pending;
+
+  return (
+    <ReportTable
+      caption="Students"
+      noun="student"
+      headers={[
+        "Rank",
+        "Student",
+        "Recent scores",
+        "Average",
+        "Attendance",
+        "Total",
+      ]}
+      emptyTitle="No students yet"
+      emptyText="Share the class code or invite members to get started."
+      pagination={resource.data.pagination}
+      onPageChange={setPage}
+      rows={resource.data.items.map((student, index) => ({
+        key: student.account_id,
+        text: `${student.display_name} ${student.email}`,
+        cells: [
+          student.average_score === null
+            ? "—"
+            : (resource.data.pagination.page - 1) *
+                resource.data.pagination.page_size +
+              index +
+              1,
+          <>
+            <strong>{student.display_name}</strong>
+            <br />
+            <small>{student.email}</small>
+          </>,
+          student.recent_scores.length ? (
+            <span
+              className="cl-recent"
+              aria-label={`Most recent first: ${student.recent_scores
+                .map((score) => (score === null ? "absent" : score))
+                .join(", ")}`}
+            >
+              {student.recent_scores.map((score, scoreIndex) => (
+                <span key={scoreIndex} data-absent={score === null}>
+                  {score === null ? "–" : formatScore(score)}
+                </span>
+              ))}
+            </span>
+          ) : (
+            "—"
+          ),
+          formatScore(student.average_score),
+          formatRate(student.attendance_rate),
+          formatScore(student.total_points),
+        ],
+      }))}
+    />
+  );
+}
+
+// Member view: the class's sessions and how the caller did in each.
+function ParticipateTable({ classInfo }) {
+  const [page, setPage] = useState(1);
+  const resource = useClassSessions(classInfo.id, page);
+  const pending = reportResource(resource);
+  if (pending) return pending;
+
+  return (
+    <ReportTable
+      caption="Sessions"
+      noun="session"
+      headers={["Date", "Session", "Score", "Results"]}
+      emptyTitle="No sessions yet"
+      emptyText={
+        "When an organizer hosts a quiz here, a Live button appears at " +
+        "the top of this page."
+      }
+      pagination={resource.data.pagination}
+      onPageChange={setPage}
+      rows={resource.data.items.map((session) => ({
+        key: session.session_id,
+        text: session.quiz_title,
+        cells: [
+          formatDate(session.started_at),
+          session.quiz_title,
+          session.my_score === null
+            ? "Absent"
+            : `${formatScore(session.my_score)} pts · #${session.my_rank}`,
+          session.is_host ? (
+            <Link to={`/app/results/host/${session.session_id}`}>Report →</Link>
+          ) : session.my_score === null ? (
+            "—"
+          ) : (
+            <Link to={`/app/results/me/${session.session_id}`}>My results →</Link>
+          ),
+        ],
+      }))}
+    />
+  );
+}
+
+function ClassSummary({ dashboard }) {
+  const data = dashboard.status === "ready" ? dashboard.data : null;
+  const stats = [
+    ["Students", data?.student_count],
+    ["Presentations", data?.completed_session_count],
+    ["Class average", data && formatScore(data.class_average)],
+    ["Attendance", data && formatRate(data.attendance_rate)],
+  ];
+
+  return (
+    <section className="cl-summary" aria-label="Class summary">
+      {stats.map(([label, value]) => (
+        <div className="cl-stat" key={label}>
+          <span>{label}</span>
+          <strong>{value ?? "—"}</strong>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+// Same authenticated download as the session results page.
+function useCsvDownload() {
+  const { getAccessTokenSilently } = useAuth0();
+  const action = useAction();
+
+  async function download(path, fallbackName) {
+    const result = await action.run(async () => {
+      const token = await getAccessTokenSilently();
+      const base = import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "");
+      const response = await fetch(base + path, {
+        headers: { Authorization: "Bearer " + token },
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        const error = new Error(body?.error?.message || "Export failed.");
+        error.status = response.status;
+        error.code = body?.error?.code;
+        throw error;
+      }
+
+      const name = /filename="([^"]+)"/.exec(
+        response.headers.get("Content-Disposition") || "",
+      )?.[1];
+      return { blob: await response.blob(), name: name || fallbackName };
+    });
+
+    if (!result) return;
+
+    const url = URL.createObjectURL(result.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = result.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  return { download, busy: action.busy, error: action.error };
+}
+
+// Quizzes the caller wrote and may host as a session of this class.
+function PresentTable({ classInfo }) {
+  const account = useAccount();
+  const action = useAction();
+  const resource = useResource(classInfo.canManage ? "/quizzes" : null);
+  const [query, setQuery] = useState("");
+
+  if (!classInfo.canManage) {
+    return (
+      <EmptyMessage title="Present">
+        Only organizers of this class can host its sessions. When one starts,
+        a Live button appears at the top of this page.
+      </EmptyMessage>
+    );
+  }
+
+  if (classInfo.archived) {
+    return (
+      <EmptyMessage title="Present">
+        This class is archived, so no new sessions can start in it.
+      </EmptyMessage>
+    );
+  }
+
+  if (resource.loading) {
+    return <ResourceMessage resource={{ status: "loading" }} />;
+  }
+
+  if (resource.error) {
+    return (
+      <ResourceMessage
+        resource={{
+          status: "error",
+          error: resource.error,
+          reload: resource.reload,
+        }}
+      />
+    );
+  }
+
+  const needle = query.trim().toLowerCase();
+  const quizzes = (resource.data || []).filter(
+    (quiz) =>
+      quiz.author_id === account.account_id &&
+      quiz.status === "PUBLISHED" &&
+      quiz.title.toLowerCase().includes(needle),
+  );
+
+  return (
+    <>
+      <div className="cl-toolbar">
+        <label className="cl-search">
+          <span className="cl-sr">Search quizzes</span>
+          <input
+            type="search"
+            placeholder="Search quizzes…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+
+        <span className="cl-count" aria-live="polite">
+          {quizzes.length} {quizzes.length === 1 ? "quiz" : "quizzes"}
+        </span>
+      </div>
+
+      <RequestError error={action.error} />
+
+      <div className="cl-table-wrap">
+        <table className="cl-table">
+          <caption className="cl-sr">Quizzes you can host</caption>
+          <thead>
+            <tr>
+              <th scope="col">Quiz</th>
+              <th scope="col">Questions</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {quizzes.length === 0 ? (
+              <tr>
+                <td colSpan={3}>
+                  <div className="cl-state" role="status">
+                    <h2>No quizzes to host</h2>
+                    <p>
+                      {needle
+                        ? "No published quiz matches your search."
+                        : "Publish a quiz to host it in this class."}
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              quizzes.map((quiz) => (
+                <tr key={quiz.quiz_id}>
+                  <td>
+                    <Link to={`/app/quizzes/${quiz.quiz_id}`}>{quiz.title}</Link>
+                  </td>
+                  <td>{quiz.question_count}</td>
+                  <td>
+                    <HostQuizButton
+                      quiz={quiz}
+                      action={action}
+                      classId={classInfo.id}
+                      label="Host in this class"
+                    />
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function ClassWorkspace({ classInfo, onChange }) {
+  const showAdminLayout = classInfo.canManage === true;
+  const api = useApi();
+  const navigate = useNavigate();
+  const leave = useAction();
+  const confirmer = useConfirm();
+  const [copied, setCopied] = useState(false);
+  const csv = useCsvDownload();
+  const dashboard = useClassDashboard(classInfo.id);
+  const studentCount =
+    dashboard.status === "ready" ? dashboard.data.student_count : null;
 
   const [view, setView] = useState(showAdminLayout ? "admin" : "user");
 
   const [section, setSection] = useState(
     showAdminLayout ? "Presentations" : "Present",
   );
-
-  const [joinOpen, setJoinOpen] = useState(false);
-  const [code, setCode] = useState("");
-  const [copied, setCopied] = useState(false);
-
-  const api = useApi();
-  const joinAction = useAction();
-  const navigate = useNavigate();
-
-  // Session codes are not tied to a class, so this is the same request as
-  // the dashboard's Join strip.
-  async function join(event) {
-    event.preventDefault();
-
-    if (!/^\d{6}$/.test(code)) return;
-
-    const joined = await joinAction.run(() =>
-      api("/sessions/join", {
-        method: "POST",
-        body: JSON.stringify({ join_code: code }),
-      }),
-    );
-
-    if (joined) {
-      navigate(`/app/play/${joined.session.session_id}`);
-    }
-  }
-
-  async function copyCode() {
-    await copyText(classInfo.code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
-  }
 
   const adminView = showAdminLayout && view === "admin";
 
@@ -131,18 +519,34 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
   function changeView(nextView) {
     setView(nextView);
     setSection(nextView === "admin" ? "Presentations" : "Present");
-    setJoinOpen(false);
+  }
+
+  async function copyCode() {
+    await copyText(classInfo.code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  }
+
+  async function leaveClass() {
+    const confirmed = await confirmer.confirm({
+      label: "Leave class",
+      title: `Leave ${classInfo.name}?`,
+      message: "You can rejoin with the class code.",
+      confirmLabel: "Leave class",
+    });
+    if (!confirmed) return;
+
+    const left = await leave.run(async () => {
+      await api(`/classes/${classInfo.id}/membership`, { method: "DELETE" });
+      return true;
+    });
+
+    if (left) navigate("/app/classes");
   }
 
   return (
     <section className="cl-page" aria-labelledby="class-heading">
-      {layoutOnly && (
-        <div className="cl-review-notice">
-          <strong>Development layout review.</strong> No class is selected.
-          Values and actions remain unavailable. Switching views here does not
-          change account permissions.
-        </div>
-      )}
+      <ConfirmDialog confirmer={confirmer} />
 
       <div className="cl-classbar">
         <Link className="cl-button cl-secondary" to="/app/classes">
@@ -151,13 +555,15 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
 
         <div className="cl-class-title">
           <p className="cl-eyebrow">
-            <span className={`cl-chip${canManage ? "" : " cl-chip-member"}`}>
-              {layoutOnly
-                ? "Class dashboard layout"
-                : classInfo.roleLabel || "Class"}
+            <span
+              className={`cl-chip${
+                classInfo.canManage ? "" : " cl-chip-member"
+              }`}
+            >
+              {classInfo.roleLabel || "Class"}
             </span>
 
-            {canManage && classInfo.code && (
+            {classInfo.canManage && classInfo.code && (
               <button
                 type="button"
                 className="cl-code-chip"
@@ -170,9 +576,7 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
             )}
           </p>
 
-          <h1 id="class-heading">
-            {layoutOnly ? "Class dashboard" : classInfo.name}
-          </h1>
+          <h1 id="class-heading">{classInfo.name}</h1>
         </div>
 
         {showAdminLayout && (
@@ -205,7 +609,7 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
           <div className="cl-actions">
             <button
               type="button"
-              disabled={layoutOnly || classInfo?.archived}
+              disabled={classInfo.archived}
               onClick={() => setSection("Members")}
             >
               + Invite member
@@ -213,35 +617,29 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
 
             <button
               type="button"
-              disabled
-              aria-describedby="class-actions-note"
+              disabled={csv.busy}
+              onClick={() =>
+                void csv.download(
+                  `/classes/${classInfo.id}/grades/export.csv`,
+                  "class-grades.csv",
+                )
+              }
             >
-              Export grades
+              {csv.busy ? "Preparing…" : "Export grades"}
             </button>
           </div>
         )}
       </div>
 
-      <p id="class-actions-note" className="cl-section-note">
-        {layoutOnly
-          ? "This is a layout preview. Select a real class to use its features."
-          : classInfo.archived
-            ? "This class is archived."
-            : "Class grades and grade downloads are not available yet."}
-      </p>
+      <ClassLiveButton classId={classInfo.id} />
 
-      {adminView && (
-        <section className="cl-summary" aria-label="Class summary">
-          {["Students", "Presentations", "Class average", "Attendance"].map(
-            (label) => (
-              <div className="cl-stat" key={label}>
-                <span>{label}</span>
-                <strong aria-label="Not available">—</strong>
-              </div>
-            ),
-          )}
-        </section>
+      {classInfo.archived && (
+        <p className="cl-section-note">This class is archived.</p>
       )}
+
+      <RequestError error={csv.error || leave.error} />
+
+      {adminView && <ClassSummary dashboard={dashboard} />}
 
       <div className="cl-section-tabs">
         <div role="group" aria-label="Class sections">
@@ -259,125 +657,39 @@ function ClassWorkspace({ classInfo = null, layoutOnly = false, onChange }) {
 
         {!adminView && (
           <div className="cl-actions">
-            {layoutOnly ? (
-              <button type="button" disabled>
-                + New quiz
-              </button>
-            ) : (
-              <Link
-                className="cl-button cl-secondary"
-                to="/app/quizzes/new"
-                aria-describedby="class-quiz-note"
-              >
+            {classInfo.canManage && (
+              <Link className="cl-button" to="/app/quizzes/new">
                 + New quiz
               </Link>
             )}
 
-            <button
-              type="button"
-              aria-expanded={joinOpen}
-              aria-controls="class-session-panel"
-              onClick={() => setJoinOpen((current) => !current)}
-            >
-              Join
-            </button>
+            {classInfo.membershipStatus === "ACTIVE" && (
+              <button
+                type="button"
+                className="cl-secondary"
+                disabled={leave.busy}
+                onClick={() => void leaveClass()}
+              >
+                Leave class
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      {!adminView && (
-        <p id="class-quiz-note" className="cl-section-note">
-          Quizzes are not linked to classes yet. New quizzes and joined
-          sessions appear on your main quiz dashboard.
-        </p>
-      )}
-
-      {!adminView && joinOpen && (
-        <form
-          id="class-session-panel"
-          className="ui-join-strip"
-          onSubmit={join}
-        >
-          <label htmlFor="class-session-code">Session code</label>
-
-          <input
-            id="class-session-code"
-            autoFocus
-            required
-            inputMode="numeric"
-            autoComplete="off"
-            pattern="[0-9]{6}"
-            maxLength={6}
-            placeholder="000000"
-            value={code}
-            disabled={layoutOnly || joinAction.busy}
-            onChange={(event) =>
-              setCode(event.target.value.replace(/\D/g, "").slice(0, 6))
-            }
-          />
-
-          <button
-            type="submit"
-            className="qp-primary"
-            disabled={layoutOnly || code.length !== 6 || joinAction.busy}
-          >
-            {joinAction.busy ? "Joining…" : "Go →"}
-          </button>
-
-          <RequestError error={joinAction.error} />
-        </form>
-      )}
-
       {activeSection === "Members" ? (
-        layoutOnly ? (
-          <div className="cl-state">
-            <h2>Members</h2>
-            <p>Select a real class to view and manage its members.</p>
-          </div>
-        ) : (
-          <ClassMembers classInfo={classInfo} onChange={onChange} />
-        )
+        <ClassMembers classInfo={classInfo} onChange={onChange} />
       ) : activeSection === "Settings" ? (
-        layoutOnly ? (
-          <div className="cl-state">
-            <h2>Class settings</h2>
-            <p>Select a real class to change its settings.</p>
-          </div>
-        ) : (
-          <ClassSettings classInfo={classInfo} onChange={onChange} />
-        )
+        <ClassSettings classInfo={classInfo} onChange={onChange} />
+      ) : activeSection === "Present" ? (
+        <PresentTable classInfo={classInfo} />
+      ) : activeSection === "Presentations" ? (
+        <PresentationsTable classInfo={classInfo} studentCount={studentCount} />
+      ) : activeSection === "Students" ? (
+        <StudentsTable classInfo={classInfo} />
       ) : (
-        <>
-          <div className="cl-toolbar">
-            <label className="cl-search">
-              <span className="cl-sr">
-                Search {activeSection.toLowerCase()}
-              </span>
-
-              <input
-                type="search"
-                placeholder={`Search ${activeSection.toLowerCase()}…`}
-                disabled
-              />
-            </label>
-
-            <span className="cl-count">— records</span>
-          </div>
-
-          <UnavailableTable section={activeSection} />
-        </>
+        <ParticipateTable classInfo={classInfo} />
       )}
-
-      <div className="cl-existing-flow">
-        <p>
-          Your existing quiz dashboard remains available separately while class
-          features are being connected.
-        </p>
-
-        <Link className="cl-button" to="/app/dashboard/present">
-          Open quiz dashboard →
-        </Link>
-      </div>
     </section>
   );
 }
@@ -419,8 +731,4 @@ export default function ClassPage() {
       onChange={resource.reload}
     />
   );
-}
-
-export function ClassLayoutReview() {
-  return <ClassWorkspace layoutOnly />;
 }

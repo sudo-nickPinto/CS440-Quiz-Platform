@@ -381,6 +381,21 @@
   font-weight: 700;
 }
 
+.qp .ui-host-for {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.qp .ui-host-for select {
+  min-height: 40px;
+  max-width: 220px;
+  border: var(--b-thin);
+  background: var(--paper);
+  font: inherit;
+}
+
 .qp .ui-empty {
   padding: clamp(28px, 6vw, 70px) 20px;
   text-align: center;

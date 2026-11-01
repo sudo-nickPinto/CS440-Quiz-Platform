@@ -99,7 +99,6 @@ footer { padding: 20px 40px; display: flex; justify-content: space-between; gap:
 .tone-2 { background: #ffcf3f; color: #392800; }
 .tone-3 { background: #207608; }
 .room-tip { font-size: .88rem; color: #e5d5fc; margin: 26px 0 0; }
-.mockup-disclosure { font-size: .72rem; color: #dfccf6; text-align: center; margin: 20px auto; max-width: 690px; }
 .lobby-shapes { margin-top: 28px; }
 .skip-link { position: absolute; left: 16px; top: -100px; padding: 12px; background: white; color: #46178f; z-index: 10; }
 .skip-link:focus { top: 12px; }

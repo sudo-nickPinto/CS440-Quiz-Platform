@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router";
 import ClassesPage from "../classes/ClassesPage";
-import ClassPage, { ClassLayoutReview } from "../classes/ClassPage";
+import ClassPage from "../classes/ClassPage";
+import JoinClassPage from "../classes/JoinClassPage";
 import QuizBurgLogo from "../classes/QuizBurgLogo";
 
 import { AccountContext } from "./account";
@@ -94,10 +95,6 @@ export default function PreviewApp({ onSignOut }) {
           <Routes>
             <Route path="classes" element={<ClassesPage />} />
 
-            {import.meta.env.DEV && (
-              <Route path="classes/layout" element={<ClassLayoutReview />} />
-            )}
-
             <Route
               path="classes/:classId"
               element={<ClassPage key={pathname} />}
@@ -123,6 +120,11 @@ export default function PreviewApp({ onSignOut }) {
             />
 
             <Route path="join" element={<JoinSessionPage />} />
+
+            <Route
+              path="join/class/:code"
+              element={<JoinClassPage key={pathname} />}
+            />
 
             <Route
               path="host/:sessionId"

@@ -195,7 +195,15 @@ function ParticipantLobby({ state, title, actions }) {
   );
 }
 
-function QuestionScreen({ state, host, busy, canAct, submit, controls }) {
+function QuestionScreen({
+  state,
+  host,
+  busy,
+  canAct,
+  submit,
+  controls,
+  standing,
+}) {
   const question = state.currentQuestion;
   const [now, setNow] = useState(() => Date.now());
 
@@ -295,8 +303,6 @@ function QuestionScreen({ state, host, busy, canAct, submit, controls }) {
     );
   }
 
-  const me = state.lastResults?.me;
-
   return (
     <section
       className="lv-pq"
@@ -347,8 +353,14 @@ function QuestionScreen({ state, host, busy, canAct, submit, controls }) {
       </div>
 
       <div className="lv-stat-row lv-pbottom">
-        <Stat label="Score" value={(me?.cumulative_score ?? 0).toLocaleString()} />
-        <Stat label="Rank" value={me?.rank == null ? "—" : `#${me.rank}`} />
+        <Stat
+          label="Score"
+          value={standing ? standing.cumulative_score.toLocaleString() : "—"}
+        />
+        <Stat
+          label="Rank"
+          value={standing?.rank == null ? "—" : `#${standing.rank}`}
+        />
       </div>
 
       {busy && (
@@ -550,6 +562,12 @@ function ConnectedSession({ sessionId }) {
   const confirmer = useConfirm();
   const { state, phase } = live;
 
+  // The reducer clears lastResults when the next question opens, so keep the
+  // participant's latest score and rank to show while they answer.
+  const [standing, setStanding] = useState(null);
+  const latestMe = state.lastResults?.me;
+  if (latestMe && latestMe !== standing) setStanding(latestMe);
+
   // Optional metadata. Live state and controls still come from the socket.
   const metadata = useResource(
     state.session ? `/sessions/${sessionId}` : null,
@@ -587,7 +605,10 @@ function ConnectedSession({ sessionId }) {
     null;
 
   if (phase === "ended") {
-    const completed = state.final?.status === "COMPLETED";
+    // session_ended carries `reason`; GET /sessions/{id}/results carries
+    // `status`. Accept either so both paths reach the final screens.
+    const completed =
+      (state.final?.status ?? state.final?.reason) === "COMPLETED";
 
     if (completed && host && Array.isArray(state.final.standings)) {
       return (
@@ -840,6 +861,7 @@ function ConnectedSession({ sessionId }) {
               <QuestionScreen
                 key={state.currentQuestion.session_question_id}
                 state={state}
+                standing={standing}
                 host={host}
                 busy={action.busy}
                 canAct={canAct}

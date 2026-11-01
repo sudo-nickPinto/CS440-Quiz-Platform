@@ -117,14 +117,19 @@ Errors: `403 quiz_access_denied`, `404 quiz_not_found`, `500 quiz_archive_failed
 
 Statuses: `LOBBY → ACTIVE → COMPLETED`, or `LOBBY → CANCELLED`. Starting, advancing, ending and answering all happen over the WebSocket ([LIVE_PROTOCOL.md](LIVE_PROTOCOL.md) §1, §4). A session whose host is gone for 15 minutes is ended automatically (§5, PR #53).
 
-`SessionResponse`: `session_id, quiz_id, quiz_version_id, quiz_title, host_id, join_code, status, current_question_order, created_at, started_at, ended_at`.
+`SessionResponse`: `session_id, quiz_id, quiz_version_id, quiz_title, host_id, class_id, join_code, status, current_question_order, created_at, started_at, ended_at`. `class_id` is `null` for an open session.
 
 ### `POST /quizzes/{quiz_id}/sessions` → `201 SessionResponse`
 Only the quiz's author can host it (Admins can't host other people's quizzes). Creates a `LOBBY` session with a fresh 6-digit `join_code`.
 
+Optional body: `{"class_id": 12}`. No body, or `{"class_id": null}`, creates an **open session** that anyone with the code can join. With a `class_id` it creates a **class session**: the caller must also be an active organizer of that class (or an Admin), and only the class's active members can join it.
+
 | Status | Code | When |
 |---|---|---|
 | 403 | `session_host_denied` | Caller isn't the quiz author |
+| 403 | `not_class_organizer` | `class_id` given and the caller isn't an active organizer or Admin |
+| 404 | `class_not_found` | `class_id` given and the class doesn't exist or the caller isn't in it |
+| 409 | `class_archived` | `class_id` given and the class is archived |
 | 404 | `quiz_not_found` | |
 | 409 | `quiz_not_hostable` | Quiz is archived, or has no published version |
 | 500 | `session_creation_failed` | |
@@ -137,10 +142,19 @@ Response: `{ "session": SessionResponse, "participant": { "session_participant_i
 
 | Status | Code | When |
 |---|---|---|
+| 403 | `not_class_member` | It's a class session and the caller isn't an active member, even with the right code |
 | 404 | `join_code_not_found` | No LOBBY/ACTIVE session uses the code |
 | 409 | `host_cannot_join` | The host tried to join their own session |
 | 409 | `session_already_joined` | This account already has a participant row, even one that has left |
 | 500 | `session_join_failed` | |
+
+### `POST /sessions/{session_id}/join` → `201 SessionJoinResponse`
+The class page's Live button: join a **class session** by id, with no code. Same response, errors and late-join rules as joining by code. Only active members of the session's class can use it. Open sessions answer `404 session_not_found` so they still need their code.
+
+### `GET /classes/{class_id}/active-sessions` → `200 ClassActiveSession[]`
+Any active member. The class's `LOBBY` and `ACTIVE` sessions, newest first; the class page polls it every 5 seconds to draw the Live button.
+
+`ClassActiveSession`: `session_id, class_id, quiz_id, quiz_title, host_id, is_host, joined, left, join_code, status, current_question_order, question_count, created_at, started_at`. `joined` is true when the caller has an active participant row (`left_at IS NULL`), so the button goes straight to the game. `left` is true when the caller previously participated but left; that participant row is permanent, so the Live button is disabled and they cannot rejoin. Nonmembers get `404 class_not_found`.
 
 ### `GET /sessions/{session_id}` → `200 SessionResponse`
 Host, Admin, or a participant who hasn't left.
@@ -213,8 +227,71 @@ Extra errors: `403 results_export_denied` (a participant), `500 results_incomple
 
 ## WebSocket
 
-`/ws/sessions/{session_id}`: the host and participant live channel. Authentication is the first message, not the URL. See [LIVE_PROTOCOL.md](LIVE_PROTOCOL.md) for events, close codes and reconnects.
+`/ws/sessions/{session_id}`: the host and participant live channel. Authentication is the first message, not the URL. See [LIVE_PROTOCOL.md](LIVE_PROTOCOL.md) for events, close codes and reconnects. In a class session the socket re-checks membership; a member removed mid-game is closed with `4403 not_class_member`, and their answers are refused with `403 not_class_member`.
 
-## Planned: classes
+## Classes
 
-Classes, membership, class-aware sessions and the class Live button are proposed in [CLASS_APPROVAL.md](CLASS_APPROVAL.md) (rewritten in PR #51: organizers, class codes, `GET /classes/{id}/active-sessions`, `POST /sessions/{id}/join`). Add those routes here when they ship.
+How the class features fit together is in [CLASSES.md](CLASSES.md); the original design is [CLASS_APPROVAL.md](CLASS_APPROVAL.md). Class-aware session routes are listed under [Sessions](#sessions) above.
+
+### `POST /classes/join` → `200 ClassResponse`
+Join a class by its code. Body: `{"code": "ABCD-2345"}`. Case, spaces and the dash don't matter. The caller becomes an active `MEMBER` (`joined_via: CODE`). A pending invite or an earlier membership they left is reactivated. The invite link `/app/join/class/{code}` in the frontend calls this route.
+
+| Status | Code | When |
+|---|---|---|
+| 403 | `class_joining_closed` | The code is turned off, or the class is archived |
+| 403 | `class_member_removed` | An organizer removed them; only a new invite lets them back |
+| 404 | `class_code_not_found` | No class has that code |
+| 409 | `already_class_member` | Already an active member |
+| 429 | `too_many_join_attempts` | More than 10 tries in a minute from one account (counted per server process) |
+
+### `DELETE /classes/{class_id}/membership` → `204`
+Leave a class. The membership becomes `LEFT`, and the code brings them back. Errors: `404 class_not_found` (not a member), `409 not_class_member` (an Admin who never joined), `409 last_organizer`.
+
+### Class reports
+Built from the class's `COMPLETED` sessions only; open sessions never count. Scores are each player's `result.total_score`.
+
+- `GET /classes/{class_id}/dashboard`: for any member. It returns:
+  - `student_count` and `completed_session_count`;
+  - `class_average` and `attendance_rate`, which are organizers only and null for members;
+  - `active_sessions`;
+  - the five most recent `completed_sessions` and `presented_quizzes`;
+  - the first ten `students`, for organizers.
+- `GET /classes/{class_id}/sessions`: for any member. It takes `page`, `page_size` (1–100), `sort=started_at|participant_count|average_score` and `order`. Each item has:
+  - `session_id, quiz_id, quiz_title, status, host_name, is_host, started_at, ended_at, participant_count`;
+  - `average_score` and `top_score`, which are organizers only;
+  - `my_score` and `my_rank`, the caller's own result or null.
+- `GET /classes/{class_id}/quizzes`: for any member. Completed sessions grouped by quiz, with `presented_at, session_count, participant_count` and `average_score` (organizers only). It takes `sort=presented_at|title|participant_count`.
+- `GET /classes/{class_id}/students`: organizers only (`403 not_class_organizer`). Active `MEMBER`s, with:
+  - `session_count, average_score, total_points`;
+  - `attendance_rate` (0–1);
+  - `recent_scores`, the last five sessions newest first, with null where they were absent.
+
+  It takes `sort=name|average_score|session_count`.
+
+All four use the same paging shape: `{ class_id, items, pagination: { page, page_size, total_items, total_pages } }`.
+
+### Detailed class reports
+For one session, one quiz or one student. Like the lists above, they only count the class's `COMPLETED` sessions and use stored scores. All three are sent with `Cache-Control: no-store`.
+
+Organizers and Admins see everyone. Members see only their own rows, and class-wide numbers come back null for them. People without an active membership get `404 class_not_found`.
+
+- `GET /classes/{class_id}/sessions/{session_id}/results`: the same body as `GET /sessions/{session_id}/report`, plus `class_id` and `started_at`. Any organizer gets every player (`view: "host"`), not just the one who hosted. A member gets `view: "participant"` with only their own row.
+  - Errors: `404 session_not_found` (a session from another class, an open session, or one that isn't `COMPLETED`), `403 participant_report_denied` (a member who didn't play it).
+- `GET /classes/{class_id}/quizzes/{quiz_id}/results`: every completed presentation of the quiz in this class, newest first. It returns `{ class_id, quiz_id, title, session_count, participant_count, average_score, sessions }`.
+  - Each session has the same fields as a `/sessions` item, plus `results: [{ account_id, name, rank, points, correct }]`. Members only get their own result.
+  - `average_score` is averaged over every player in every session (organizers only).
+  - Errors: `404 quiz_not_found`. A quiz that was never presented here returns an empty `sessions` list.
+- `GET /classes/{class_id}/students/{account_id}/results`: one student's history in the class. Members can only ask for themselves (`403 not_class_organizer` otherwise). It returns:
+  - `display_name`, `email` (organizers only), `role` and `status`. Removed and departed students keep their history;
+  - `class_session_count`, `session_count`, `attendance_rate`, `total_points`, `average_score`, `correct_count` and `incorrect_count`;
+  - `class_average`, organizers only, using the same formula as the dashboard;
+  - `sessions`: every completed class session, newest first, with `played, points, rank, question_count, correct, incorrect`. The last four are null when the student missed it. Unanswered questions count as incorrect.
+  - Errors: `404 student_not_found` (never in this class).
+
+### `GET /classes/{class_id}/grades/export.csv` → `200 text/csv`
+Organizers only. Returns `{class-name}-grades.csv`, a gradebook (UTF-8 with BOM, `no-store`):
+- one row per student, sorted by name;
+- one column per completed session, oldest first (`Quiz title (YYYY-MM-DD)`), where an empty cell means absent;
+- then `Sessions played, Attendance %, Average points, Total points`.
+
+Cells get the same formula escaping as the session export.

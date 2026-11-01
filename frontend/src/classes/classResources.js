@@ -106,3 +106,36 @@ export function useClassResource(classId) {
 
   return resourceState(result, (data) => normalizeClass(data, account));
 }
+
+export const REPORT_PAGE_SIZE = 25;
+
+function useClassReport(classId, path) {
+  const result = useResource(`/classes/${classId}/${path}`);
+
+  return resourceState(result, (data) => {
+    if (!data || typeof data !== "object") {
+      throw new Error("The class report could not be read.");
+    }
+
+    return data;
+  });
+}
+
+export function useClassDashboard(classId) {
+  return useClassReport(classId, "dashboard");
+}
+
+export function useClassSessions(classId, page = 1) {
+  return useClassReport(
+    classId,
+    `sessions?page=${page}&page_size=${REPORT_PAGE_SIZE}`,
+  );
+}
+
+// Organizer-only; best average first, so row order is the class rank.
+export function useClassStudents(classId, page = 1) {
+  return useClassReport(
+    classId,
+    `students?page=${page}&page_size=${REPORT_PAGE_SIZE}&sort=average_score&order=desc`,
+  );
+}
