@@ -12,11 +12,12 @@ function normalizeClass(record, account) {
     throw new Error("The server returned invalid class information.");
   }
 
-  const isAdmin = account.role === "ADMIN";
+  const isFaculty = account.is_active === true && account.role === "ADMIN";
+
   const isOrganizer =
+    isFaculty &&
     record.current_role === "ORGANIZER" &&
     record.membership_status === "ACTIVE";
-
   return {
     id: record.class_id,
     name: record.name,
@@ -24,14 +25,12 @@ function normalizeClass(record, account) {
     joiningOpen: record.joining_open === true,
     archived: Boolean(record.archived_at),
     membershipStatus: record.membership_status,
-    canManage: isAdmin || isOrganizer,
-    roleLabel: isAdmin
-      ? "Administrator"
-      : isOrganizer
-        ? "Organizer"
-        : record.membership_status === "INVITED"
-          ? "Invited"
-          : "Member",
+    canManage: isOrganizer,
+    roleLabel: isOrganizer
+      ? "Organizer"
+      : record.membership_status === "INVITED"
+        ? "Invited"
+        : "Member",
   };
 }
 

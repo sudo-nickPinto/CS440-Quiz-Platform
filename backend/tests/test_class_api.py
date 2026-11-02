@@ -45,7 +45,7 @@ def class_client() -> Iterator[tuple[TestClient, dict[str, CurrentAccount]]]:
                     auth0_sub=f"test|classes-{name}",
                     email=f"classes-{name}@test.invalid",
                     display_name=name.replace("_", " ").title(),
-                    account_type="ADMINISTRATOR" if name == "admin" else None,
+                    account_type="ADMINISTRATOR" if name in {"creator", "organizer", "admin"} else None,
                 )
                 for name in (
                     "creator",
@@ -64,7 +64,7 @@ def class_client() -> Iterator[tuple[TestClient, dict[str, CurrentAccount]]]:
                 name: CurrentAccount(
                     account_id=model.account_id,
                     role=(
-                        AccountRole.ADMIN if name == "admin" else AccountRole.USER
+                        AccountRole.ADMIN if name in {"creator", "organizer", "admin"} else AccountRole.USER
                     ),
                     is_active=True,
                 )
@@ -137,7 +137,7 @@ def test_generated_code_uses_approved_alphabet_and_length() -> None:
     assert not (set("0O1IL") & set(CLASS_CODE_ALPHABET))
 
 
-def test_active_user_creates_class_and_becomes_organizer(class_client) -> None:
+def test_active_faculty_creates_class_and_becomes_organizer(class_client) -> None:
     client, identities = class_client
 
     response = client.post("/classes", json={"name": "  CS 440  "})
@@ -191,10 +191,11 @@ def test_class_and_creator_membership_are_atomic() -> None:
             auth0_sub="test|atomic-class",
             email="atomic-class@test.invalid",
             display_name="Atomic Creator",
+            account_type="ADMINISTRATOR",
         )
         db.add(account)
         db.commit()
-        identity = CurrentAccount(account.account_id, AccountRole.USER, True)
+        identity = CurrentAccount(account.account_id, AccountRole.ADMIN, True)
         db.execute(
             text(
                 "CREATE TRIGGER fail_class_membership_insert "
@@ -257,27 +258,16 @@ def test_normal_list_includes_active_and_invited_but_not_inactive_memberships(
     assert all(item["join_code"] is None for item in response.json())
 
 
-def test_global_admin_lists_every_class_including_archived(class_client) -> None:
+def test_faculty_list_excludes_classes_without_membership(class_client):
     client, identities = class_client
-    first_id = seed_class(client, identities["organizer"], name="First")
-    archived_id = seed_class(
-        client,
-        identities["organizer"],
-        name="Archived",
-        archived=True,
-    )
+    seed_class(client, identities["organizer"], name="First")
+    seed_class(client, identities["organizer"], name="Archived", archived=True)
     act_as(client, identities["admin"])
-
     response = client.get("/classes")
-
     assert response.status_code == 200
-    assert [item["class_id"] for item in response.json()] == [archived_id, first_id]
-    assert response.json()[0]["archived_at"] is not None
-    assert all(item["current_role"] is None for item in response.json())
-    assert all(item["membership_status"] is None for item in response.json())
+    assert response.json() == []
 
-
-def test_class_detail_hides_code_from_member_but_not_organizer_or_admin(
+def test_class_detail_hides_code_and_rejects_unrelated_faculty(
     class_client,
 ) -> None:
     client, identities = class_client
@@ -304,7 +294,8 @@ def test_class_detail_hides_code_from_member_but_not_organizer_or_admin(
     assert member_response.status_code == 200
     assert member_response.json()["join_code"] is None
     assert organizer_response.json()["join_code"] == "ABCD-EFGH"
-    assert admin_response.json()["join_code"] == "ABCD-EFGH"
+    assert admin_response.status_code == 404
+    assert admin_response.json()["error"]["code"] == "class_not_found"
 
 
 @pytest.mark.parametrize(
@@ -420,7 +411,7 @@ def test_member_cannot_rename_rotate_or_archive(class_client) -> None:
         assert response.json()["error"]["code"] == "not_class_organizer"
 
 
-def test_organizer_and_global_admin_can_rename(class_client) -> None:
+def test_organizer_can_rename_but_unrelated_faculty_cannot(class_client) -> None:
     client, identities = class_client
     class_id = seed_class(client, identities["organizer"])
 
@@ -433,30 +424,24 @@ def test_organizer_and_global_admin_can_rename(class_client) -> None:
 
     assert organizer_update.status_code == 200
     assert organizer_update.json()["name"] == "Organizer Name"
-    assert admin_update.status_code == 200
-    assert admin_update.json()["name"] == "Admin Name"
+    assert admin_update.status_code == 404
+    assert admin_update.json()["error"]["code"] == "class_not_found"
+    act_as(client, identities["organizer"])
+    assert client.get(f"/classes/{class_id}").json()["name"] == "Organizer Name"
 
 
-def test_global_admin_can_rotate_code_and_archive(class_client) -> None:
+def test_unrelated_faculty_cannot_rotate_code_or_archive(class_client):
     client, identities = class_client
     class_id = seed_class(client, identities["organizer"])
     act_as(client, identities["admin"])
-
-    with patch(
-        "app.services.classes.generate_class_code",
-        return_value="JKMNPQRS",
-    ):
-        rotated = client.post(f"/classes/{class_id}/code")
-    archived = client.post(f"/classes/{class_id}/archive")
-
-    assert rotated.status_code == 200
-    assert rotated.json()["join_code"] == "JKMN-PQRS"
-    assert rotated.json()["joining_open"] is True
-    assert archived.status_code == 200
-    assert archived.json()["archived_at"] is not None
-    assert archived.json()["join_code"] is None
-    assert archived.json()["joining_open"] is False
-
+    for path in (f"/classes/{class_id}/code", f"/classes/{class_id}/archive"):
+        response = client.post(path)
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "class_not_found"
+    act_as(client, identities["organizer"])
+    detail = client.get(f"/classes/{class_id}")
+    assert detail.json()["join_code"] == "ABCD-EFGH"
+    assert detail.json()["archived_at"] is None
 
 def test_joining_can_be_closed_and_reopened_when_not_archived(class_client) -> None:
     client, identities = class_client

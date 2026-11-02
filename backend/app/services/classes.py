@@ -20,10 +20,12 @@ from app.models.classes import (
 from app.schemas.classes import ClassCreate, ClassJoin, ClassResponse, ClassUpdate
 from app.services.class_authorization import (
     ClassAccess,
+    require_active_faculty,
     require_class_member,
     require_class_organizer,
 )
 from app.services.class_memberships import _load_class, _protect_last_organizer
+from app.models.account import AccountRole, effective_role
 
 CLASS_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CLASS_CODE_LENGTH = 8
@@ -79,18 +81,20 @@ def _format_join_code(code: str | None) -> str | None:
 def _to_response(
     class_: Class,
     membership: ClassMembership | None,
-    *,
-    is_global_admin: bool,
 ) -> ClassResponse:
     active_membership = (
         membership
         if membership is not None and membership.status == MembershipStatus.ACTIVE
         else None
     )
-    may_view_code = is_global_admin or (
+
+    may_view_code = (
         active_membership is not None
         and active_membership.role == ClassRole.ORGANIZER
+        and active_membership.account.is_active
+        and effective_role(active_membership.account.account_type) == AccountRole.ADMIN
     )
+
     return ClassResponse(
         class_id=class_.class_id,
         name=class_.name,
@@ -101,22 +105,14 @@ def _to_response(
         created_at=class_.created_at,
         updated_at=class_.updated_at,
         current_role=(
-            None
-            if is_global_admin or active_membership is None
-            else active_membership.role
+            active_membership.role if active_membership is not None else None
         ),
-        membership_status=(
-            None if is_global_admin or membership is None else membership.status
-        ),
+        membership_status=membership.status if membership is not None else None,
     )
 
 
 def _access_response(access: ClassAccess) -> ClassResponse:
-    return _to_response(
-        access.class_,
-        access.membership,
-        is_global_admin=access.is_global_admin,
-    )
+    return _to_response(access.class_, access.membership)
 
 
 def _commit(db: Session, code: str, message: str) -> None:
@@ -132,38 +128,40 @@ def create_class(
     account: CurrentAccount,
     payload: ClassCreate,
 ) -> ClassResponse:
+    require_active_faculty(account)
+
     code = _generate_unique_code(
         db,
         error_code="class_create_failed",
         error_message="Could not create the class.",
     )
+
     membership = ClassMembership(
         account_id=account.account_id,
         role=ClassRole.ORGANIZER,
         status=MembershipStatus.ACTIVE,
         joined_via=JoinedVia.CREATOR,
     )
+
     class_ = Class(
         name=payload.name,
         created_by_id=account.account_id,
         join_code=code,
         memberships=[membership],
     )
+
     db.add(class_)
     _commit(db, "class_create_failed", "Could not create the class.")
-    return _to_response(class_, membership, is_global_admin=account.is_admin)
+
+    return _to_response(class_, membership)
 
 
 def list_classes(
     db: Session,
     account: CurrentAccount,
 ) -> list[ClassResponse]:
-    ordering = (Class.created_at.desc(), Class.class_id.desc())
-    if account.is_admin:
-        classes = db.scalars(select(Class).order_by(*ordering)).all()
-        return [
-            _to_response(class_, None, is_global_admin=True) for class_ in classes
-        ]
+    if not account.is_active:
+        raise APIError(403, "inactive_account", "This account is inactive.")
 
     rows = db.execute(
         select(Class, ClassMembership)
@@ -174,12 +172,10 @@ def list_classes(
                 (MembershipStatus.ACTIVE, MembershipStatus.INVITED)
             ),
         )
-        .order_by(*ordering)
+        .order_by(Class.created_at.desc(), Class.class_id.desc())
     ).all()
-    return [
-        _to_response(class_, membership, is_global_admin=False)
-        for class_, membership in rows
-    ]
+
+    return [_to_response(class_, membership) for class_, membership in rows]
 
 
 def get_class(
@@ -303,9 +299,7 @@ def join_class(
         )
         db.add(membership)
     elif membership.status == MembershipStatus.ACTIVE:
-        raise APIError(
-            409, "already_class_member", "You're already in this class."
-        )
+        raise APIError(409, "already_class_member", "You're already in this class.")
     elif membership.status == MembershipStatus.REMOVED:
         # Only an organizer can undo a removal, by inviting them again.
         raise APIError(
@@ -332,7 +326,7 @@ def join_class(
     except SQLAlchemyError as exc:
         db.rollback()
         raise APIError(500, "class_join_failed", "Could not join the class.") from exc
-    return _to_response(class_, membership, is_global_admin=False)
+    return _to_response(class_, membership)
 
 
 def leave_class(
@@ -353,13 +347,6 @@ def leave_class(
         .with_for_update()
     )
     if membership is None or membership.status != MembershipStatus.ACTIVE:
-        # An Admin browsing a class they never joined has nothing to leave.
-        if account.is_admin:
-            raise APIError(
-                409, "not_class_member", "You aren't a member of this class."
-            )
-        # Match the class authorization behavior for removed members and
-        # outsiders so this endpoint does not reveal that the class exists.
         raise APIError(404, "class_not_found", "Class not found.")
 
     _protect_last_organizer(db, membership)

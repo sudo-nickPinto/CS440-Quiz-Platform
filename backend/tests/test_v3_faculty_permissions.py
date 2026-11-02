@@ -23,10 +23,17 @@ from app.services.classes import create_class
 
 
 @pytest.fixture
-def context():
+def context(tmp_path, caplog):
+    database_url = f"sqlite:///{(tmp_path / 'faculty.sqlite').as_posix()}"
+    database = Database(database_url)
+    try:
+        Base.metadata.create_all(database.engine)
+    finally:
+        database.dispose()
+
     app = create_app(
         Settings(
-            database_url="sqlite://",
+            database_url=database_url,
             auth0_domain="tenant.example.auth0.com",
             auth0_audience="quiz-api",
             live_abandon_after_seconds=0,
@@ -34,7 +41,11 @@ def context():
     )
 
     with TestClient(app) as client:
-        Base.metadata.create_all(app.state.database.engine)
+        assert not any(
+            record.name == "app.main"
+            and record.getMessage() == "Startup sweep of open questions failed"
+            for record in caplog.records
+        )
 
         with app.state.database.session_factory() as db:
             models = {

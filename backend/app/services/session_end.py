@@ -20,6 +20,7 @@ from app.models import (
 from app.schemas.live_question import QuestionClosedEvent
 from app.schemas.results import FinalResults, FinalStanding
 from app.services.live_questions import close_open_question_for_host
+from app.services.class_authorization import require_class_member
 
 ENDED_STATUSES = (LiveSessionStatus.COMPLETED, LiveSessionStatus.CANCELLED)
 
@@ -411,24 +412,29 @@ def get_final_results(
     account: CurrentAccount,
     session_id: int,
 ) -> tuple[FinalResults, int | None]:
-    """Stored final results plus the caller's session_participant_id.
+    """Return persisted results after checking the caller's session access.
 
-    The caller's participant id is None for the host or an Admin, who see
-    every row; the route cuts the rows down for participants.
+    Hosts receive all rows. Participants receive their own results through
+    the existing response filtering. Faculty status grants no bypass.
     """
     session = db.get(LiveSession, session_id)
+
     if session is None:
         raise APIError(404, "session_not_found", "Session not found.")
 
+    if session.class_id is not None:
+        require_class_member(db, account, session.class_id)
+
     viewer_participant_id = None
-    if session.host_id != account.account_id and not account.is_admin:
-        # Anyone who played sees the results, even if they left early.
+
+    if session.host_id != account.account_id:
         viewer_participant_id = db.scalar(
             select(SessionParticipant.session_participant_id).where(
                 SessionParticipant.session_id == session_id,
                 SessionParticipant.account_id == account.account_id,
             )
         )
+
         if viewer_participant_id is None:
             raise APIError(
                 403,

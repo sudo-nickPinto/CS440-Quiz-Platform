@@ -20,10 +20,22 @@ from app.services.class_memberships import remove_class_member, update_class_mem
 from app.services.classes import leave_class
 
 
+def make_faculty(client, account):
+    with client.app.state.database.session_factory() as db:
+        model = db.get(Account, account.account_id)
+        assert model is not None
+        model.account_type = "ADMINISTRATOR"
+        db.commit()
+    return CurrentAccount(account.account_id, AccountRole.ADMIN, True)
+
+
 def test_class_membership_crud_uses_migrated_mysql_schema(
     mysql_quiz_client,
 ) -> None:
     client, class_admin, target = mysql_quiz_client
+    class_admin = make_faculty(client, class_admin)
+    target = make_faculty(client, target)
+    client.app.dependency_overrides[get_active_account] = lambda: class_admin
     with client.app.state.database.session_factory() as db:
         db: Session
         class_ = Class(
@@ -48,11 +60,11 @@ def test_class_membership_crud_uses_migrated_mysql_schema(
         json={"email": "READER@test.invalid"},
     )
     client.app.dependency_overrides[get_active_account] = lambda: CurrentAccount(
-        target.account_id, AccountRole.USER, True
+        target.account_id, AccountRole.ADMIN, True
     )
     accepted = client.post(f"/classes/{class_id}/invite/accept")
     client.app.dependency_overrides[get_active_account] = lambda: CurrentAccount(
-        class_admin.account_id, AccountRole.USER, True
+        class_admin.account_id, AccountRole.ADMIN, True
     )
     promoted = client.patch(
         f"/classes/{class_id}/members/{target.account_id}",
@@ -89,11 +101,15 @@ def test_class_membership_crud_uses_migrated_mysql_schema(
 @pytest.mark.parametrize("operation", ["remove", "demote"])
 def test_concurrent_admin_changes_are_serialized(mysql_quiz_client, operation) -> None:
     client, class_admin, target = mysql_quiz_client
+    class_admin = make_faculty(client, class_admin)
+    target = make_faculty(client, target)
+    client.app.dependency_overrides[get_active_account] = lambda: class_admin
     with client.app.state.database.session_factory() as db:
         third = Account(
             auth0_sub=f"test|third-{operation}",
             email=f"third-{operation}@test.invalid",
             display_name="Third Admin",
+            account_type="ADMINISTRATOR",
         )
         db.add(third)
         db.flush()

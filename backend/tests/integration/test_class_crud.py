@@ -114,7 +114,7 @@ def _seed_accounts(app) -> dict[str, CurrentAccount]:
                 auth0_sub=f"{ACCOUNT_PREFIX}{name}",
                 email=f"class-crud-integration-{name}@test.invalid",
                 display_name=name.replace("_", " ").title(),
-                account_type="ADMINISTRATOR" if name == "admin" else None,
+                account_type="ADMINISTRATOR" if name in {"creator", "admin"} else None,
             )
             for name in (
                 "creator",
@@ -131,7 +131,7 @@ def _seed_accounts(app) -> dict[str, CurrentAccount]:
         return {
             name: CurrentAccount(
                 account_id=model.account_id,
-                role=AccountRole.ADMIN if name == "admin" else AccountRole.USER,
+                role=AccountRole.ADMIN if name in {"creator", "admin"} else AccountRole.USER,
                 is_active=True,
             )
             for name, model in account_models.items()
@@ -350,8 +350,9 @@ def test_mysql_visibility_authorization_rotation_and_archive(
 
     _act_as(client, accounts["admin"])
     admin_detail = client.get(f"/classes/{class_id}")
-    assert admin_detail.status_code == 200
-    assert admin_detail.json()["join_code"] == body["join_code"]
+    assert admin_detail.status_code == 404
+    assert admin_detail.json()["error"]["code"] == "class_not_found"
+    _act_as(client, accounts["creator"])
     renamed_and_closed = client.patch(
         f"/classes/{class_id}",
         json={"name": "Admin Renamed", "joining_open": False},
@@ -375,7 +376,7 @@ def test_mysql_visibility_authorization_rotation_and_archive(
     _act_as(client, accounts["member"])
     assert client.get(f"/classes/{class_id}").json()["join_code"] is None
 
-    _act_as(client, accounts["admin"])
+    _act_as(client, accounts["creator"])
     first_archive = client.post(f"/classes/{class_id}/archive")
     second_archive = client.post(f"/classes/{class_id}/archive")
     assert first_archive.status_code == 200
@@ -405,7 +406,7 @@ def test_mysql_visibility_authorization_rotation_and_archive(
     assert historical.status_code == 200
     assert historical.json()["archived_at"] is not None
 
-    _act_as(client, accounts["admin"])
+    _act_as(client, accounts["creator"])
     reopen = client.patch(f"/classes/{class_id}", json={"joining_open": True})
     reissue = client.post(f"/classes/{class_id}/code")
     for response in (reopen, reissue):

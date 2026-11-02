@@ -286,20 +286,23 @@ def list_quizzes(
     db: Session,
     account: CurrentAccount,
 ) -> list[QuizListItem]:
-    """List public quizzes, or every quiz when requested by an Admin."""
+    """Apply the same existing V2 visibility rules to faculty and students.
+
+    Task 2 replaces this listing with class-scoped quiz access.
+    """
     statement = (
         select(Quiz)
         .options(selectinload(Quiz.versions).selectinload(QuizVersion.questions))
-        .order_by(Quiz.created_at.desc(), Quiz.quiz_id.desc())
-    )
-    if not account.is_admin:
-        statement = statement.where(
+        .where(
             (Quiz.status == QuizStatus.PUBLISHED)
             | (
                 (Quiz.author_id == account.account_id)
                 & (Quiz.status == QuizStatus.ARCHIVED)
             )
         )
+        .order_by(Quiz.created_at.desc(), Quiz.quiz_id.desc())
+    )
+
     return [_to_list_item(quiz) for quiz in db.scalars(statement).all()]
 
 
@@ -309,11 +312,10 @@ def get_quiz(
     quiz_id: int,
 ) -> QuizResponse:
     quiz = _load_quiz(db, quiz_id)
-    if quiz.status != QuizStatus.PUBLISHED and not (
-        quiz.author_id == account.account_id or account.is_admin
-    ):
-        # Do not reveal archived or legacy draft quizzes to other users.
+
+    if quiz.status != QuizStatus.PUBLISHED and quiz.author_id != account.account_id:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
+
     return _to_response(quiz)
 
 
@@ -323,11 +325,11 @@ def archive_quiz(
     quiz_id: int,
 ) -> QuizResponse:
     quiz = _load_quiz(db, quiz_id)
-    if quiz.author_id != account.account_id and not account.is_admin:
+    if quiz.author_id != account.account_id:
         raise APIError(
             403,
             "quiz_access_denied",
-            "Only the quiz author or an Admin can archive it.",
+            "Only the quiz author can archive it.",
         )
     if quiz.status == QuizStatus.ARCHIVED:
         return _to_response(quiz)

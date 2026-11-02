@@ -35,7 +35,7 @@ def authorization_context() -> Iterator[tuple[Session, dict[str, CurrentAccount]
                 auth0_sub=f"test|class-authorization-{name}",
                 email=f"class-authorization-{name}@test.invalid",
                 display_name=name.replace("_", " ").title(),
-                account_type="ADMINISTRATOR" if name == "admin" else None,
+                account_type="ADMINISTRATOR" if name in {"organizer", "admin"} else None,
             )
             for name in (
                 "outsider",
@@ -103,7 +103,7 @@ def authorization_context() -> Iterator[tuple[Session, dict[str, CurrentAccount]
         accounts = {
             name: CurrentAccount(
                 account_id=model.account_id,
-                role=AccountRole.ADMIN if name == "admin" else AccountRole.USER,
+                role=AccountRole.ADMIN if name in {"organizer", "admin"} else AccountRole.USER,
                 is_active=True,
             )
             for name, model in account_models.items()
@@ -193,38 +193,18 @@ def test_active_member_is_not_class_organizer(authorization_context) -> None:
     )
 
 
-def test_global_admin_bypasses_member_and_organizer_checks(
-    authorization_context,
-) -> None:
+def test_faculty_without_membership_cannot_access_class(authorization_context):
     db, accounts, class_id, _ = authorization_context
+    for check in (require_class_member, require_class_organizer):
+        assert_api_error(404, "class_not_found", lambda: check(db, accounts["admin"], class_id))
 
-    member_access = require_class_member(db, accounts["admin"], class_id)
-    organizer_access = require_class_organizer(db, accounts["admin"], class_id)
-
-    assert member_access.class_.class_id == class_id
-    assert member_access.membership is None
-    assert member_access.is_global_admin is True
-    assert organizer_access.class_.class_id == class_id
-    assert organizer_access.membership is None
-    assert organizer_access.is_global_admin is True
-
-
-def test_archived_class_remains_readable_to_active_member_and_global_admin(
-    authorization_context,
-) -> None:
-    db, accounts, _, archived_class_id = authorization_context
-
-    member_access = require_class_member(
-        db, accounts["member"], archived_class_id
-    )
-    admin_access = require_class_member(db, accounts["admin"], archived_class_id)
-
-    assert member_access.class_.archived_at is not None
-    assert member_access.membership is not None
-    assert member_access.membership.status == MembershipStatus.ACTIVE
-    assert admin_access.class_.archived_at is not None
-    assert admin_access.is_global_admin is True
-
+def test_archived_class_requires_active_membership(authorization_context):
+    db, accounts, _, class_id = authorization_context
+    access = require_class_member(db, accounts["member"], class_id)
+    assert access.class_.archived_at is not None
+    assert access.membership.status == MembershipStatus.ACTIVE
+    assert access.is_global_admin is False
+    assert_api_error(404, "class_not_found", lambda: require_class_member(db, accounts["admin"], class_id))
 
 def test_active_organizer_can_host_class_sessions(authorization_context) -> None:
     db, accounts, class_id, _ = authorization_context
@@ -237,15 +217,9 @@ def test_active_organizer_can_host_class_sessions(authorization_context) -> None
     assert access.is_global_admin is False
 
 
-def test_global_admin_can_host_class_sessions(authorization_context) -> None:
+def test_faculty_without_membership_cannot_host_class_sessions(authorization_context):
     db, accounts, class_id, _ = authorization_context
-
-    access = require_class_host(db, accounts["admin"], class_id)
-
-    assert access.class_.class_id == class_id
-    assert access.membership is None
-    assert access.is_global_admin is True
-
+    assert_api_error(404, "class_not_found", lambda: require_class_host(db, accounts["admin"], class_id))
 
 def test_active_member_cannot_host_class_sessions(authorization_context) -> None:
     db, accounts, class_id, _ = authorization_context
@@ -295,11 +269,13 @@ def test_archived_class_cannot_host_sessions(authorization_context) -> None:
     )
     db.commit()
 
-    for account_name in ("organizer", "admin"):
-        assert_api_error(
-            409,
-            "class_archived",
-            lambda: require_class_host(
-                db, accounts[account_name], archived_class_id
-            ),
-        )
+    assert_api_error(
+        409,
+        "class_archived",
+        lambda: require_class_host(db, accounts["organizer"], archived_class_id),
+    )
+    assert_api_error(
+        404,
+        "class_not_found",
+        lambda: require_class_host(db, accounts["admin"], archived_class_id),
+    )

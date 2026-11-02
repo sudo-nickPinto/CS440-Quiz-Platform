@@ -14,6 +14,7 @@ from app.models.classes import (
     Class,
     ClassRole,
     ClassMembership,
+    MembershipStatus,
 )
 from app.models.quiz import Quiz, QuizVersion
 from app.models.session import (
@@ -41,7 +42,7 @@ def dashboard_client() -> Iterator[tuple[TestClient, dict[str, CurrentAccount], 
                     auth0_sub=f"auth0|{name}",
                     email=f"{name}@gettysburg.edu",
                     display_name=display_name,
-                    account_type="ADMINISTRATOR" if name == "global" else None,
+                    account_type="ADMINISTRATOR" if name in {"owner", "global"} else None,
                 )
                 for name, display_name in {
                     "owner": "Owner",
@@ -82,7 +83,7 @@ def dashboard_client() -> Iterator[tuple[TestClient, dict[str, CurrentAccount], 
                 name: CurrentAccount(
                     account_id=model.account_id,
                     role=(
-                        AccountRole.ADMIN if name == "global" else AccountRole.USER
+                        AccountRole.ADMIN if name in {"owner", "global"} else AccountRole.USER
                     ),
                     is_active=True,
                 )
@@ -181,18 +182,13 @@ def test_student_roster_supports_sorting_and_pagination(dashboard_client) -> Non
     assert first.json()["pagination"]["total_pages"] == 2
 
 
-def test_global_admin_can_access_students_without_membership(dashboard_client) -> None:
+def test_unrelated_faculty_cannot_access_dashboard_or_students(dashboard_client):
     client, identities, class_id = dashboard_client
     act_as(client, identities["global"])
-
-    dashboard = client.get(f"/classes/{class_id}/dashboard")
-    students = client.get(f"/classes/{class_id}/students")
-
-    assert dashboard.status_code == 200
-    assert dashboard.json()["is_global_admin"] is True
-    assert dashboard.json()["current_user_role"] is None
-    assert students.status_code == 200
-
+    for path in (f"/classes/{class_id}/dashboard", f"/classes/{class_id}/students"):
+        response = client.get(path)
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "class_not_found"
 
 def test_nonmember_cannot_discover_class(dashboard_client) -> None:
     client, identities, class_id = dashboard_client
@@ -215,6 +211,15 @@ def test_empty_archived_class_is_supported(dashboard_client) -> None:
             archived_at=datetime.now(UTC).replace(tzinfo=None),
         )
         db.add(archived)
+        db.flush()
+        db.add(
+            ClassMembership(
+                class_id=archived.class_id,
+                account_id=identities["global"].account_id,
+                role=ClassRole.ORGANIZER,
+                status=MembershipStatus.ACTIVE,
+            )
+        )
         db.commit()
         archived_id = archived.class_id
     act_as(client, identities["global"])
@@ -224,7 +229,7 @@ def test_empty_archived_class_is_supported(dashboard_client) -> None:
 
     assert dashboard.status_code == 200
     assert dashboard.json()["is_archived"] is True
-    assert dashboard.json()["active_member_count"] == 0
+    assert dashboard.json()["active_member_count"] == 1
     assert dashboard.json()["active_sessions"] == []
     assert students.status_code == 200
     assert students.json()["items"] == []
