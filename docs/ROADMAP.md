@@ -191,4 +191,4 @@ Not on the timeline. We'll pick these up only if the MVP ships early, or next se
 
 - **Dates are proposals.** Adjust them at the next team meeting, then update this file.
 - **Owners are inferred from commits and open PRs**, not assigned. "Nick (proposed)" means Nick plans to take it.
-- `docs/AUTH.md` still says "every route should treat all accounts the same". Since #26 added Admin, that line needs a small update.
+- `docs/AUTH.md` documents the V3 faculty assignment model: approved faculty are assigned `ADMINISTRATOR` manually, without receiving global access to unrelated classes.

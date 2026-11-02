@@ -31,7 +31,7 @@ flowchart TD
     F -->|No| G[Hidden 404 class_not_found]
     F -->|Yes| H{Organizer action?}
     H -->|No| I[Return class data]
-    H -->|Yes| J{Role is ORGANIZER or global Admin?}
+    H -->|Yes| J{Active faculty ORGANIZER?}
     J -->|No| K[403 not_class_organizer]
     J -->|Yes| L[Perform operation and commit]
     L --> M[Return ClassResponse]
@@ -85,7 +85,7 @@ Each person's relationship with each class is stored in `class_membership`:
 
 | Caller | Read class | Rename, rotate code, or archive |
 | --- | ---: | ---: |
-| Global Admin | Allowed | Allowed |
+| Faculty organizer | Allowed | Allowed |
 | Active organizer | Allowed | Allowed |
 | Active member | Allowed | `403 not_class_organizer` |
 | Invited user | Hidden `404` | Hidden `404` |
@@ -116,7 +116,7 @@ The backend performs these steps:
 4. `update_class()` calls `require_class_organizer()` before changing the class.
 5. `require_class_member()` loads class 7 and Alice's `ClassMembership` row.
 6. The membership must have `status == ACTIVE`.
-7. The organizer check then requires `role == ORGANIZER`; a global Admin may bypass the membership requirement.
+7. The organizer check requires an active faculty account with `role == ORGANIZER`; there is no global bypass.
 8. Only after authorization succeeds does the service change the requested fields.
 9. The transaction commits.
 10. The updated `ClassResponse` returns with `200 OK`.
@@ -311,7 +311,7 @@ For example, the active-member denial test arranges an `ACTIVE/MEMBER` membershi
 The reusable fixture creates several identities in one isolated SQLite database:
 
 ```text
-outsider, invited, left, removed, member, organizer, global Admin
+outsider, invited, left, removed, member, faculty organizer, unrelated faculty
 ```
 
 That lets the tests verify the full permission table without changing real application data.
@@ -380,7 +380,7 @@ Expected result:
 2 passed
 ```
 
-The first test sends protected mutation requests as an active member and verifies `403 not_class_organizer`. The second sends rename requests as an organizer and global Admin and verifies `200 OK` with the updated name.
+The first test sends protected mutation requests as an active member and verifies `403 not_class_organizer`. The second sends rename requests as an active faculty organizer and verifies `200 OK`; unrelated faculty are denied.
 
 #### Broader focused verification
 

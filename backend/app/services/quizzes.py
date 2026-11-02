@@ -159,8 +159,7 @@ def update_quiz(
                 "Quiz not found.",
             )
 
-        # Being a global administrator does not grant edit access
-        # to somebody else's quiz.
+        # Faculty status does not grant edit access to somebody else's quiz.
         if quiz.author_id != account.account_id:
             raise APIError(
                 403,
