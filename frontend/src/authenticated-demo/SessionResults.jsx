@@ -53,18 +53,19 @@ function Stat({ label, value }) {
   );
 }
 
-function Title({ report, host, children }) {
+function Title({ report, host, children, backTo, backLabel }) {
+  const destination =
+    backTo ||
+    (host
+      ? `/app/quizzes/${report.quiz_id}/reports`
+      : "/app/dashboard/participate");
+
+  const label = backLabel || (host ? "Hosting history" : "Participate");
+
   return (
     <header className="rr-title">
-      <Link
-        className="rr-button"
-        to={
-          host
-            ? `/app/quizzes/${report.quiz_id}/reports`
-            : "/app/dashboard/participate"
-        }
-      >
-        ← {host ? "Hosting history" : "Participate"}
+      <Link className="rr-button" to={destination}>
+        ← {label}
       </Link>
 
       <div>
@@ -387,7 +388,7 @@ function QuestionBreakdown({ question, index, players, onPerson }) {
   );
 }
 
-function HostResults({ report }) {
+export function HostResults({ report, backTo, backLabel, exportControl }) {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const { getAccessTokenSilently } = useAuth0();
@@ -464,15 +465,19 @@ function HostResults({ report }) {
 
   return (
     <div className="rr" style={{ "--q": report.questions.length }}>
-      <Title report={report} host>
-        <button
-          type="button"
-          className="rr-button orange"
-          disabled={action.busy}
-          onClick={() => void download()}
-        >
-          {action.busy ? "Preparing…" : "Export CSV"}
-        </button>
+      <Title report={report} host backTo={backTo} backLabel={backLabel}>
+        {exportControl === undefined ? (
+          <button
+            type="button"
+            className="rr-button orange"
+            disabled={action.busy}
+            onClick={() => void download()}
+          >
+            {action.busy ? "Preparing…" : "Export CSV"}
+          </button>
+        ) : (
+          exportControl
+        )}
       </Title>
 
       <RequestError error={action.error} />
@@ -620,7 +625,7 @@ function HostResults({ report }) {
   );
 }
 
-function ParticipantResults({ report }) {
+export function ParticipantResults({ report, backTo, backLabel }) {
   const [params, setParams] = useSearchParams();
   const player = report.players[0];
 
@@ -690,8 +695,11 @@ function ParticipantResults({ report }) {
   return (
     <div className="rr rr-me">
       <nav className="rr-crumbs" aria-label="Breadcrumb">
-        <Link className="rr-crumb-back" to="/app/dashboard/participate">
-          ← Participate
+        <Link
+          className="rr-crumb-back"
+          to={backTo || "/app/dashboard/participate"}
+        >
+          ← {backLabel || "Participate"}
         </Link>
         <div className="rr-trail">
           <span>Dashboard /</span>

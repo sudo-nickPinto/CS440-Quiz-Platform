@@ -4,6 +4,11 @@ import ClassesPage from "../classes/ClassesPage";
 import ClassPage from "../classes/ClassPage";
 import JoinClassPage from "../classes/JoinClassPage";
 import QuizBurgLogo from "../classes/QuizBurgLogo";
+import {
+  ClassSessionReportPage,
+  ClassQuizReportPage,
+  ClassStudentReportPage,
+} from "../classes/ClassReports";
 
 import { AccountContext } from "./account";
 import { useResource } from "./rest";
@@ -98,6 +103,21 @@ export default function PreviewApp({ onSignOut }) {
             <Route
               path="classes/:classId"
               element={<ClassPage key={pathname} />}
+            />
+
+            <Route
+              path="classes/:classId/sessions/:sessionId/report"
+              element={<ClassSessionReportPage key={pathname} />}
+            />
+
+            <Route
+              path="classes/:classId/quizzes/:quizId/report"
+              element={<ClassQuizReportPage key={pathname} />}
+            />
+
+            <Route
+              path="classes/:classId/students/:accountId/report"
+              element={<ClassStudentReportPage key={pathname} />}
             />
 
             <Route path="dashboard/:view" element={<PreviewDashboard />} />

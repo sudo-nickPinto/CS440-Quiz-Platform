@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
-import { Link, useNavigate, useParams } from "react-router";
-
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 import HostQuizButton from "../authenticated-demo/HostQuizButton";
 import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
@@ -10,14 +9,15 @@ import { useConfirm } from "../authenticated-demo/useConfirm";
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import ClassLiveButton from "./ClassLiveButton";
 import { copyText } from "./classHelpers";
+import { EmptyMessage, ResourceMessage } from "./ClassUI";
+import { ClassMembers, ClassSettings } from "./ClassManagement";
 import {
   useClassDashboard,
+  useClassQuizzes,
   useClassResource,
   useClassSessions,
   useClassStudents,
 } from "./classResources";
-import { EmptyMessage, ResourceMessage } from "./ClassUI";
-import { ClassMembers, ClassSettings } from "./ClassManagement";
 
 const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
   month: "short",
@@ -61,9 +61,7 @@ function ReportTable({
 }) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
-  const visible = rows.filter((row) =>
-    row.text.toLowerCase().includes(needle),
-  );
+  const visible = rows.filter((row) => row.text.toLowerCase().includes(needle));
   const totalItems = pagination?.total_items ?? rows.length;
   const page = pagination?.page ?? 1;
   const totalPages = pagination?.total_pages ?? (totalItems ? 1 : 0);
@@ -158,14 +156,10 @@ function ReportTable({
 
 // Organizer view: every completed session of the class.
 function PresentationsTable({ classInfo, studentCount }) {
-  const account = useAccount();
   const [page, setPage] = useState(1);
   const resource = useClassSessions(classInfo.id, page);
   const pending = reportResource(resource);
   if (pending) return pending;
-
-  // Session reports are open to the host and Admins only.
-  const mayOpen = (session) => session.is_host || account.role === "ADMIN";
 
   return (
     <ReportTable
@@ -194,13 +188,11 @@ function PresentationsTable({ classInfo, studentCount }) {
             : session.participant_count,
           formatScore(session.average_score),
           formatScore(session.top_score),
-          mayOpen(session) ? (
-            <Link to={`/app/results/host/${session.session_id}`}>
-              Report →
-            </Link>
-          ) : (
-            `Hosted by ${session.host_name}`
-          ),
+          <Link
+            to={`/app/classes/${classInfo.id}/sessions/${session.session_id}/report`}
+          >
+            Report →
+          </Link>,
         ],
       }))}
     />
@@ -240,7 +232,11 @@ function StudentsTable({ classInfo }) {
               index +
               1,
           <>
-            <strong>{student.display_name}</strong>
+            <Link
+              to={`/app/classes/${classInfo.id}/students/${student.account_id}/report`}
+            >
+              <strong>{student.display_name}</strong>
+            </Link>
             <br />
             <small>{student.email}</small>
           </>,
@@ -297,12 +293,14 @@ function ParticipateTable({ classInfo }) {
           session.my_score === null
             ? "Absent"
             : `${formatScore(session.my_score)} pts · #${session.my_rank}`,
-          session.is_host ? (
-            <Link to={`/app/results/host/${session.session_id}`}>Report →</Link>
-          ) : session.my_score === null ? (
-            "—"
+          classInfo.canManage || session.my_score != null ? (
+            <Link
+              to={`/app/classes/${classInfo.id}/sessions/${session.session_id}/report`}
+            >
+              {classInfo.canManage ? "Session report →" : "My results →"}
+            </Link>
           ) : (
-            <Link to={`/app/results/me/${session.session_id}`}>My results →</Link>
+            "—"
           ),
         ],
       }))}
@@ -383,8 +381,8 @@ function PresentTable({ classInfo }) {
   if (!classInfo.canManage) {
     return (
       <EmptyMessage title="Present">
-        Only organizers of this class can host its sessions. When one starts,
-        a Live button appears at the top of this page.
+        Only organizers of this class can host its sessions. When one starts, a
+        Live button appears at the top of this page.
       </EmptyMessage>
     );
   }
@@ -469,7 +467,9 @@ function PresentTable({ classInfo }) {
               quizzes.map((quiz) => (
                 <tr key={quiz.quiz_id}>
                   <td>
-                    <Link to={`/app/quizzes/${quiz.quiz_id}`}>{quiz.title}</Link>
+                    <Link to={`/app/quizzes/${quiz.quiz_id}`}>
+                      {quiz.title}
+                    </Link>
                   </td>
                   <td>{quiz.question_count}</td>
                   <td>
@@ -490,7 +490,52 @@ function PresentTable({ classInfo }) {
   );
 }
 
+function ClassQuizzesTable({ classInfo }) {
+  const [page, setPage] = useState(1);
+  const resource = useClassQuizzes(classInfo.id, page);
+  const pending = reportResource(resource);
+
+  if (pending) return pending;
+
+  return (
+    <ReportTable
+      caption="Presented quizzes"
+      noun="quiz"
+      headers={[
+        "Quiz",
+        "Last presented",
+        "Presentations",
+        "Participations",
+        "Average",
+        "Report",
+      ]}
+      emptyTitle="No presented quizzes yet"
+      emptyText="Quizzes appear here after a session in this class completes."
+      pagination={resource.data.pagination}
+      onPageChange={setPage}
+      rows={resource.data.items.map((quiz) => ({
+        key: quiz.quiz_id,
+        text: quiz.title,
+        cells: [
+          quiz.title,
+          formatDate(quiz.presented_at),
+          formatScore(quiz.session_count),
+          formatScore(quiz.participant_count),
+          formatScore(quiz.average_score),
+          <Link
+            to={`/app/classes/${classInfo.id}/quizzes/${quiz.quiz_id}/report`}
+          >
+            Report →
+          </Link>,
+        ],
+      }))}
+    />
+  );
+}
+
 function ClassWorkspace({ classInfo, onChange }) {
+  const account = useAccount();
+  const [searchParams] = useSearchParams();
   const showAdminLayout = classInfo.canManage === true;
   const api = useApi();
   const navigate = useNavigate();
@@ -502,16 +547,29 @@ function ClassWorkspace({ classInfo, onChange }) {
   const studentCount =
     dashboard.status === "ready" ? dashboard.data.student_count : null;
 
-  const [view, setView] = useState(showAdminLayout ? "admin" : "user");
+  const [view, setView] = useState(() => {
+    if (searchParams.get("view") === "user") {
+      return "user";
+    }
 
-  const [section, setSection] = useState(
-    showAdminLayout ? "Presentations" : "Present",
-  );
+    return showAdminLayout ? "admin" : "user";
+  });
+
+  const [section, setSection] = useState(() => {
+    if (
+      searchParams.get("view") === "user" &&
+      searchParams.get("section") === "Present"
+    ) {
+      return "Present";
+    }
+
+    return showAdminLayout ? "Presentations" : "Present";
+  });
 
   const adminView = showAdminLayout && view === "admin";
 
   const sections = adminView
-    ? ["Presentations", "Students", "Members", "Settings"]
+    ? ["Presentations", "Quizzes", "Students", "Members", "Settings"]
     : ["Present", "Participate"];
 
   const activeSection = sections.includes(section) ? section : sections[0];
@@ -605,28 +663,32 @@ function ClassWorkspace({ classInfo, onChange }) {
           </div>
         )}
 
-        {adminView && (
+        {showAdminLayout && (
           <div className="cl-actions">
-            <button
-              type="button"
-              disabled={classInfo.archived}
-              onClick={() => setSection("Members")}
-            >
-              + Invite member
-            </button>
+            {adminView && (
+              <>
+                <button
+                  type="button"
+                  disabled={classInfo.archived}
+                  onClick={() => setSection("Members")}
+                >
+                  + Invite member
+                </button>
 
-            <button
-              type="button"
-              disabled={csv.busy}
-              onClick={() =>
-                void csv.download(
-                  `/classes/${classInfo.id}/grades/export.csv`,
-                  "class-grades.csv",
-                )
-              }
-            >
-              {csv.busy ? "Preparing…" : "Export grades"}
-            </button>
+                <button
+                  type="button"
+                  disabled={csv.busy}
+                  onClick={() =>
+                    void csv.download(
+                      `/classes/${classInfo.id}/grades/export.csv`,
+                      "class-grades.csv",
+                    )
+                  }
+                >
+                  {csv.busy ? "Preparing…" : "Export grades"}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -639,7 +701,12 @@ function ClassWorkspace({ classInfo, onChange }) {
 
       <RequestError error={csv.error || leave.error} />
 
-      {adminView && <ClassSummary dashboard={dashboard} />}
+      {adminView &&
+        (dashboard.status === "ready" ? (
+          <ClassSummary dashboard={dashboard} />
+        ) : (
+          <ResourceMessage resource={dashboard} />
+        ))}
 
       <div className="cl-section-tabs">
         <div role="group" aria-label="Class sections">
@@ -657,9 +724,12 @@ function ClassWorkspace({ classInfo, onChange }) {
 
         {!adminView && (
           <div className="cl-actions">
-            {classInfo.canManage && (
-              <Link className="cl-button" to="/app/quizzes/new">
-                + New quiz
+            {classInfo.membershipStatus === "ACTIVE" && (
+              <Link
+                className="cl-button cl-secondary"
+                to={`/app/classes/${classInfo.id}/students/${account.account_id}/report`}
+              >
+                My class report
               </Link>
             )}
 
@@ -685,6 +755,8 @@ function ClassWorkspace({ classInfo, onChange }) {
         <PresentTable classInfo={classInfo} />
       ) : activeSection === "Presentations" ? (
         <PresentationsTable classInfo={classInfo} studentCount={studentCount} />
+      ) : activeSection === "Quizzes" ? (
+        <ClassQuizzesTable classInfo={classInfo} />
       ) : activeSection === "Students" ? (
         <StudentsTable classInfo={classInfo} />
       ) : (
