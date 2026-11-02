@@ -241,8 +241,8 @@ Login, token verification, account creation and linking of login methods all wor
 7. **Turn on refresh tokens and decide how often people must log in** (the "once a month" idea). APIs > (our API) > Settings: enable **Allow Offline Access**. Applications > (our SPA) > Settings > Refresh Token Rotation: enable **Rotation**, and set the absolute and inactivity lifetimes (e.g. 30 days absolute, 7 days inactivity). Those lifetimes are now what decides when users must log in again. Email verification itself only happens once and never repeats.
 8. **Test "Forgot password?"** once end to end with a real inbox. It is provided by Auth0 and has no code in this repo.
 
-**Product decisions still open**
-9. **Professor and administrator status.** `account_type` is NULL for everyone and there is no chooser. Options from the ER diagram notes: manual assignment by the team, an approval queue, or an allow-list by email domain. Until this is decided, every route should treat all accounts the same.
+**Account authorization**
+9. **Faculty status.** `account_type = 'ADMINISTRATOR'` represents an approved faculty account; it is not a global-superuser role. New accounts continue to default to a non-faculty User. For V3, a project maintainer assigns faculty status manually in the database after confirming the account belongs to an approved faculty member. There is intentionally no self-service role chooser or public promotion endpoint. Faculty status permits class creation, but it does not grant access to unrelated classes: faculty must still hold an active `ORGANIZER` membership to manage a class.
 10. **Merging login methods you do not own the email for.** Linking only happens for verified emails. If someone changes their email in Auth0 later, the old `account.email` is not updated. Decide whether that matters before launch.
 
 **Cleanup**

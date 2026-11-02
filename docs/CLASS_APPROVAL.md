@@ -1,18 +1,18 @@
 # Classes (after the MVP)
 
-> **Status (2026-10-27): built.** This is the original design proposal, kept for its reasoning. What shipped is described in [CLASSES.md](CLASSES.md). The tables shipped as `class` and `class_membership` (migration `0006_classes`), and sessions point at a class through `live_session.class_id` (migration `0007_session_class`), so read `group_id` below as `class_id`.
+> **Status (2026-11-01): historical design proposal.** The authorization rules below have been updated to the V3 faculty model. What shipped is described in [CLASSES.md](CLASSES.md). The tables shipped as `class` and `class_membership` (migration `0006_classes`), and sessions point at a class through `live_session.class_id` (migration `0007_session_class`), so read `group_id` below as `class_id`.
 
 A proposal for how classes should work once we add them. The schema changes are proposals for Ulugbek, who owns the database files. This doc adds no migration.
 
 This replaces two earlier ideas:
 
 - **#39 (closed):** an app-wide "approve this signup" queue. The team dropped it on 2026-10-14.
-- **The first version of this doc:** per-class *teachers* who approved *students* one by one. We dropped teachers and approval. Anyone can make a class, and a class code lets you in right away.
+- **The first version of this doc:** per-class *teachers* who approved *students* one by one. V3 keeps in-app membership and invitations, but faculty accounts now create classes and students cannot be organizers.
 
 ## 1. Goal and scope
 
 - **A class is a group of people who play quizzes together**, like a Google Classroom class. The people who run it are its **organizers**.
-- **Any verified user can use the app.** Auth0 email verification is the only gate on signup. The backend's `403 email_not_verified` in `backend/app/accounts.py` stays as it is. So does `403 inactive_account`, which Admins use to deactivate an account by hand.
+- **Any verified user can sign in.** Auth0 email verification remains the signup gate. The backend's `403 email_not_verified` and `403 inactive_account` behavior stays unchanged.
 - **A class only gates class things:** its roster, its live sessions and its past results. Open sessions with a six-digit code keep working exactly as in the MVP.
 - **No approval step.** Joining with a class code or accepting an invite makes you a member right away. Organizers control who's in by removing people, changing the code or closing joining.
 
@@ -20,24 +20,24 @@ Out of scope: LMS/roster imports, grading, semester statistics (see [ROADMAP §5
 
 ## 2. Roles
 
-There are only two app-wide roles, and there is no teacher role anywhere.
+There are two account roles. `ADMIN` means faculty; it is not a global-superuser role.
 
 | Who | Scope | Meaning |
 |---|---|---|
-| **Admin** | App | The existing `account_type = 'ADMINISTRATOR'`. Can see and change anything, including any class. |
-| **User** | App | Everyone else. Can make quizzes, make classes, host sessions and play in them. |
-| **Organizer** | One class | Runs that class: invites and removes people, manages the codes and hosts its sessions. Whoever creates the class is its first organizer. A class can have several organizers and always has at least one. |
+| **Admin / faculty** | Account | The existing `account_type = 'ADMINISTRATOR'`. Can create a class, but has no automatic access to unrelated classes. |
+| **User / student** | Account | Everyone else. Can participate in classes but cannot create a class or become an organizer. |
+| **Organizer** | One class | An active faculty member who runs that class: invites and removes people, manages the codes and hosts its sessions. The faculty member who creates the class becomes its first organizer. |
 | **Member** | One class | Belongs to the class. Sees its past quizzes and their own results, and joins its live sessions. |
 
 - **Host** and **participant** stay things a User *does*, not roles (as in the MVP). **Organizer** and **member** are the same idea inside one class. The same person can organize CS 111 and be a member of CS 440.
-- "Organizer" is deliberately not "admin". **Admin** always means the app-wide Admin.
+- Faculty status alone does not grant class access. Class management requires both an active faculty account and an active `ORGANIZER` membership in that class.
 - USER and ADMIN stay the only app-wide roles (`effective_role` in `backend/app/models/account.py`). The `STUDENT` / `PROFESSOR` values in `account.account_type` stay unused, and we don't read them for permissions (see open question 6).
 
 ## 3. Flows
 
 ### Make a class
 
-1. Any user creates a class with a name. They become an `ACTIVE` `ORGANIZER` of it.
+1. An active faculty account creates a class with a name and becomes its `ACTIVE` `ORGANIZER`.
 2. The server generates a **class code**: 8 characters with no look-alikes (no `0 O 1 I L`), for example `K7RM-Q4XP`. Session codes are six digits, so one Join box can tell the two apart.
 3. The **invite link** is the code in a URL: `/join/class/K7RM-Q4XP`. It isn't a separate secret.
 4. An organizer can **change the code**, which kills the old code and link, or **close joining**. Neither affects existing members.
@@ -55,9 +55,9 @@ There are only two app-wide roles, and there is no teacher role anywhere.
 
 ### Organizers
 
-- Any organizer can make a member an organizer, or turn another organizer back into a member.
+- An organizer can promote an active faculty member to organizer or demote another organizer. Students cannot become organizers.
 - A class can't lose its last organizer. That person can't leave or step down until someone else is an organizer (`409 last_organizer`). They can archive the class instead.
-- An Admin can do anything an organizer can, in any class. That includes appointing an organizer for a class whose organizers are gone.
+- Faculty who are not active organizers of a class cannot manage it or use its organizer-only data.
 
 ### Leaving and removal
 
@@ -88,7 +88,7 @@ Members of a class rarely need the session code. The class page's **Live** butto
 
 - **Open session (MVP, unchanged):** `live_session.group_id` is `NULL`. Anyone logged in who has the six-digit code can join.
 - **Class session:** the host picks a class when starting it ("For: Open / CS 440 · Fall 26"), so `group_id` is set. Joining needs an `ACTIVE` membership in that class, whether by the session code or the Live button. Anyone else gets `403 not_class_member`, **even if they know the code**.
-- **Who can start a class session:** an organizer of that class who is also the quiz's author (the MVP rule that only the author hosts still holds). An Admin can always start one. See open question 1 for organizers hosting each other's quizzes.
+- **Who can start a class session:** an active faculty organizer of that class who is also the quiz's author (the MVP rule that only the author hosts still holds). Faculty status alone does not bypass either check.
 - **Membership is checked when someone joins and when they submit an answer.** If a member is removed in the middle of a session, their next answer is rejected with `403 not_class_member`, and they can't rejoin.
 - **Nothing else about the game changes.** Question timing, the WebSocket protocol, late-join behaviour (someone who joins mid-question plays from the next question), rejection of duplicate and late answers, and the scoring formula all stay as in [`LIVE_PROTOCOL.md`](LIVE_PROTOCOL.md).
 - **Six-digit session codes stay** for class sessions too. That keeps today's Join box working, and leaves room to let outsiders into a class session later if we want to.
