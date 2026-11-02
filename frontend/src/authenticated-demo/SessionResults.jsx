@@ -51,18 +51,19 @@ function Stat({ label, value }) {
   );
 }
 
-function Title({ report, host, children }) {
+function Title({ report, host, children, backTo, backLabel }) {
+  const destination =
+    backTo ||
+    (host
+      ? `/app/quizzes/${report.quiz_id}/reports`
+      : "/app/dashboard/participate");
+
+  const label = backLabel || (host ? "Hosting history" : "Participate");
+
   return (
     <header className="rr-title">
-      <Link
-        className="rr-button"
-        to={
-          host
-            ? `/app/quizzes/${report.quiz_id}/reports`
-            : "/app/dashboard/participate"
-        }
-      >
-        ← {host ? "Hosting history" : "Participate"}
+      <Link className="rr-button" to={destination}>
+        ← {label}
       </Link>
 
       <div>
@@ -310,7 +311,7 @@ function QuestionBreakdown({ question, index, players, onPerson }) {
   );
 }
 
-function HostResults({ report }) {
+export function HostResults({ report, backTo, backLabel, exportControl }) {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const { getAccessTokenSilently } = useAuth0();
@@ -385,15 +386,19 @@ function HostResults({ report }) {
 
   return (
     <div className="rr">
-      <Title report={report} host>
-        <button
-          type="button"
-          className="rr-button orange"
-          disabled={action.busy}
-          onClick={() => void download()}
-        >
-          {action.busy ? "Preparing…" : "Export CSV"}
-        </button>
+      <Title report={report} host backTo={backTo} backLabel={backLabel}>
+        {exportControl === undefined ? (
+          <button
+            type="button"
+            className="rr-button orange"
+            disabled={action.busy}
+            onClick={() => void download()}
+          >
+            {action.busy ? "Preparing…" : "Export CSV"}
+          </button>
+        ) : (
+          exportControl
+        )}
       </Title>
 
       <RequestError error={action.error} />
@@ -507,7 +512,7 @@ function HostResults({ report }) {
   );
 }
 
-function ParticipantResults({ report }) {
+export function ParticipantResults({ report, backTo, backLabel }) {
   const [params, setParams] = useSearchParams();
   const player = report.players[0];
 
@@ -553,7 +558,12 @@ function ParticipantResults({ report }) {
 
   return (
     <div className="rr">
-      <Title report={report} host={false} />
+      <Title
+        report={report}
+        host={false}
+        backTo={backTo}
+        backLabel={backLabel}
+      />
 
       <div className="rr-report-band">
         <Stat label="Speed points" value={fmt(player.points)} />
@@ -577,8 +587,8 @@ function ParticipantResults({ report }) {
       </div>
 
       <p className="rr-padding">
-        Your answers are shown here. The host and Admins can also review session
-        results.
+        Your answers are shown here. Authorized hosts and administrators can
+        also review results.
       </p>
 
       <div className="rr-reader">

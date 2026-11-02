@@ -139,3 +139,10 @@ export function useClassStudents(classId, page = 1) {
     `students?page=${page}&page_size=${REPORT_PAGE_SIZE}&sort=average_score&order=desc`,
   );
 }
+
+export function useClassQuizzes(classId, page = 1) {
+  return useClassReport(
+    classId,
+    `quizzes?page=${page}&page_size=${REPORT_PAGE_SIZE}&sort=presented_at&order=desc`,
+  );
+}
