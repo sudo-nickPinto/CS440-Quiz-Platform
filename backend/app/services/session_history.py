@@ -16,6 +16,7 @@ from app.models import (
     SessionQuestion,
     SessionQuestionStatus,
 )
+from app.models.classes import ClassMembership, MembershipStatus
 
 
 def _date(value: datetime | None) -> str | None:
@@ -77,6 +78,22 @@ def _page(db: Session, statement, limit: int, offset: int) -> dict:
         "items": items,
         "has_more": len(rows) > limit,
     }
+
+
+def _visible_session_class(account: CurrentAccount):
+    active_membership = (
+        select(ClassMembership.membership_id)
+        .where(
+            ClassMembership.class_id == LiveSession.class_id,
+            ClassMembership.account_id == account.account_id,
+            ClassMembership.status == MembershipStatus.ACTIVE,
+        )
+        .exists()
+    )
+
+    # Preserve existing open-session history during the V3 transition.
+    # Class session history always requires active class membership.
+    return LiveSession.class_id.is_(None) | active_membership
 
 
 def list_taken_sessions(
@@ -146,6 +163,7 @@ def list_taken_sessions(
         .where(
             SessionParticipant.account_id == account.account_id,
             LiveSession.status == LiveSessionStatus.COMPLETED,
+            _visible_session_class(account),
         )
     )
 
@@ -212,7 +230,7 @@ def list_quiz_hosting_history(
 ) -> dict:
     quiz = db.get(Quiz, quiz_id)
 
-    if quiz is None or (quiz.author_id != account.account_id and not account.is_admin):
+    if quiz is None or quiz.author_id != account.account_id:
         raise APIError(
             404,
             "quiz_not_found",
@@ -221,17 +239,14 @@ def list_quiz_hosting_history(
 
     statement = _history_query().where(
         QuizVersion.quiz_id == quiz_id,
+        LiveSession.host_id == account.account_id,
         LiveSession.status.in_(
             [
                 LiveSessionStatus.COMPLETED,
                 LiveSessionStatus.CANCELLED,
             ]
         ),
+        _visible_session_class(account),
     )
-
-    # Match the existing report permission model: hosts see their sessions;
-    # global administrators can inspect all sessions.
-    if not account.is_admin:
-        statement = statement.where(LiveSession.host_id == account.account_id)
 
     return _page(db, statement, limit, offset)

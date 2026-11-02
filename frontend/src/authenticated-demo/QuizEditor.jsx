@@ -344,8 +344,8 @@ export function QuizEditor({
             summaryClass="qe-tpbtn"
             footer={
               <p className="qe-fine">
-                Every question uses this unless you give it its own time.
-                The quiz runs <b>{clock(totalTime)}</b>.
+                Every question uses this unless you give it its own time. The
+                quiz runs <b>{clock(totalTime)}</b>.
               </p>
             }
           >
@@ -363,8 +363,7 @@ export function QuizEditor({
           {editor.questions.length > 0 ? (
             <p className="qe-intro">
               Click a letter to mark the <b>correct answer</b>. Every question
-              gets <b>{editor.defaultTime}s</b> unless you give it its own
-              time.
+              gets <b>{editor.defaultTime}s</b> unless you give it its own time.
             </p>
           ) : (
             <div className="qe-empty">
@@ -384,7 +383,10 @@ export function QuizEditor({
                   <div className="qe-insert">
                     <button type="button" onClick={() => insertAt(index)}>
                       + Insert question here
-                      <span className="ui-sr"> (before question {index + 1})</span>
+                      <span className="ui-sr">
+                        {" "}
+                        (before question {index + 1})
+                      </span>
                     </button>
                   </div>
                 )}
@@ -432,7 +434,9 @@ export function QuizEditor({
 
                         return (
                           <div
-                            className={"qe-choice" + (correct ? " is-correct" : "")}
+                            className={
+                              "qe-choice" + (correct ? " is-correct" : "")
+                            }
                             key={choiceIndex}
                           >
                             <button
@@ -464,7 +468,9 @@ export function QuizEditor({
                               onChange={(event) =>
                                 changeQuestion(question.id, {
                                   options: question.options.map((text, i) =>
-                                    i === choiceIndex ? event.target.value : text,
+                                    i === choiceIndex
+                                      ? event.target.value
+                                      : text,
                                   ),
                                 })
                               }
@@ -775,10 +781,14 @@ export function QuizViewer() {
       <div className="qe-bar">
         <Link
           className="qe-back"
-          to={fromClass ? `/app/classes/${fromClass}` : "/app/dashboard/present"}
+          to={
+            fromClass ? `/app/classes/${fromClass}` : "/app/dashboard/present"
+          }
         >
           <span aria-hidden="true">←</span>
-          <span className="qe-back-word">{fromClass ? "Class" : "Dashboard"}</span>
+          <span className="qe-back-word">
+            {fromClass ? "Class" : "Dashboard"}
+          </span>
           <span className="ui-sr">
             {fromClass ? "Back to class" : "Back to dashboard"}
           </span>
@@ -810,7 +820,7 @@ export function QuizViewer() {
         </p>
 
         <div className="qv-actions">
-          {(mine || account.role === "ADMIN") && (
+          {mine && (
             <Link
               className="qb-btn qb-btn-paper"
               to={`/app/quizzes/${quiz.quiz_id}/reports`}
@@ -882,7 +892,9 @@ export function QuizViewer() {
                           {choice.is_correct ? "✓" : LETTERS[choiceIndex]}
                         </span>
                         <span className="qv-ctext">
-                          <span className="ui-sr">{LETTERS[choiceIndex]}. </span>
+                          <span className="ui-sr">
+                            {LETTERS[choiceIndex]}.{" "}
+                          </span>
                           {choice.choice_text}
                         </span>
                         <span className="qe-choice-end">

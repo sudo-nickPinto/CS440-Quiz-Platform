@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { useAction, useApi } from "../authenticated-demo/rest";
 import { useClassesResource } from "./classResources";
 import { ClassCard, EmptyMessage, ResourceMessage } from "./ClassUI";
+import { useAccount } from "../authenticated-demo/account";
 
 export default function ClassesPage() {
   const api = useApi();
@@ -17,6 +18,9 @@ export default function ClassesPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("name");
+
+  const account = useAccount();
+  const canCreateClass = account.is_active === true && account.role === "ADMIN";
 
   const ready = resource.status === "ready";
   const records = ready ? resource.data : [];
@@ -52,6 +56,8 @@ export default function ClassesPage() {
 
     const trimmedName = name.trim();
     if (!trimmedName) return;
+
+    if (!canCreateClass) return;
 
     const created = await action.run(() =>
       api("/classes", {
@@ -112,16 +118,18 @@ export default function ClassesPage() {
           )}
         </h1>
 
-        <button
-          type="button"
-          className="cl-new"
-          aria-expanded={panel === "create"}
-          aria-controls="class-create-panel"
-          onClick={() => togglePanel("create")}
-          disabled={action.busy}
-        >
-          + New class
-        </button>
+        {canCreateClass && (
+          <button
+            type="button"
+            className="cl-new"
+            aria-expanded={panel === "create"}
+            aria-controls="class-create-panel"
+            onClick={() => togglePanel("create")}
+            disabled={action.busy}
+          >
+            + New class
+          </button>
+        )}
 
         <button
           type="button"
@@ -140,7 +148,7 @@ export default function ClassesPage() {
         </p>
       )}
 
-      {panel === "create" && (
+      {canCreateClass && panel === "create" && (
         <form
           id="class-create-panel"
           className="cl-inline-panel"

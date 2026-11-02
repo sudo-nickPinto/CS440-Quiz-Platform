@@ -132,24 +132,19 @@ def test_non_author_cannot_archive_and_archived_quiz_is_not_public(
     assert client.get(f"/quizzes/{quiz_id}").status_code == 404
 
 
-def test_admin_can_control_and_access_every_quiz(
-    quiz_client: tuple[TestClient, CurrentAccount, CurrentAccount],
-) -> None:
-    client, _, _ = quiz_client
+def test_faculty_cannot_access_another_users_archived_quiz(quiz_client):
+    client, author, reader = quiz_client
     quiz = create_quiz(client)
-    admin = CurrentAccount(999, AccountRole.ADMIN, True)
-    client.app.dependency_overrides[get_active_account] = lambda: admin
-
-    archived = client.patch(f"/quizzes/{quiz['quiz_id']}/archive")
+    faculty = CurrentAccount(reader.account_id, AccountRole.ADMIN, True)
+    client.app.dependency_overrides[get_active_account] = lambda: faculty
+    assert client.patch(f"/quizzes/{quiz['quiz_id']}/archive").status_code == 403
+    client.app.dependency_overrides[get_active_account] = lambda: author
+    assert client.patch(f"/quizzes/{quiz['quiz_id']}/archive").status_code == 200
+    client.app.dependency_overrides[get_active_account] = lambda: faculty
     listing = client.get("/quizzes")
-    detail = client.get(f"/quizzes/{quiz['quiz_id']}")
-
-    assert archived.status_code == 200
-    assert archived.json()["status"] == "ARCHIVED"
     assert listing.status_code == 200
-    assert listing.json()[0]["status"] == "ARCHIVED"
-    assert detail.status_code == 200
-
+    assert all(item["quiz_id"] != quiz["quiz_id"] for item in listing.json())
+    assert client.get(f"/quizzes/{quiz['quiz_id']}").status_code == 404
 
 def test_partial_patch_and_separate_publish_are_not_supported(
     quiz_client: tuple[TestClient, CurrentAccount, CurrentAccount],

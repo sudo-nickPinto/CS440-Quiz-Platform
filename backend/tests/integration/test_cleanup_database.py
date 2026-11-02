@@ -1,11 +1,19 @@
 from sqlalchemy import text
 
+from app.auth import CurrentAccount, get_active_account
+from app.models import Account, AccountRole
+
 from tests.integration.conftest import cleanup_database
 from tests.test_session_api import QUIZ_PAYLOAD
 
 
 def test_cleanup_handles_a_class_scoped_live_session(mysql_quiz_client) -> None:
-    client, _, _ = mysql_quiz_client
+    client, author, _ = mysql_quiz_client
+    with client.app.state.database.session_factory() as db:
+        db.get(Account, author.account_id).account_type = "ADMINISTRATOR"
+        db.commit()
+    faculty = CurrentAccount(author.account_id, AccountRole.ADMIN, True)
+    client.app.dependency_overrides[get_active_account] = lambda: faculty
     created_class = client.post("/classes", json={"name": "Cleanup class"})
     assert created_class.status_code == 201
     quiz = client.post("/quizzes", json=QUIZ_PAYLOAD)

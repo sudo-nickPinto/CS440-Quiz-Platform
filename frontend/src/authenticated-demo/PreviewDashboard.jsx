@@ -16,8 +16,7 @@ const SORTS = [
   ["questions", "Most questions"],
 ];
 
-const plural = (count, word, many = word + "s") =>
-  count === 1 ? word : many;
+const plural = (count, word, many = word + "s") => (count === 1 ? word : many);
 
 function displayDate(value) {
   const date = new Date(value);
@@ -27,7 +26,6 @@ function displayDate(value) {
 export default function PreviewDashboard() {
   const { view } = useParams();
   const account = useAccount();
-  const isAdmin = account.role === "ADMIN";
   const api = useApi();
   const navigate = useNavigate();
   const action = useAction();
@@ -58,7 +56,7 @@ export default function PreviewDashboard() {
   const quizzes = (resource.data || [])
     .filter(
       (quiz) =>
-        (isAdmin || quiz.author_id === account.account_id) &&
+        quiz.author_id === account.account_id &&
         ["PUBLISHED", "ARCHIVED"].includes(quiz.status) &&
         quiz.title.toLowerCase().includes(query.trim().toLowerCase()),
     )
@@ -156,11 +154,7 @@ export default function PreviewDashboard() {
       </nav>
 
       {joinOpen && (
-        <form
-          className="ui-join-strip"
-          id="dashboard-join"
-          onSubmit={join}
-        >
+        <form className="ui-join-strip" id="dashboard-join" onSubmit={join}>
           <label htmlFor="dashboard-join-code">Session code</label>
 
           <input
@@ -196,14 +190,8 @@ export default function PreviewDashboard() {
           <input
             type="search"
             className="ui-search"
-            aria-label={
-              isAdmin
-                ? "Search published and archived quizzes"
-                : "Search your published and archived quizzes"
-            }
-            placeholder={
-              isAdmin ? "Search all quizzes…" : "Search your quizzes…"
-            }
+            aria-label="Search your published and archived quizzes"
+            placeholder="Search your quizzes…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -329,7 +317,9 @@ export default function PreviewDashboard() {
 
                 {quiz.status === "PUBLISHED" ? (
                   <details className="ui-row-menu">
-                    <summary aria-label={`Actions for ${quiz.title}`}>⋯</summary>
+                    <summary aria-label={`Actions for ${quiz.title}`}>
+                      ⋯
+                    </summary>
 
                     <div className="ui-row-options" role="menu">
                       {quiz.author_id === account.account_id && (
@@ -342,7 +332,11 @@ export default function PreviewDashboard() {
                       )}
 
                       {quiz.author_id === account.account_id && (
-                        <div className="ui-host-item" role="group" aria-label="Host live session">
+                        <div
+                          className="ui-host-item"
+                          role="group"
+                          aria-label="Host live session"
+                        >
                           <HostQuizButton
                             quiz={quiz}
                             action={action}

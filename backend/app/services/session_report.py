@@ -237,7 +237,7 @@ def export_session_report(
         raise APIError(
             403,
             "results_export_denied",
-            "Only the host or an Admin can export.",
+            "Only the host can export this session report.",
         )
 
     def safe(value):

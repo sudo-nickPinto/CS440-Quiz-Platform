@@ -4,7 +4,7 @@ Only COMPLETED class sessions count; cancelled and unfinished ones never
 appear. Scores come from the stored result rows, not from recalculating
 responses.
 
-Organizers and global Admins see everyone. Members see only their own rows,
+Active faculty organizers see everyone. Members see only their own rows,
 and the class-wide numbers (averages, top scores) come back null for them,
 the same as on the dashboard.
 
@@ -183,7 +183,7 @@ def get_class_student_results(
         raise APIError(
             403,
             "not_class_organizer",
-            "Only a class organizer or global Admin can view other students.",
+            "Only an active faculty organizer of this class can view other students.",
         )
 
     # Removed and departed students keep their history, so any membership
