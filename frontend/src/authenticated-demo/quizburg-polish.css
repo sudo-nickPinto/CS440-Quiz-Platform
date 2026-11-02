@@ -2130,6 +2130,55 @@
   font-size: 14px;
 }
 
+/* Host: "For [open session / class ▾]" next to the orange button */
+.qp .qv-host {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.qp .qv-host .ui-host-for {
+  color: var(--gray);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .qv-host .ui-host-for select {
+  max-width: 320px;
+  min-height: 44px;
+  border: var(--b);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--ink);
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.qp .qv-host > button {
+  min-height: 44px;
+  padding: 9px 18px;
+  border: var(--b);
+  background: var(--orange-deep);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--paper);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qp .qv-host > button:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.qp .qv-host > button:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
 .qp .qv-gap {
   height: 28px;
 }

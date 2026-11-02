@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
+import { useClassesResource } from "../classes/classResources";
 import { useAccount } from "./account";
+import HostQuizButton from "./HostQuizButton";
 
 import { blankEditor, LETTERS, newQuestion } from "./model";
 import { toQuizCreate } from "./quizPayload";
@@ -729,12 +731,19 @@ export function QuizEditor({
 export function QuizViewer() {
   const { quizId } = useParams();
   const account = useAccount();
-  const api = useApi();
   const action = useAction();
-  const navigate = useNavigate();
   const validId = /^[1-9][0-9]*$/.test(quizId);
 
   const resource = useResource(validId ? `/quizzes/${quizId}` : null);
+
+  // Opened from a class page: host in that class. Otherwise offer the same
+  // open-session / class choice as the dashboard menu.
+  const fromClass = useLocation().state?.classId ?? null;
+  const classes = useClassesResource();
+  const hostClasses =
+    classes.status === "ready"
+      ? classes.data.filter((item) => item.canManage && !item.archived)
+      : [];
 
   if (!validId) {
     return <p role="alert">Invalid quiz ID.</p>;
@@ -761,26 +770,18 @@ export function QuizViewer() {
     0,
   );
 
-  // Same request as "Host live session" on the dashboard.
-  async function host() {
-    const session = await action.run(() =>
-      api(`/quizzes/${quiz.quiz_id}/sessions`, {
-        method: "POST",
-      }),
-    );
-
-    if (session) {
-      navigate(`/app/host/${session.session_id}`);
-    }
-  }
-
   return (
     <section className="qv" aria-labelledby="quiz-title">
       <div className="qe-bar">
-        <Link className="qe-back" to="/app/dashboard/present">
+        <Link
+          className="qe-back"
+          to={fromClass ? `/app/classes/${fromClass}` : "/app/dashboard/present"}
+        >
           <span aria-hidden="true">←</span>
-          <span className="qe-back-word">Dashboard</span>
-          <span className="ui-sr">Back to dashboard</span>
+          <span className="qe-back-word">{fromClass ? "Class" : "Dashboard"}</span>
+          <span className="ui-sr">
+            {fromClass ? "Back to class" : "Back to dashboard"}
+          </span>
         </Link>
 
         <div className="qe-titlebox">
@@ -828,14 +829,20 @@ export function QuizViewer() {
           )}
 
           {published && mine && (
-            <button
-              type="button"
-              className="qb-btn"
-              disabled={action.busy}
-              onClick={() => void host()}
-            >
-              {action.busy ? "Starting…" : "Host live session →"}
-            </button>
+            <div className="qv-host">
+              <HostQuizButton
+                quiz={quiz}
+                action={action}
+                classId={fromClass}
+                hostClasses={hostClasses}
+                hostClassesStatus={classes.status}
+                hostClassesError={classes.error}
+                reloadHostClasses={classes.reload}
+                label={
+                  fromClass ? "Host in this class →" : "Host live session →"
+                }
+              />
+            </div>
           )}
         </div>
       </div>

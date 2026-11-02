@@ -467,7 +467,10 @@ function PresentTable({ classInfo }) {
               quizzes.map((quiz) => (
                 <tr key={quiz.quiz_id}>
                   <td>
-                    <Link to={`/app/quizzes/${quiz.quiz_id}`}>
+                    <Link
+                      to={`/app/quizzes/${quiz.quiz_id}`}
+                      state={{ classId: classInfo.id }}
+                    >
                       {quiz.title}
                     </Link>
                   </td>
