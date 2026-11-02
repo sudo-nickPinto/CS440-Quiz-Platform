@@ -3,9 +3,12 @@ import { useAuth0 } from "@auth0/auth0-react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 import HostQuizButton from "../authenticated-demo/HostQuizButton";
+import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import RequestError from "../authenticated-demo/RequestError";
+import { useConfirm } from "../authenticated-demo/useConfirm";
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import ClassLiveButton from "./ClassLiveButton";
+import { copyText } from "./classHelpers";
 import { EmptyMessage, ResourceMessage } from "./ClassUI";
 import { ClassMembers, ClassSettings } from "./ClassManagement";
 import {
@@ -464,7 +467,10 @@ function PresentTable({ classInfo }) {
               quizzes.map((quiz) => (
                 <tr key={quiz.quiz_id}>
                   <td>
-                    <Link to={`/app/quizzes/${quiz.quiz_id}`}>
+                    <Link
+                      to={`/app/quizzes/${quiz.quiz_id}`}
+                      state={{ classId: classInfo.id }}
+                    >
                       {quiz.title}
                     </Link>
                   </td>
@@ -537,6 +543,8 @@ function ClassWorkspace({ classInfo, onChange }) {
   const api = useApi();
   const navigate = useNavigate();
   const leave = useAction();
+  const confirmer = useConfirm();
+  const [copied, setCopied] = useState(false);
   const csv = useCsvDownload();
   const dashboard = useClassDashboard(classInfo.id);
   const studentCount =
@@ -574,9 +582,20 @@ function ClassWorkspace({ classInfo, onChange }) {
     setSection(nextView === "admin" ? "Presentations" : "Present");
   }
 
+  async function copyCode() {
+    await copyText(classInfo.code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  }
+
   async function leaveClass() {
-    const message = `Leave ${classInfo.name}? You can rejoin with the class code.`;
-    if (!window.confirm(message)) return;
+    const confirmed = await confirmer.confirm({
+      label: "Leave class",
+      title: `Leave ${classInfo.name}?`,
+      message: "You can rejoin with the class code.",
+      confirmLabel: "Leave class",
+    });
+    if (!confirmed) return;
 
     const left = await leave.run(async () => {
       await api(`/classes/${classInfo.id}/membership`, { method: "DELETE" });
@@ -588,13 +607,35 @@ function ClassWorkspace({ classInfo, onChange }) {
 
   return (
     <section className="cl-page" aria-labelledby="class-heading">
+      <ConfirmDialog confirmer={confirmer} />
+
       <div className="cl-classbar">
         <Link className="cl-button cl-secondary" to="/app/classes">
           ← Classes
         </Link>
 
         <div className="cl-class-title">
-          <p className="cl-eyebrow">{classInfo.roleLabel || "Class"}</p>
+          <p className="cl-eyebrow">
+            <span
+              className={`cl-chip${
+                classInfo.canManage ? "" : " cl-chip-member"
+              }`}
+            >
+              {classInfo.roleLabel || "Class"}
+            </span>
+
+            {classInfo.canManage && classInfo.code && (
+              <button
+                type="button"
+                className="cl-code-chip"
+                onClick={copyCode}
+                aria-label={`Copy class code ${classInfo.code}`}
+              >
+                {copied ? "Copied" : `Code ${classInfo.code}`}
+                <span aria-hidden="true"> ⧉</span>
+              </button>
+            )}
+          </p>
 
           <h1 id="class-heading">{classInfo.name}</h1>
         </div>

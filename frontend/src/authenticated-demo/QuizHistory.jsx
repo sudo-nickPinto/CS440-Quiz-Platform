@@ -16,7 +16,22 @@ function displayDate(value) {
     : date.toLocaleString();
 }
 
-function HistoryList({ endpoint, host }) {
+// The class-admin mockup's date block: "OCT / 19"
+function DateBlock({ value }) {
+  const date = value ? new Date(value) : null;
+  const valid = date && !Number.isNaN(date.getTime());
+
+  return (
+    <span className="qh-date" aria-hidden="true">
+      <small>
+        {valid ? date.toLocaleString(undefined, { month: "short" }) : "—"}
+      </small>
+      <b>{valid ? String(date.getDate()).padStart(2, "0") : "—"}</b>
+    </span>
+  );
+}
+
+function HistoryList({ endpoint, host, backTo }) {
   const [page, setPage] = useState(0);
 
   const resource = useResource(
@@ -24,32 +39,49 @@ function HistoryList({ endpoint, host }) {
   );
 
   const items = resource.data?.items ?? [];
+  const quizTitle = items[0]?.quiz_title;
 
   return (
     <section className="qh" aria-label={host ? "Hosting history" : "Quizzes taken"}>
-      <header className="qh-heading">
-        <div>
-          <p className="ui-eyebrow">
-            {host ? "Presenter" : "Participant"}
-          </p>
+      <header className="qe-bar qh-bar">
+        <Link className="qe-back" to={backTo}>
+          <span aria-hidden="true">←</span>
+          <span className="qe-back-word">Quiz</span>
+          <span className="ui-sr">Back to the quiz</span>
+        </Link>
 
-          <h1>{host ? "Hosting history" : "Quizzes taken"}</h1>
-
-          <p>
+        <div className="qe-titlebox">
+          <span className="qe-eyebrow">
+            {host ? "Hosting history" : "Quizzes taken"}
+          </span>
+          <h1 className="qv-title">
+            {quizTitle || (host ? "Hosting history" : "Quizzes taken")}
+          </h1>
+          <p className="qv-description">
             {host
-              ? "Each entry is a separate live session of this quiz."
+              ? "Each row is a separate live session of this quiz."
               : "Revisit your answers and results from completed quizzes."}
           </p>
         </div>
 
-        <button
-          type="button"
-          disabled={resource.loading}
-          onClick={resource.reload}
-        >
-          Refresh
-        </button>
+        <div className="qe-state">
+          <button
+            type="button"
+            className="ui-linkbtn"
+            disabled={resource.loading}
+            onClick={resource.reload}
+          >
+            Refresh
+          </button>
+        </div>
       </header>
+
+      <div className="qh-head" aria-hidden="true">
+        <span>Date</span>
+        <span>Session</span>
+        <span className="qh-wide">Status</span>
+        <span />
+      </div>
 
       {resource.loading && (
         <p className="qh-message" role="status">
@@ -73,7 +105,7 @@ function HistoryList({ endpoint, host }) {
 
               <p>
                 {host
-                  ? "Completed and cancelled hosting sessions will appear here."
+                  ? "Completed and cancelled sessions of this quiz will appear here."
                   : "After a quiz you joined ends, your report will appear here."}
               </p>
 
@@ -88,44 +120,46 @@ function HistoryList({ endpoint, host }) {
           <div className="qh-list">
             {items.map((session) => {
               const cancelled = session.status === "CANCELLED";
+              const when =
+                session.ended_at ?? session.started_at ?? session.created_at;
 
               return (
-                <article className="qh-card" key={session.session_id}>
-                  <div>
-                    <span className="qh-status">
-                      {cancelled ? "Cancelled" : "Completed"}
-                    </span>
+                <article
+                  className={"qh-row" + (cancelled ? " is-cancelled" : "")}
+                  key={session.session_id}
+                >
+                  <DateBlock value={when} />
 
-                    <h2>{session.quiz_title}</h2>
-
-                    <p>
-                      Session #{session.session_id}
-                      {" · "}
+                  <div className="qh-main">
+                    <strong>Session #{session.session_id}</strong>
+                    <small>
                       Version {session.version_number}
-                    </p>
-
-                    <p>Hosted by {session.host_name}</p>
-
-                    <p>
+                      {" · "}
+                      Hosted by {session.host_name}
+                    </small>
+                    <small>
                       {cancelled ? "Cancelled" : "Completed"}:{" "}
-                      {displayDate(
-                        session.ended_at ??
-                          session.started_at ??
-                          session.created_at,
-                      )}
-                    </p>
+                      {displayDate(when)}
+                    </small>
                   </div>
 
+                  <span className="qh-wide">
+                    <span
+                      className={"qh-status" + (cancelled ? " is-cancelled" : "")}
+                    >
+                      {cancelled ? "Cancelled" : "Completed"}
+                    </span>
+                  </span>
+
                   {cancelled ? (
-                    <p className="qh-note">
-                      No quiz results were recorded.
-                    </p>
+                    <span className="qh-note">No results</span>
                   ) : (
                     <Link
-                      className="qp-button"
+                      className="qh-go"
                       to={`/app/results/${host ? "host" : "me"}/${session.session_id}`}
+                      aria-label={`View report for session ${session.session_id}`}
                     >
-                      View report
+                      <span aria-hidden="true">→</span>
                     </Link>
                   )}
                 </article>
@@ -175,18 +209,11 @@ export function QuizHostingHistory() {
   }
 
   return (
-    <div>
-      <div className="qh-back">
-        <Link className="qp-button" to="/app/dashboard/present">
-          ← Present
-        </Link>
-      </div>
-
-      <HistoryList
-        key={quizId}
-        endpoint={`/quizzes/${quizId}/history`}
-        host
-      />
-    </div>
+    <HistoryList
+      key={quizId}
+      endpoint={`/quizzes/${quizId}/history`}
+      backTo={`/app/quizzes/${quizId}`}
+      host
+    />
   );
 }
