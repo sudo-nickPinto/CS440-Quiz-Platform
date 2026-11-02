@@ -25,9 +25,7 @@ export default function ClassesPage() {
     (item) => item.membershipStatus === "INVITED",
   );
 
-  const classes = records.filter(
-    (item) => item.membershipStatus !== "INVITED",
-  );
+  const classes = records.filter((item) => item.membershipStatus !== "INVITED");
 
   const visible = classes
     .filter((item) =>
@@ -157,10 +155,7 @@ export default function ClassesPage() {
             />
           </label>
 
-          <button
-            type="submit"
-            disabled={action.busy || !name.trim()}
-          >
+          <button type="submit" disabled={action.busy || !name.trim()}>
             {action.busy ? "Saving…" : "Create class →"}
           </button>
 
@@ -233,9 +228,7 @@ export default function ClassesPage() {
                 <button
                   type="button"
                   disabled={action.busy}
-                  onClick={() =>
-                    respondToInvitation(item.id, "accept")
-                  }
+                  onClick={() => respondToInvitation(item.id, "accept")}
                 >
                   Accept
                 </button>
@@ -243,9 +236,7 @@ export default function ClassesPage() {
                 <button
                   type="button"
                   disabled={action.busy}
-                  onClick={() =>
-                    respondToInvitation(item.id, "decline")
-                  }
+                  onClick={() => respondToInvitation(item.id, "decline")}
                 >
                   Decline
                 </button>
