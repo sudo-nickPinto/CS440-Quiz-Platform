@@ -100,15 +100,15 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 | `type` | To | Payload |
 |---|---|---|
 | `session_state` | the one client, on (re)connect | snapshot, see below |
-| `participant_joined` | host | `session_participant_id`, `display_name`, `participant_count`. Joining happens over REST, not the socket, so `join_session_route` (`POST /sessions/join`) gets an after-commit hook into the WebSocket hub, the same pattern as the REST answer hook: once `join_session()` has committed, it broadcasts `participant_joined` to the host's socket(s) using the new `SessionParticipantResponse`. If the host isn't connected nothing is sent, and they see the count in their next `session_state` |
-| `participant_left` | host | same fields. Produced by **NEW** `leave` |
+| `participant_joined` | host | `session_participant_id`, `display_name`, `avatar_key` (a preset such as `"owl.sky"`, or `null` for initials), `participant_count`. Joining happens over REST, not the socket, so `join_session_route` (`POST /sessions/join`) gets an after-commit hook into the WebSocket hub, the same pattern as the REST answer hook: once `join_session()` has committed, it broadcasts `participant_joined` to the host's socket(s) using the new `SessionParticipantResponse`. If the host isn't connected nothing is sent, and they see the count in their next `session_state` |
+| `participant_left` | host | `session_participant_id`, `display_name`, `participant_count` (no avatar). Produced by **NEW** `leave` |
 | `question_opened` | everyone | `QuestionOpenedEvent` (no correctness, just as today) |
 | `answer_progress` | host | `session_question_id`, `answered_count`, `eligible_count` (sent after each answer) |
 | `question_closed` | everyone | `QuestionClosedEvent` (`reason` ∈ `ALL_ANSWERED`, `DEADLINE`, `HOST`) |
 | `question_results` | host | the full `ClosedQuestionResultsSnapshot` |
-| `question_results` | each participant | **participant view**: `correct_choice_ids`, per-choice `response_count`, `me` (their own row: `selected_choice_id`, `is_correct`, `points_awarded`, `cumulative_score`, `rank`), and `leaderboard`: top 5 `{display_name, cumulative_score, rank}` (decided, §9) |
+| `question_results` | each participant | **participant view**: `correct_choice_ids`, per-choice `response_count`, `me` (their own row: `selected_choice_id`, `is_correct`, `points_awarded`, `cumulative_score`, `rank`), and `leaderboard`: top 5 `{display_name, avatar_key, cumulative_score, rank}` (decided, §9). The host's `participants` rows carry `avatar_key` too |
 | `host_status` | participants | `{"connected": bool}` |
-| `session_ended` | everyone | `reason` ∈ `COMPLETED`, `CANCELLED`, plus the final top 5 |
+| `session_ended` | everyone | `reason` ∈ `COMPLETED`, `CANCELLED`, plus the final top 5 (each row has `avatar_key`) |
 | `ack` | the sender | `request_id`, plus `session_question_id` for `open_question` or `receipt` (a `ResponseReceipt`) for `submit_answer` |
 | `error` | the sender | `request_id`, `code`, `message` (§7) |
 | `pong` | the sender | — |

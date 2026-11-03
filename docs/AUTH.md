@@ -28,7 +28,12 @@ sequenceDiagram
         F->>D: link to account with same email, or INSERT account
         F->>D: INSERT account_identity row
     end
-    F-->>B: {account_id, email, display_name, account_type}
+    F-->>B: {account_id, email, display_name, first_name, last_name, avatar_key, profile_complete, role, is_active}
+    opt profile_complete is false
+        B->>B: ProfileSetupScreen (first name, last name, avatar)
+        B->>F: PATCH /me
+        F->>D: UPDATE account (names, avatar, display_name)
+    end
 ```
 
 The backend shares no secret with Auth0. It trusts a token only because the signature verifies against Auth0's published public keys.
@@ -119,7 +124,8 @@ Auth added two modules (`auth.py`, `accounts.py`), one route module (`routes/me.
 | `errors.py` | `APIError` and handlers; every error is `{"error": {"code", "message"}}`. |
 | `auth.py` | `current_user`: reads the bearer token, fetches Auth0's public keys (lazily, cached), verifies RS256 signature, issuer and audience, returns the claims. |
 | `accounts.py` | `get_or_create_account(db, domain, sub, token)`: the logic in section 3. |
-| `api/routes/me.py` | `current_account` dependency and `GET /me`. |
+| `api/routes/me.py` | `current_account` dependency, `GET /me` and `PATCH /me` (save the profile). |
+| `avatars.py` | The preset avatar allowlist (`figure.color` keys). `frontend/src/avatars/catalog.js` holds the same ids. |
 | `api/router.py` | Registers the health and me routers. |
 
 ### Frontend (`frontend/src/`)
@@ -128,7 +134,9 @@ Auth added two modules (`auth.py`, `accounts.py`), one route module (`routes/me.
 | `main.jsx` | Wraps the app in `Auth0Provider` (domain, client id, redirect URI, audience). |
 | `App.jsx` | Reads login state from `useAuth0()`, session restore, logout, shows login page or lobby. |
 | `components/LandingPage.jsx` | Sign in and Create account (`screen_hint: 'signup'`), both sent to the email/password connection (`connection: 'Username-Password-Authentication'`), which also hides the Google button on Auth0's hosted page. |
-| `components/AccountGate.jsx` | Calls `/me` once logged in (creating the account on first login) before showing the lobby. |
+| `components/AccountGate.jsx` | Calls `/me` once logged in (creating the account on first login), then shows the verify-email, deactivated or profile setup screen if needed before the lobby. |
+| `components/ProfileSetupScreen.jsx`, `components/ProfileForm.jsx` | The one-time "Make it yours" screen: first name, last name and a preset avatar, saved with `PATCH /me`. The same form backs Edit profile (`/app/profile`). |
+| `avatars/` | `Avatar` (preset tile or initials), `AvatarPicker`, and the figure/color catalog. |
 | `api.js` | `apiFetch(path, getToken, options)`: attaches the bearer token and throws `error.message` from the error body. |
 
 ## 6. Configuration
@@ -189,6 +197,8 @@ Every error has the shape `{"error": {"code": "...", "message": "..."}}`; the fr
 | 500 | `auth_not_configured` | `AUTH0_DOMAIN` or `AUTH0_AUDIENCE` missing on the server |
 | 403 | `email_not_verified` | Auth0 profile has no verified email at first login |
 | 502 | `profile_unavailable` | Could not reach Auth0 `/userinfo` at first login |
+| 422 | `invalid_profile` | `PATCH /me` with a blank or too-long name, control characters, or an unknown avatar |
+| 403 | `inactive_account` | `PATCH /me` on a deactivated account |
 
 ## 9. Behaviors worth knowing
 
@@ -203,6 +213,10 @@ Every error has the shape `{"error": {"code": "...", "message": "..."}}`; the fr
 **Several logins, one account.** A new login with the same verified email as an existing account lands on that `account` (this is how older Google-made accounts pick up an email/password login). `account.auth0_sub` is only the first login and is not used for lookups.
 
 **Email verification happens once.** Auth0 marks an email verified when the user clicks the link in the verification email, and it stays verified. Users are not asked again. How often they must *log in* is a separate setting (Auth0 session lifetime, tenant settings > Advanced for the SSO session, and the application's refresh-token/absolute lifetime).
+
+**Signup collects names after Auth0.** Auth0's page asks only for email and password. Adding fields to Auth0's own signup form needs a paid plan and a custom domain. After the email is verified, the app shows a one-time profile setup screen for first name, last name and a preset avatar. Accounts made before this feature see it once, with names prefilled from `display_name` when that isn't an email address. Saving sets `display_name` to "First Last".
+
+**Password rule.** The `Username-Password-Authentication` connection requires at least 8 characters including a symbol. This is set in the Auth0 tenant (connection password policy), not in this repo; the landing page only shows a hint. It applies to new signups and password resets. Existing passwords keep working.
 
 **Forgot password.** Auth0's hosted login page has a "Forgot password?" link for the email/password connection and sends the reset email. There is no code for it in this repo.
 
