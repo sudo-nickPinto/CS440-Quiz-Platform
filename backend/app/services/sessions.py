@@ -291,7 +291,9 @@ def get_session(
     session_id: int,
 ) -> SessionResponse:
     session = _load_session(db, session_id)
-    permitted = session.host_id == account.account_id or account.is_admin
+    if session.class_id is not None:
+        require_class_member(db, account, session.class_id)
+    permitted = session.host_id == account.account_id
     if not permitted:
         permitted = (
             db.scalar(
@@ -318,11 +320,15 @@ def list_session_participants(
     session_id: int,
 ) -> list[SessionParticipantResponse]:
     session = _load_session(db, session_id)
-    if session.host_id != account.account_id and not account.is_admin:
+
+    if session.class_id is not None:
+        require_class_member(db, account, session.class_id)
+
+    if session.host_id != account.account_id:
         raise APIError(
             403,
             "session_access_denied",
-            "Only the host or an Admin can view the lobby participants.",
+            "Only the host can view the lobby participants.",
         )
 
     participants = db.scalars(

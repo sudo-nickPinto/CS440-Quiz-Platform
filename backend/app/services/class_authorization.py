@@ -16,8 +16,38 @@ from app.models.classes import (
 @dataclass(frozen=True, slots=True)
 class ClassAccess:
     class_: Class
-    membership: ClassMembership | None
-    is_global_admin: bool
+    membership: ClassMembership
+    is_faculty: bool
+
+    @property
+    def is_organizer(self) -> bool:
+        return (
+            self.is_faculty
+            and self.membership.status == MembershipStatus.ACTIVE
+            and self.membership.role == ClassRole.ORGANIZER
+        )
+
+    @property
+    def is_global_admin(self) -> bool:
+        # Compatibility with the existing dashboard response.
+        # V3 never grants global class access.
+        return False
+
+
+def require_active_faculty(account: CurrentAccount) -> None:
+    if not account.is_active:
+        raise APIError(
+            403,
+            "inactive_account",
+            "This account is inactive.",
+        )
+
+    if not account.is_admin:
+        raise APIError(
+            403,
+            "faculty_required",
+            "Only active faculty accounts can create classes.",
+        )
 
 
 def get_class(db: Session, class_id: int) -> Class:
@@ -45,19 +75,20 @@ def require_class_member(
     account: CurrentAccount,
     class_id: int,
 ) -> ClassAccess:
+    if not account.is_active:
+        raise APIError(404, "class_not_found", "Class not found.")
+
     class_ = get_class(db, class_id)
     membership = get_class_membership(db, class_id, account.account_id)
-    access = ClassAccess(
-        class_=class_,
-        membership=membership,
-        is_global_admin=account.is_admin,
-    )
 
-    if account.is_admin:
-        return access
     if membership is None or membership.status != MembershipStatus.ACTIVE:
         raise APIError(404, "class_not_found", "Class not found.")
-    return access
+
+    return ClassAccess(
+        class_=class_,
+        membership=membership,
+        is_faculty=account.is_admin,
+    )
 
 
 def require_class_organizer(
@@ -66,14 +97,14 @@ def require_class_organizer(
     class_id: int,
 ) -> ClassAccess:
     access = require_class_member(db, account, class_id)
-    if access.is_global_admin:
-        return access
-    if access.membership is None or access.membership.role != ClassRole.ORGANIZER:
+
+    if not access.is_organizer:
         raise APIError(
             403,
             "not_class_organizer",
-            "Only a class organizer or global Admin can perform this action.",
+            "Only an active faculty organizer can perform this action.",
         )
+
     return access
 
 
@@ -82,17 +113,13 @@ def require_class_host(
     account: CurrentAccount,
     class_id: int,
 ) -> ClassAccess:
-    """Allow starting a live session for a class: an active organizer or a
-    global Admin, and the class must not be archived.
-
-    This only checks the class. Session creation still has to check that the
-    account is the quiz's author.
-    """
     access = require_class_organizer(db, account, class_id)
+
     if access.class_.archived_at is not None:
         raise APIError(
             409,
             "class_archived",
             "An archived class cannot start new sessions.",
         )
+
     return access

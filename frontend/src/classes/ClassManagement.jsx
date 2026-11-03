@@ -2,12 +2,15 @@ import { useState } from "react";
 import { useAccount } from "../authenticated-demo/account";
 
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
+import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
+import { useConfirm } from "../authenticated-demo/useConfirm";
 import { ResourceMessage } from "./ClassUI";
 
 export function ClassMembers({ classInfo, onChange }) {
   const account = useAccount();
   const api = useApi();
   const action = useAction();
+  const confirmer = useConfirm();
 
   const resource = useResource(`/classes/${classInfo.id}/members`);
   const invitesResource = useResource(`/classes/${classInfo.id}/invites`);
@@ -70,11 +73,17 @@ export function ClassMembers({ classInfo, onChange }) {
   async function changeRole(member) {
     const nextRole = member.role === "ORGANIZER" ? "MEMBER" : "ORGANIZER";
 
-    const confirmed = window.confirm(
-      `Change ${member.display_name || member.email} to ${
-        nextRole === "ORGANIZER" ? "organizer" : "member"
+    const confirmed = await confirmer.confirm({
+      label: "Change role",
+      title: `Make ${member.display_name || member.email} ${
+        nextRole === "ORGANIZER" ? "an organizer" : "a member"
       }?`,
-    );
+      message:
+        nextRole === "ORGANIZER"
+          ? "Organizers can invite, remove and manage members."
+          : "They will no longer be able to manage this class.",
+      confirmLabel: nextRole === "ORGANIZER" ? "Make organizer" : "Make member",
+    });
 
     if (!confirmed) return;
 
@@ -92,9 +101,12 @@ export function ClassMembers({ classInfo, onChange }) {
   }
 
   async function removeMember(member) {
-    const confirmed = window.confirm(
-      `Remove ${member.display_name || member.email} from this class?`,
-    );
+    const confirmed = await confirmer.confirm({
+      label: "Remove member",
+      title: `Remove ${member.display_name || member.email}?`,
+      message: "They will lose access to this class.",
+      confirmLabel: "Remove",
+    });
 
     if (!confirmed) return;
 
@@ -145,6 +157,8 @@ export function ClassMembers({ classInfo, onChange }) {
 
   return (
     <section aria-label="Class members">
+      <ConfirmDialog confirmer={confirmer} />
+
       {action.error && (
         <p className="cl-feedback cl-error" role="alert">
           {action.error.message}
@@ -221,7 +235,10 @@ export function ClassMembers({ classInfo, onChange }) {
             <div className="cl-invitation" key={invitation.account_id}>
               <div>
                 <strong>{invitation.display_name || invitation.email}</strong>
-                <p>{invitation.email}</p>
+                {invitation.display_name &&
+                  invitation.display_name !== invitation.email && (
+                    <p>{invitation.email}</p>
+                  )}
               </div>
 
               <button
@@ -320,6 +337,7 @@ export function ClassMembers({ classInfo, onChange }) {
 export function ClassSettings({ classInfo, onChange }) {
   const api = useApi();
   const action = useAction();
+  const confirmer = useConfirm();
 
   const [name, setName] = useState(classInfo.name);
   const [joiningOpen, setJoiningOpen] = useState(classInfo.joiningOpen);
@@ -344,10 +362,14 @@ export function ClassSettings({ classInfo, onChange }) {
   }
 
   async function regenerateCode() {
-    const confirmed = window.confirm(
-      "Generate a new class code? The previous code will stop working " +
-        "and the class code will be enabled.",
-    );
+    const confirmed = await confirmer.confirm({
+      label: "Class code",
+      title: "Generate a new class code?",
+      message:
+        "The previous code will stop working and the class code will be " +
+        "enabled.",
+      confirmLabel: "Generate code",
+    });
 
     if (!confirmed) return;
 
@@ -362,10 +384,14 @@ export function ClassSettings({ classInfo, onChange }) {
   }
 
   async function archiveClass() {
-    const confirmed = window.confirm(
-      "Archive this class? Its class code will be removed. " +
-        "There is currently no restore action.",
-    );
+    const confirmed = await confirmer.confirm({
+      label: "Archive class",
+      title: "Archive this class?",
+      message:
+        "Its class code will be removed. There is currently no restore " +
+        "action.",
+      confirmLabel: "Archive class",
+    });
 
     if (!confirmed) return;
 
@@ -381,6 +407,8 @@ export function ClassSettings({ classInfo, onChange }) {
 
   return (
     <section className="cl-settings" aria-labelledby="settings-heading">
+      <ConfirmDialog confirmer={confirmer} />
+
       <h2 id="settings-heading">Class settings</h2>
 
       {action.error && (

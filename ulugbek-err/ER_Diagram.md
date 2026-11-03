@@ -137,8 +137,8 @@ erDiagram
 - `account` has one row per person. `account_identity` has one row for each way that person has logged in (for example Google and email/password).
 - The MVP has two roles: **User** and **Admin**.
   - The `account_type` column was built for Student, Professor and Administrator. We're not changing the column, because the login code already reads it.
-  - For the MVP: `ADMINISTRATOR` means Admin. Anything else (including empty) means User.
-  - To make someone an Admin, we set `account_type = 'ADMINISTRATOR'` by hand in the database.
+  - For V3: `ADMINISTRATOR` means an approved faculty account, not a global superuser. Anything else (including empty) means User.
+  - A project maintainer sets `account_type = 'ADMINISTRATOR'` by hand after confirming the account belongs to approved faculty. There is no self-service promotion endpoint.
 - Hosting and joining are things a User does. They aren't roles, so they aren't stored on the account.
 - Everyone is in one shared class. There's no class table in the MVP, so "in the class" just means "has an account".
 
@@ -213,7 +213,7 @@ erDiagram
 ### How classes work
 
 - **Anyone can make a class.** They become its first organizer: a membership with `role = ORGANIZER`, `status = ACTIVE` and `joined_via = CREATOR`. The backend saves the class and that membership together, so you never get one without the other.
-- **Organizer and member are roles inside one class,** not on the account. The same person can organize one class and be a member of another. Admin still means the app-wide Admin.
+- **Organizer and member are roles inside one class,** not on the account. Faculty status permits class creation, but managing a class still requires an active `ORGANIZER` membership in that class.
 - **Joining:** someone joins with the class code (`joined_via = CODE`) or by accepting an invite (`INVITED`, then `ACTIVE`).
 - **Leaving and removal:** leaving sets `status = LEFT`. An organizer removing someone sets `status = REMOVED`, and `decided_by_id` and `decided_at` record who did it and when.
 - **One row per person per class.** Joining again, being invited again or being removed all update the same row. Past results never change, because they live in the session tables.
@@ -224,8 +224,8 @@ erDiagram
 - A class always keeps at least one active organizer. Removing, demoting or letting the last one leave is refused (`409 last_organizer`).
 - Roles and statuses always come from `class_membership`, never from the account or the request.
 - Generating class codes (8 characters, no look-alike letters) and rate-limiting joins by code.
-- Only an active organizer (or a global Admin) can start a session for a class, and not in an archived class. Use `require_class_host()` in `backend/app/services/class_authorization.py`. The host must also be the quiz's author.
-- Only active members can create quizzes in a class (`quiz.class_id`), and not in an archived class. A quiz is visible only to its owner and the class's organizers, and only while they're active in the class.
+- Only an active faculty organizer can start a session for a class, and not in an archived class. Use `require_class_host()` in `backend/app/services/class_authorization.py`. The host must also be the quiz's author.
+- Only active members can create quizzes in a class (`quiz.class_id`), and not in an archived class. A quiz is visible only to its owner and the class's organizers, and only while they're active in the class. Faculty status gives no extra quiz access.
 
 ## Things that must be unique
 

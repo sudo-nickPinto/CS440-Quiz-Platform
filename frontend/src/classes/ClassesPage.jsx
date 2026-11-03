@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { useAction, useApi } from "../authenticated-demo/rest";
 import { useClassesResource } from "./classResources";
 import { ClassCard, EmptyMessage, ResourceMessage } from "./ClassUI";
+import { useAccount } from "../authenticated-demo/account";
 
 export default function ClassesPage() {
   const api = useApi();
@@ -18,6 +19,9 @@ export default function ClassesPage() {
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("name");
 
+  const account = useAccount();
+  const canCreateClass = account.is_active === true && account.role === "ADMIN";
+
   const ready = resource.status === "ready";
   const records = ready ? resource.data : [];
 
@@ -25,9 +29,7 @@ export default function ClassesPage() {
     (item) => item.membershipStatus === "INVITED",
   );
 
-  const classes = records.filter(
-    (item) => item.membershipStatus !== "INVITED",
-  );
+  const classes = records.filter((item) => item.membershipStatus !== "INVITED");
 
   const visible = classes
     .filter((item) =>
@@ -54,6 +56,8 @@ export default function ClassesPage() {
 
     const trimmedName = name.trim();
     if (!trimmedName) return;
+
+    if (!canCreateClass) return;
 
     const created = await action.run(() =>
       api("/classes", {
@@ -106,19 +110,26 @@ export default function ClassesPage() {
       <div className="cl-titlebar">
         <h1 id="classes-heading">
           Classes
-          {ready && <small>{classes.length} total</small>}
+          {ready && (
+            <small>
+              {classes.filter((item) => item.canManage).length} managed ·{" "}
+              {classes.filter((item) => !item.canManage).length} joined
+            </small>
+          )}
         </h1>
 
-        <button
-          type="button"
-          className="cl-new"
-          aria-expanded={panel === "create"}
-          aria-controls="class-create-panel"
-          onClick={() => togglePanel("create")}
-          disabled={action.busy}
-        >
-          + New class
-        </button>
+        {canCreateClass && (
+          <button
+            type="button"
+            className="cl-new"
+            aria-expanded={panel === "create"}
+            aria-controls="class-create-panel"
+            onClick={() => togglePanel("create")}
+            disabled={action.busy}
+          >
+            + New class
+          </button>
+        )}
 
         <button
           type="button"
@@ -137,7 +148,7 @@ export default function ClassesPage() {
         </p>
       )}
 
-      {panel === "create" && (
+      {canCreateClass && panel === "create" && (
         <form
           id="class-create-panel"
           className="cl-inline-panel"
@@ -157,10 +168,7 @@ export default function ClassesPage() {
             />
           </label>
 
-          <button
-            type="submit"
-            disabled={action.busy || !name.trim()}
-          >
+          <button type="submit" disabled={action.busy || !name.trim()}>
             {action.busy ? "Saving…" : "Create class →"}
           </button>
 
@@ -233,9 +241,7 @@ export default function ClassesPage() {
                 <button
                   type="button"
                   disabled={action.busy}
-                  onClick={() =>
-                    respondToInvitation(item.id, "accept")
-                  }
+                  onClick={() => respondToInvitation(item.id, "accept")}
                 >
                   Accept
                 </button>
@@ -243,9 +249,7 @@ export default function ClassesPage() {
                 <button
                   type="button"
                   disabled={action.busy}
-                  onClick={() =>
-                    respondToInvitation(item.id, "decline")
-                  }
+                  onClick={() => respondToInvitation(item.id, "decline")}
                 >
                   Decline
                 </button>
@@ -294,7 +298,9 @@ export default function ClassesPage() {
         </label>
 
         <span className="cl-count" aria-live="polite">
-          {ready ? `${visible.length} classes` : "— classes"}
+          {ready
+            ? `${visible.length} ${visible.length === 1 ? "class" : "classes"}`
+            : "— classes"}
         </span>
 
         <button

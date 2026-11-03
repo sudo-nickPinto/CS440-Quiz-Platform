@@ -67,10 +67,7 @@ def _utc(value: datetime | None) -> datetime | None:
 
 
 def _is_organizer(access: ClassAccess) -> bool:
-    return access.is_global_admin or (
-        access.membership is not None
-        and access.membership.role == ClassRole.ORGANIZER
-    )
+    return access.is_organizer
 
 
 def _active_member_count(db: Session, class_id: int) -> int:
@@ -113,8 +110,7 @@ def _session_rows(db: Session, class_id: int, statuses) -> list:
         )
         .outerjoin(
             Result,
-            Result.session_participant_id
-            == SessionParticipant.session_participant_id,
+            Result.session_participant_id == SessionParticipant.session_participant_id,
         )
         .where(LiveSession.class_id == class_id, LiveSession.status.in_(statuses))
         .group_by(
@@ -144,8 +140,7 @@ def _my_results(
         )
         .outerjoin(
             Result,
-            Result.session_participant_id
-            == SessionParticipant.session_participant_id,
+            Result.session_participant_id == SessionParticipant.session_participant_id,
         )
         .where(
             SessionParticipant.account_id == account.account_id,
@@ -296,8 +291,7 @@ def _class_scores(
         )
         .outerjoin(
             Result,
-            Result.session_participant_id
-            == SessionParticipant.session_participant_id,
+            Result.session_participant_id == SessionParticipant.session_participant_id,
         )
         .where(
             LiveSession.class_id == class_id,
@@ -333,9 +327,7 @@ def _class_students(db: Session, class_id: int) -> list[ClassStudentSummary]:
                 average_score=round(total / len(played), 1) if played else None,
                 total_points=total,
                 attendance_rate=(
-                    round(len(played) / len(newest_first), 3)
-                    if newest_first
-                    else None
+                    round(len(played) / len(newest_first), 3) if newest_first else None
                 ),
                 recent_scores=[
                     played.get(session_id)

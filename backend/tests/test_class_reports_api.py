@@ -135,6 +135,7 @@ def reports() -> Iterator[tuple[TestClient, dict, dict]]:
                     auth0_sub=f"auth0|{name}",
                     email=f"{name}@gettysburg.edu",
                     display_name=display,
+                    account_type="ADMINISTRATOR" if name in {"owner", "coorg", "global"} else None,
                 )
                 for name, (display, _, _) in PEOPLE.items()
             }
@@ -260,7 +261,7 @@ def reports() -> Iterator[tuple[TestClient, dict, dict]]:
         identities = {
             name: CurrentAccount(
                 ids[name],
-                AccountRole.ADMIN if name == "global" else AccountRole.USER,
+                AccountRole.ADMIN if name in {"owner", "coorg", "global"} else AccountRole.USER,
                 True,
             )
             for name in PEOPLE
@@ -475,7 +476,7 @@ def test_quiz_without_completed_class_session_is_not_found(
     response = client.get(f"/classes/{data['class_id']}/quizzes/{quiz_id}/results")
 
     assert response.status_code == 404
-    assert response.json()["error"]["code"] == "quiz_not_found"
+    assert response.json()["error"]["code"] == ("class_not_found" if viewer == "global" else "quiz_not_found")
     assert "Unrelated private quiz" not in response.text
 
 
@@ -551,15 +552,10 @@ def test_student_outside_the_class_is_not_found(reports) -> None:
     assert response.json()["error"]["code"] == "student_not_found"
 
 
-def test_global_admin_reads_every_report_without_membership(reports) -> None:
+def test_unrelated_faculty_cannot_read_class_reports(reports):
     client, identities, data = reports
     act_as(client, identities["global"])
-
-    session = client.get(session_url(data, "first"))
-    quiz = client.get(quiz_url(data))
-    student = client.get(student_url(data, "amy"))
-
-    assert session.status_code == 200
-    assert len(session.json()["players"]) == 3
-    assert quiz.json()["average_score"] == 450.0
-    assert student.json()["class_average"] == 500.0
+    for url in (session_url(data, "first"), quiz_url(data), student_url(data, "amy")):
+        response = client.get(url)
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "class_not_found"

@@ -236,8 +236,8 @@ def update_quiz(
         if not _can_read(db, account, quiz):
             raise APIError(404, "quiz_not_found", "Quiz not found.")
 
-        # Being a global administrator does not grant edit access
-        # to somebody else's quiz.
+        # Faculty status and the class organizer role do not grant
+        # edit access to somebody else's quiz.
         if quiz.author_id != account.account_id:
             raise APIError(
                 403,

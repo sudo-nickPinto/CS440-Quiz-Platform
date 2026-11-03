@@ -365,6 +365,11 @@ def test_non_member_closes_with_4403(live) -> None:
 
 def test_removed_class_member_closes_with_4403_after_joining(live) -> None:
     client, people = live
+    host_id = people["host"].account_id
+    with client.app.state.database.session_factory() as db:
+        db.get(Account, host_id).account_type = "ADMINISTRATOR"
+        db.commit()
+    people["host"] = CurrentAccount(host_id, AccountRole.ADMIN, True)
     with client.app.state.database.session_factory() as db:
         class_ = Class(
             name="Socket class",
