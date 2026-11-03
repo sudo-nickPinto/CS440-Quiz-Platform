@@ -414,6 +414,8 @@ function PresentTable({ classInfo }) {
   const needle = query.trim().toLowerCase();
   const quizzes = (resource.data || []).filter(
     (quiz) =>
+      // GET /quizzes spans all of the caller's classes; show only this one.
+      quiz.class_id === classInfo.id &&
       quiz.author_id === account.account_id &&
       quiz.status === "PUBLISHED" &&
       quiz.title.toLowerCase().includes(needle),
