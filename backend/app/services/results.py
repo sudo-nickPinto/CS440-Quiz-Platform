@@ -41,6 +41,7 @@ class ClosedQuestionResultData:
 class UnrankedParticipantResult:
     session_participant_id: int
     display_name: str
+    avatar_key: str | None
     selected_choice_id: int | None
     is_correct: bool
     points_awarded: int
@@ -134,6 +135,7 @@ def get_closed_question_results(
         select(
             SessionParticipant.session_participant_id,
             Account.display_name,
+            Account.avatar_key,
         )
         .join(Account, Account.account_id == SessionParticipant.account_id)
         .where(SessionParticipant.session_id == session_id)
@@ -169,12 +171,13 @@ def get_closed_question_results(
         for session_participant_id, cumulative_score in cumulative_score_rows
     }
     unranked_participants = []
-    for session_participant_id, display_name in participant_rows:
+    for session_participant_id, display_name, avatar_key in participant_rows:
         response = current_response_by_participant.get(session_participant_id)
         unranked_participants.append(
             UnrankedParticipantResult(
                 session_participant_id=session_participant_id,
                 display_name=display_name,
+                avatar_key=avatar_key,
                 selected_choice_id=response.choice_id if response else None,
                 is_correct=response.is_correct if response else False,
                 points_awarded=response.points_awarded if response else 0,
@@ -203,6 +206,7 @@ def get_closed_question_results(
             ParticipantQuestionResult(
                 session_participant_id=participant.session_participant_id,
                 display_name=participant.display_name,
+                avatar_key=participant.avatar_key,
                 selected_choice_id=participant.selected_choice_id,
                 is_correct=participant.is_correct,
                 points_awarded=participant.points_awarded,

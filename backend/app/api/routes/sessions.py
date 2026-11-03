@@ -98,6 +98,7 @@ def _announce_join(
         joined.session.session_id,
         joined.participant.session_participant_id,
         joined.participant.display_name,
+        joined.participant.avatar_key,
     )
 
 
