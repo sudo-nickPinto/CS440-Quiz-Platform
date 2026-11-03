@@ -5539,3 +5539,16 @@
   text-decoration-thickness: 2px;
   text-underline-offset: 4px;
 }
+
+/* Header avatar: the summary keeps its border and shadow; the preset tile
+   fills it. */
+.qp .ui-avatar .avatar {
+  --avatar-size: 38px;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.qp .ui-user .qb-account-menu button + button {
+  border-top: var(--b-thin);
+}

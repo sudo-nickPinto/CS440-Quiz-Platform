@@ -20,13 +20,15 @@ FIGURES: tuple[str, ...] = (
     "alien",
 )
 
+# Tile colors; the frontend maps each to a design token (sky is --sky-soft,
+# orange is --orange-deep), never a raw hex.
 COLORS: tuple[str, ...] = (
     "sky",
+    "apricot",
+    "sand",
+    "paper",
     "navy",
     "orange",
-    "sand",
-    "apricot",
-    "mist",
 )
 
 AVATAR_KEYS: frozenset[str] = frozenset(
