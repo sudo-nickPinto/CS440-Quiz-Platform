@@ -76,7 +76,7 @@ curl http://localhost:8080/healthz
 curl http://localhost:8080/api/health
 ```
 
-The five SQL migrations are applied by MySQL only when `mysql-data` is first
+The SQL migrations (0001 to 0008) are applied by MySQL only when `mysql-data` is first
 created. Restarting the containers does not re-run them and does not erase data.
 
 Stop the stack without deleting its database:

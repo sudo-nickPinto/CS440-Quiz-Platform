@@ -13,6 +13,7 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0005_optional_session_group` | Makes `live_session.group_id` optional. The MVP has one shared class, so sessions don't belong to a group |
 | `0006_classes` | `class`, `class_membership` (classes with organizers and members, from PR #51) |
 | `0007_session_class` | Adds `live_session.class_id`: the host may pick a class for a session, and then only its active members can join (task 6). NULL is an open session |
+| `0008_account_profile` | Adds `account.first_name`, `last_name` and `avatar_key`: the profile people fill in once after signing up. `display_name` becomes "first last" when it is saved |
 
 Each migration comes in two files:
 
