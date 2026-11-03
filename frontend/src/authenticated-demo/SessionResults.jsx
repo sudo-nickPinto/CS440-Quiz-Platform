@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useAuth0 } from "@auth0/auth0-react";
 import {
   Link,
   Navigate,
@@ -7,8 +6,9 @@ import {
   useParams,
   useSearchParams,
 } from "react-router";
-import { useAction, useResource } from "./rest";
+import { useResource } from "./rest";
 import RequestError from "./RequestError";
+import { useFileDownload } from "./useFileDownload";
 import "./session-results.css";
 
 const LABEL = {
@@ -388,11 +388,21 @@ function QuestionBreakdown({ question, index, players, onPerson }) {
   );
 }
 
-export function HostResults({ report, backTo, backLabel, exportControl }) {
+/*
+ * The export defaults to the host's CSV. The class report passes the
+ * class session's Excel export instead.
+ */
+export function HostResults({
+  report,
+  backTo,
+  backLabel,
+  exportPath = `/sessions/${report.session_id}/results/export.csv`,
+  exportName = `session-${report.session_id}-results.csv`,
+  exportLabel = "Export CSV",
+}) {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
-  const { getAccessTokenSilently } = useAuth0();
-  const action = useAction();
+  const file = useFileDownload();
 
   const questionsTab = params.get("tab") === "questions";
   const players = report.players;
@@ -424,63 +434,22 @@ export function HostResults({ report, backTo, backLabel, exportControl }) {
     });
   }
 
-  async function download() {
-    const blob = await action.run(async () => {
-      const token = await getAccessTokenSilently();
-      const base = import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "");
-
-      const response = await fetch(
-        base + "/sessions/" + report.session_id + "/results/export.csv",
-        {
-          headers: { Authorization: "Bearer " + token },
-        },
-      );
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        const error = new Error(body?.error?.message || "Export failed.");
-        error.status = response.status;
-        error.code = body?.error?.code;
-        throw error;
-      }
-
-      return response.blob();
-    });
-
-    if (!blob) return;
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "session-" + report.session_id + "-results.csv";
-
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
   const shown = questionsTab ? filteredQuestions.length : filteredPlayers.length;
 
   return (
     <div className="rr" style={{ "--q": report.questions.length }}>
       <Title report={report} host backTo={backTo} backLabel={backLabel}>
-        {exportControl === undefined ? (
-          <button
-            type="button"
-            className="rr-button orange"
-            disabled={action.busy}
-            onClick={() => void download()}
-          >
-            {action.busy ? "Preparing…" : "Export CSV"}
-          </button>
-        ) : (
-          exportControl
-        )}
+        <button
+          type="button"
+          className="rr-button orange"
+          disabled={file.busy}
+          onClick={() => void file.download(exportPath, exportName)}
+        >
+          {file.busy ? "Preparing…" : exportLabel}
+        </button>
       </Title>
 
-      <RequestError error={action.error} />
+      <RequestError error={file.error} />
 
       <div className="rr-summary">
         <Stat label="Participants" value={report.total_participants} />
