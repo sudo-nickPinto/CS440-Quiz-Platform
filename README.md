@@ -87,6 +87,50 @@ Note: `frontend/.env.example` points at the backend on port `8001`, so run `uvic
 
 Every REST route, who may call it and its error codes: [docs/API.md](docs/API.md). The live WebSocket: [docs/LIVE_PROTOCOL.md](docs/LIVE_PROTOCOL.md).
 
+## V3 Task 4: Quiz submission and approval
+
+### 1. In plain English
+
+Task 4 adds a review step between publishing a quiz and making it available to
+host in a class. An active class member who owns a quiz, or actively
+collaborates on it, submits an exact published version. An active faculty
+organizer then approves or rejects the submission. Approved current versions
+appear in the class's approved-quiz list; submitters may instead withdraw their
+own pending submissions.
+
+### 2. Assumptions and design choices
+
+- `quiz.class_id` is the authoritative class, and approval never grants quiz
+  editing, class-management, report, or results permissions.
+- Submission rows are permanent audit history. Decisions and withdrawals are
+  terminal, self-approval is allowed, and conditional updates give competing
+  decisions one winner.
+- Only published, non-archived, current versions are hostable. A newer
+  published version makes an older approval stale, while a newer draft does
+  not.
+- Inaccessible classes, submissions, and versions use non-leaking `404`
+  responses. Visible users without organizer or withdrawal authority receive
+  `403`.
+
+### 3. Technical implementation
+
+Migration `0010_quiz_submission` adds the submission model, restrictive audit
+foreign keys, decision-field checks, and a stored generated
+`active_version_id`. A unique key on `(class_id, active_version_id)` prevents
+concurrent pending or approved duplicates while allowing rejected or withdrawn
+versions to be submitted again.
+
+The backend provides five class routes: create and list submissions, approve or
+reject a submission, soft-withdraw a pending submission, and list approved
+quizzes. Focused model, schema, authorization, stale-version, hostability, and
+real-MySQL concurrency tests cover the workflow. Task 4 also exposes a reusable
+approval helper; Task 5 will connect that helper to live-session creation and
+hosting.
+
+See the [API reference](docs/API.md) for endpoint contracts and the
+[Task 4 design](docs/V3_TASK4_SUBMISSION_APPROVAL_DRAFT.md) for the complete
+authorization, state-machine, migration, and Task 5 boundary decisions.
+
 ## Development Workflow
 
 Before starting a new feature, update your local `main` branch:
