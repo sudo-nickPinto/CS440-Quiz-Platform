@@ -15,6 +15,7 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0007_session_class` | Adds `live_session.class_id`: the host may pick a class for a session, and then only its active members can join (task 6). NULL is an open session |
 | `0008_quiz_class` | Adds `quiz.class_id`: every quiz belongs to a class, and only that class can see it (V3 task 2). Fills it in for quizzes played in exactly one class |
 | `0009_quiz_collaboration` | Adds optimistic quiz revisions, collaborator permission/state, and append-only share/revocation audit events (V3 task 3) |
+| `0010_quiz_submission` | Adds class quiz submission/approval audit records and concurrency-safe active-submission uniqueness (V3 task 4) |
 
 Each migration comes in two files:
 
@@ -75,6 +76,7 @@ See [`../LOCAL_DATABASE_SETUP.md`](../LOCAL_DATABASE_SETUP.md). It sets up a MyS
 - **Sessions and groups:** leave `live_session.group_id` empty for the MVP. Use `live_session.class_id` (0007) for the session's class.
 - **Classes:** use `class` and `class_membership`, not the old `course_group` and `group_membership`. Classes are archived, never deleted: a class with members can't be deleted.
 - **Quizzes and classes:** `quiz.class_id` (0008) is the class that owns the quiz. Every new quiz gets one. It's only allowed to be empty for quizzes made before V3. See "Quizzes without a class" below.
+- **Quiz submissions:** `quiz.class_id` is authoritative. `quiz_submission.class_id` (0010) repeats it only for indexes and uniqueness, so the backend must verify they match before inserting. Submission rows are audit history and their foreign keys use `RESTRICT`.
 - **Deleting quizzes:** you can't delete a quiz that has already been played. Set its `status` to `'ARCHIVED'` instead.
 - **Rules the database doesn't check:** some rules have to be checked in the backend code. They're listed at the top of `0003_live_sessions.up.sql` and in the "Rules the backend has to check" section of `ER_Diagram.md`.
 

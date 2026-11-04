@@ -227,6 +227,41 @@ erDiagram
 - Only an active faculty organizer can start a session for a class, and not in an archived class. Use `require_class_host()` in `backend/app/services/class_authorization.py`. The host must also be the quiz's author.
 - Only active members can create quizzes in a class (`quiz.class_id`), and not in an archived class. A quiz is visible only to its owner and the class's organizers, and only while they're active in the class. Faculty status gives no extra quiz access.
 
+## Quiz submission approval (V3)
+
+Migration `0010` keeps an audit row whenever a published quiz version is
+submitted to a class for approval. The Task 4 routes and service enforce the
+authorization and transition rules, while the migration establishes the
+database invariants that preserve the audit history under concurrency.
+
+```mermaid
+erDiagram
+    "CLASS" ||--o{ QUIZ_SUBMISSION : receives
+    QUIZ_VERSION ||--o{ QUIZ_SUBMISSION : "is submitted as"
+    ACCOUNT ||--o{ QUIZ_SUBMISSION : submits
+    ACCOUNT |o--o{ QUIZ_SUBMISSION : decides
+
+    QUIZ_SUBMISSION {
+        int submission_id PK
+        int class_id FK "index/uniqueness copy; quiz.class_id is authoritative"
+        int quiz_version_id FK
+        int submitted_by_id FK
+        enum status "PENDING, APPROVED, REJECTED, WITHDRAWN"
+        int decided_by_id FK "empty only while pending"
+        datetime submitted_at
+        datetime decided_at "empty only while pending"
+        int active_version_id UK "stored generated; private database detail"
+    }
+```
+
+`active_version_id` equals `quiz_version_id` for `PENDING` and `APPROVED`
+rows, and is `NULL` for `REJECTED` and `WITHDRAWN` rows. The unique key on
+`(class_id, active_version_id)` prevents concurrent active duplicates while
+allowing rejected or withdrawn versions to be submitted again. All four
+foreign keys use `RESTRICT` so classes, versions, and actor accounts cannot be
+deleted out from under submission history. A database check also requires both
+decision fields to be empty for pending rows and present for terminal rows.
+
 ## Things that must be unique
 
 - **account:** no two accounts can have the same email.
@@ -241,6 +276,7 @@ erDiagram
 - **result:** each participant gets one final result.
 - **class:** no two classes can have the same code. Any number of classes can have no code.
 - **class_membership:** a person has at most one membership row per class.
+- **quiz_submission:** a class/version pair has at most one `PENDING` or `APPROVED` row. `REJECTED` and `WITHDRAWN` rows keep their history but do not block resubmission.
 
 ## Rules the backend has to check
 
