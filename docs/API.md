@@ -131,7 +131,7 @@ The caller's own quizzes, across every class they're active in, newest first. In
 ### `GET /quizzes/{quiz_id}` → `200 QuizResponse`
 Full quiz, including correct answers. Same rule as above: only the owner or an organizer of the quiz's class, and anyone else gets 404.
 
-`QuizResponse`: `quiz_id, author_id, class_id, status, visibility, created_at, updated_at, version`. `version` holds `quiz_version_id, version_number, title, description, created_at, published_at, questions[]`. Each question holds `question_id, question_order, question_type, question_text, explanation, time_limit_seconds, base_points, choices[]`. Each choice holds `choice_id, choice_order, choice_text, is_correct`.
+`QuizResponse`: `quiz_id, author_id, class_id, revision, status, visibility, created_at, updated_at, version`. `version` holds `quiz_version_id, version_number, title, description, created_at, published_at, questions[]`. Each question holds `question_id, question_order, question_type, question_text, explanation, time_limit_seconds, base_points, choices[]`. Each choice holds `choice_id, choice_order, choice_text, is_correct`.
 
 Errors: `404 quiz_not_found`, `500 invalid_quiz`.
 
@@ -139,6 +139,57 @@ Errors: `404 quiz_not_found`, `500 invalid_quiz`.
 The quiz's owner only. Sets `status` to `ARCHIVED`.
 
 Errors: `403 quiz_access_denied` (an organizer who isn't the owner), `404 quiz_not_found`, `500 quiz_archive_failed`.
+
+### V3 class quiz drafts and collaborators
+
+`POST /classes/{class_id}/quizzes` creates a private draft owned by the caller.
+The caller must be an active member of the class. Its initial `revision` is 1
+and its version has `published_at: null`.
+
+`GET /classes/{class_id}/quizzes/{quiz_id}` returns the editable draft to its
+owner or an active named collaborator. `PUT` on the same URL replaces the
+draft content and requires `expected_revision`. A successful transaction
+increments the quiz revision exactly once. A stale request returns:
+
+```json
+{
+  "error": {
+    "code": "quiz_edit_conflict",
+    "message": "This quiz changed after you opened it. Reload the latest version before saving again.",
+    "details": { "current_revision": 4 }
+  }
+}
+```
+
+`base_version` is not accepted in V3: published version numbers and optimistic
+revisions are separate counters. Clients must fetch `QuizResponse.revision` and
+send it back as `expected_revision`.
+
+`POST /classes/{class_id}/quizzes/{quiz_id}/publish` publishes the current
+draft and takes `{ "expected_revision": 4 }`. Only the quiz owner may publish.
+It timestamps the draft, changes the quiz status to `PUBLISHED`, and increments
+the revision exactly once. Collaborators can edit but cannot publish. A later
+edit creates a new draft version without changing the published version.
+
+Publish errors include `quiz_publish_denied`, `quiz_not_publishable`, and
+`quiz_edit_conflict`.
+
+Collaborator management is owner-only:
+
+```text
+GET    /classes/{class_id}/quizzes/{quiz_id}/collaborators
+POST   /classes/{class_id}/quizzes/{quiz_id}/collaborators
+DELETE /classes/{class_id}/quizzes/{quiz_id}/collaborators/{account_id}
+```
+
+The POST body is `{ "email": "member@example.edu", "permission": "EDITOR" }`.
+The email is normalized before lookup, and the target must be an active member
+of the quiz's class. Unknown emails and accounts outside the class both return
+`not_class_member`, so this endpoint cannot probe account registration.
+Every share and revocation is preserved in an append-only audit table, while
+revocation immediately blocks future draft reads and writes. Errors include `not_class_member`,
+`already_quiz_collaborator`, `quiz_owner_cannot_collaborate`,
+`collaborator_management_denied`, and `quiz_collaborator_not_found`.
 
 ## Sessions
 

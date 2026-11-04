@@ -248,6 +248,7 @@ def test_csv_contains_saved_scores_and_escapes_formulas(db):
 
 
 def test_publishing_revision_preserves_historical_report(db):
+    from app.models.classes import Class, ClassMembership, ClassRole, JoinedVia
     from app.schemas.quiz import QuizUpdate
     from app.services.quizzes import update_quiz
 
@@ -255,12 +256,28 @@ def test_publishing_revision_preserves_historical_report(db):
     # publication timestamp. Mark it published for this edit test.
     original_version = db.get(QuizVersion, 1)
     original_version.published_at = NOW
+    class_ = Class(
+        name="Report class",
+        created_by_id=HOST.account_id,
+        joining_open=False,
+    )
+    db.add(class_)
+    db.flush()
+    db.add(
+        ClassMembership(
+            class_id=class_.class_id,
+            account_id=HOST.account_id,
+            role=ClassRole.ORGANIZER,
+            joined_via=JoinedVia.CREATOR,
+        )
+    )
+    db.get(Quiz, 1).class_id = class_.class_id
     db.commit()
 
     before = get_session_report(db, HOST, 10)
 
     payload = QuizUpdate(
-        base_version=1,
+        expected_revision=1,
         title="Changed title for future sessions",
         description="New description",
         questions=[

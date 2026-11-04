@@ -112,7 +112,7 @@ export function QuizEditor({
   const validClass = /^[1-9][0-9]*$/.test(classId ?? "");
   const dirty = JSON.stringify(editor) !== JSON.stringify(initial);
 
-  const conflict = action.error?.code === "quiz_version_conflict";
+  const conflict = action.error?.code === "quiz_edit_conflict";
 
   const backTo = editing
     ? `/app/quizzes/${existingQuiz.quiz_id}`
@@ -271,11 +271,11 @@ export function QuizEditor({
       const payload = toQuizCreate(editor);
 
       if (editing) {
-        payload.base_version = existingQuiz.version.version_number;
+        payload.expected_revision = existingQuiz.revision;
       }
 
       const path = editing
-        ? `/quizzes/${existingQuiz.quiz_id}`
+        ? `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}`
         : `/classes/${classId}/quizzes`;
 
       return api(path, {
@@ -695,11 +695,11 @@ export function QuizEditor({
               <>
                 <div className="qe-confirm-text">
                   <h2>
-                    {editing ? "Publish these changes?" : "Save this quiz?"}
+                    {editing ? "Save these changes?" : "Save this quiz?"}
                   </h2>
                   <p>
                     {editing
-                      ? "Future sessions use the new version. Past sessions and results keep their original questions."
+                      ? "This saves a draft. Publish it from the quiz page when it is ready to host."
                       : "It's saved as a draft in this class. A draft can't be hosted until it's published."}
                   </p>
                 </div>
@@ -768,6 +768,7 @@ export function QuizEditor({
 export function QuizViewer() {
   const { quizId } = useParams();
   const account = useAccount();
+  const api = useApi();
   const action = useAction();
   const validId = /^[1-9][0-9]*$/.test(quizId);
 
@@ -806,6 +807,19 @@ export function QuizViewer() {
     (sum, question) => sum + Number(question.time_limit_seconds || 0),
     0,
   );
+
+  async function publishQuiz() {
+    const publishedQuiz = await action.run(() =>
+      api(
+        `/classes/${quiz.class_id}/quizzes/${quiz.quiz_id}/publish`,
+        {
+          method: "POST",
+          body: JSON.stringify({ expected_revision: quiz.revision }),
+        },
+      ),
+    );
+    if (publishedQuiz) resource.reload();
+  }
 
   return (
     <section className="qv" aria-labelledby="quiz-title">
@@ -865,13 +879,24 @@ export function QuizViewer() {
             </Link>
           )}
 
-          {published && mine && (
+          {mine && quiz.status !== "ARCHIVED" && (
             <Link
               className="qb-btn qb-btn-paper"
               to={`/app/quizzes/${quiz.quiz_id}/edit`}
             >
               Edit quiz
             </Link>
+          )}
+
+          {!published && mine && quiz.status === "DRAFT" && (
+            <button
+              type="button"
+              className="qb-btn"
+              disabled={action.busy}
+              onClick={() => void publishQuiz()}
+            >
+              {action.busy ? "Publishing…" : "Publish quiz"}
+            </button>
           )}
 
           {published && mine && (

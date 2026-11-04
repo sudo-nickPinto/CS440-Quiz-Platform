@@ -249,9 +249,9 @@ def test_explanation_over_limit_is_rejected(quiz_client) -> None:
     assert response.status_code == 422
 
 
-def revision_payload(base_version: int = 1) -> dict:
+def revision_payload(expected_revision: int = 1) -> dict:
     payload = deepcopy(QUIZ_PAYLOAD)
-    payload["base_version"] = base_version
+    payload["expected_revision"] = expected_revision
     payload["title"] = "Revised Quiz"
     payload["description"] = "Updated description"
 
@@ -325,7 +325,8 @@ def test_stale_edit_is_rejected_without_overwriting_newer_version(quiz_client):
     response = client.put(path, json=stale)
 
     assert response.status_code == 409
-    assert response.json()["error"]["code"] == "quiz_version_conflict"
+    assert response.json()["error"]["code"] == "quiz_edit_conflict"
+    assert response.json()["error"]["details"]["current_revision"] == 2
 
     current = client.get(path).json()
     assert current["version"]["version_number"] == 2
@@ -412,12 +413,19 @@ def test_old_sessions_keep_version_and_new_sessions_use_revision(
     )
     assert updated.status_code == 200
 
+    published = client.post(
+        f"/classes/{original['class_id']}/quizzes/{quiz_id}/publish",
+        json={"expected_revision": updated.json()["revision"]},
+    )
+    assert published.status_code == 200
+
     response = client.post(f"/quizzes/{quiz_id}/sessions")
     assert response.status_code == 201
     new_session = response.json()
 
     assert (
-        new_session["quiz_version_id"] == updated.json()["version"]["quiz_version_id"]
+        new_session["quiz_version_id"]
+        == published.json()["version"]["quiz_version_id"]
     )
 
     with client.app.state.database.session_factory() as db:
