@@ -884,3 +884,7 @@
 .cl-page .cl-class-title h1 {
   overflow-wrap: anywhere;
 }
+
+.qp .cl-sort {
+  flex: 0 0 auto;
+}

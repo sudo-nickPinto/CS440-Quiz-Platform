@@ -35,6 +35,8 @@ from app.schemas.class_dashboard import (
     SortOrder,
     StudentSort,
 )
+from app.schemas.quiz import ClassQuizSort
+from app.services.quizzes import list_class_quizzes as list_my_class_quizzes
 from app.services.class_authorization import (
     ClassAccess,
     require_class_member,
@@ -431,6 +433,16 @@ def get_class_dashboard(
     quizzes = _quiz_summaries(completed, rows, organizer)
     active, _ = _session_summaries(db, account, class_id, access, LIVE_STATUSES)
     students = _class_students(db, class_id)
+    my_quizzes = list_my_class_quizzes(
+        db,
+        account,
+        class_id,
+        page=1,
+        page_size=RECENT_SCORE_COUNT,
+        sort=ClassQuizSort.UPDATED_AT,
+        order=SortOrder.DESC,
+        mine=True,
+    )
 
     class_average = attendance_rate = None
     if organizer:
@@ -443,7 +455,6 @@ def get_class_dashboard(
         class_id=access.class_.class_id,
         class_name=access.class_.name,
         current_user_role=access.membership.role if access.membership else None,
-        is_global_admin=access.is_global_admin,
         is_archived=access.class_.archived_at is not None,
         active_member_count=_active_member_count(db, class_id),
         student_count=len(students),
@@ -458,6 +469,8 @@ def get_class_dashboard(
             if organizer
             else None
         ),
+        my_quizzes=my_quizzes.items,
+        my_quiz_count=my_quizzes.pagination.total_items,
     )
 
 

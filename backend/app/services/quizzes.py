@@ -21,10 +21,12 @@ from app.models.quiz import (
     QuizVersion,
     QuizVisibility,
 )
-from app.schemas.class_dashboard import PageInfo
+from app.schemas.pagination import PageInfo, SortOrder
 from app.schemas.quiz import (
     ClassQuizListItem,
     ClassQuizListPage,
+    ClassQuizSort,
+    QuizAccess,
     QuizCollaboratorCreate,
     QuizCollaboratorResponse,
     QuizCreate,
@@ -310,51 +312,74 @@ def list_class_quizzes(
     *,
     page: int,
     page_size: int,
+    sort: ClassQuizSort = ClassQuizSort.CREATED_AT,
+    order: SortOrder = SortOrder.DESC,
+    mine: bool = False,
 ) -> ClassQuizListPage:
-    """A class's quizzes, newest first.
+    """A page of a class's quizzes.
 
-    Organizers see every quiz in the class; members see the ones they own.
+    Organizers see every quiz in the class; members see the ones they own
+    or collaborate on. ``mine`` narrows an organizer's list the same way.
     """
     membership = _require_active_membership(db, account, class_id)
+    collaborating = select(QuizCollaborator.quiz_id).where(
+        QuizCollaborator.account_id == account.account_id,
+        QuizCollaborator.revoked_at.is_(None),
+    )
     condition = Quiz.class_id == class_id
-    if membership.role != ClassRole.ORGANIZER:
-        collaborator_access = exists(
-            select(1).where(
-                QuizCollaborator.quiz_id == Quiz.quiz_id,
-                QuizCollaborator.account_id == account.account_id,
-                QuizCollaborator.revoked_at.is_(None),
-            )
-        )
+    if mine or membership.role != ClassRole.ORGANIZER:
         condition = and_(
             condition,
-            or_(Quiz.author_id == account.account_id, collaborator_access),
+            or_(
+                Quiz.author_id == account.account_id,
+                Quiz.quiz_id.in_(collaborating),
+            ),
         )
 
-    total = db.scalar(select(func.count(Quiz.quiz_id)).where(condition)) or 0
+    # Titles live on the latest version, so sort in Python. A class has
+    # tens of quizzes, not thousands.
     rows = db.execute(
         select(Quiz, Account.display_name)
         .join(Account, Account.account_id == Quiz.author_id)
         .where(condition)
         .options(selectinload(Quiz.versions).selectinload(QuizVersion.questions))
-        .order_by(Quiz.created_at.desc(), Quiz.quiz_id.desc())
-        .limit(page_size)
-        .offset((page - 1) * page_size)
     ).all()
+    editing = set(db.scalars(collaborating))
 
     items = []
     for quiz, author_name in rows:
         version = _latest_editor_version(quiz)
+        if quiz.author_id == account.account_id:
+            access = QuizAccess.OWNER
+        elif quiz.quiz_id in editing:
+            access = QuizAccess.EDITOR
+        else:
+            access = None
         items.append(
             ClassQuizListItem(
                 **_to_list_item(quiz).model_dump(),
                 author_name=author_name,
                 version_number=version.version_number,
                 updated_at=quiz.updated_at,
+                my_access=access,
             )
         )
+
+    keys = {
+        ClassQuizSort.UPDATED_AT: lambda item: item.updated_at,
+        ClassQuizSort.CREATED_AT: lambda item: item.created_at,
+        ClassQuizSort.TITLE: lambda item: item.title.lower(),
+    }
+    reverse = order == SortOrder.DESC
+    # Id breaks ties so equal timestamps or titles still page stably.
+    items.sort(key=lambda item: item.quiz_id, reverse=reverse)
+    items.sort(key=keys[sort], reverse=reverse)
+
+    total = len(items)
+    start = (page - 1) * page_size
     return ClassQuizListPage(
         class_id=class_id,
-        items=items,
+        items=items[start : start + page_size],
         pagination=PageInfo(
             page=page,
             page_size=page_size,

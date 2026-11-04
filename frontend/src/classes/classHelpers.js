@@ -10,3 +10,29 @@ export function shortName(name) {
 export function copyText(text) {
   return navigator.clipboard?.writeText(text).catch(() => {});
 }
+
+// Sort choices for a class's "My quizzes" list (GET /classes/{id}/quizzes).
+export const MY_QUIZ_SORTS = {
+  recent: { label: "Recently edited", sort: "updated_at", order: "desc" },
+  newest: { label: "Newest", sort: "created_at", order: "desc" },
+  title: { label: "Title A–Z", sort: "title", order: "asc" },
+};
+
+export function myQuizzesPath(classId, page = 1, sortKey = "recent", pageSize = 25) {
+  const choice = MY_QUIZ_SORTS[sortKey] ?? MY_QUIZ_SORTS.recent;
+  return (
+    `/classes/${classId}/quizzes?mine=true&page=${page}&page_size=${pageSize}` +
+    `&sort=${choice.sort}&order=${choice.order}`
+  );
+}
+
+export function quizAccessLabel(access) {
+  return access === "OWNER" ? "Owner" : access === "EDITOR" ? "Editor" : "—";
+}
+
+export function quizStatusLabel(status) {
+  return (
+    { DRAFT: "Draft", PUBLISHED: "Published", ARCHIVED: "Archived" }[status] ??
+    "—"
+  );
+}

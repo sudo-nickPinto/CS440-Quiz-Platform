@@ -5,8 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
+from app.schemas.pagination import SortOrder
 from app.schemas.quiz import (
     ClassQuizListPage,
+    ClassQuizSort,
     QuizCollaboratorCreate,
     QuizCollaboratorResponse,
     QuizCreate,
@@ -45,10 +47,22 @@ def list_class_quizzes_route(
     class_id: int,
     page: Page = 1,
     page_size: PageSize = 25,
+    sort: ClassQuizSort = ClassQuizSort.CREATED_AT,
+    order: SortOrder = SortOrder.DESC,
+    mine: bool = False,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> ClassQuizListPage:
-    return list_class_quizzes(db, account, class_id, page=page, page_size=page_size)
+    return list_class_quizzes(
+        db,
+        account,
+        class_id,
+        page=page,
+        page_size=page_size,
+        sort=sort,
+        order=order,
+        mine=mine,
+    )
 
 
 @router.get("/{quiz_id}", response_model=QuizResponse)

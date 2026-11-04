@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 
 from pydantic import (
     BaseModel,
@@ -14,7 +15,7 @@ from app.models.quiz import (
     QuizStatus,
     QuizVisibility,
 )
-from app.schemas.class_dashboard import PageInfo
+from app.schemas.pagination import PageInfo
 
 
 class QuizRequestModel(BaseModel):
@@ -173,10 +174,24 @@ class QuizListItem(BaseModel):
     created_at: datetime
 
 
+class ClassQuizSort(str, Enum):
+    UPDATED_AT = "updated_at"
+    CREATED_AT = "created_at"
+    TITLE = "title"
+
+
+class QuizAccess(str, Enum):
+    OWNER = "OWNER"
+    EDITOR = "EDITOR"
+
+
 class ClassQuizListItem(QuizListItem):
     author_name: str
     version_number: int
     updated_at: datetime
+    # How the caller can work on the quiz; null when an organizer sees a
+    # quiz they neither own nor collaborate on.
+    my_access: QuizAccess | None
 
 
 class ClassQuizListPage(BaseModel):

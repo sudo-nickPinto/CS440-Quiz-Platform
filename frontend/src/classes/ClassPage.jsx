@@ -8,7 +8,13 @@ import RequestError from "../authenticated-demo/RequestError";
 import { useConfirm } from "../authenticated-demo/useConfirm";
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import ClassLiveButton from "./ClassLiveButton";
-import { copyText } from "./classHelpers";
+import {
+  copyText,
+  MY_QUIZ_SORTS,
+  myQuizzesPath,
+  quizAccessLabel,
+  quizStatusLabel,
+} from "./classHelpers";
 import { EmptyMessage, ResourceMessage } from "./ClassUI";
 import { ClassMembers, ClassSettings } from "./ClassManagement";
 import {
@@ -17,6 +23,7 @@ import {
   useClassResource,
   useClassSessions,
   useClassStudents,
+  useMyClassQuizzes,
 } from "./classResources";
 
 const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
@@ -58,6 +65,7 @@ function ReportTable({
   onPageChange,
   emptyTitle,
   emptyText,
+  controls = null,
 }) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
@@ -84,6 +92,8 @@ function ReportTable({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
+
+        {controls}
 
         <span className="cl-count" aria-live="polite">
           {needle
@@ -375,7 +385,9 @@ function useCsvDownload() {
 function PresentTable({ classInfo }) {
   const account = useAccount();
   const action = useAction();
-  const resource = useResource(classInfo.canManage ? "/quizzes" : null);
+  const resource = useResource(
+    classInfo.canManage ? myQuizzesPath(classInfo.id, 1, "recent", 100) : null,
+  );
   const [query, setQuery] = useState("");
 
   if (!classInfo.canManage) {
@@ -412,10 +424,9 @@ function PresentTable({ classInfo }) {
   }
 
   const needle = query.trim().toLowerCase();
-  const quizzes = (resource.data || []).filter(
+  const quizzes = (resource.data?.items || []).filter(
     (quiz) =>
-      // GET /quizzes spans all of the caller's classes; show only this one.
-      quiz.class_id === classInfo.id &&
+      // Collaborators can't host, so only the caller's own quizzes.
       quiz.author_id === account.account_id &&
       quiz.status === "PUBLISHED" &&
       quiz.title.toLowerCase().includes(needle),
@@ -495,6 +506,68 @@ function PresentTable({ classInfo }) {
   );
 }
 
+// Quizzes in this class the caller owns or edits as a collaborator.
+function MyQuizzesTable({ classInfo }) {
+  const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState("recent");
+  const resource = useMyClassQuizzes(classInfo.id, page, sortKey);
+  const pending = reportResource(resource);
+
+  if (pending) return pending;
+
+  return (
+    <ReportTable
+      caption="My quizzes"
+      noun="quiz"
+      headers={["Quiz", "Access", "Status", "Questions", "Last edited"]}
+      emptyTitle="No quizzes yet"
+      emptyText={
+        classInfo.membershipStatus === "ACTIVE" && !classInfo.archived
+          ? "Create a quiz with + New quiz, or ask a classmate to share one with you."
+          : "Quizzes you own or that are shared with you in this class appear here."
+      }
+      pagination={resource.data.pagination}
+      onPageChange={setPage}
+      controls={
+        <label className="cl-sort">
+          <span className="cl-sr">Sort my quizzes</span>
+          <select
+            value={sortKey}
+            onChange={(event) => {
+              setSortKey(event.target.value);
+              setPage(1);
+            }}
+          >
+            {Object.entries(MY_QUIZ_SORTS).map(([key, choice]) => (
+              <option key={key} value={key}>
+                {choice.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      }
+      rows={resource.data.items.map((quiz) => ({
+        key: quiz.quiz_id,
+        text: `${quiz.title} ${quiz.author_name}`,
+        cells: [
+          <Link
+            to={`/app/quizzes/${quiz.quiz_id}`}
+            state={{ classId: classInfo.id }}
+          >
+            {quiz.title}
+          </Link>,
+          quiz.my_access === "EDITOR"
+            ? `Editor · shared by ${quiz.author_name}`
+            : quizAccessLabel(quiz.my_access),
+          quizStatusLabel(quiz.status),
+          formatScore(quiz.question_count),
+          formatDate(quiz.updated_at),
+        ],
+      }))}
+    />
+  );
+}
+
 function ClassQuizzesTable({ classInfo }) {
   const [page, setPage] = useState(1);
   const resource = useClassQuizzes(classInfo.id, page);
@@ -568,14 +641,14 @@ function ClassWorkspace({ classInfo, onChange }) {
       return "Present";
     }
 
-    return showAdminLayout ? "Presentations" : "Present";
+    return showAdminLayout ? "Presentations" : "My quizzes";
   });
 
   const adminView = showAdminLayout && view === "admin";
 
   const sections = adminView
     ? ["Presentations", "Quizzes", "Students", "Members", "Settings"]
-    : ["Present", "Participate"];
+    : ["My quizzes", "Present", "Participate"];
 
   const activeSection = sections.includes(section) ? section : sections[0];
 
@@ -765,6 +838,8 @@ function ClassWorkspace({ classInfo, onChange }) {
         <ClassMembers classInfo={classInfo} onChange={onChange} />
       ) : activeSection === "Settings" ? (
         <ClassSettings classInfo={classInfo} onChange={onChange} />
+      ) : activeSection === "My quizzes" ? (
+        <MyQuizzesTable classInfo={classInfo} />
       ) : activeSection === "Present" ? (
         <PresentTable classInfo={classInfo} />
       ) : activeSection === "Presentations" ? (

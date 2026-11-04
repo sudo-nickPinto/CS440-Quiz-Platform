@@ -1,5 +1,6 @@
 import { useAccount } from "../authenticated-demo/account";
 import { useResource } from "../authenticated-demo/rest";
+import { myQuizzesPath } from "./classHelpers";
 
 function normalizeClass(record, account) {
   if (
@@ -144,4 +145,17 @@ export function useClassQuizzes(classId, page = 1) {
     classId,
     `presented-quizzes?page=${page}&page_size=${REPORT_PAGE_SIZE}&sort=presented_at&order=desc`,
   );
+}
+
+// Quizzes in this class the caller owns or collaborates on.
+export function useMyClassQuizzes(classId, page = 1, sortKey = "recent") {
+  const result = useResource(myQuizzesPath(classId, page, sortKey, REPORT_PAGE_SIZE));
+
+  return resourceState(result, (data) => {
+    if (!data || !Array.isArray(data.items)) {
+      throw new Error("Your quizzes could not be read.");
+    }
+
+    return data;
+  });
 }
