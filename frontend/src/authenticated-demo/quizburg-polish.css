@@ -5596,3 +5596,70 @@
 .qp .ui-user .qb-account-menu button + button {
   border-top: var(--b-thin);
 }
+
+/* ---------- App shell: main navigation (Dashboard · Classes · Join game) ---------- */
+
+.qp .qb-app-nav {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.qp .qb-app-nav a {
+  display: grid;
+  place-items: center;
+  padding: 10px 16px;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font: 15px/1 "Archivo Black", sans-serif;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.qp .qb-app-nav a:hover {
+  background: var(--sky-soft);
+}
+
+/* "You are here": solid deep orange, like the dashboard's selected tab. */
+.qp .qb-app-nav a[aria-current="page"] {
+  background: var(--orange-deep);
+  color: var(--paper);
+}
+
+.qp .qb-app-nav a:active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+/* Tablets and phones: the nav takes its own full-width row under the logo
+   and avatar, so the header never overflows. */
+@media (max-width: 900px) {
+  .qp .qp-header {
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+
+  .qp .qb-app-nav {
+    order: 3;
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+}
+
+@media (max-width: 640px) {
+  .qp .qb-app-nav a {
+    padding: 10px 4px;
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp .qb-app-nav a:active {
+    transform: none;
+  }
+}
