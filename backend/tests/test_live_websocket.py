@@ -182,6 +182,7 @@ def test_host_and_two_participants_play_one_question(live) -> None:
                     "session_participant_id"
                 ],
                 "display_name": name.title(),
+                "avatar_key": None,
                 "participant_count": 1 if name == "alice" else 2,
             }
 

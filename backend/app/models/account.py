@@ -31,6 +31,11 @@ class Account(Base):
     auth0_sub: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # NULL until the person fills in the profile setup screen (migration 0009).
+    first_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # A preset such as "owl.sky" from app/avatars.py; NULL shows initials.
+    avatar_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
     account_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("TRUE")

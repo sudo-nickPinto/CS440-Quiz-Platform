@@ -442,6 +442,10 @@ export default function LandingPage({ authError = "" }) {
                           : "Create an account"}
                       </button>
                     </p>
+
+                    <p className="lp-fine">
+                      Passwords need 8+ characters, including a symbol.
+                    </p>
                   </div>
 
                   <p className="lp-login-status" role="status">

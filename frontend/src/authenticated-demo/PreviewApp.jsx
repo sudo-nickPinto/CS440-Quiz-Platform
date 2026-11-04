@@ -1,5 +1,13 @@
-import { useEffect, useRef } from "react";
-import { Link, Navigate, Route, Routes, useLocation } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import {
+  Link,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router";
+import Avatar from "../avatars/Avatar";
 import ClassesPage from "../classes/ClassesPage";
 import ClassPage from "../classes/ClassPage";
 import JoinClassPage from "../classes/JoinClassPage";
@@ -17,6 +25,7 @@ import PreviewDashboard from "./PreviewDashboard";
 import { QuizEditor, QuizViewer } from "./QuizEditor";
 import { QuizHostingHistory } from "./QuizHistory";
 import JoinSessionPage from "./JoinSessionPage";
+import ProfilePage from "./ProfilePage";
 import LiveSessionPage from "./LiveSessionPage";
 import EditQuizPage from "./EditQuizPage";
 import "./preview.css";
@@ -28,7 +37,11 @@ import "./dismissPopovers.js";
 
 export default function PreviewApp({ onSignOut }) {
   const account = useResource("/me");
+  // PATCH /me returns the updated account; use it so the header updates
+  // without reloading /me (which would blank the app while it loads).
+  const [savedAccount, setSavedAccount] = useState(null);
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const main = useRef(null);
 
   useEffect(() => {
@@ -44,14 +57,16 @@ export default function PreviewApp({ onSignOut }) {
     return <RequestError error={account.error} retry={account.reload} />;
   }
 
-  if (!account.data?.is_active) {
+  const me = savedAccount ?? account.data;
+
+  if (!me?.is_active) {
     return (
       <p role="alert">This account is inactive. Contact your administrator.</p>
     );
   }
 
   return (
-    <AccountContext.Provider value={account.data}>
+    <AccountContext.Provider value={me}>
       <div className="qp">
         <a className="qp-skip" href="#app-main">
           Skip to content
@@ -67,27 +82,24 @@ export default function PreviewApp({ onSignOut }) {
           </Link>
 
           <div className="ui-user">
-            <span className="ui-user-name">{account.data.display_name}</span>
+            <span className="ui-user-name">{me.display_name}</span>
 
             <details className="qb-account">
               <summary
                 className="ui-avatar"
-                aria-label={`Account menu for ${account.data.display_name}`}
+                aria-label={`Account menu for ${me.display_name}`}
               >
-                {(account.data.display_name || "User")
-                  .trim()
-                  .split(/\s+/)
-                  .slice(0, 2)
-                  .map((part) => part[0])
-                  .join("")
-                  .toUpperCase()}
+                <Avatar avatarKey={me.avatar_key} name={me.display_name} />
               </summary>
 
               <div className="qb-account-menu">
                 <p>
                   <small>Signed in as</small>
-                  <strong>{account.data.display_name}</strong>
+                  <strong>{me.display_name}</strong>
                 </p>
+                <button type="button" onClick={() => navigate("/app/profile")}>
+                  Edit profile
+                </button>
                 <button type="button" onClick={onSignOut}>
                   Sign out
                 </button>
@@ -140,6 +152,11 @@ export default function PreviewApp({ onSignOut }) {
             />
 
             <Route path="join" element={<JoinSessionPage />} />
+
+            <Route
+              path="profile"
+              element={<ProfilePage onSaved={setSavedAccount} />}
+            />
 
             <Route
               path="join/class/:code"
