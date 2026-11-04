@@ -19,6 +19,7 @@ from app.models import (
 )
 from app.schemas.results import FinalResults
 from app.services.session_end import get_final_results
+from app.services.spreadsheet import safe_cell
 
 
 def get_session_report(
@@ -240,18 +241,11 @@ def export_session_report(
             "Only the host can export this session report.",
         )
 
-    def safe(value):
-        # Prevent spreadsheet formulas in names and question/answer text.
-        if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
-            return "'" + value
-
-        return value
-
     output = StringIO(newline="")
     writer = csv.writer(output)
 
     def write(row):
-        writer.writerow([safe(value) for value in row])
+        writer.writerow([safe_cell(value) for value in row])
 
     write(["Quiz", report["quiz_title"], "Session", session_id])
 

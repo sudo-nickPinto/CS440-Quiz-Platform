@@ -355,16 +355,30 @@ Organizers and Admins see everyone. Members see only their own rows, and class-w
 
 - `GET /classes/{class_id}/sessions/{session_id}/results`: the same body as `GET /sessions/{session_id}/report`, plus `class_id` and `started_at`. Any organizer gets every player (`view: "host"`), not just the one who hosted. A member gets `view: "participant"` with only their own row.
   - Errors: `404 session_not_found` (a session from another class, an open session, or one that isn't `COMPLETED`), `403 participant_report_denied` (a member who didn't play it).
-- `GET /classes/{class_id}/quizzes/{quiz_id}/results`: every completed presentation of the quiz in this class, newest first. It returns `{ class_id, quiz_id, title, session_count, participant_count, average_score, sessions }`.
+- `GET /classes/{class_id}/quizzes/{quiz_id}/results`: every completed presentation of the quiz in this class, newest first. It returns `{ class_id, quiz_id, view, title, session_count, participant_count, average_score, sessions }`, where `view` is `organizer` or `member`.
   - Each session has the same fields as a `/sessions` item, plus `results: [{ account_id, name, rank, points, correct }]`. Members only get their own result.
   - `average_score` is averaged over every player in every session (organizers only).
   - Errors: `404 quiz_not_found`, also for a quiz that has no completed session in this class.
 - `GET /classes/{class_id}/students/{account_id}/results`: one student's history in the class. Members can only ask for themselves (`403 not_class_organizer` otherwise). It returns:
+  - `view`: `organizer` or `member`;
   - `display_name`, `email` (organizers only), `role` and `status`. Removed and departed students keep their history;
   - `class_session_count`, `session_count`, `attendance_rate`, `total_points`, `average_score`, `correct_count` and `incorrect_count`;
   - `class_average`, organizers only, using the same formula as the dashboard;
   - `sessions`: every completed class session, newest first, with `played, points, rank, question_count, correct, incorrect`. The last four are null when the student missed it. Unanswered questions count as incorrect.
   - Errors: `404 student_not_found` (never in this class).
+
+### Excel exports of the class reports → `200 .xlsx`
+Each export is built from the matching report above, so the workbook shows the same numbers. They return `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` with `Cache-Control: no-store`. They take the same errors as the report, and times are in UTC.
+
+| Endpoint | Who | File | Sheets |
+|---|---|---|---|
+| `GET /classes/{class_id}/sessions/{session_id}/export.xlsx` | Organizers | `class-{cid}-session-{sid}-results.xlsx` | **Summary**; **Scores** (rank, participant, total points, correct); **Answers** (one row per participant per question: result, selected and correct answer, time, points) |
+| `GET /classes/{class_id}/quizzes/{quiz_id}/export.xlsx` | Organizers | `class-{cid}-quiz-{qid}-results.xlsx` | **Summary**; **Presentations** (one row per completed presentation); **Results** (every player's result in each presentation) |
+| `GET /classes/{class_id}/students/{account_id}/export.xlsx` | Organizers, or the student themselves | `class-{cid}-student-{aid}-results.xlsx` | **Summary** (totals, attendance, class average); **Sessions** (every completed class session, played or not) |
+
+- A member who exports a session or quiz gets `403 not_class_organizer`. So does a member who exports another student.
+- A member's own student export leaves out the email and the class average, as the report does.
+- Cells starting with `=`, `+`, `-` or `@` get a leading `'`, as in the CSV exports, so they stay text. Control characters that Excel can't store are dropped.
 
 ### `GET /classes/{class_id}/grades/export.csv` → `200 text/csv`
 Organizers only. Returns `{class-name}-grades.csv`, a gradebook (UTF-8 with BOM, `no-store`):
