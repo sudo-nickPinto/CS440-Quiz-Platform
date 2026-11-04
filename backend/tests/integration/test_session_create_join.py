@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from app.auth import CurrentAccount, get_active_account
+from tests.class_quiz_helpers import post_class_quiz
 
 
 QUIZ_PAYLOAD = {
@@ -22,7 +23,7 @@ def test_session_create_and_join_use_migrated_schema(
     mysql_quiz_client: tuple[TestClient, CurrentAccount, CurrentAccount],
 ) -> None:
     client, author, reader = mysql_quiz_client
-    quiz_response = client.post("/quizzes", json=QUIZ_PAYLOAD)
+    quiz_response = post_class_quiz(client, QUIZ_PAYLOAD)
     assert quiz_response.status_code == 201
     quiz = quiz_response.json()
 

@@ -4,6 +4,7 @@ from app.auth import CurrentAccount, get_active_account
 from app.models import Account, AccountRole
 
 from tests.integration.conftest import cleanup_database
+from tests.class_quiz_helpers import publish_quiz
 from tests.test_session_api import QUIZ_PAYLOAD
 
 
@@ -16,8 +17,11 @@ def test_cleanup_handles_a_class_scoped_live_session(mysql_quiz_client) -> None:
     client.app.dependency_overrides[get_active_account] = lambda: faculty
     created_class = client.post("/classes", json={"name": "Cleanup class"})
     assert created_class.status_code == 201
-    quiz = client.post("/quizzes", json=QUIZ_PAYLOAD)
+    quiz = client.post(
+        f"/classes/{created_class.json()['class_id']}/quizzes", json=QUIZ_PAYLOAD
+    )
     assert quiz.status_code == 201
+    publish_quiz(client, quiz.json()["quiz_id"])
     session = client.post(
         f"/quizzes/{quiz.json()['quiz_id']}/sessions",
         json={"class_id": created_class.json()["class_id"]},

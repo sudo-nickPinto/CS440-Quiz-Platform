@@ -45,8 +45,9 @@ erDiagram
     QUIZ {
         int quiz_id PK
         int author_id FK "the creator; only they can host it"
+        int class_id FK "V3 (0008): the class that owns the quiz"
         enum status "DRAFT, PUBLISHED, ARCHIVED"
-        enum visibility "not used in MVP; every quiz is public"
+        enum visibility "not used; new quizzes are PRIVATE"
         datetime created_at
         datetime updated_at
     }
@@ -146,7 +147,7 @@ erDiagram
 - A quiz is saved as `quiz` → `quiz_version` → `question` → `answer_choice`.
 - Saved quizzes can't be edited in the MVP, so every quiz has just one version (version 1).
 - We're keeping the version table because the quiz code is already built on it, and it's what will let us add editing later without changing old results.
-- Every quiz is public to everyone. The backend should ignore the `visibility` column for now.
+- **Since V3 (0008), every quiz belongs to a class** (`quiz.class_id`). Any active member of a class can create quizzes in it (they start as drafts), and only the quiz's owner and the class's organizers can see it. Being an Admin doesn't count. The `visibility` column is ignored: `PUBLIC` doesn't show a quiz outside its class. Quizzes made before V3 can have no class until someone gives them one (see the migrations README).
 - Only the person who made the quiz (`author_id`) can host it. Being able to see a quiz doesn't mean you can host it.
 - Each question has its own timer (`time_limit_seconds`), its answer choices, and which choices are correct.
 
@@ -224,6 +225,42 @@ erDiagram
 - Roles and statuses always come from `class_membership`, never from the account or the request.
 - Generating class codes (8 characters, no look-alike letters) and rate-limiting joins by code.
 - Only an active faculty organizer can start a session for a class, and not in an archived class. Use `require_class_host()` in `backend/app/services/class_authorization.py`. The host must also be the quiz's author.
+- Only active members can create quizzes in a class (`quiz.class_id`), and not in an archived class. A quiz is visible only to its owner and the class's organizers, and only while they're active in the class. Faculty status gives no extra quiz access.
+
+## Quiz submission approval (V3)
+
+Migration `0010` keeps an audit row whenever a published quiz version is
+submitted to a class for approval. The Task 4 routes and service enforce the
+authorization and transition rules, while the migration establishes the
+database invariants that preserve the audit history under concurrency.
+
+```mermaid
+erDiagram
+    "CLASS" ||--o{ QUIZ_SUBMISSION : receives
+    QUIZ_VERSION ||--o{ QUIZ_SUBMISSION : "is submitted as"
+    ACCOUNT ||--o{ QUIZ_SUBMISSION : submits
+    ACCOUNT |o--o{ QUIZ_SUBMISSION : decides
+
+    QUIZ_SUBMISSION {
+        int submission_id PK
+        int class_id FK "index/uniqueness copy; quiz.class_id is authoritative"
+        int quiz_version_id FK
+        int submitted_by_id FK
+        enum status "PENDING, APPROVED, REJECTED, WITHDRAWN"
+        int decided_by_id FK "empty only while pending"
+        datetime submitted_at
+        datetime decided_at "empty only while pending"
+        int active_version_id UK "stored generated; private database detail"
+    }
+```
+
+`active_version_id` equals `quiz_version_id` for `PENDING` and `APPROVED`
+rows, and is `NULL` for `REJECTED` and `WITHDRAWN` rows. The unique key on
+`(class_id, active_version_id)` prevents concurrent active duplicates while
+allowing rejected or withdrawn versions to be submitted again. All four
+foreign keys use `RESTRICT` so classes, versions, and actor accounts cannot be
+deleted out from under submission history. A database check also requires both
+decision fields to be empty for pending rows and present for terminal rows.
 
 ## Things that must be unique
 
@@ -239,6 +276,7 @@ erDiagram
 - **result:** each participant gets one final result.
 - **class:** no two classes can have the same code. Any number of classes can have no code.
 - **class_membership:** a person has at most one membership row per class.
+- **quiz_submission:** a class/version pair has at most one `PENDING` or `APPROVED` row. `REJECTED` and `WITHDRAWN` rows keep their history but do not block resubmission.
 
 ## Rules the backend has to check
 

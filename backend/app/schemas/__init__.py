@@ -25,6 +25,12 @@ from app.schemas.quiz import (
     QuizResponse,
     QuizVersionResponse,
 )
+from app.schemas.quiz_submission import (
+    ApprovedQuizResponse,
+    QuizSubmissionCreate,
+    QuizSubmissionDecision,
+    QuizSubmissionResponse,
+)
 from app.schemas.response import ResponseReceipt, ResponseSubmit
 from app.schemas.results import (
     AnswerChoiceResult,
@@ -46,6 +52,7 @@ __all__ = [
     "AnswerChoiceCreate",
     "AnswerChoiceResult",
     "AnswerChoiceResponse",
+    "ApprovedQuizResponse",
     "ClassInviteCreate",
     "ClassMemberResponse",
     "ClassMemberUpdate",
@@ -60,6 +67,9 @@ __all__ = [
     "QuizCreate",
     "QuizListItem",
     "QuizResponse",
+    "QuizSubmissionCreate",
+    "QuizSubmissionDecision",
+    "QuizSubmissionResponse",
     "QuizVersionResponse",
     "ResponseReceipt",
     "ResponseSubmit",

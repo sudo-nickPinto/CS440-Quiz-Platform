@@ -9,6 +9,8 @@ from app.config import Settings
 from app.database import Base
 from app.main import create_app
 from app.models.account import Account, AccountRole
+from app.models.classes import ClassMembership, ClassRole
+from tests.class_quiz_helpers import post_class_quiz
 
 QUIZ_PAYLOAD = {
     "title": "MVP Quiz",
@@ -68,12 +70,12 @@ def quiz_client() -> Iterator[tuple[TestClient, CurrentAccount, CurrentAccount]]
 
 
 def create_quiz(client: TestClient) -> dict:
-    response = client.post("/quizzes", json=QUIZ_PAYLOAD)
+    response = post_class_quiz(client, QUIZ_PAYLOAD)
     assert response.status_code == 201
     return response.json()
 
 
-def test_save_quiz_creates_one_public_published_version(
+def test_save_quiz_creates_one_private_published_version_in_its_class(
     quiz_client: tuple[TestClient, CurrentAccount, CurrentAccount],
 ) -> None:
     client, author, _ = quiz_client
@@ -81,8 +83,9 @@ def test_save_quiz_creates_one_public_published_version(
     body = create_quiz(client)
 
     assert body["author_id"] == author.account_id
+    assert body["class_id"] is not None
     assert body["status"] == "PUBLISHED"
-    assert body["visibility"] == "PUBLIC"
+    assert body["visibility"] == "PRIVATE"
     assert body["version"]["version_number"] == 1
     assert body["version"]["published_at"] is not None
     assert [item["question_order"] for item in body["version"]["questions"]] == [
@@ -94,21 +97,25 @@ def test_save_quiz_creates_one_public_published_version(
     ] == [1, 2]
 
 
-def test_all_active_users_can_list_and_retrieve_saved_quizzes(
+def test_owner_lists_and_retrieves_own_quiz_but_outsiders_cannot(
     quiz_client: tuple[TestClient, CurrentAccount, CurrentAccount],
 ) -> None:
     client, _, reader = quiz_client
     quiz = create_quiz(client)
-    client.app.dependency_overrides[get_active_account] = lambda: reader
 
     listing = client.get("/quizzes")
-    detail = client.get(f"/quizzes/{quiz['quiz_id']}")
-
     assert listing.status_code == 200
     assert listing.json()[0]["title"] == "MVP Quiz"
     assert listing.json()[0]["question_count"] == 2
-    assert detail.status_code == 200
-    assert detail.json()["quiz_id"] == quiz["quiz_id"]
+    assert listing.json()[0]["class_id"] == quiz["class_id"]
+    assert client.get(f"/quizzes/{quiz['quiz_id']}").status_code == 200
+
+    # There is no app-wide catalog: someone outside the class sees nothing.
+    client.app.dependency_overrides[get_active_account] = lambda: reader
+    assert client.get("/quizzes").json() == []
+    detail = client.get(f"/quizzes/{quiz['quiz_id']}")
+    assert detail.status_code == 404
+    assert detail.json()["error"]["code"] == "quiz_not_found"
 
 
 def test_non_author_cannot_archive_and_archived_quiz_is_not_public(
@@ -119,8 +126,9 @@ def test_non_author_cannot_archive_and_archived_quiz_is_not_public(
     quiz_id = quiz["quiz_id"]
     client.app.dependency_overrides[get_active_account] = lambda: reader
 
+    # The reader isn't in the quiz's class, so the quiz looks missing.
     denied = client.patch(f"/quizzes/{quiz_id}/archive")
-    assert denied.status_code == 403
+    assert denied.status_code == 404
 
     client.app.dependency_overrides[get_active_account] = lambda: author
     archived = client.patch(f"/quizzes/{quiz_id}/archive")
@@ -132,19 +140,40 @@ def test_non_author_cannot_archive_and_archived_quiz_is_not_public(
     assert client.get(f"/quizzes/{quiz_id}").status_code == 404
 
 
-def test_faculty_cannot_access_another_users_archived_quiz(quiz_client):
+def test_admin_quiz_list_has_no_global_catalog(
+    quiz_client: tuple[TestClient, CurrentAccount, CurrentAccount],
+) -> None:
+    client, _, _ = quiz_client
+    create_quiz(client)
+    admin = CurrentAccount(999, AccountRole.ADMIN, True)
+    client.app.dependency_overrides[get_active_account] = lambda: admin
+
+    listing = client.get("/quizzes")
+
+    assert listing.status_code == 200
+    assert listing.json() == []
+
+
+def test_faculty_cannot_access_another_users_archived_quiz(
+    quiz_client: tuple[TestClient, CurrentAccount, CurrentAccount],
+) -> None:
     client, author, reader = quiz_client
     quiz = create_quiz(client)
     faculty = CurrentAccount(reader.account_id, AccountRole.ADMIN, True)
+
+    # Faculty outside the quiz's class can't see it, so it looks missing.
     client.app.dependency_overrides[get_active_account] = lambda: faculty
-    assert client.patch(f"/quizzes/{quiz['quiz_id']}/archive").status_code == 403
+    assert client.patch(f"/quizzes/{quiz['quiz_id']}/archive").status_code == 404
+
     client.app.dependency_overrides[get_active_account] = lambda: author
     assert client.patch(f"/quizzes/{quiz['quiz_id']}/archive").status_code == 200
+
     client.app.dependency_overrides[get_active_account] = lambda: faculty
     listing = client.get("/quizzes")
     assert listing.status_code == 200
     assert all(item["quiz_id"] != quiz["quiz_id"] for item in listing.json())
     assert client.get(f"/quizzes/{quiz['quiz_id']}").status_code == 404
+
 
 def test_partial_patch_and_separate_publish_are_not_supported(
     quiz_client: tuple[TestClient, CurrentAccount, CurrentAccount],
@@ -194,7 +223,7 @@ def test_explanation_is_saved_and_returned(
     payload = deepcopy(QUIZ_PAYLOAD)
     payload["questions"][0]["explanation"] = explanation
 
-    created = client.post("/quizzes", json=payload)
+    created = post_class_quiz(client, payload)
 
     assert created.status_code == 201
     body = created.json()
@@ -215,14 +244,14 @@ def test_explanation_over_limit_is_rejected(quiz_client) -> None:
     payload = deepcopy(QUIZ_PAYLOAD)
     payload["questions"][0]["explanation"] = "x" * 5001
 
-    response = client.post("/quizzes", json=payload)
+    response = post_class_quiz(client, payload)
 
     assert response.status_code == 422
 
 
-def revision_payload(base_version: int = 1) -> dict:
+def revision_payload(expected_revision: int = 1) -> dict:
     payload = deepcopy(QUIZ_PAYLOAD)
-    payload["base_version"] = base_version
+    payload["expected_revision"] = expected_revision
     payload["title"] = "Revised Quiz"
     payload["description"] = "Updated description"
 
@@ -296,7 +325,8 @@ def test_stale_edit_is_rejected_without_overwriting_newer_version(quiz_client):
     response = client.put(path, json=stale)
 
     assert response.status_code == 409
-    assert response.json()["error"]["code"] == "quiz_version_conflict"
+    assert response.json()["error"]["code"] == "quiz_edit_conflict"
+    assert response.json()["error"]["details"]["current_revision"] == 2
 
     current = client.get(path).json()
     assert current["version"]["version_number"] == 2
@@ -307,6 +337,16 @@ def test_stale_edit_is_rejected_without_overwriting_newer_version(quiz_client):
 def test_only_creator_can_edit_even_if_other_user_is_admin(quiz_client, role):
     client, _, reader = quiz_client
     original = create_quiz(client)
+    # An organizer of the class can see the quiz but still can't edit it.
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            ClassMembership(
+                class_id=original["class_id"],
+                account_id=reader.account_id,
+                role=ClassRole.ORGANIZER,
+            )
+        )
+        db.commit()
 
     other = CurrentAccount(reader.account_id, role, True)
     client.app.dependency_overrides[get_active_account] = lambda: other
@@ -373,12 +413,19 @@ def test_old_sessions_keep_version_and_new_sessions_use_revision(
     )
     assert updated.status_code == 200
 
+    published = client.post(
+        f"/classes/{original['class_id']}/quizzes/{quiz_id}/publish",
+        json={"expected_revision": updated.json()["revision"]},
+    )
+    assert published.status_code == 200
+
     response = client.post(f"/quizzes/{quiz_id}/sessions")
     assert response.status_code == 201
     new_session = response.json()
 
     assert (
-        new_session["quiz_version_id"] == updated.json()["version"]["quiz_version_id"]
+        new_session["quiz_version_id"]
+        == published.json()["version"]["quiz_version_id"]
     )
 
     with client.app.state.database.session_factory() as db:

@@ -91,6 +91,8 @@ Every number below comes from the class's **completed** sessions (`live_session.
 
 **Detailed reports.** Organizers can open a full report for one session, one quiz (every time it was presented), or one student. Members can open the same reports but only see their own rows. See "Detailed class reports" in [API.md](API.md). Code: `backend/app/services/class_reports.py`.
 
+**Excel exports.** Each detailed report has an **Export Excel** button that downloads the same data as a workbook. The session and quiz exports are for organizers. A member can export only their own student report. See "Excel exports of the class reports" in [API.md](API.md). Code: `backend/app/services/class_exports.py`.
+
 Code: `backend/app/services/class_dashboard.py` and the report tables in `frontend/src/classes/ClassPage.jsx`.
 
 ## 7. Deploying

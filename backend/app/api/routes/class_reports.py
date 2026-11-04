@@ -4,6 +4,11 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
+from app.services.class_exports import (
+    export_class_quiz,
+    export_class_session,
+    export_class_student,
+)
 from app.services.class_reports import (
     get_class_quiz_results,
     get_class_session_results,
@@ -47,3 +52,33 @@ def class_student_results_route(
 ) -> dict:
     response.headers["Cache-Control"] = "no-store"
     return get_class_student_results(db, account, class_id, account_id)
+
+
+@router.get("/sessions/{session_id}/export.xlsx")
+def class_session_export_route(
+    class_id: int,
+    session_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> HTTPResponse:
+    return export_class_session(db, account, class_id, session_id)
+
+
+@router.get("/quizzes/{quiz_id}/export.xlsx")
+def class_quiz_export_route(
+    class_id: int,
+    quiz_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> HTTPResponse:
+    return export_class_quiz(db, account, class_id, quiz_id)
+
+
+@router.get("/students/{account_id}/export.xlsx")
+def class_student_export_route(
+    class_id: int,
+    account_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> HTTPResponse:
+    return export_class_student(db, account, class_id, account_id)

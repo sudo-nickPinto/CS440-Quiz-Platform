@@ -22,6 +22,7 @@ from app.schemas.live_question import QuestionCloseReason, QuestionOpenedEvent
 from app.schemas.response import ResponseSubmit
 from app.services.live_questions import close_question_if_ready, open_question
 from app.services.responses import submit_response
+from tests.class_quiz_helpers import post_class_quiz
 
 
 QUIZ_PAYLOAD = {
@@ -52,6 +53,8 @@ CLEANUP_TABLES = [
     "quiz_collaborator",
     "quiz_group",
     "quiz",
+    "class_membership",
+    "class",
     "group_membership",
     "course_group",
     "account_identity",
@@ -169,7 +172,7 @@ def _create_and_open_question(
     context: LifecycleContext,
 ) -> OpenQuestionContext:
     _use_account(context.client, context.host)
-    quiz_response = context.client.post("/quizzes", json=QUIZ_PAYLOAD)
+    quiz_response = post_class_quiz(context.client, QUIZ_PAYLOAD)
     assert quiz_response.status_code == 201
     quiz = quiz_response.json()
 
