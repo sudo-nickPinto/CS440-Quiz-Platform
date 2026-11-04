@@ -622,6 +622,12 @@
   color: var(--gray);
 }
 
+/* Drafts: not hostable yet, so a light pill instead of the published block. */
+.qp .ui-published.ui-draft {
+  background: var(--sky-soft);
+  color: var(--ink);
+}
+
 .qp .ui-quiz-title {
   padding: 12px 18px;
 }
