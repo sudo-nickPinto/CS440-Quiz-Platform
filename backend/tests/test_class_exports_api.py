@@ -12,7 +12,7 @@ import pytest
 from openpyxl import load_workbook
 from sqlalchemy import select
 
-from app.models import Account, Question
+from app.models import Account, Question, QuizVersion
 from tests.test_class_reports_api import (  # noqa: F401 (reports is a fixture)
     act_as,
     quiz_url,
@@ -212,6 +212,8 @@ def test_exports_keep_formula_text_as_plain_text(reports) -> None:
             select(Question).order_by(Question.question_id)
         ).first()
         first_question.question_text = "+1"
+        # Only a formula once the control character is dropped.
+        db.scalars(select(QuizVersion)).one().title = "\x01=1+1"
         db.commit()
 
     books = [
@@ -235,3 +237,6 @@ def test_exports_keep_formula_text_as_plain_text(reports) -> None:
     assert any(row[2] == "'+1" for row in rows(session_book["Answers"]))
     assert rows(quiz_book["Results"])[0][3] == "'" + attack
     assert summary(student_book)["Student"] == "'" + attack
+    assert summary(session_book)["Quiz"] == "'=1+1"
+    assert summary(quiz_book)["Quiz"] == "'=1+1"
+    assert rows(student_book["Sessions"])[0][2] == "'=1+1"

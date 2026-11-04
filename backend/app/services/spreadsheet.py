@@ -37,11 +37,12 @@ def excel_datetime(value: str | datetime | None) -> datetime | None:
 
 
 def _excel_value(value):
-    value = safe_cell(value)
     if isinstance(value, str):
         # openpyxl refuses control characters, so drop them rather than fail.
+        # This must come before safe_cell: "\x01=1+1" only starts with "="
+        # once the control character is gone.
         value = ILLEGAL_CHARACTERS_RE.sub("", value)
-    return value
+    return safe_cell(value)
 
 
 def new_workbook() -> Workbook:
