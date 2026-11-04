@@ -47,6 +47,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Lets the browser read the filename of CSV and Excel downloads.
+        expose_headers=["Content-Disposition"],
     )
     register_error_handlers(application)
     application.include_router(api_router)

@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useAuth0 } from "@auth0/auth0-react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 import HostQuizButton from "../authenticated-demo/HostQuizButton";
 import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import RequestError from "../authenticated-demo/RequestError";
 import { useConfirm } from "../authenticated-demo/useConfirm";
+import { useFileDownload } from "../authenticated-demo/useFileDownload";
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import ClassLiveButton from "./ClassLiveButton";
 import { copyText } from "./classHelpers";
@@ -329,48 +329,6 @@ function ClassSummary({ dashboard }) {
   );
 }
 
-// Same authenticated download as the session results page.
-function useCsvDownload() {
-  const { getAccessTokenSilently } = useAuth0();
-  const action = useAction();
-
-  async function download(path, fallbackName) {
-    const result = await action.run(async () => {
-      const token = await getAccessTokenSilently();
-      const base = import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "");
-      const response = await fetch(base + path, {
-        headers: { Authorization: "Bearer " + token },
-      });
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        const error = new Error(body?.error?.message || "Export failed.");
-        error.status = response.status;
-        error.code = body?.error?.code;
-        throw error;
-      }
-
-      const name = /filename="([^"]+)"/.exec(
-        response.headers.get("Content-Disposition") || "",
-      )?.[1];
-      return { blob: await response.blob(), name: name || fallbackName };
-    });
-
-    if (!result) return;
-
-    const url = URL.createObjectURL(result.blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = result.name;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  return { download, busy: action.busy, error: action.error };
-}
-
 // Quizzes the caller wrote and may host as a session of this class.
 function PresentTable({ classInfo }) {
   const account = useAccount();
@@ -547,7 +505,7 @@ function ClassWorkspace({ classInfo, onChange }) {
   const leave = useAction();
   const confirmer = useConfirm();
   const [copied, setCopied] = useState(false);
-  const csv = useCsvDownload();
+  const csv = useFileDownload();
   const dashboard = useClassDashboard(classInfo.id);
   const studentCount =
     dashboard.status === "ready" ? dashboard.data.student_count : null;

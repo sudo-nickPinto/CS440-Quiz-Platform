@@ -5,6 +5,7 @@ import {
   HostResults,
   ParticipantResults,
 } from "../authenticated-demo/SessionResults";
+import { useFileDownload } from "../authenticated-demo/useFileDownload";
 
 function validId(value) {
   return (
@@ -28,7 +29,7 @@ function sessionUrl(classId, sessionId) {
   return `/app/classes/${classId}/sessions/${sessionId}/report`;
 }
 
-function ReportFrame({ classId, title, children }) {
+function ReportFrame({ classId, title, actions, error, children }) {
   return (
     <section className="cl-page">
       <header className="cl-classbar">
@@ -43,7 +44,11 @@ function ReportFrame({ classId, title, children }) {
           <p className="cl-eyebrow">Class report</p>
           <h1>{title}</h1>
         </div>
+
+        {actions}
       </header>
+
+      <RequestError error={error} />
 
       {children}
     </section>
@@ -100,91 +105,18 @@ function Summary({ items }) {
   );
 }
 
-/*
- * Quote every CSV field, escape embedded quotes, and neutralize
- * spreadsheet formulas in text supplied by users.
- */
-function csvCell(value) {
-  let text = value == null ? "" : String(value);
-
-  if (
-    typeof value === "string" &&
-    (/^[=+\-@]/.test(value.trimStart()) || /^[\t\r\n]/.test(value))
-  ) {
-    text = "'" + text;
-  }
-
-  return `"${text.replaceAll('"', '""')}"`;
-}
-
-function downloadSessionCsv(report) {
-  const rows = [
-    [
-      "Quiz",
-      "Session ID",
-      "Participant",
-      "Rank",
-      "Final points",
-      "Correct answers",
-      "Question",
-      "Question text",
-      "Selected answer",
-      "Correct answer",
-      "Outcome",
-      "Question points",
-      "Answer time (ms)",
-    ],
-  ];
-
-  for (const player of report.players) {
-    for (const question of report.questions) {
-      const answer = player.answers.find(
-        (item) => item.question_id === question.question_id,
-      );
-
-      const selected = question.choices.find(
-        (choice) => choice.id === answer?.choice_id,
-      );
-
-      const correct = question.choices
-        .filter((choice) => choice.correct)
-        .map((choice) => choice.text)
-        .join(" / ");
-
-      rows.push([
-        report.quiz_title,
-        report.session_id,
-        player.name,
-        player.rank,
-        player.points,
-        player.correct,
-        question.order,
-        question.text,
-        selected?.text ?? "",
-        correct,
-        answer?.state ?? "not_played",
-        answer?.points ?? 0,
-        answer?.time_ms ?? "",
-      ]);
-    }
-  }
-
-  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
-  const blob = new Blob(["\uFEFF", csv], {
-    type: "text/csv;charset=utf-8",
-  });
-
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = `class-${report.class_id}-session-${report.session_id}-results.csv`;
-
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+// The Excel exports are built by the backend from the same reports.
+function ExcelButton({ file, path, name }) {
+  return (
+    <button
+      type="button"
+      className="cl-button"
+      disabled={file.busy}
+      onClick={() => void file.download(path, name)}
+    >
+      {file.busy ? "Preparing…" : "Export Excel"}
+    </button>
+  );
 }
 
 function SessionReport({ report, classId }) {
@@ -200,15 +132,9 @@ function SessionReport({ report, classId }) {
         report={report}
         backTo={backTo}
         backLabel="Class dashboard"
-        exportControl={
-          <button
-            type="button"
-            className="rr-button orange"
-            onClick={() => downloadSessionCsv(report)}
-          >
-            Export CSV
-          </button>
-        }
+        exportPath={`/classes/${classId}/sessions/${report.session_id}/export.xlsx`}
+        exportName={`class-${classId}-session-${report.session_id}-results.xlsx`}
+        exportLabel="Export Excel"
       />
     );
   }
@@ -315,11 +241,23 @@ export function ClassQuizReportPage() {
   const resource = useResource(
     valid ? `/classes/${classId}/quizzes/${quizId}/results` : null,
   );
+  const file = useFileDownload();
 
   return (
     <ReportFrame
       classId={classId}
       title={resource.data?.title || "Quiz report"}
+      actions={
+        // Class-wide exports are for the class's organizers only.
+        resource.data?.view === "organizer" && (
+          <ExcelButton
+            file={file}
+            path={`/classes/${classId}/quizzes/${quizId}/export.xlsx`}
+            name={`class-${classId}-quiz-${quizId}-results.xlsx`}
+          />
+        )
+      }
+      error={file.error}
     >
       <ReportRequest valid={valid} resource={resource}>
         {(report) => <QuizReport report={report} classId={classId} />}
@@ -416,6 +354,7 @@ export function ClassStudentReportPage() {
   const resource = useResource(
     valid ? `/classes/${classId}/students/${accountId}/results` : null,
   );
+  const file = useFileDownload();
 
   return (
     <ReportFrame
@@ -425,6 +364,17 @@ export function ClassStudentReportPage() {
           ? `${resource.data.display_name} — report`
           : "Student report"
       }
+      actions={
+        // Anyone who can open this report may export it.
+        resource.data && (
+          <ExcelButton
+            file={file}
+            path={`/classes/${classId}/students/${accountId}/export.xlsx`}
+            name={`class-${classId}-student-${accountId}-results.xlsx`}
+          />
+        )
+      }
+      error={file.error}
     >
       <ReportRequest valid={valid} resource={resource}>
         {(report) => <StudentReport report={report} classId={classId} />}

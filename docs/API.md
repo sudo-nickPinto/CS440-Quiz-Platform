@@ -148,7 +148,7 @@ The caller's own quizzes, across every class they're active in, newest first. In
 ### `GET /quizzes/{quiz_id}` → `200 QuizResponse`
 Full quiz, including correct answers. Same rule as above: only the owner or an organizer of the quiz's class, and anyone else gets 404.
 
-`QuizResponse`: `quiz_id, author_id, class_id, status, visibility, created_at, updated_at, version`. `version` holds `quiz_version_id, version_number, title, description, created_at, published_at, questions[]`. Each question holds `question_id, question_order, question_type, question_text, explanation, time_limit_seconds, base_points, choices[]`. Each choice holds `choice_id, choice_order, choice_text, is_correct`.
+`QuizResponse`: `quiz_id, author_id, class_id, revision, status, visibility, created_at, updated_at, version`. `version` holds `quiz_version_id, version_number, title, description, created_at, published_at, questions[]`. Each question holds `question_id, question_order, question_type, question_text, explanation, time_limit_seconds, base_points, choices[]`. Each choice holds `choice_id, choice_order, choice_text, is_correct`.
 
 Errors: `404 quiz_not_found`, `500 invalid_quiz`.
 
@@ -156,6 +156,133 @@ Errors: `404 quiz_not_found`, `500 invalid_quiz`.
 The quiz's owner only. Sets `status` to `ARCHIVED`.
 
 Errors: `403 quiz_access_denied` (an organizer who isn't the owner), `404 quiz_not_found`, `500 quiz_archive_failed`.
+
+### V3 class quiz drafts and collaborators
+
+`POST /classes/{class_id}/quizzes` creates a private draft owned by the caller.
+The caller must be an active member of the class. Its initial `revision` is 1
+and its version has `published_at: null`.
+
+`GET /classes/{class_id}/quizzes/{quiz_id}` returns the editable draft to its
+owner or an active named collaborator. `PUT` on the same URL replaces the
+draft content and requires `expected_revision`. A successful transaction
+increments the quiz revision exactly once. A stale request returns:
+
+```json
+{
+  "error": {
+    "code": "quiz_edit_conflict",
+    "message": "This quiz changed after you opened it. Reload the latest version before saving again.",
+    "details": { "current_revision": 4 }
+  }
+}
+```
+
+`base_version` is not accepted in V3: published version numbers and optimistic
+revisions are separate counters. Clients must fetch `QuizResponse.revision` and
+send it back as `expected_revision`.
+
+`POST /classes/{class_id}/quizzes/{quiz_id}/publish` publishes the current
+draft and takes `{ "expected_revision": 4 }`. Only the quiz owner may publish.
+It timestamps the draft, changes the quiz status to `PUBLISHED`, and increments
+the revision exactly once. Collaborators can edit but cannot publish. A later
+edit creates a new draft version without changing the published version.
+
+Publish errors include `quiz_publish_denied`, `quiz_not_publishable`, and
+`quiz_edit_conflict`.
+
+Collaborator management is owner-only:
+
+```text
+GET    /classes/{class_id}/quizzes/{quiz_id}/collaborators
+POST   /classes/{class_id}/quizzes/{quiz_id}/collaborators
+DELETE /classes/{class_id}/quizzes/{quiz_id}/collaborators/{account_id}
+```
+
+The POST body is `{ "email": "member@example.edu", "permission": "EDITOR" }`.
+The email is normalized before lookup, and the target must be an active member
+of the quiz's class. Unknown emails and accounts outside the class both return
+`not_class_member`, so this endpoint cannot probe account registration.
+Every share and revocation is preserved in an append-only audit table, while
+revocation immediately blocks future draft reads and writes. Errors include `not_class_member`,
+`already_quiz_collaborator`, `quiz_owner_cannot_collaborate`,
+`collaborator_management_denied`, and `quiz_collaborator_not_found`.
+
+## Quiz submissions and approvals
+
+Task 4 adds a class approval layer around an exact immutable quiz version.
+Every route first requires an active membership in the class; missing classes,
+invited/removed/left members, outsiders, and unrelated faculty all receive
+`404 class_not_found`. Approval makes a version available to the class but does
+not grant edit, collaborator, class-management, report, or results access.
+Archived classes retain readable submission history, but cannot receive new
+submissions, approve versions, or return hostable quizzes. Organizers may still
+reject pending submissions, and submitters may still withdraw their own.
+
+### `POST /classes/{class_id}/quiz-submissions` → `201 QuizSubmissionResponse`
+
+Body: `{ "quiz_version_id": 321 }`. The caller must own the quiz or be an
+active named collaborator. The exact version must be published, current,
+non-archived, and owned by this class. A newer draft does not make a published
+version stale; a newer published version does.
+
+Errors: `404 quiz_version_not_found`, `409 class_archived`,
+`409 quiz_version_not_published`, `409 quiz_version_stale`,
+`409 quiz_submission_conflict`, and
+`500 quiz_submission_failed`. The database's generated active-version key
+makes duplicate pending/approved submissions safe under concurrent requests.
+
+### `GET /classes/{class_id}/quiz-submissions` → `200 QuizSubmissionResponse[]`
+
+Newest first, without pagination. Active faculty organizers see every class
+submission; other active members see only submissions they created.
+
+`QuizSubmissionResponse`: `submission_id, class_id, quiz_version_id,
+submitted_by_id, status, decided_by_id, submitted_at, decided_at`.
+
+### `PATCH /classes/{class_id}/quiz-submissions/{submission_id}` → `200 QuizSubmissionResponse`
+
+Body accepts only `{ "status": "APPROVED" }` or
+`{ "status": "REJECTED" }`. Only an active faculty `ORGANIZER` may decide;
+self-approval is allowed. Approval rechecks the version and that the submitter
+still has an active account and class membership and still owns or actively
+collaborates on the quiz. Rejection remains available after that eligibility
+is lost or the class is archived. Approval of an archived class returns
+`409 class_archived`. Conditional `PENDING` updates give concurrent decisions
+one winner.
+
+Errors: `404 submission_not_found`, `403 not_class_organizer`,
+`409 class_archived`, `409 submission_no_longer_eligible`,
+`409 invalid_submission_transition`, the version errors above, and
+`500 quiz_submission_decision_failed`.
+
+### `DELETE /classes/{class_id}/quiz-submissions/{submission_id}` → `204`
+
+Soft-withdraws the original submitter's pending row. The row remains as
+`WITHDRAWN`, with the submitter in `decided_by_id` and a `decided_at` timestamp.
+Rejected and withdrawn versions may be submitted again.
+Withdrawal remains available after the class is archived so pending records
+can be closed without deleting their audit history.
+
+Errors: `404 submission_not_found`, `403 not_submission_owner`,
+`409 invalid_submission_transition`, and
+`500 quiz_submission_withdrawal_failed`. A submission the caller cannot see is
+always `404`; the 403 applies only when the resource is visible.
+
+### `GET /classes/{class_id}/approved-quizzes` → `200 ApprovedQuizResponse[]`
+
+Available to every active class member. Returns approved, published, current,
+non-archived versions that still belong to the class, newest approval first.
+An archived class returns `409 class_archived` instead of a hostable list.
+
+`ApprovedQuizResponse`: `submission_id, quiz_id, quiz_version_id,
+version_number, title, author_id, approved_at, approved_by_id`.
+
+Task 4 also exposes
+`require_approved_quiz_version(db, class_id, quiz_version_id)` for Task 5. It
+uses the same filtering and raises `409 quiz_version_not_approved` when the
+exact version is not currently hostable, or `409 class_archived` when the class
+itself cannot host. Session creation does not call it yet.
 
 ## Sessions
 
@@ -321,16 +448,30 @@ Organizers and Admins see everyone. Members see only their own rows, and class-w
 
 - `GET /classes/{class_id}/sessions/{session_id}/results`: the same body as `GET /sessions/{session_id}/report`, plus `class_id` and `started_at`. Any organizer gets every player (`view: "host"`), not just the one who hosted. A member gets `view: "participant"` with only their own row.
   - Errors: `404 session_not_found` (a session from another class, an open session, or one that isn't `COMPLETED`), `403 participant_report_denied` (a member who didn't play it).
-- `GET /classes/{class_id}/quizzes/{quiz_id}/results`: every completed presentation of the quiz in this class, newest first. It returns `{ class_id, quiz_id, title, session_count, participant_count, average_score, sessions }`.
+- `GET /classes/{class_id}/quizzes/{quiz_id}/results`: every completed presentation of the quiz in this class, newest first. It returns `{ class_id, quiz_id, view, title, session_count, participant_count, average_score, sessions }`, where `view` is `organizer` or `member`.
   - Each session has the same fields as a `/sessions` item, plus `results: [{ account_id, name, rank, points, correct }]`. Members only get their own result.
   - `average_score` is averaged over every player in every session (organizers only).
   - Errors: `404 quiz_not_found`, also for a quiz that has no completed session in this class.
 - `GET /classes/{class_id}/students/{account_id}/results`: one student's history in the class. Members can only ask for themselves (`403 not_class_organizer` otherwise). It returns:
+  - `view`: `organizer` or `member`;
   - `display_name`, `email` (organizers only), `role` and `status`. Removed and departed students keep their history;
   - `class_session_count`, `session_count`, `attendance_rate`, `total_points`, `average_score`, `correct_count` and `incorrect_count`;
   - `class_average`, organizers only, using the same formula as the dashboard;
   - `sessions`: every completed class session, newest first, with `played, points, rank, question_count, correct, incorrect`. The last four are null when the student missed it. Unanswered questions count as incorrect.
   - Errors: `404 student_not_found` (never in this class).
+
+### Excel exports of the class reports → `200 .xlsx`
+Each export is built from the matching report above, so the workbook shows the same numbers. They return `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` with `Cache-Control: no-store`. They take the same errors as the report, and times are in UTC.
+
+| Endpoint | Who | File | Sheets |
+|---|---|---|---|
+| `GET /classes/{class_id}/sessions/{session_id}/export.xlsx` | Organizers | `class-{cid}-session-{sid}-results.xlsx` | **Summary**; **Scores** (rank, participant, total points, correct); **Answers** (one row per participant per question: result, selected and correct answer, time, points) |
+| `GET /classes/{class_id}/quizzes/{quiz_id}/export.xlsx` | Organizers | `class-{cid}-quiz-{qid}-results.xlsx` | **Summary**; **Presentations** (one row per completed presentation); **Results** (every player's result in each presentation) |
+| `GET /classes/{class_id}/students/{account_id}/export.xlsx` | Organizers, or the student themselves | `class-{cid}-student-{aid}-results.xlsx` | **Summary** (totals, attendance, class average); **Sessions** (every completed class session, played or not) |
+
+- A member who exports a session or quiz gets `403 not_class_organizer`. So does a member who exports another student.
+- A member's own student export leaves out the email and the class average, as the report does.
+- Cells starting with `=`, `+`, `-` or `@` get a leading `'`, as in the CSV exports, so they stay text. Control characters that Excel can't store are dropped.
 
 ### `GET /classes/{class_id}/grades/export.csv` → `200 text/csv`
 Organizers only. Returns `{class-name}-grades.csv`, a gradebook (UTF-8 with BOM, `no-store`):

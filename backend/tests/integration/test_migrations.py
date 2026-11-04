@@ -13,9 +13,16 @@ import pymysql
 import pytest
 from pymysql.constants import CLIENT
 from sqlalchemy import create_engine, inspect
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import URL, make_url
 
-from app.models import Class, ClassMembership, Quiz
+from app.models import (
+    Class,
+    ClassMembership,
+    Quiz,
+    QuizCollaborator,
+    QuizCollaboratorEvent,
+    QuizSubmission,
+)
 
 MIGRATIONS = Path(__file__).resolve().parents[3] / "ulugbek-err" / "migrations"
 UP_FILES = sorted(MIGRATIONS.glob("*.up.sql"))
@@ -23,7 +30,7 @@ DOWN_FILES = sorted(MIGRATIONS.glob("*.down.sql"), reverse=True)
 
 
 @pytest.fixture
-def scratch_database() -> Iterator[tuple[pymysql.Connection, str]]:
+def scratch_database() -> Iterator[tuple[pymysql.Connection, URL]]:
     database_url = os.getenv("TEST_DATABASE_URL")
     if not database_url:
         pytest.skip("Set TEST_DATABASE_URL to run migration tests.")
@@ -46,7 +53,8 @@ def scratch_database() -> Iterator[tuple[pymysql.Connection, str]]:
             cursor.execute(f"DROP DATABASE IF EXISTS `{name}`")
             cursor.execute(f"CREATE DATABASE `{name}` CHARACTER SET utf8mb4")
             cursor.execute(f"USE `{name}`")
-        yield connection, url.set(database=name).render_as_string(hide_password=False)
+        # Passing a URL object keeps its password redacted in pytest failure output.
+        yield connection, url.set(database=name)
     finally:
         with connection.cursor() as cursor:
             cursor.execute(f"DROP DATABASE IF EXISTS `{name}`")
@@ -79,7 +87,7 @@ def test_every_migration_has_an_up_and_a_down_file() -> None:
 
 
 def test_migrations_apply_revert_and_reapply(
-    scratch_database: tuple[pymysql.Connection, str],
+    scratch_database: tuple[pymysql.Connection, URL],
 ) -> None:
     connection, _ = scratch_database
     versions = [path.name.removesuffix(".up.sql") for path in UP_FILES]
@@ -87,7 +95,7 @@ def test_migrations_apply_revert_and_reapply(
     for path in UP_FILES:
         run_file(connection, path)
     assert applied(connection) == versions
-    assert {"class", "class_membership"} <= tables(connection)
+    assert {"class", "class_membership", "quiz_submission"} <= tables(connection)
 
     for path in DOWN_FILES:
         run_file(connection, path)
@@ -99,7 +107,7 @@ def test_migrations_apply_revert_and_reapply(
 
 
 def test_migration_0006_down_only_removes_class_tables(
-    scratch_database: tuple[pymysql.Connection, str],
+    scratch_database: tuple[pymysql.Connection, URL],
 ) -> None:
     connection, _ = scratch_database
     for path in UP_FILES:
@@ -110,9 +118,10 @@ def test_migration_0006_down_only_removes_class_tables(
     later = [path for path in UP_FILES if path.name > "0006_classes.up.sql"]
     for path in reversed(later):
         run_file(connection, MIGRATIONS / path.name.replace(".up.", ".down."))
+    after_later_down = tables(connection)
 
     run_file(connection, MIGRATIONS / "0006_classes.down.sql")
-    assert tables(connection) == before - {"class", "class_membership"}
+    assert tables(connection) == after_later_down - {"class", "class_membership"}
     assert "0006_classes" not in applied(connection)
 
     run_file(connection, MIGRATIONS / "0006_classes.up.sql")
@@ -121,8 +130,8 @@ def test_migration_0006_down_only_removes_class_tables(
     assert tables(connection) == before
 
 
-def test_class_models_match_migrated_tables(
-    scratch_database: tuple[pymysql.Connection, str],
+def test_models_match_migrated_tables(
+    scratch_database: tuple[pymysql.Connection, URL],
 ) -> None:
     connection, database_url = scratch_database
     for path in UP_FILES:
@@ -131,7 +140,14 @@ def test_class_models_match_migrated_tables(
     engine = create_engine(database_url)
     try:
         inspector = inspect(engine)
-        for model in (Class, ClassMembership, Quiz):
+        for model in (
+            Class,
+            ClassMembership,
+            Quiz,
+            QuizCollaborator,
+            QuizCollaboratorEvent,
+            QuizSubmission,
+        ):
             table = model.__table__
             columns = {
                 column["name"]: column for column in inspector.get_columns(table.name)
@@ -159,6 +175,82 @@ def test_class_models_match_migrated_tables(
         engine.dispose()
 
 
+def test_migration_0010_generated_active_version_metadata(
+    scratch_database: tuple[pymysql.Connection, URL],
+) -> None:
+    connection, database_url = scratch_database
+    for path in UP_FILES:
+        run_file(connection, path)
+
+    engine = create_engine(database_url)
+    try:
+        inspector = inspect(engine)
+        columns = {
+            column["name"]: column
+            for column in inspector.get_columns("quiz_submission")
+        }
+        computed = columns["active_version_id"]["computed"]
+        normalized_sql = " ".join(computed["sqltext"].upper().split())
+        assert computed["persisted"] is True
+        assert "PENDING" in normalized_sql
+        assert "APPROVED" in normalized_sql
+        assert "QUIZ_VERSION_ID" in normalized_sql
+
+        unique = {
+            constraint["name"]: constraint["column_names"]
+            for constraint in inspector.get_unique_constraints("quiz_submission")
+        }
+        assert unique["uq_quiz_submission_active"] == [
+            "class_id",
+            "active_version_id",
+        ]
+
+        indexes = {
+            index["name"]: index["column_names"]
+            for index in inspector.get_indexes("quiz_submission")
+        }
+        assert indexes["idx_quiz_submission_class_status_newest"] == [
+            "class_id",
+            "status",
+            "submitted_at",
+            "submission_id",
+        ]
+        assert indexes["idx_quiz_submission_member_newest"] == [
+            "class_id",
+            "submitted_by_id",
+            "submitted_at",
+            "submission_id",
+        ]
+
+        checks = {
+            check["name"]: " ".join(check["sqltext"].upper().split())
+            for check in inspector.get_check_constraints("quiz_submission")
+        }
+        decision_check = (
+            checks["ck_quiz_submission_decision"]
+            .replace("`", "")
+            .replace("_UTF8MB4", "")
+        )
+        assert "STATUS = 'PENDING'" in decision_check
+        assert "DECIDED_BY_ID IS NULL" in decision_check
+        assert "DECIDED_BY_ID IS NOT NULL" in decision_check
+
+        foreign_keys = {
+            foreign_key["name"]: foreign_key
+            for foreign_key in inspector.get_foreign_keys("quiz_submission")
+        }
+        assert set(foreign_keys) == {
+            "fk_quiz_submission_class",
+            "fk_quiz_submission_version",
+            "fk_quiz_submission_submitted_by",
+            "fk_quiz_submission_decided_by",
+        }
+        for foreign_key in foreign_keys.values():
+            assert foreign_key["options"].get("ondelete") == "RESTRICT"
+    finally:
+        engine.dispose()
+
+
 def quiz_classes(connection: pymysql.Connection) -> dict[int, int | None]:
     with connection.cursor() as cursor:
         cursor.execute("SELECT quiz_id, class_id FROM quiz ORDER BY quiz_id")
@@ -166,7 +258,7 @@ def quiz_classes(connection: pymysql.Connection) -> dict[int, int | None]:
 
 
 def test_migration_0008_gives_quizzes_their_only_class(
-    scratch_database: tuple[pymysql.Connection, str],
+    scratch_database: tuple[pymysql.Connection, URL],
 ) -> None:
     connection, _ = scratch_database
     for path in UP_FILES:

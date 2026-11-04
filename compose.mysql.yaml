@@ -25,7 +25,9 @@ services:
       - ./ulugbek-err/migrations/0006_classes.up.sql:/docker-entrypoint-initdb.d/0006.sql:ro
       - ./ulugbek-err/migrations/0007_session_class.up.sql:/docker-entrypoint-initdb.d/0007.sql:ro
       - ./ulugbek-err/migrations/0008_quiz_class.up.sql:/docker-entrypoint-initdb.d/0008.sql:ro
-      - ./ulugbek-err/migrations/0009_account_profile.up.sql:/docker-entrypoint-initdb.d/0009.sql:ro
+      - ./ulugbek-err/migrations/0009_quiz_collaboration.up.sql:/docker-entrypoint-initdb.d/0009.sql:ro
+      - ./ulugbek-err/migrations/0010_quiz_submission.up.sql:/docker-entrypoint-initdb.d/0010.sql:ro
+      - ./ulugbek-err/migrations/0011_account_profile.up.sql:/docker-entrypoint-initdb.d/0011.sql:ro
     healthcheck:
       test:
         - CMD-SHELL

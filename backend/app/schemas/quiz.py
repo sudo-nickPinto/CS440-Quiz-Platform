@@ -1,8 +1,19 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
-from app.models.quiz import QuestionType, QuizStatus, QuizVisibility
+from app.models.quiz import (
+    CollaboratorPermission,
+    QuestionType,
+    QuizStatus,
+    QuizVisibility,
+)
 from app.schemas.class_dashboard import PageInfo
 
 
@@ -74,8 +85,34 @@ class QuizCreate(QuizRequestModel):
         return value or None
 
 class QuizUpdate(QuizCreate):
-    # The published version originally loaded by the editor.
-    base_version: int = Field(ge=1, strict=True)
+    expected_revision: int = Field(ge=1, strict=True)
+
+
+class QuizPublish(QuizRequestModel):
+    expected_revision: int = Field(ge=1, strict=True)
+
+
+class QuizCollaboratorCreate(QuizRequestModel):
+    email: str = Field(max_length=320)
+    permission: CollaboratorPermission = CollaboratorPermission.EDITOR
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        value = value.strip().lower()
+        if not value or "@" not in value:
+            raise ValueError("A valid email address is required.")
+        return value
+
+
+class QuizCollaboratorResponse(BaseModel):
+    quiz_id: int
+    account_id: int
+    email: str
+    display_name: str
+    permission: CollaboratorPermission
+    shared_by_id: int
+    created_at: datetime
 
 
 class AnswerChoiceResponse(BaseModel):
@@ -117,6 +154,7 @@ class QuizResponse(BaseModel):
     quiz_id: int
     author_id: int
     class_id: int | None
+    revision: int
     status: QuizStatus
     visibility: QuizVisibility
     created_at: datetime
