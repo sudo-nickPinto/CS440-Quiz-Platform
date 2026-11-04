@@ -1,6 +1,8 @@
 DELETE FROM schema_migrations
 WHERE version = '0009_quiz_collaboration';
 
+DROP TABLE quiz_collaborator_event;
+
 ALTER TABLE quiz_collaborator
     DROP FOREIGN KEY fk_quiz_collaborator_revoked_by,
     DROP FOREIGN KEY fk_quiz_collaborator_shared_by,

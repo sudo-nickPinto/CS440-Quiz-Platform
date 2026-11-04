@@ -34,5 +34,28 @@ ALTER TABLE quiz_collaborator
     ADD INDEX idx_quiz_collaborator_active
         (quiz_id, revoked_at, account_id);
 
+-- The current collaborator row can be reactivated, while this append-only
+-- event table preserves every earlier share and revocation.
+CREATE TABLE quiz_collaborator_event (
+    event_id    INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    quiz_id     INT UNSIGNED NOT NULL,
+    account_id  INT UNSIGNED NOT NULL,
+    action      ENUM('SHARED', 'REVOKED') NOT NULL,
+    actor_id    INT UNSIGNED NOT NULL,
+    occurred_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    CONSTRAINT fk_quiz_collaborator_event_quiz
+        FOREIGN KEY (quiz_id) REFERENCES quiz (quiz_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_quiz_collaborator_event_account
+        FOREIGN KEY (account_id) REFERENCES account (account_id)
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_quiz_collaborator_event_actor
+        FOREIGN KEY (actor_id) REFERENCES account (account_id)
+        ON DELETE RESTRICT,
+    INDEX idx_quiz_collaborator_event_history
+        (quiz_id, account_id, occurred_at, event_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+
 INSERT INTO schema_migrations (version)
 VALUES ('0009_quiz_collaboration');

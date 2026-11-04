@@ -16,6 +16,7 @@ from app.models.classes import (
     JoinedVia,
     MembershipStatus,
 )
+from app.models.quiz import CollaboratorEventType, QuizCollaboratorEvent
 
 
 QUIZ_PAYLOAD = {
@@ -296,6 +297,27 @@ def test_nonmember_cannot_be_added(collaboration_client) -> None:
     assert client.get(path).status_code == 404
 
 
+def test_unknown_email_and_nonmember_use_the_same_private_error(
+    collaboration_client,
+) -> None:
+    client, class_id, _, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}/collaborators"
+
+    unknown = client.post(
+        path,
+        json={"email": "missing@example.com", "permission": "EDITOR"},
+    )
+    outsider = client.post(
+        path,
+        json={"email": "outsider@example.com", "permission": "EDITOR"},
+    )
+
+    assert unknown.status_code == outsider.status_code == 409
+    assert unknown.json()["error"]["code"] == "not_class_member"
+    assert unknown.json()["error"] == outsider.json()["error"]
+
+
 def test_removed_member_immediately_loses_collaborator_access(
     collaboration_client,
 ) -> None:
@@ -335,6 +357,41 @@ def test_every_draft_edit_requires_expected_revision(
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "request_validation_error"
+
+    legacy = {**payload, "base_version": 1}
+    legacy_response = client.put(
+        f"/classes/{class_id}/quizzes/{quiz['quiz_id']}",
+        json=legacy,
+    )
+    assert legacy_response.status_code == 422
+    assert legacy_response.json()["error"]["code"] == "request_validation_error"
+
+
+def test_readding_collaborator_preserves_share_and_revocation_history(
+    collaboration_client,
+) -> None:
+    client, class_id, _, editor, _ = collaboration_client
+    quiz = _create(client, class_id)
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}/collaborators"
+    payload = {"email": "editor@example.com", "permission": "EDITOR"}
+
+    assert client.post(path, json=payload).status_code == 201
+    assert client.delete(f"{path}/{editor.account_id}").status_code == 204
+    assert client.post(path, json=payload).status_code == 201
+
+    with client.app.state.database.session_factory() as db:
+        actions = [
+            event.action
+            for event in db.query(QuizCollaboratorEvent)
+            .filter_by(quiz_id=quiz["quiz_id"], account_id=editor.account_id)
+            .order_by(QuizCollaboratorEvent.event_id)
+        ]
+
+    assert actions == [
+        CollaboratorEventType.SHARED,
+        CollaboratorEventType.REVOKED,
+        CollaboratorEventType.SHARED,
+    ]
 
 
 def test_duplicate_and_owner_collaborators_are_rejected(

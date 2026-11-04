@@ -161,6 +161,10 @@ increments the quiz revision exactly once. A stale request returns:
 }
 ```
 
+`base_version` is not accepted in V3: published version numbers and optimistic
+revisions are separate counters. Clients must fetch `QuizResponse.revision` and
+send it back as `expected_revision`.
+
 `POST /classes/{class_id}/quizzes/{quiz_id}/publish` publishes the current
 draft and takes `{ "expected_revision": 4 }`. Only the quiz owner may publish.
 It timestamps the draft, changes the quiz status to `PUBLISHED`, and increments
@@ -180,8 +184,10 @@ DELETE /classes/{class_id}/quizzes/{quiz_id}/collaborators/{account_id}
 
 The POST body is `{ "email": "member@example.edu", "permission": "EDITOR" }`.
 The email is normalized before lookup, and the target must be an active member
-of the quiz's class. Revocation is audited and immediately blocks future draft
-reads and writes. Errors include `account_not_found`, `not_class_member`,
+of the quiz's class. Unknown emails and accounts outside the class both return
+`not_class_member`, so this endpoint cannot probe account registration.
+Every share and revocation is preserved in an append-only audit table, while
+revocation immediately blocks future draft reads and writes. Errors include `not_class_member`,
 `already_quiz_collaborator`, `quiz_owner_cannot_collaborate`,
 `collaborator_management_denied`, and `quiz_collaborator_not_found`.
 

@@ -14,7 +14,7 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0006_classes` | `class`, `class_membership` (classes with organizers and members, from PR #51) |
 | `0007_session_class` | Adds `live_session.class_id`: the host may pick a class for a session, and then only its active members can join (task 6). NULL is an open session |
 | `0008_quiz_class` | Adds `quiz.class_id`: every quiz belongs to a class, and only that class can see it (V3 task 2). Fills it in for quizzes played in exactly one class |
-| `0009_quiz_collaboration` | Adds optimistic quiz revisions plus collaborator permission, sharing, and revocation audit fields (V3 task 3) |
+| `0009_quiz_collaboration` | Adds optimistic quiz revisions, collaborator permission/state, and append-only share/revocation audit events (V3 task 3) |
 
 Each migration comes in two files:
 

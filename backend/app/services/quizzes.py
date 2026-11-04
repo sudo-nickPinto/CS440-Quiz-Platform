@@ -11,10 +11,12 @@ from app.models.account import Account
 from app.models.classes import ClassMembership, ClassRole, MembershipStatus
 from app.models.quiz import (
     AnswerChoice,
+    CollaboratorEventType,
     CollaboratorPermission,
     Question,
     Quiz,
     QuizCollaborator,
+    QuizCollaboratorEvent,
     QuizStatus,
     QuizVersion,
     QuizVisibility,
@@ -712,24 +714,23 @@ def add_quiz_collaborator(
     target = db.scalar(
         select(Account).where(func.lower(Account.email) == payload.email)
     )
-    if target is None:
-        raise APIError(404, "account_not_found", "No account has that email address.")
+    if (
+        target is None
+        or not target.is_active
+        or _active_membership(db, class_id, target.account_id) is None
+    ):
+        # Do not reveal whether an email belongs to an account elsewhere.
+        raise APIError(
+            409,
+            "not_class_member",
+            "No active member of this class has that email address.",
+        )
     if target.account_id == quiz.author_id:
         raise APIError(
             409,
             "quiz_owner_cannot_collaborate",
             "The quiz owner cannot also be a collaborator.",
         )
-    if (
-        not target.is_active
-        or _active_membership(db, class_id, target.account_id) is None
-    ):
-        raise APIError(
-            409,
-            "not_class_member",
-            "The account is not an active member of this class.",
-        )
-
     collaborator = db.get(QuizCollaborator, (quiz_id, target.account_id))
     now = datetime.now(UTC).replace(tzinfo=None)
     if collaborator is not None and collaborator.revoked_at is None:
@@ -752,6 +753,14 @@ def add_quiz_collaborator(
         collaborator.created_at = now
         collaborator.revoked_at = None
         collaborator.revoked_by_id = None
+    db.add(
+        QuizCollaboratorEvent(
+            quiz_id=quiz_id,
+            account_id=target.account_id,
+            action=CollaboratorEventType.SHARED,
+            actor_id=account.account_id,
+        )
+    )
     try:
         db.commit()
     except IntegrityError as exc:
@@ -785,6 +794,14 @@ def revoke_quiz_collaborator(
         raise APIError(404, "quiz_collaborator_not_found", "Collaborator not found.")
     collaborator.revoked_at = datetime.now(UTC).replace(tzinfo=None)
     collaborator.revoked_by_id = account.account_id
+    db.add(
+        QuizCollaboratorEvent(
+            quiz_id=quiz_id,
+            account_id=target_account_id,
+            action=CollaboratorEventType.REVOKED,
+            actor_id=account.account_id,
+        )
+    )
     try:
         db.commit()
     except SQLAlchemyError as exc:

@@ -68,6 +68,7 @@ def cleanup_database(app) -> None:
         "answer_choice",
         "question",
         "quiz_version",
+        "quiz_collaborator_event",
         "quiz_collaborator",
         "quiz_group",
         "quiz",

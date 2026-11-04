@@ -41,6 +41,11 @@ class CollaboratorPermission(str, Enum):
     EDITOR = "EDITOR"
 
 
+class CollaboratorEventType(str, Enum):
+    SHARED = "SHARED"
+    REVOKED = "REVOKED"
+
+
 def enum_values(enum_class: type[Enum]) -> list[str]:
     return [member.value for member in enum_class]
 
@@ -131,6 +136,36 @@ class QuizCollaborator(Base):
     )
 
     quiz: Mapped[Quiz] = relationship(back_populates="collaborators")
+
+
+class QuizCollaboratorEvent(Base):
+    __tablename__ = "quiz_collaborator_event"
+
+    event_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True), primary_key=True
+    )
+    quiz_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("quiz.quiz_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    account_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    action: Mapped[CollaboratorEventType] = mapped_column(
+        SqlEnum(CollaboratorEventType, values_callable=enum_values),
+        nullable=False,
+    )
+    actor_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DATETIME(fsp=3), nullable=False, server_default=func.now()
+    )
 
 
 class QuizVersion(Base):

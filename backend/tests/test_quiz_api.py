@@ -249,9 +249,9 @@ def test_explanation_over_limit_is_rejected(quiz_client) -> None:
     assert response.status_code == 422
 
 
-def revision_payload(base_version: int = 1) -> dict:
+def revision_payload(expected_revision: int = 1) -> dict:
     payload = deepcopy(QUIZ_PAYLOAD)
-    payload["base_version"] = base_version
+    payload["expected_revision"] = expected_revision
     payload["title"] = "Revised Quiz"
     payload["description"] = "Updated description"
 

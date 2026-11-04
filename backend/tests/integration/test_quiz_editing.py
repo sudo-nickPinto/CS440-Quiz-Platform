@@ -41,7 +41,7 @@ def test_competing_edits_publish_only_one_revision(mysql_quiz_client):
             **{
                 **PAYLOAD,
                 "title": title,
-                "base_version": 1,
+                "expected_revision": 1,
             }
         )
 

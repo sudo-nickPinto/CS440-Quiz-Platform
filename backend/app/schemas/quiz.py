@@ -1,7 +1,6 @@
 from datetime import datetime
 
 from pydantic import (
-    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
@@ -86,13 +85,7 @@ class QuizCreate(QuizRequestModel):
         return value or None
 
 class QuizUpdate(QuizCreate):
-    # base_version remains accepted while existing clients migrate to the V3
-    # optimistic-locking name.
-    expected_revision: int = Field(
-        ge=1,
-        strict=True,
-        validation_alias=AliasChoices("expected_revision", "base_version"),
-    )
+    expected_revision: int = Field(ge=1, strict=True)
 
 
 class QuizPublish(QuizRequestModel):
