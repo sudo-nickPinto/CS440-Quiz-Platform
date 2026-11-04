@@ -59,10 +59,13 @@ export function createLiveSession({
     try {
       const rows = await getJson(`/sessions/${sessionId}/participants`)
       if (fetchId !== rosterFetch) return // a newer snapshot started another
-      let participants = rows.map(({ session_participant_id, display_name }) => ({
-        session_participant_id,
-        display_name,
-      }))
+      let participants = rows.map(
+        ({ session_participant_id, display_name, avatar_key }) => ({
+          session_participant_id,
+          display_name,
+          avatar_key: avatar_key ?? null,
+        }),
+      )
       for (const event of rosterEvents) {
         participants = participants.filter(
           (p) => p.session_participant_id !== event.session_participant_id,
@@ -71,6 +74,7 @@ export function createLiveSession({
           participants.push({
             session_participant_id: event.session_participant_id,
             display_name: event.display_name,
+            avatar_key: event.avatar_key ?? null,
           })
         }
       }

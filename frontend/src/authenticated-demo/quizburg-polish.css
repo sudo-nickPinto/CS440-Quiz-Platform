@@ -622,6 +622,12 @@
   color: var(--gray);
 }
 
+/* Drafts: not hostable yet, so a light pill instead of the published block. */
+.qp .ui-published.ui-draft {
+  background: var(--sky-soft);
+  color: var(--ink);
+}
+
 .qp .ui-quiz-title {
   padding: 12px 18px;
 }
@@ -2679,7 +2685,11 @@
 }
 
 .qp .lv-chip {
-  padding: 8px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 6px 14px 6px 6px;
   border: var(--b-thin);
   background: var(--sky-soft);
   box-shadow: 3px 3px 0 var(--ink);
@@ -2688,6 +2698,14 @@
   font-weight: 700;
   overflow-wrap: anywhere;
   animation: lv-chip-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.qp .lv-chip-avatar {
+  --avatar-size: 32px;
+}
+
+.qp .lv-chip-name {
+  min-width: 0;
 }
 
 @keyframes lv-chip-in {
@@ -3151,7 +3169,7 @@
 
 .qp .lv-board li {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) auto;
+  grid-template-columns: 72px auto minmax(0, 1fr) auto;
   align-items: center;
   min-height: 68px;
   padding-right: 22px;
@@ -3189,9 +3207,14 @@
   color: var(--ink);
 }
 
+.qp .lv-board-avatar {
+  --avatar-size: 40px;
+  margin-left: 18px;
+}
+
 .qp .lv-board li > strong {
   min-width: 0;
-  padding-left: 18px;
+  padding: 0 12px;
   overflow: hidden;
   font: 19px "Archivo Black", sans-serif;
   text-overflow: ellipsis;
@@ -3518,7 +3541,13 @@
   white-space: nowrap;
 }
 
-.qp .lv-podium-name span {
+.qp .lv-podium-avatar {
+  --avatar-size: 48px;
+  display: grid;
+  margin: 0 auto 8px;
+}
+
+.qp .lv-podium-name .lv-podium-pts {
   color: var(--gray);
   font-size: 14px;
   font-weight: 700;
@@ -3721,8 +3750,13 @@
   }
 
   .qp .lv-chip {
-    padding: 6px 10px;
+    gap: 8px;
+    padding: 5px 10px 5px 5px;
     font-size: 14px;
+  }
+
+  .qp .lv-chip-avatar {
+    --avatar-size: 26px;
   }
 
   .qp .lv-hq,
@@ -3797,12 +3831,17 @@
   }
 
   .qp .lv-board li {
-    grid-template-columns: 52px minmax(0, 1fr) auto;
+    grid-template-columns: 52px auto minmax(0, 1fr) auto;
     padding-right: 10px;
   }
 
+  .qp .lv-board-avatar {
+    --avatar-size: 32px;
+    margin-left: 10px;
+  }
+
   .qp .lv-board li > strong {
-    padding-left: 10px;
+    padding: 0 8px;
     font-size: 16px;
   }
 
@@ -3824,7 +3863,12 @@
     font-size: 15px;
   }
 
-  .qp .lv-podium-name span {
+  .qp .lv-podium-avatar {
+    --avatar-size: 34px;
+    margin-bottom: 6px;
+  }
+
+  .qp .lv-podium-name .lv-podium-pts {
     font-size: 12px;
   }
 
@@ -4993,6 +5037,7 @@
   padding: 20px 34px;
   font-size: clamp(15px, 1.6vw, 22px);
   letter-spacing: 1px;
+  white-space: nowrap;
 }
 
 .qp .cl-titlebar .cl-new[aria-expanded="true"] {
@@ -5538,4 +5583,84 @@
   font-weight: 700;
   text-decoration-thickness: 2px;
   text-underline-offset: 4px;
+}
+
+/* Header avatar: the summary keeps its border and shadow; the preset tile
+   fills it. */
+.qp .ui-avatar .avatar {
+  --avatar-size: 38px;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.qp .ui-user .qb-account-menu button + button {
+  border-top: var(--b-thin);
+}
+
+/* ---------- App shell: main navigation (Dashboard · Classes · Join game) ---------- */
+
+.qp .qb-app-nav {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.qp .qb-app-nav a {
+  display: grid;
+  place-items: center;
+  padding: 10px 16px;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font: 15px/1 "Archivo Black", sans-serif;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.qp .qb-app-nav a:hover {
+  background: var(--sky-soft);
+}
+
+/* "You are here": solid deep orange, like the dashboard's selected tab. */
+.qp .qb-app-nav a[aria-current="page"] {
+  background: var(--orange-deep);
+  color: var(--paper);
+}
+
+.qp .qb-app-nav a:active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+/* Tablets and phones: the nav takes its own full-width row under the logo
+   and avatar, so the header never overflows. */
+@media (max-width: 900px) {
+  .qp .qp-header {
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+
+  .qp .qb-app-nav {
+    order: 3;
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+}
+
+@media (max-width: 640px) {
+  .qp .qb-app-nav a {
+    padding: 10px 4px;
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp .qb-app-nav a:active {
+    transform: none;
+  }
 }

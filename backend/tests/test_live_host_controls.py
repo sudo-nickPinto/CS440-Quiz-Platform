@@ -274,7 +274,12 @@ def test_full_game_with_skip_auto_close_and_end(live) -> None:
         )
         assert [e["display_name"] for e in ended["leaderboard"]] == ["Alice", "Bob"]
         assert "standings" not in ended
-        assert set(ended["leaderboard"][0]) == {"display_name", "total_score", "final_rank"}
+        assert set(ended["leaderboard"][0]) == {
+            "display_name",
+            "avatar_key",
+            "total_score",
+            "final_rank",
+        }
 
     # Every socket is closed normally once the game is over.
     for ws in (host, alice, bob):

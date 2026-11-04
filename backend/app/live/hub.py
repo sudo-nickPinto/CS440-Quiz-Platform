@@ -199,6 +199,7 @@ class LiveHub:
         session_id: int,
         session_participant_id: int,
         display_name: str,
+        avatar_key: str | None = None,
     ) -> None:
         """Hook run after a committed REST join; tells the host (§4)."""
         try:
@@ -209,6 +210,7 @@ class LiveHub:
                     "type": "participant_joined",
                     "session_participant_id": session_participant_id,
                     "display_name": display_name,
+                    "avatar_key": avatar_key,
                     "participant_count": participant_count,
                 },
                 role="host",
