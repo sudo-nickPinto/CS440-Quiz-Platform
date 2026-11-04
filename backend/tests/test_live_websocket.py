@@ -37,6 +37,7 @@ from app.models import (
     MembershipStatus,
 )
 from tests.test_accounts import AUDIENCE, DOMAIN, PRIVATE_KEY, make_token
+from tests.class_quiz_helpers import post_class_quiz
 
 QUIZ_PAYLOAD = {
     "title": "Live Quiz",
@@ -122,7 +123,7 @@ def as_account(client: TestClient, account: CurrentAccount) -> None:
 
 def make_session(client: TestClient, people: dict[str, CurrentAccount]) -> dict:
     as_account(client, people["host"])
-    quiz = client.post("/quizzes", json=QUIZ_PAYLOAD)
+    quiz = post_class_quiz(client, QUIZ_PAYLOAD)
     assert quiz.status_code == 201
     session = client.post(f"/quizzes/{quiz.json()['quiz_id']}/sessions")
     assert session.status_code == 201
@@ -397,7 +398,7 @@ def test_removed_class_member_closes_with_4403_after_joining(live) -> None:
         class_id = class_.class_id
 
     as_account(client, people["host"])
-    quiz = client.post("/quizzes", json=QUIZ_PAYLOAD)
+    quiz = post_class_quiz(client, QUIZ_PAYLOAD)
     assert quiz.status_code == 201
     session = client.post(
         f"/quizzes/{quiz.json()['quiz_id']}/sessions",

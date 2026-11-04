@@ -15,6 +15,8 @@ services:
       - --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql-data:/var/lib/mysql
+      # Every ulugbek-err/migrations/*.up.sql file, in order. Add a line here
+      # whenever a migration is added.
       - ./ulugbek-err/migrations/0001_accounts_and_groups.up.sql:/docker-entrypoint-initdb.d/0001.sql:ro
       - ./ulugbek-err/migrations/0002_quizzes.up.sql:/docker-entrypoint-initdb.d/0002.sql:ro
       - ./ulugbek-err/migrations/0003_live_sessions.up.sql:/docker-entrypoint-initdb.d/0003.sql:ro
@@ -22,7 +24,8 @@ services:
       - ./ulugbek-err/migrations/0005_optional_session_group.up.sql:/docker-entrypoint-initdb.d/0005.sql:ro
       - ./ulugbek-err/migrations/0006_classes.up.sql:/docker-entrypoint-initdb.d/0006.sql:ro
       - ./ulugbek-err/migrations/0007_session_class.up.sql:/docker-entrypoint-initdb.d/0007.sql:ro
-      - ./ulugbek-err/migrations/0008_account_profile.up.sql:/docker-entrypoint-initdb.d/0008.sql:ro
+      - ./ulugbek-err/migrations/0008_quiz_class.up.sql:/docker-entrypoint-initdb.d/0008.sql:ro
+      - ./ulugbek-err/migrations/0009_account_profile.up.sql:/docker-entrypoint-initdb.d/0009.sql:ro
     healthcheck:
       test:
         - CMD-SHELL
