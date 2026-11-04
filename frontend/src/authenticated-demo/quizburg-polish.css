@@ -5037,6 +5037,7 @@
   padding: 20px 34px;
   font-size: clamp(15px, 1.6vw, 22px);
   letter-spacing: 1px;
+  white-space: nowrap;
 }
 
 .qp .cl-titlebar .cl-new[aria-expanded="true"] {
