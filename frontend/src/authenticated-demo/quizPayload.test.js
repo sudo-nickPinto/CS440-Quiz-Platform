@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { quizToEditor, toQuizCreate } from "./quizPayload";
+import {
+  quizQuestionToEditor,
+  quizToEditor,
+  toQuestionCreate,
+  toQuizCreate,
+} from "./quizPayload";
 
 function savedQuiz() {
   return {
@@ -55,6 +60,19 @@ describe("editing saved quizzes", () => {
         },
       ],
     });
+  });
+
+  it("preserves question identity and revision for independent saves", () => {
+    const question = savedQuiz().version.questions[0];
+    question.revision = 4;
+
+    const editorQuestion = quizQuestionToEditor(question);
+
+    expect(editorQuestion.questionId).toBe(12);
+    expect(editorQuestion.revision).toBe(4);
+    expect(toQuestionCreate(editorQuestion, 0, 20).question_text).toBe(
+      "Which answer?",
+    );
   });
 
   it("does not mutate the saved quiz when editor values change", () => {

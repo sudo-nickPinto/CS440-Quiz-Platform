@@ -11,12 +11,17 @@ import { useAccount } from "./account";
 import HostQuizButton from "./HostQuizButton";
 
 import { blankEditor, LETTERS, newQuestion } from "./model";
-import { toQuizCreate } from "./quizPayload";
+import {
+  quizQuestionToEditor,
+  toQuestionCreate,
+  toQuizCreate,
+} from "./quizPayload";
 import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 import ConfirmDialog from "./ConfirmDialog";
 import { useConfirm } from "./useConfirm";
 import { QuestionMenu, TimePicker } from "./EditorParts";
+import { useQuizCollaboration } from "./useQuizCollaboration";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -96,12 +101,18 @@ export function QuizEditor({
 }) {
   const [initial] = useState(() => initialEditor ?? blankEditor());
   const [editor, setEditor] = useState(initial);
+  const [baselineEditor, setBaselineEditor] = useState(initial);
+  const [quizRevision, setQuizRevision] = useState(
+    existingQuiz?.revision ?? null,
+  );
   const [reviewing, setReviewing] = useState(false);
   const [validation, setValidation] = useState("");
   const [explaining, setExplaining] = useState(() => new Set());
+  const [remoteNotice, setRemoteNotice] = useState(null);
 
   const api = useApi();
   const action = useAction();
+  const account = useAccount();
   const navigate = useNavigate();
   const confirmer = useConfirm();
   const [searchParams] = useSearchParams();
@@ -110,9 +121,59 @@ export function QuizEditor({
   // New quizzes belong to a class: the class page links here with ?class=ID.
   const classId = searchParams.get("class");
   const validClass = /^[1-9][0-9]*$/.test(classId ?? "");
-  const dirty = JSON.stringify(editor) !== JSON.stringify(initial);
+  const dirty = JSON.stringify(editor) !== JSON.stringify(baselineEditor);
 
-  const conflict = action.error?.code === "quiz_edit_conflict";
+  const conflict = ["quiz_edit_conflict", "question_edit_conflict"].includes(
+    action.error?.code,
+  );
+
+  const collaborationStatus = useQuizCollaboration(
+    editing ? existingQuiz.quiz_id : null,
+    (message) => {
+      if (message.editor_account_id === account.account_id) return;
+      if (message.type === "question_updated") {
+        const questionId = message.question.question_id;
+        const local = editor.questions.find(
+          (question) => question.questionId === questionId,
+        );
+        const baseline = baselineEditor.questions.find(
+          (question) => question.questionId === questionId,
+        );
+        if (!local || !baseline || JSON.stringify(local) !== JSON.stringify(baseline)) {
+          setRemoteNotice(
+            "A collaborator updated a question that has local changes. Save or reload before continuing.",
+          );
+          return;
+        }
+        const index = editor.questions.indexOf(local);
+        const updated = quizQuestionToEditor(message.question, index);
+        setEditor((currentEditor) => ({
+          ...currentEditor,
+          questions: currentEditor.questions.map((question) =>
+            question.questionId === questionId ? updated : question,
+          ),
+        }));
+        setBaselineEditor((currentBaseline) => ({
+          ...currentBaseline,
+          questions: currentBaseline.questions.map((question) =>
+            question.questionId === questionId ? updated : question,
+          ),
+        }));
+        setQuizRevision(message.quiz_revision);
+        setRemoteNotice(`Question ${index + 1} was updated by a collaborator.`);
+        return;
+      }
+      if (message.type === "quiz_structure_updated") {
+        setQuizRevision(message.quiz_revision);
+        setRemoteNotice(
+          "A collaborator changed the quiz structure. Reload before making structural changes.",
+        );
+      } else if (message.type === "quiz_published") {
+        setQuizRevision(message.quiz_revision);
+        setRemoteNotice("The quiz was published by its owner.");
+      }
+    },
+  );
 
   const backTo = editing
     ? `/app/quizzes/${existingQuiz.quiz_id}`
@@ -264,14 +325,100 @@ export function QuizEditor({
     }
   }
 
+  function questionChanged(question) {
+    const saved = baselineEditor.questions.find(
+      (item) => item.questionId === question.questionId,
+    );
+    return !saved || JSON.stringify(saved) !== JSON.stringify(question);
+  }
+
+  function acceptSavedQuestion(previousQuestionId, savedQuestion, nextQuizRevision) {
+    const updated = quizQuestionToEditor(
+      savedQuestion,
+      editor.questions.findIndex(
+        (question) => question.questionId === previousQuestionId,
+      ),
+    );
+    const replace = (current) => ({
+      ...current,
+      questions: current.questions.map((question) =>
+        question.questionId === previousQuestionId ? updated : question,
+      ),
+    });
+    setEditor(replace);
+    setBaselineEditor(replace);
+    setQuizRevision(nextQuizRevision);
+    setRemoteNotice(null);
+  }
+
+  async function saveQuestion(question, index) {
+    if (!question.questionId || !questionChanged(question)) return;
+    const result = await action.run(() => {
+      const payload = toQuestionCreate(question, index, editor.defaultTime);
+      payload.expected_revision = question.revision;
+      return api(
+        `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}` +
+          `/questions/${question.questionId}`,
+        { method: "PATCH", body: JSON.stringify(payload) },
+      );
+    });
+    if (result) {
+      acceptSavedQuestion(
+        question.questionId,
+        result.question,
+        result.quiz_revision,
+      );
+    }
+  }
+
   async function save() {
     if (conflict) return;
 
-    const quiz = await action.run(() => {
+    const quiz = await action.run(async () => {
       const payload = toQuizCreate(editor);
 
       if (editing) {
-        payload.expected_revision = existingQuiz.revision;
+        const sameStructure =
+          editor.questions.length === baselineEditor.questions.length &&
+          editor.questions.every(
+            (question, index) =>
+              question.questionId &&
+              question.questionId ===
+                baselineEditor.questions[index]?.questionId,
+          );
+        const sameMetadata =
+          editor.title === baselineEditor.title &&
+          editor.description === baselineEditor.description;
+
+        // Published quizzes need one aggregate save to create the next draft.
+        // Adding, deleting, reordering, or renaming also changes shared quiz
+        // structure. Ordinary question edits use independent revisions.
+        if (
+          existingQuiz.status === "DRAFT" &&
+          sameStructure &&
+          sameMetadata
+        ) {
+          let lastResult = null;
+          for (const [index, question] of editor.questions.entries()) {
+            if (!questionChanged(question)) continue;
+            const questionPayload = toQuestionCreate(
+              question,
+              index,
+              editor.defaultTime,
+            );
+            questionPayload.expected_revision = question.revision;
+            lastResult = await api(
+              `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}` +
+                `/questions/${question.questionId}`,
+              { method: "PATCH", body: JSON.stringify(questionPayload) },
+            );
+          }
+          return lastResult
+            ? { quiz_id: existingQuiz.quiz_id }
+            : existingQuiz;
+        }
+
+        payload.expected_revision = quizRevision;
       }
 
       const path = editing
@@ -389,6 +536,24 @@ export function QuizEditor({
             </span>
           </TimePicker>
         </div>
+
+        {editing && (
+          <div className="qe-collaboration" aria-live="polite">
+            <span>
+              Live collaboration: {collaborationStatus === "open" ? "connected" : collaborationStatus}
+            </span>
+            {remoteNotice && <strong>{remoteNotice}</strong>}
+            {remoteNotice && (
+              <button
+                type="button"
+                className="ui-linkbtn"
+                onClick={() => onReload?.()}
+              >
+                Reload latest quiz
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="qe-stack">
           {editor.questions.length > 0 ? (
@@ -637,6 +802,22 @@ export function QuizEditor({
                         Reset to default ({editor.defaultTime}s)
                       </button>
                     )}
+
+                    {editing &&
+                      existingQuiz.status === "DRAFT" &&
+                      question.questionId && (
+                        <div className="qe-question-save">
+                          <span>Question revision {question.revision}</span>
+                          <button
+                            type="button"
+                            className="qb-btn qb-btn-paper"
+                            disabled={!questionChanged(question) || conflict}
+                            onClick={() => void saveQuestion(question, index)}
+                          >
+                            {action.busy ? "Saving…" : "Save question"}
+                          </button>
+                        </div>
+                      )}
                   </div>
                 </article>
               </div>
@@ -879,7 +1060,7 @@ export function QuizViewer() {
             </Link>
           )}
 
-          {mine && quiz.status !== "ARCHIVED" && (
+          {quiz.can_edit && quiz.status !== "ARCHIVED" && (
             <Link
               className="qb-btn qb-btn-paper"
               to={`/app/quizzes/${quiz.quiz_id}/edit`}

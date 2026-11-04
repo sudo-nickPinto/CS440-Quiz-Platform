@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
@@ -11,6 +11,8 @@ from app.schemas.quiz import (
     QuizCollaboratorResponse,
     QuizCreate,
     QuizPublish,
+    QuestionUpdate,
+    QuestionUpdateResponse,
     QuizResponse,
     QuizUpdate,
 )
@@ -23,6 +25,7 @@ from app.services.quizzes import (
     publish_class_quiz,
     revoke_quiz_collaborator,
     update_class_quiz,
+    update_class_quiz_question,
 )
 
 router = APIRouter(prefix="/classes/{class_id}/quizzes", tags=["class quizzes"])
@@ -62,25 +65,76 @@ def get_class_quiz_route(
 
 
 @router.put("/{quiz_id}", response_model=QuizResponse)
-def update_class_quiz_route(
+async def update_class_quiz_route(
     class_id: int,
     quiz_id: int,
     payload: QuizUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizResponse:
-    return update_class_quiz(db, account, class_id, quiz_id, payload)
+    result = update_class_quiz(db, account, class_id, quiz_id, payload)
+    await request.app.state.quiz_edit_hub.broadcast(
+        quiz_id,
+        {
+            "type": "quiz_structure_updated",
+            "quiz_id": quiz_id,
+            "quiz_revision": result.revision,
+            "editor_account_id": account.account_id,
+        },
+    )
+    return result
+
+
+@router.patch(
+    "/{quiz_id}/questions/{question_id}",
+    response_model=QuestionUpdateResponse,
+)
+async def update_class_quiz_question_route(
+    class_id: int,
+    quiz_id: int,
+    question_id: int,
+    payload: QuestionUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> QuestionUpdateResponse:
+    result = update_class_quiz_question(
+        db, account, class_id, quiz_id, question_id, payload
+    )
+    await request.app.state.quiz_edit_hub.broadcast(
+        quiz_id,
+        {
+            "type": "question_updated",
+            "quiz_id": quiz_id,
+            "quiz_revision": result.quiz_revision,
+            "editor_account_id": account.account_id,
+            "question": result.question.model_dump(),
+        },
+    )
+    return result
 
 
 @router.post("/{quiz_id}/publish", response_model=QuizResponse)
-def publish_class_quiz_route(
+async def publish_class_quiz_route(
     class_id: int,
     quiz_id: int,
     payload: QuizPublish,
+    request: Request,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizResponse:
-    return publish_class_quiz(db, account, class_id, quiz_id, payload)
+    result = publish_class_quiz(db, account, class_id, quiz_id, payload)
+    await request.app.state.quiz_edit_hub.broadcast(
+        quiz_id,
+        {
+            "type": "quiz_published",
+            "quiz_id": quiz_id,
+            "quiz_revision": result.revision,
+            "editor_account_id": account.account_id,
+        },
+    )
+    return result
 
 
 @router.get(
@@ -115,11 +169,13 @@ def add_quiz_collaborator_route(
     "/{quiz_id}/collaborators/{account_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def revoke_quiz_collaborator_route(
+async def revoke_quiz_collaborator_route(
     class_id: int,
     quiz_id: int,
     account_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> None:
     revoke_quiz_collaborator(db, account, class_id, quiz_id, account_id)
+    await request.app.state.quiz_edit_hub.close_account(quiz_id, account_id)
