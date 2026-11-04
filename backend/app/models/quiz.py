@@ -48,6 +48,13 @@ class Quiz(Base):
     author_id: Mapped[int] = mapped_column(
         INTEGER(unsigned=True), ForeignKey("account.account_id"), nullable=False
     )
+    # Migration 0008: the class that owns the quiz. Only that class's members
+    # can see it. NULL only for quizzes made before V3 that still need a class.
+    class_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("class.class_id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     status: Mapped[QuizStatus] = mapped_column(
         SqlEnum(QuizStatus, values_callable=enum_values),
         nullable=False,

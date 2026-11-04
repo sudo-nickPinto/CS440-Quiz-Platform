@@ -9,6 +9,7 @@ from app.database import Base
 from app.main import create_app
 from app.models import Account, AccountRole, LiveSession, LiveSessionStatus
 from app.services import sessions as session_service
+from tests.class_quiz_helpers import post_class_quiz
 
 
 QUIZ_PAYLOAD = {
@@ -64,7 +65,7 @@ def use_account(client: TestClient, account: CurrentAccount) -> None:
 
 
 def create_quiz(client: TestClient) -> dict:
-    response = client.post("/quizzes", json=QUIZ_PAYLOAD)
+    response = post_class_quiz(client, QUIZ_PAYLOAD)
     assert response.status_code == 201
     return response.json()
 

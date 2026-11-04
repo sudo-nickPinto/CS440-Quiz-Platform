@@ -1,21 +1,15 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
-from app.schemas.quiz import QuizCreate, QuizListItem, QuizResponse, QuizUpdate
-from app.services.quizzes import archive_quiz, create_quiz, get_quiz, list_quizzes,update_quiz
+from app.schemas.quiz import QuizListItem, QuizResponse, QuizUpdate
+from app.services.quizzes import archive_quiz, get_quiz, list_quizzes, update_quiz
 
 router = APIRouter(prefix="/quizzes", tags=["quizzes"])
 
 
-@router.post("", response_model=QuizResponse, status_code=status.HTTP_201_CREATED)
-def create_quiz_route(
-    payload: QuizCreate,
-    db: Session = Depends(get_db),
-    account: CurrentAccount = Depends(get_active_account),
-) -> QuizResponse:
-    return create_quiz(db, account, payload)
+# Quizzes are created inside a class: POST /classes/{class_id}/quizzes.
 
 
 @router.get("", response_model=list[QuizListItem])

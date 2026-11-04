@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router";
 import { useClassesResource } from "../classes/classResources";
 import { useAccount } from "./account";
 import HostQuizButton from "./HostQuizButton";
@@ -98,15 +104,21 @@ export function QuizEditor({
   const action = useAction();
   const navigate = useNavigate();
   const confirmer = useConfirm();
+  const [searchParams] = useSearchParams();
 
   const editing = existingQuiz !== null;
+  // New quizzes belong to a class: the class page links here with ?class=ID.
+  const classId = searchParams.get("class");
+  const validClass = /^[1-9][0-9]*$/.test(classId ?? "");
   const dirty = JSON.stringify(editor) !== JSON.stringify(initial);
 
   const conflict = action.error?.code === "quiz_version_conflict";
 
   const backTo = editing
     ? `/app/quizzes/${existingQuiz.quiz_id}`
-    : "/app/dashboard/present";
+    : validClass
+      ? `/app/classes/${classId}`
+      : "/app/dashboard/present";
 
   const ids = editor.questions.map((question) => question.id);
   const current = useCurrentQuestion(ids);
@@ -262,7 +274,11 @@ export function QuizEditor({
         payload.base_version = existingQuiz.version.version_number;
       }
 
-      return api(editing ? `/quizzes/${existingQuiz.quiz_id}` : "/quizzes", {
+      const path = editing
+        ? `/quizzes/${existingQuiz.quiz_id}`
+        : `/classes/${classId}/quizzes`;
+
+      return api(path, {
         method: editing ? "PUT" : "POST",
         body: JSON.stringify(payload),
       });
@@ -275,6 +291,21 @@ export function QuizEditor({
     }
   }
 
+  if (!editing && !validClass) {
+    return (
+      <section className="qp-content">
+        <h1>Create a quiz</h1>
+        <p>
+          Quizzes now belong to a class. Open one of your classes and choose
+          "+ New quiz" there.
+        </p>
+        <Link className="qp-button" to="/app/classes">
+          Go to my classes
+        </Link>
+      </section>
+    );
+  }
+
   return (
     <form className="qe" noValidate onSubmit={review}>
       <ConfirmDialog confirmer={confirmer} />
@@ -284,10 +315,10 @@ export function QuizEditor({
           <Link className="qe-back" to={backTo} onClick={leaveEditor}>
             <span aria-hidden="true">←</span>
             <span className="qe-back-word">
-              {editing ? "Quiz" : "Dashboard"}
+              {editing ? "Quiz" : "Class"}
             </span>
             <span className="ui-sr">
-              {editing ? "Cancel editing" : "Back to dashboard"}
+              {editing ? "Cancel editing" : "Back to class"}
             </span>
           </Link>
 
@@ -664,12 +695,12 @@ export function QuizEditor({
               <>
                 <div className="qe-confirm-text">
                   <h2>
-                    {editing ? "Publish these changes?" : "Publish this quiz?"}
+                    {editing ? "Publish these changes?" : "Save this quiz?"}
                   </h2>
                   <p>
                     {editing
                       ? "Future sessions use the new version. Past sessions and results keep their original questions."
-                      : "It's published as soon as you save, and you can host it right away. You can still edit it later."}
+                      : "It's saved as a draft in this class. A draft can't be hosted until it's published."}
                   </p>
                 </div>
 
@@ -692,7 +723,7 @@ export function QuizEditor({
                       ? "Saving…"
                       : editing
                         ? "Save changes"
-                        : "Publish quiz"}
+                        : "Save draft"}
                   </button>
                 </div>
               </>
@@ -806,7 +837,12 @@ export function QuizViewer() {
 
         <div className="qe-state">
           <span className={"qe-pill" + (published ? " is-saved" : "")}>
-            {published ? "Published" : "Archived"} · v
+            {published
+              ? "Published"
+              : quiz.status === "DRAFT"
+                ? "Draft"
+                : "Archived"}{" "}
+            · v
             {quiz.version.version_number}
           </span>
         </div>

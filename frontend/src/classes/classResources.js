@@ -142,6 +142,6 @@ export function useClassStudents(classId, page = 1) {
 export function useClassQuizzes(classId, page = 1) {
   return useClassReport(
     classId,
-    `quizzes?page=${page}&page_size=${REPORT_PAGE_SIZE}&sort=presented_at&order=desc`,
+    `presented-quizzes?page=${page}&page_size=${REPORT_PAGE_SIZE}&sort=presented_at&order=desc`,
   );
 }
