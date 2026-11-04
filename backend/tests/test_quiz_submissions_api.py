@@ -536,6 +536,95 @@ def test_submission_visibility_uses_hidden_not_found_responses(submissions) -> N
     )
 
 
+def test_archived_class_blocks_submission_approval_and_hostability_but_allows_cleanup(
+    submissions,
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    main_version_id = data["versions"]["main"]
+
+    approved = post_submission(client, class_id, main_version_id)
+    act_as(actor, identities, "faculty")
+    assert decide(
+        client, class_id, approved.json()["submission_id"], "APPROVED"
+    ).status_code == 200
+    pending_rejection = post_submission(
+        client, class_id, data["versions"]["self"]
+    )
+
+    with client.app.state.database.session_factory() as db:
+        cleanup_quiz = Quiz(
+            author_id=data["ids"]["owner"],
+            class_id=class_id,
+            status=QuizStatus.PUBLISHED,
+        )
+        db.add(cleanup_quiz)
+        db.flush()
+        cleanup_version = QuizVersion(
+            quiz_id=cleanup_quiz.quiz_id,
+            version_number=1,
+            title="Pending cleanup quiz",
+            published_at=datetime(2026, 11, 3, 15, 0),
+        )
+        db.add(cleanup_version)
+        db.commit()
+        cleanup_version_id = cleanup_version.quiz_version_id
+
+    act_as(actor, identities, "owner")
+    pending_withdrawal = post_submission(
+        client, class_id, cleanup_version_id
+    )
+
+    with client.app.state.database.session_factory() as db:
+        class_ = db.get(Class, class_id)
+        class_.join_code = None
+        class_.joining_open = False
+        class_.archived_at = datetime(2026, 11, 4, 9, 0)
+        db.commit()
+
+    assert_error(
+        post_submission(client, class_id, main_version_id),
+        409,
+        "class_archived",
+    )
+
+    act_as(actor, identities, "faculty")
+    rejection_id = pending_rejection.json()["submission_id"]
+    assert_error(
+        decide(client, class_id, rejection_id, "APPROVED"),
+        409,
+        "class_archived",
+    )
+    rejected = decide(client, class_id, rejection_id, "REJECTED")
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "REJECTED"
+
+    act_as(actor, identities, "owner")
+    assert client.delete(
+        f"/classes/{class_id}/quiz-submissions/"
+        f"{pending_withdrawal.json()['submission_id']}"
+    ).status_code == 204
+
+    assert_error(
+        client.get(f"/classes/{class_id}/approved-quizzes"),
+        409,
+        "class_archived",
+    )
+    with client.app.state.database.session_factory() as db:
+        with pytest.raises(APIError) as error:
+            require_approved_quiz_version(db, class_id, main_version_id)
+        assert error.value.code == "class_archived"
+
+    act_as(actor, identities, "faculty")
+    statuses = {
+        row["status"]
+        for row in client.get(
+            f"/classes/{class_id}/quiz-submissions"
+        ).json()
+    }
+    assert statuses == {"APPROVED", "REJECTED", "WITHDRAWN"}
+
+
 def test_approved_list_and_helper_share_current_version_rules(submissions) -> None:
     client, data, identities, actor = submissions
     class_id = data["classes"]["main"]

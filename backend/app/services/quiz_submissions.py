@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, aliased
 from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models.account import Account
-from app.models.classes import ClassMembership, MembershipStatus
+from app.models.classes import Class, ClassMembership, MembershipStatus
 from app.models.quiz import Quiz, QuizCollaborator, QuizStatus, QuizVersion
 from app.models.quiz_submission import QuizSubmission, SubmissionStatus
 from app.schemas.quiz_submission import (
@@ -21,6 +21,15 @@ from app.services.class_authorization import ClassAccess, require_class_member
 
 def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _require_unarchived_class(class_: Class) -> None:
+    if class_.archived_at is not None:
+        raise APIError(
+            409,
+            "class_archived",
+            "An archived class cannot accept quiz approvals or host quizzes.",
+        )
 
 
 def _active_collaborator_exists(
@@ -116,7 +125,8 @@ def create_quiz_submission(
     class_id: int,
     payload: QuizSubmissionCreate,
 ) -> QuizSubmissionResponse:
-    require_class_member(db, account, class_id)
+    access = require_class_member(db, account, class_id)
+    _require_unarchived_class(access.class_)
     version, quiz = _load_visible_version(
         db, account, class_id, payload.quiz_version_id
     )
@@ -238,6 +248,7 @@ def decide_quiz_submission(
         )
 
     if payload.status == SubmissionStatus.APPROVED:
+        _require_unarchived_class(access.class_)
         row = _version_and_quiz(db, submission.quiz_version_id)
         if row is None:
             raise APIError(404, "quiz_version_not_found", "Quiz version not found.")
@@ -377,7 +388,8 @@ def list_approved_quizzes(
     account: CurrentAccount,
     class_id: int,
 ) -> list[ApprovedQuizResponse]:
-    require_class_member(db, account, class_id)
+    access = require_class_member(db, account, class_id)
+    _require_unarchived_class(access.class_)
     rows = db.execute(
         _approved_versions_statement(class_id).order_by(
             QuizSubmission.decided_at.desc(), QuizSubmission.submission_id.desc()
@@ -403,6 +415,9 @@ def require_approved_quiz_version(
     class_id: int,
     quiz_version_id: int,
 ) -> QuizVersion:
+    class_ = db.get(Class, class_id)
+    if class_ is not None:
+        _require_unarchived_class(class_)
     row = db.execute(
         _approved_versions_statement(class_id).where(
             QuizVersion.quiz_version_id == quiz_version_id

@@ -198,6 +198,9 @@ Every route first requires an active membership in the class; missing classes,
 invited/removed/left members, outsiders, and unrelated faculty all receive
 `404 class_not_found`. Approval makes a version available to the class but does
 not grant edit, collaborator, class-management, report, or results access.
+Archived classes retain readable submission history, but cannot receive new
+submissions, approve versions, or return hostable quizzes. Organizers may still
+reject pending submissions, and submitters may still withdraw their own.
 
 ### `POST /classes/{class_id}/quiz-submissions` → `201 QuizSubmissionResponse`
 
@@ -206,8 +209,9 @@ active named collaborator. The exact version must be published, current,
 non-archived, and owned by this class. A newer draft does not make a published
 version stale; a newer published version does.
 
-Errors: `404 quiz_version_not_found`, `409 quiz_version_not_published`,
-`409 quiz_version_stale`, `409 quiz_submission_conflict`, and
+Errors: `404 quiz_version_not_found`, `409 class_archived`,
+`409 quiz_version_not_published`, `409 quiz_version_stale`,
+`409 quiz_submission_conflict`, and
 `500 quiz_submission_failed`. The database's generated active-version key
 makes duplicate pending/approved submissions safe under concurrent requests.
 
@@ -226,17 +230,22 @@ Body accepts only `{ "status": "APPROVED" }` or
 self-approval is allowed. Approval rechecks the version and that the submitter
 still has an active account and class membership and still owns or actively
 collaborates on the quiz. Rejection remains available after that eligibility
-is lost. Conditional `PENDING` updates give concurrent decisions one winner.
+is lost or the class is archived. Approval of an archived class returns
+`409 class_archived`. Conditional `PENDING` updates give concurrent decisions
+one winner.
 
 Errors: `404 submission_not_found`, `403 not_class_organizer`,
-`409 submission_no_longer_eligible`, `409 invalid_submission_transition`,
-the version errors above, and `500 quiz_submission_decision_failed`.
+`409 class_archived`, `409 submission_no_longer_eligible`,
+`409 invalid_submission_transition`, the version errors above, and
+`500 quiz_submission_decision_failed`.
 
 ### `DELETE /classes/{class_id}/quiz-submissions/{submission_id}` → `204`
 
 Soft-withdraws the original submitter's pending row. The row remains as
 `WITHDRAWN`, with the submitter in `decided_by_id` and a `decided_at` timestamp.
 Rejected and withdrawn versions may be submitted again.
+Withdrawal remains available after the class is archived so pending records
+can be closed without deleting their audit history.
 
 Errors: `404 submission_not_found`, `403 not_submission_owner`,
 `409 invalid_submission_transition`, and
@@ -247,6 +256,7 @@ always `404`; the 403 applies only when the resource is visible.
 
 Available to every active class member. Returns approved, published, current,
 non-archived versions that still belong to the class, newest approval first.
+An archived class returns `409 class_archived` instead of a hostable list.
 
 `ApprovedQuizResponse`: `submission_id, quiz_id, quiz_version_id,
 version_number, title, author_id, approved_at, approved_by_id`.
@@ -254,7 +264,8 @@ version_number, title, author_id, approved_at, approved_by_id`.
 Task 4 also exposes
 `require_approved_quiz_version(db, class_id, quiz_version_id)` for Task 5. It
 uses the same filtering and raises `409 quiz_version_not_approved` when the
-exact version is not currently hostable. Session creation does not call it yet.
+exact version is not currently hostable, or `409 class_archived` when the class
+itself cannot host. Session creation does not call it yet.
 
 ## Sessions
 

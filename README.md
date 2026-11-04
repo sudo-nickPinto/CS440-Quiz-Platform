@@ -108,6 +108,9 @@ own pending submissions.
 - Only published, non-archived, current versions are hostable. A newer
   published version makes an older approval stale, while a newer draft does
   not.
+- Archived classes keep readable submission history but cannot receive new
+  submissions, approve versions, or return hostable quizzes. Rejection and
+  withdrawal remain available to close pending records.
 - Inaccessible classes, submissions, and versions use non-leaking `404`
   responses. Visible users without organizer or withdrawal authority receive
   `403`.

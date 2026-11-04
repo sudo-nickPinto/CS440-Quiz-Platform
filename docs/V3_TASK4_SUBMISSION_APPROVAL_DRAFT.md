@@ -4,7 +4,7 @@
 
 **Status:** Backend implemented; Task 5 hosting integration remains separate
 
-**Last updated:** November 3, 2026
+**Last updated:** November 4, 2026
 
 ## Purpose
 
@@ -116,7 +116,8 @@ Result: `201 Created` with the submission response.
 
 The service verifies class membership, quiz ownership or active collaboration,
 class ownership of the quiz, publication of the version, and the absence of an
-active duplicate in one transaction.
+active duplicate in one transaction. An archived class rejects new submissions
+with `409 class_archived`.
 
 ### List submissions
 
@@ -146,7 +147,8 @@ organizer of this class may decide a pending submission; self-approval is
 allowed. Approval rechecks that the version is still published, current, and
 in the class, and that the submitter is still active and still owns or actively
 collaborates on the quiz. Lost submitter eligibility blocks approval with
-`submission_no_longer_eligible` but does not block rejection.
+`submission_no_longer_eligible`. An archived class blocks approval with
+`class_archived`; rejection remains available to close pending records.
 
 ### Withdraw a submission
 
@@ -154,14 +156,16 @@ collaborates on the quiz. Lost submitter eligibility blocks approval with
 
 Result: `204 No Content` after changing the status to `WITHDRAWN`.
 This endpoint never physically deletes a row. Only the original submitter may
-withdraw, and only while the status is `PENDING`.
+withdraw, and only while the status is `PENDING`. Withdrawal remains available
+after class archival so the pending record can be closed cleanly.
 
 ### List approved quizzes
 
 `GET /classes/{class_id}/approved-quizzes`
 
 Active class members may retrieve approved, currently hostable immutable
-versions. An item includes:
+versions. Archived classes return `409 class_archived` and never return a
+hostable list. An item includes:
 
 - `submission_id`
 - `quiz_id`
@@ -217,6 +221,7 @@ cannot be approved. An organizer may still reject it.
 | `403` | `not_submission_owner` | Caller can see the submission but is not its original submitter. |
 | `403` | `not_class_organizer` | Caller can see the submission but is not an active faculty organizer. |
 | `409` | `quiz_version_not_published` | Version is mutable or unpublished. |
+| `409` | `class_archived` | Archived class receives a new submission or approval, or is checked for hostable quizzes. |
 | `409` | `quiz_submission_conflict` | An active submission already exists for the class and version. |
 | `409` | `invalid_submission_transition` | Requested action is not valid from the current status. |
 | `409` | `quiz_version_stale` | Version is no longer the current publishable version. |
@@ -245,7 +250,8 @@ approval before it becomes hostable.
 Task 4 provides
 `require_approved_quiz_version(db, class_id, quiz_version_id)`. It uses the
 same approved/current/published/non-archived/same-class query as
-`approved-quizzes`. Task 5 will call it when creating a live session.
+`approved-quizzes` and rejects archived classes with `class_archived`. Task 5
+will call it when creating a live session.
 
 Task 4 will not redesign session routes, join codes, WebSocket behavior,
 question timing, scoring, reconnect behavior, or participant results. Those
@@ -269,6 +275,8 @@ remain Task 5 responsibilities.
 
 - Active organizer can approve a pending submission.
 - Active organizer can reject a pending submission.
+- Archived classes reject new submissions and approvals with `class_archived`.
+- Rejection and withdrawal remain available after archival for cleanup.
 - Active non-organizer cannot approve or reject.
 - Organizer of another class cannot decide the submission.
 - Original submitter can withdraw a pending submission.
@@ -290,6 +298,8 @@ remain Task 5 responsibilities.
 - Organizer sees all class submissions.
 - Member sees only their own submissions.
 - Active members see approved, current versions in `approved-quizzes`.
+- Archived classes cannot return hostable versions from the approved list or
+  hostability helper.
 - Pending, rejected, withdrawn, cross-class, and stale versions are excluded.
 - Approval does not grant editing access.
 - Approval does not grant class-wide results or report access.
@@ -321,6 +331,8 @@ remain Task 5 responsibilities.
 8. A stored generated column plus unique key enforces active-submission
    uniqueness safely under concurrent requests.
 9. Self-approval is allowed for active faculty organizers.
+10. Archival blocks submission, approval, and hostability; rejection,
+    withdrawal, and authorized audit reads remain available.
 
 ## Out of Scope
 
