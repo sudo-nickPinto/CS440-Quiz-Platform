@@ -15,6 +15,7 @@ from app.models.quiz import (
     QuizStatus,
     QuizVisibility,
 )
+from app.schemas.class_dashboard import PageInfo
 
 
 class QuizRequestModel(BaseModel):
@@ -94,6 +95,10 @@ class QuizUpdate(QuizCreate):
     )
 
 
+class QuizPublish(QuizRequestModel):
+    expected_revision: int = Field(ge=1, strict=True)
+
+
 class QuizCollaboratorCreate(QuizRequestModel):
     email: str = Field(max_length=320)
     permission: CollaboratorPermission = CollaboratorPermission.EDITOR
@@ -147,6 +152,7 @@ class QuizVersionResponse(BaseModel):
     title: str
     description: str | None
     created_at: datetime
+    # Null while the version is still a draft.
     published_at: datetime | None
     questions: list[QuestionResponse]
 
@@ -166,8 +172,21 @@ class QuizResponse(BaseModel):
 class QuizListItem(BaseModel):
     quiz_id: int
     author_id: int
+    class_id: int | None
     status: QuizStatus
     title: str
     description: str | None
     question_count: int
     created_at: datetime
+
+
+class ClassQuizListItem(QuizListItem):
+    author_name: str
+    version_number: int
+    updated_at: datetime
+
+
+class ClassQuizListPage(BaseModel):
+    class_id: int
+    items: list[ClassQuizListItem]
+    pagination: PageInfo

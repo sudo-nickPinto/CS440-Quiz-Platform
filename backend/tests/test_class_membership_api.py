@@ -35,7 +35,7 @@ def class_client() -> Iterator[tuple[TestClient, dict[str, CurrentAccount], int]
                     auth0_sub=f"auth0|{name}",
                     email=email,
                     display_name=name.replace("_", " ").title(),
-                    account_type=("ADMINISTRATOR" if name == "global_admin" else None),
+                    account_type=("ADMINISTRATOR" if name in {"organizer", "other_organizer", "global_admin"} else None),
                 )
                 for name, email in {
                     "organizer": "organizer@gettysburg.edu",
@@ -74,7 +74,7 @@ def class_client() -> Iterator[tuple[TestClient, dict[str, CurrentAccount], int]
             identities = {
                 name: CurrentAccount(
                     model.account_id,
-                    AccountRole.ADMIN if name == "global_admin" else AccountRole.USER,
+                    AccountRole.ADMIN if name in {"organizer", "other_organizer", "global_admin"} else AccountRole.USER,
                     True,
                 )
                 for name, model in accounts.items()
@@ -220,6 +220,10 @@ def test_invite_response_does_not_reveal_class_existence(
 def test_organizer_can_promote_and_demote_other_organizers(class_client) -> None:
     client, identities, class_id = class_client
     target_id = identities["target"].account_id
+    with client.app.state.database.session_factory() as db:
+        db.get(Account, target_id).account_type = "ADMINISTRATOR"
+        db.commit()
+    identities["target"] = CurrentAccount(target_id, AccountRole.ADMIN, True)
     invite_target(client, class_id)
     act_as(client, identities["target"])
     client.post(f"/classes/{class_id}/invite/accept")
@@ -321,16 +325,12 @@ def test_outsider_and_removed_member_cannot_discover_class(class_client) -> None
     assert outsider.json()["error"]["code"] == "class_not_found"
 
 
-def test_global_admin_can_manage_any_class_roster(class_client) -> None:
+def test_unrelated_faculty_cannot_manage_class_roster(class_client):
     client, identities, class_id = class_client
     act_as(client, identities["global_admin"])
-
-    invited = invite_target(client, class_id)
-    listing = client.get(f"/classes/{class_id}/members")
-
-    assert invited.status_code == 201
-    assert listing.status_code == 200
-
+    for response in (invite_target(client, class_id), client.get(f"/classes/{class_id}/members"), client.get(f"/classes/{class_id}/invites")):
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "class_not_found"
 
 def test_unknown_member_and_invalid_role_errors(class_client) -> None:
     client, identities, class_id = class_client
@@ -351,7 +351,7 @@ def test_unknown_member_and_invalid_role_errors(class_client) -> None:
     assert invalid_role.status_code == 422
 
 
-@pytest.mark.parametrize("actor", ["organizer", "global_admin"])
+@pytest.mark.parametrize("actor", ["organizer"])
 def test_pending_invites_can_be_loaded_again(class_client, actor) -> None:
     client, identities, class_id = class_client
 
@@ -381,6 +381,7 @@ def test_pending_invites_can_be_loaded_again(class_client, actor) -> None:
         ("member", 403),
         ("target", 404),
         ("other_organizer", 404),
+        ("global_admin", 404),
     ],
 )
 def test_pending_invites_require_class_organizer(

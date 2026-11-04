@@ -1,13 +1,14 @@
 from datetime import UTC, datetime
+from math import ceil
 
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models.account import Account
-from app.models.classes import ClassMembership, MembershipStatus
+from app.models.classes import ClassMembership, ClassRole, MembershipStatus
 from app.models.quiz import (
     AnswerChoice,
     CollaboratorPermission,
@@ -18,15 +19,20 @@ from app.models.quiz import (
     QuizVersion,
     QuizVisibility,
 )
+from app.schemas.class_dashboard import PageInfo
 from app.schemas.quiz import (
+    ClassQuizListItem,
+    ClassQuizListPage,
     QuizCollaboratorCreate,
     QuizCollaboratorResponse,
     QuizCreate,
     QuizListItem,
+    QuizPublish,
     QuizResponse,
     QuizUpdate,
     QuizVersionResponse,
 )
+from app.services.class_authorization import get_class, get_class_membership
 
 
 def _quiz_query(quiz_id: int):
@@ -44,6 +50,64 @@ def _quiz_query(quiz_id: int):
 def _load_quiz(db: Session, quiz_id: int) -> Quiz:
     quiz = db.scalar(_quiz_query(quiz_id))
     if quiz is None:
+        raise APIError(404, "quiz_not_found", "Quiz not found.")
+    return quiz
+
+
+def _active_collaborator(
+    db: Session,
+    quiz_id: int,
+    account_id: int,
+) -> QuizCollaborator | None:
+    return db.scalar(
+        select(QuizCollaborator).where(
+            QuizCollaborator.quiz_id == quiz_id,
+            QuizCollaborator.account_id == account_id,
+            QuizCollaborator.revoked_at.is_(None),
+        )
+    )
+
+
+def _require_active_membership(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+) -> ClassMembership:
+    """The caller's ACTIVE membership in the class, or 404 class_not_found.
+
+    V3 has no app-wide authority over classes: being an Admin (faculty)
+    doesn't let anyone into a class they aren't an active member of.
+    """
+    get_class(db, class_id)
+    membership = get_class_membership(db, class_id, account.account_id)
+    if membership is None or membership.status != MembershipStatus.ACTIVE:
+        raise APIError(404, "class_not_found", "Class not found.")
+    return membership
+
+
+def _can_read(db: Session, account: CurrentAccount, quiz: Quiz) -> bool:
+    """Who may see a quiz: its owner or an organizer of its class.
+
+    Either way they need an active membership in the quiz's class. A quiz
+    from before V3 with no class is visible only to its owner.
+    """
+    if quiz.class_id is None:
+        return quiz.author_id == account.account_id
+    try:
+        membership = _require_active_membership(db, account, quiz.class_id)
+    except APIError:
+        return False
+    return (
+        quiz.author_id == account.account_id
+        or membership.role == ClassRole.ORGANIZER
+        or _active_collaborator(db, quiz.quiz_id, account.account_id) is not None
+    )
+
+
+def _load_readable_quiz(db: Session, account: CurrentAccount, quiz_id: int) -> Quiz:
+    quiz = _load_quiz(db, quiz_id)
+    if not _can_read(db, account, quiz):
+        # Same answer as a missing quiz, so IDs can't be probed.
         raise APIError(404, "quiz_not_found", "Quiz not found.")
     return quiz
 
@@ -66,8 +130,17 @@ def _latest_published_version(quiz: Quiz) -> QuizVersion:
     )
 
 
+def _latest_editor_version(quiz: Quiz) -> QuizVersion:
+    """The version people work on: the newest draft, else the newest
+    published version."""
+    drafts = [version for version in quiz.versions if version.published_at is None]
+    if drafts:
+        return max(drafts, key=lambda version: version.version_number)
+    return _latest_published_version(quiz)
+
+
 def _to_response(quiz: Quiz) -> QuizResponse:
-    return _to_response_with_version(quiz, _latest_published_version(quiz))
+    return _to_response_with_version(quiz, _latest_editor_version(quiz))
 
 
 def _to_response_with_version(
@@ -85,13 +158,6 @@ def _to_response_with_version(
         updated_at=quiz.updated_at,
         version=QuizVersionResponse.model_validate(version),
     )
-
-
-def _latest_editor_version(quiz: Quiz) -> QuizVersion:
-    drafts = [version for version in quiz.versions if version.published_at is None]
-    if drafts:
-        return max(drafts, key=lambda version: version.version_number)
-    return _latest_published_version(quiz)
 
 
 def _questions_from_payload(payload: QuizCreate) -> list[Question]:
@@ -116,10 +182,11 @@ def _questions_from_payload(payload: QuizCreate) -> list[Question]:
 
 
 def _to_list_item(quiz: Quiz) -> QuizListItem:
-    version = _latest_published_version(quiz)
+    version = _latest_editor_version(quiz)
     return QuizListItem(
         quiz_id=quiz.quiz_id,
         author_id=quiz.author_id,
+        class_id=quiz.class_id,
         status=quiz.status,
         title=version.title,
         description=version.description,
@@ -131,25 +198,35 @@ def _to_list_item(quiz: Quiz) -> QuizListItem:
 def create_quiz(
     db: Session,
     account: CurrentAccount,
+    class_id: int,
     payload: QuizCreate,
-    *,
-    class_id: int | None = None,
 ) -> QuizResponse:
-    """Atomically save a complete, public, immutable MVP quiz."""
-    published_at = datetime.now(UTC).replace(tzinfo=None)
+    """Atomically save a new quiz draft owned by a class.
+
+    Any active member or organizer may create one, and becomes its owner.
+    The draft can't be hosted until it's published, and publishing doesn't
+    approve it for hosting either.
+    """
+    _require_active_membership(db, account, class_id)
+    if get_class(db, class_id).archived_at is not None:
+        raise APIError(
+            409, "class_archived", "An archived class cannot get new quizzes."
+        )
+
     version = QuizVersion(
         version_number=1,
         title=payload.title,
         description=payload.description,
-        published_at=published_at,
+        published_at=None,
         questions=_questions_from_payload(payload),
     )
     quiz = Quiz(
         author_id=account.account_id,
         class_id=class_id,
         revision=1,
-        status=QuizStatus.PUBLISHED,
-        visibility=QuizVisibility.PUBLIC,
+        status=QuizStatus.DRAFT,
+        # Visibility no longer reaches outside the class; keep it private.
+        visibility=QuizVisibility.PRIVATE,
         versions=[version],
     )
     db.add(quiz)
@@ -170,176 +247,49 @@ def update_quiz(
     quiz_id: int,
     payload: QuizUpdate,
 ) -> QuizResponse:
-    """Publish a new revision without changing any previous version."""
-
-    try:
-        quiz = db.get(Quiz, quiz_id)
-
-        if quiz is None:
-            raise APIError(
-                404,
-                "quiz_not_found",
-                "Quiz not found.",
-            )
-
-        _require_quiz_editor(db, account, quiz)
-
-        if quiz.status != QuizStatus.PUBLISHED:
-            raise APIError(
-                409,
-                "quiz_not_editable",
-                "Only published quizzes can be edited.",
-            )
-
-        versions = list(
-            db.scalars(
-                select(QuizVersion)
-                .where(QuizVersion.quiz_id == quiz_id)
-                .order_by(QuizVersion.version_number.desc())
-            ).all()
-        )
-
-        current = next(
-            (version for version in versions if version.published_at is not None),
-            None,
-        )
-
-        if current is None:
-            raise APIError(
-                409,
-                "quiz_not_published",
-                "The quiz has no published version.",
-            )
-
-        if payload.expected_revision != quiz.revision:
-            raise APIError(
-                409,
-                "quiz_edit_conflict",
-                "This quiz changed after you opened it. "
-                "Reload the latest version before saving again.",
-                details={
-                    "current_revision": quiz.revision,
-                },
-            )
-
-        now = datetime.now(UTC).replace(tzinfo=None)
-
-        # This conditional UPDATE is the optimistic lock. On MySQL, concurrent
-        # requests with the same expected revision serialize on the row and
-        # only the first predicate remains true.
-        changed = db.execute(
-            update(Quiz)
-            .where(
-                Quiz.quiz_id == quiz_id,
-                Quiz.revision == payload.expected_revision,
-            )
-            .values(
-                revision=Quiz.revision + 1,
-                updated_at=now,
-            )
-        )
-        if changed.rowcount != 1:
-            db.rollback()
-            current_revision = db.scalar(
-                select(Quiz.revision).where(Quiz.quiz_id == quiz_id)
-            )
-            raise APIError(
-                409,
-                "quiz_edit_conflict",
-                "This quiz changed after you opened it. "
-                "Reload the latest version before saving again.",
-                details={"current_revision": current_revision},
-            )
-
-        # Include any existing unpublished versions when allocating
-        # a number, even though this feature does not create drafts.
-        next_number = max(version.version_number for version in versions) + 1
-
-        revision = QuizVersion(
-            quiz_id=quiz.quiz_id,
-            version_number=next_number,
-            title=payload.title,
-            description=payload.description,
-            published_at=now,
-            questions=[
-                Question(
-                    question_order=question_order,
-                    question_text=question.question_text,
-                    explanation=question.explanation,
-                    time_limit_seconds=question.time_limit_seconds,
-                    base_points=question.base_points,
-                    choices=[
-                        AnswerChoice(
-                            choice_order=choice_order,
-                            choice_text=choice.choice_text,
-                            is_correct=choice.is_correct,
-                        )
-                        for choice_order, choice in enumerate(
-                            question.choices,
-                            start=1,
-                        )
-                    ],
-                )
-                for question_order, question in enumerate(
-                    payload.questions,
-                    start=1,
-                )
-            ],
-        )
-
-        # Insert new rows. Never replace quiz.versions or modify the
-        # previous version's questions and choices.
-        db.add(revision)
-        db.flush()
-
-        # Capture the version this request saved, rather than doing a
-        # second "latest version" lookup after committing.
-        response = QuizResponse(
-            quiz_id=quiz.quiz_id,
-            author_id=quiz.author_id,
-            class_id=quiz.class_id,
-            revision=payload.expected_revision + 1,
-            status=quiz.status,
-            visibility=quiz.visibility,
-            created_at=quiz.created_at,
-            updated_at=now,
-            version=QuizVersionResponse.model_validate(revision),
-        )
-
-        db.commit()
-        return response
-
-    except APIError:
-        db.rollback()
-        raise
-
-    except SQLAlchemyError as exc:
-        db.rollback()
+    """Compatibility route for the editor; V3 writes the class-owned draft."""
+    quiz = _load_quiz(db, quiz_id)
+    if quiz.class_id is None:
         raise APIError(
-            500,
-            "quiz_update_failed",
-            "Could not save the quiz changes.",
-        ) from exc
+            409,
+            "quiz_class_required",
+            "Assign this legacy quiz to a class before editing it.",
+        )
+    return update_class_quiz(db, account, quiz.class_id, quiz_id, payload)
 
 
 def list_quizzes(
     db: Session,
     account: CurrentAccount,
 ) -> list[QuizListItem]:
-    """List public quizzes, or every quiz when requested by an Admin."""
+    """The caller's own quizzes, across the classes they're active in.
+
+    There is no app-wide catalog any more; class quizzes are listed per class.
+    """
+    collaborator_access = exists(
+        select(1).where(
+            QuizCollaborator.quiz_id == Quiz.quiz_id,
+            QuizCollaborator.account_id == account.account_id,
+            QuizCollaborator.revoked_at.is_(None),
+        )
+    )
     statement = (
         select(Quiz)
+        .join(
+            ClassMembership,
+            (ClassMembership.class_id == Quiz.class_id)
+            & (ClassMembership.account_id == account.account_id),
+        )
+        .where(
+            ClassMembership.status == MembershipStatus.ACTIVE,
+            or_(
+                Quiz.author_id == account.account_id,
+                collaborator_access,
+            ),
+        )
         .options(selectinload(Quiz.versions).selectinload(QuizVersion.questions))
         .order_by(Quiz.created_at.desc(), Quiz.quiz_id.desc())
     )
-    if not account.is_admin:
-        statement = statement.where(
-            (Quiz.status == QuizStatus.PUBLISHED)
-            | (
-                (Quiz.author_id == account.account_id)
-                & (Quiz.status == QuizStatus.ARCHIVED)
-            )
-        )
     return [_to_list_item(quiz) for quiz in db.scalars(statement).all()]
 
 
@@ -348,11 +298,79 @@ def get_quiz(
     account: CurrentAccount,
     quiz_id: int,
 ) -> QuizResponse:
-    quiz = _load_quiz(db, quiz_id)
-    if quiz.status != QuizStatus.PUBLISHED and not (
-        quiz.author_id == account.account_id or account.is_admin
-    ):
-        # Do not reveal archived or legacy draft quizzes to other users.
+    return _to_response(_load_readable_quiz(db, account, quiz_id))
+
+
+def list_class_quizzes(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    *,
+    page: int,
+    page_size: int,
+) -> ClassQuizListPage:
+    """A class's quizzes, newest first.
+
+    Organizers see every quiz in the class; members see the ones they own.
+    """
+    membership = _require_active_membership(db, account, class_id)
+    condition = Quiz.class_id == class_id
+    if membership.role != ClassRole.ORGANIZER:
+        collaborator_access = exists(
+            select(1).where(
+                QuizCollaborator.quiz_id == Quiz.quiz_id,
+                QuizCollaborator.account_id == account.account_id,
+                QuizCollaborator.revoked_at.is_(None),
+            )
+        )
+        condition = and_(
+            condition,
+            or_(Quiz.author_id == account.account_id, collaborator_access),
+        )
+
+    total = db.scalar(select(func.count(Quiz.quiz_id)).where(condition)) or 0
+    rows = db.execute(
+        select(Quiz, Account.display_name)
+        .join(Account, Account.account_id == Quiz.author_id)
+        .where(condition)
+        .options(selectinload(Quiz.versions).selectinload(QuizVersion.questions))
+        .order_by(Quiz.created_at.desc(), Quiz.quiz_id.desc())
+        .limit(page_size)
+        .offset((page - 1) * page_size)
+    ).all()
+
+    items = []
+    for quiz, author_name in rows:
+        version = _latest_editor_version(quiz)
+        items.append(
+            ClassQuizListItem(
+                **_to_list_item(quiz).model_dump(),
+                author_name=author_name,
+                version_number=version.version_number,
+                updated_at=quiz.updated_at,
+            )
+        )
+    return ClassQuizListPage(
+        class_id=class_id,
+        items=items,
+        pagination=PageInfo(
+            page=page,
+            page_size=page_size,
+            total_items=total,
+            total_pages=ceil(total / page_size),
+        ),
+    )
+
+
+def get_class_quiz(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    quiz_id: int,
+) -> QuizResponse:
+    _require_active_membership(db, account, class_id)
+    quiz = _load_readable_quiz(db, account, quiz_id)
+    if quiz.class_id != class_id:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
     return _to_response(quiz)
 
@@ -362,12 +380,13 @@ def archive_quiz(
     account: CurrentAccount,
     quiz_id: int,
 ) -> QuizResponse:
-    quiz = _load_quiz(db, quiz_id)
-    if quiz.author_id != account.account_id and not account.is_admin:
+    quiz = _load_readable_quiz(db, account, quiz_id)
+    # Only the owner; being an Admin or a class organizer isn't enough.
+    if quiz.author_id != account.account_id:
         raise APIError(
             403,
             "quiz_access_denied",
-            "Only the quiz author or an Admin can archive it.",
+            "Only the quiz owner can archive it.",
         )
     if quiz.status == QuizStatus.ARCHIVED:
         return _to_response(quiz)
@@ -417,20 +436,6 @@ def _class_quiz(db: Session, class_id: int, quiz_id: int) -> Quiz:
     return quiz
 
 
-def _active_collaborator(
-    db: Session,
-    quiz_id: int,
-    account_id: int,
-) -> QuizCollaborator | None:
-    return db.scalar(
-        select(QuizCollaborator).where(
-            QuizCollaborator.quiz_id == quiz_id,
-            QuizCollaborator.account_id == account_id,
-            QuizCollaborator.revoked_at.is_(None),
-        )
-    )
-
-
 def _require_quiz_editor(
     db: Session,
     account: CurrentAccount,
@@ -449,56 +454,6 @@ def _require_quiz_editor(
     )
 
 
-def create_class_quiz(
-    db: Session,
-    account: CurrentAccount,
-    class_id: int,
-    payload: QuizCreate,
-) -> QuizResponse:
-    _require_active_class_member(db, account, class_id)
-    draft = QuizVersion(
-        version_number=1,
-        title=payload.title,
-        description=payload.description,
-        published_at=None,
-        questions=_questions_from_payload(payload),
-    )
-    quiz = Quiz(
-        author_id=account.account_id,
-        class_id=class_id,
-        revision=1,
-        status=QuizStatus.DRAFT,
-        visibility=QuizVisibility.PRIVATE,
-        versions=[draft],
-    )
-    db.add(quiz)
-    try:
-        db.commit()
-    except SQLAlchemyError as exc:
-        db.rollback()
-        raise APIError(500, "quiz_save_failed", "Could not save the quiz.") from exc
-    quiz_id = quiz.quiz_id
-    db.expire_all()
-    stored = _load_quiz(db, quiz_id)
-    return _to_response_with_version(stored, _latest_editor_version(stored))
-
-
-def get_class_quiz(
-    db: Session,
-    account: CurrentAccount,
-    class_id: int,
-    quiz_id: int,
-) -> QuizResponse:
-    _require_active_class_member(db, account, class_id)
-    quiz = _class_quiz(db, class_id, quiz_id)
-    # Draft/editor detail is private to its owner and named collaborators.
-    if quiz.author_id != account.account_id and _active_collaborator(
-        db, quiz_id, account.account_id
-    ) is None:
-        raise APIError(404, "quiz_not_found", "Quiz not found.")
-    return _to_response_with_version(quiz, _latest_editor_version(quiz))
-
-
 def update_class_quiz(
     db: Session,
     account: CurrentAccount,
@@ -509,6 +464,8 @@ def update_class_quiz(
     _require_active_class_member(db, account, class_id)
     quiz = _class_quiz(db, class_id, quiz_id)
     _require_quiz_editor(db, account, quiz)
+    if quiz.status == QuizStatus.ARCHIVED:
+        raise APIError(409, "quiz_not_editable", "An archived quiz cannot be edited.")
 
     if payload.expected_revision != quiz.revision:
         raise APIError(
@@ -587,6 +544,106 @@ def update_class_quiz(
             500,
             "quiz_update_failed",
             "Could not save the quiz changes.",
+        ) from exc
+
+
+def publish_class_quiz(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    quiz_id: int,
+    payload: QuizPublish,
+) -> QuizResponse:
+    """Publish the current draft using the same revision lock as editing.
+
+    Collaborators may edit a draft, but only its owner controls publication.
+    Publishing timestamps the current version, making that version immutable;
+    a later edit creates a new draft version.
+    """
+    _require_active_class_member(db, account, class_id)
+    quiz = _class_quiz(db, class_id, quiz_id)
+    if quiz.author_id != account.account_id:
+        raise APIError(
+            403,
+            "quiz_publish_denied",
+            "Only the quiz owner can publish it.",
+        )
+    if quiz.status == QuizStatus.ARCHIVED:
+        raise APIError(
+            409,
+            "quiz_not_publishable",
+            "An archived quiz cannot be published.",
+        )
+    if payload.expected_revision != quiz.revision:
+        raise APIError(
+            409,
+            "quiz_edit_conflict",
+            "This quiz changed after you opened it. Reload before publishing.",
+            details={"current_revision": quiz.revision},
+        )
+
+    draft = max(
+        (version for version in quiz.versions if version.published_at is None),
+        key=lambda version: version.version_number,
+        default=None,
+    )
+    if draft is None:
+        raise APIError(
+            409,
+            "quiz_not_publishable",
+            "The quiz has no draft version to publish.",
+        )
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        changed = db.execute(
+            update(Quiz)
+            .where(
+                Quiz.quiz_id == quiz_id,
+                Quiz.revision == payload.expected_revision,
+            )
+            .values(
+                revision=Quiz.revision + 1,
+                status=QuizStatus.PUBLISHED,
+                updated_at=now,
+            )
+        )
+        if changed.rowcount != 1:
+            db.rollback()
+            current_revision = db.scalar(
+                select(Quiz.revision).where(Quiz.quiz_id == quiz_id)
+            )
+            raise APIError(
+                409,
+                "quiz_edit_conflict",
+                "This quiz changed after you opened it. Reload before publishing.",
+                details={"current_revision": current_revision},
+            )
+
+        draft.published_at = now
+        db.flush()
+        response = QuizResponse(
+            quiz_id=quiz.quiz_id,
+            author_id=quiz.author_id,
+            class_id=quiz.class_id,
+            revision=payload.expected_revision + 1,
+            status=QuizStatus.PUBLISHED,
+            visibility=quiz.visibility,
+            created_at=quiz.created_at,
+            updated_at=now,
+            version=QuizVersionResponse.model_validate(draft),
+        )
+        db.commit()
+        return response
+    except APIError:
+        db.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(
+            500,
+            "quiz_publish_failed",
+            "Could not publish the quiz.",
         ) from exc
 
 

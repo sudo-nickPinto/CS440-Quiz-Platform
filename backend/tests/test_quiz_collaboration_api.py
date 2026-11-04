@@ -178,6 +178,76 @@ def test_stale_revision_returns_current_revision_without_partial_save(
     assert current["version"]["title"] == "First save"
 
 
+def test_owner_publishes_draft_and_a_later_edit_creates_a_new_version(
+    collaboration_client,
+) -> None:
+    client, class_id, _, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+
+    published = client.post(
+        f"{path}/publish",
+        json={"expected_revision": quiz["revision"]},
+    )
+
+    assert published.status_code == 200
+    assert published.json()["status"] == "PUBLISHED"
+    assert published.json()["revision"] == 2
+    assert published.json()["version"]["version_number"] == 1
+    assert published.json()["version"]["published_at"] is not None
+
+    edited = client.put(path, json=_edit_payload(2, "Next draft"))
+    assert edited.status_code == 200
+    assert edited.json()["status"] == "DRAFT"
+    assert edited.json()["revision"] == 3
+    assert edited.json()["version"]["version_number"] == 2
+    assert edited.json()["version"]["published_at"] is None
+
+
+def test_collaborator_can_edit_but_cannot_publish(collaboration_client) -> None:
+    client, class_id, _, editor, _ = collaboration_client
+    quiz = _create(client, class_id)
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    client.post(
+        f"{path}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+    client.app.dependency_overrides[get_active_account] = lambda: editor
+
+    edited = client.put(path, json=_edit_payload(1, "Editor draft"))
+    assert edited.status_code == 200
+    denied = client.post(
+        f"{path}/publish",
+        json={"expected_revision": edited.json()["revision"]},
+    )
+
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "quiz_publish_denied"
+
+
+def test_publish_rejects_stale_revision_and_requires_an_unpublished_draft(
+    collaboration_client,
+) -> None:
+    client, class_id, _, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    assert client.put(path, json=_edit_payload(1, "Updated")).status_code == 200
+
+    stale = client.post(f"{path}/publish", json={"expected_revision": 1})
+    assert stale.status_code == 409
+    assert stale.json()["error"] == {
+        "code": "quiz_edit_conflict",
+        "message": "This quiz changed after you opened it. Reload before publishing.",
+        "details": {"current_revision": 2},
+    }
+
+    published = client.post(f"{path}/publish", json={"expected_revision": 2})
+    assert published.status_code == 200
+    again = client.post(f"{path}/publish", json={"expected_revision": 3})
+    assert again.status_code == 409
+    assert again.json()["error"]["code"] == "quiz_not_publishable"
+
+
 def test_revocation_blocks_future_reads_and_writes(collaboration_client) -> None:
     client, class_id, _, editor, _ = collaboration_client
     quiz = _create(client, class_id)

@@ -52,12 +52,12 @@ class Quiz(Base):
     author_id: Mapped[int] = mapped_column(
         INTEGER(unsigned=True), ForeignKey("account.account_id"), nullable=False
     )
-    # Nullable only so installations with pre-V3 quizzes can apply the
-    # migration before those rows are assigned to classes. Every quiz created
-    # through the V3 class-scoped endpoint has a class_id.
+    # Migration 0008: the class that owns the quiz. Only that class's members
+    # can see it. NULL only for quizzes made before V3 that still need a class.
     class_id: Mapped[int | None] = mapped_column(
         INTEGER(unsigned=True),
         ForeignKey("class.class_id", ondelete="RESTRICT"),
+        nullable=True,
     )
     revision: Mapped[int] = mapped_column(
         INTEGER(unsigned=True), nullable=False, default=1, server_default="1"
@@ -65,13 +65,13 @@ class Quiz(Base):
     status: Mapped[QuizStatus] = mapped_column(
         SqlEnum(QuizStatus, values_callable=enum_values),
         nullable=False,
-        default=QuizStatus.PUBLISHED,
+        default=QuizStatus.DRAFT,
         server_default=QuizStatus.DRAFT.value,
     )
     visibility: Mapped[QuizVisibility] = mapped_column(
         SqlEnum(QuizVisibility, values_callable=enum_values),
         nullable=False,
-        default=QuizVisibility.PUBLIC,
+        default=QuizVisibility.PRIVATE,
         server_default=QuizVisibility.PRIVATE.value,
     )
     created_at: Mapped[datetime] = mapped_column(

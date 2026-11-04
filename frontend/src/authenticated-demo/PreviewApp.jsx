@@ -4,6 +4,11 @@ import ClassesPage from "../classes/ClassesPage";
 import ClassPage from "../classes/ClassPage";
 import JoinClassPage from "../classes/JoinClassPage";
 import QuizBurgLogo from "../classes/QuizBurgLogo";
+import {
+  ClassSessionReportPage,
+  ClassQuizReportPage,
+  ClassStudentReportPage,
+} from "../classes/ClassReports";
 
 import { AccountContext } from "./account";
 import { useResource } from "./rest";
@@ -18,12 +23,12 @@ import "./preview.css";
 import SessionResults from "./SessionResults";
 import "./taha-ui.css";
 import "../classes/classes.css";
+import "./quizburg-polish.css";
+import "./dismissPopovers.js";
 
 export default function PreviewApp({ onSignOut }) {
   const account = useResource("/me");
   const { pathname } = useLocation();
-  const showingClasses =
-    pathname === "/app/classes" || pathname.startsWith("/app/classes/");
   const main = useRef(null);
 
   useEffect(() => {
@@ -61,36 +66,33 @@ export default function PreviewApp({ onSignOut }) {
             <QuizBurgLogo />
           </Link>
 
-          <nav className="cl-app-nav" aria-label="Application navigation">
-            <Link
-              className="qp-button"
-              to="/app/classes"
-              aria-current={showingClasses ? "page" : undefined}
-            >
-              Classes
-            </Link>
-
-            <Link className="qp-button" to="/app/dashboard/present">
-              Quiz dashboard
-            </Link>
-          </nav>
-
           <div className="ui-user">
             <span className="ui-user-name">{account.data.display_name}</span>
 
-            <span className="ui-avatar" aria-hidden="true">
-              {(account.data.display_name || "User")
-                .trim()
-                .split(/\s+/)
-                .slice(0, 2)
-                .map((part) => part[0])
-                .join("")
-                .toUpperCase()}
-            </span>
+            <details className="qb-account">
+              <summary
+                className="ui-avatar"
+                aria-label={`Account menu for ${account.data.display_name}`}
+              >
+                {(account.data.display_name || "User")
+                  .trim()
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((part) => part[0])
+                  .join("")
+                  .toUpperCase()}
+              </summary>
 
-            <button type="button" onClick={onSignOut}>
-              Sign out
-            </button>
+              <div className="qb-account-menu">
+                <p>
+                  <small>Signed in as</small>
+                  <strong>{account.data.display_name}</strong>
+                </p>
+                <button type="button" onClick={onSignOut}>
+                  Sign out
+                </button>
+              </div>
+            </details>
           </div>
         </header>
 
@@ -101,6 +103,21 @@ export default function PreviewApp({ onSignOut }) {
             <Route
               path="classes/:classId"
               element={<ClassPage key={pathname} />}
+            />
+
+            <Route
+              path="classes/:classId/sessions/:sessionId/report"
+              element={<ClassSessionReportPage key={pathname} />}
+            />
+
+            <Route
+              path="classes/:classId/quizzes/:quizId/report"
+              element={<ClassQuizReportPage key={pathname} />}
+            />
+
+            <Route
+              path="classes/:classId/students/:accountId/report"
+              element={<ClassStudentReportPage key={pathname} />}
             />
 
             <Route path="dashboard/:view" element={<PreviewDashboard />} />

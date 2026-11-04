@@ -33,6 +33,12 @@ def class_setup(
     """A class where author organizes, participant is an active member, and
     invited/removed hold those statuses. "other" stays outside the class."""
     client, accounts = session_client
+    author_id = accounts["author"].account_id
+    with client.app.state.database.session_factory() as db:
+        db.get(Account, author_id).account_type = "ADMINISTRATOR"
+        db.commit()
+    accounts["author"] = CurrentAccount(author_id, AccountRole.ADMIN, True)
+    use_account(client, accounts["author"])
     with client.app.state.database.session_factory() as db:
         for name in ["member", "invited", "removed"]:
             model = Account(

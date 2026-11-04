@@ -46,6 +46,7 @@ export default function ParticipantHistory() {
       <div className="ui-toolbar">
         <input
           type="search"
+          className="ui-search"
           aria-label="Search quizzes taken"
           placeholder="Search quizzes…"
           maxLength={200}
@@ -54,36 +55,48 @@ export default function ParticipantHistory() {
         />
 
         <details className="ui-filter">
-          <summary>Filter{sort !== "recent" ? " •" : ""}</summary>
+          <summary>
+            Filter
+            {sort !== "recent" && (
+              <i className="ui-filter-dot" aria-label="(sorted)" />
+            )}
+            <span aria-hidden="true"> ▾</span>
+          </summary>
 
           <div className="ui-filter-panel">
-            <label>
-              Sort by
-              <select
-                value={sort}
-                onChange={(event) => changeSort(event.target.value)}
-              >
-                <option value="recent">Most recent</option>
-                <option value="score">Best score</option>
-                <option value="az">A → Z</option>
-              </select>
-            </label>
-
-            <p>Showing quizzes you participated in.</p>
+            <h4>Sort by</h4>
+            <div className="ui-opts" role="group" aria-label="Sort quizzes taken">
+              {[
+                ["recent", "Most recent"],
+                ["score", "Best score"],
+                ["az", "A → Z"],
+              ].map(([value, label]) => (
+                <button
+                  type="button"
+                  key={value}
+                  className="ui-opt"
+                  aria-pressed={sort === value}
+                  onClick={() => changeSort(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
             <button
               type="button"
+              className="ui-linkbtn"
               disabled={resource.loading}
               onClick={resource.reload}
             >
-              Refresh
+              Refresh list
             </button>
           </div>
         </details>
 
         <span className="ui-count" aria-live="polite">
           <strong>{resource.loading ? "…" : items.length}</strong>
-          <span>shown</span>
+          <span>taken</span>
         </span>
       </div>
 

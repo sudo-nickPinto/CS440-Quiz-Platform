@@ -1,5 +1,5 @@
 DELETE FROM schema_migrations
-WHERE version = '0008_quiz_collaboration';
+WHERE version = '0009_quiz_collaboration';
 
 ALTER TABLE quiz_collaborator
     DROP FOREIGN KEY fk_quiz_collaborator_revoked_by,
@@ -13,8 +13,5 @@ ALTER TABLE quiz_collaborator
         DEFAULT CURRENT_TIMESTAMP(3);
 
 ALTER TABLE quiz
-    DROP FOREIGN KEY fk_quiz_class,
     DROP CHECK ck_quiz_revision,
-    DROP INDEX idx_quiz_class_created,
-    DROP COLUMN revision,
-    DROP COLUMN class_id;
+    DROP COLUMN revision;

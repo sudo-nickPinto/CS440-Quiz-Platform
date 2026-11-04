@@ -157,3 +157,53 @@ def test_models_match_migrated_tables(
                     ]
     finally:
         engine.dispose()
+
+
+def quiz_classes(connection: pymysql.Connection) -> dict[int, int | None]:
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT quiz_id, class_id FROM quiz ORDER BY quiz_id")
+        return dict(cursor.fetchall())
+
+
+def test_migration_0008_gives_quizzes_their_only_class(
+    scratch_database: tuple[pymysql.Connection, str],
+) -> None:
+    connection, _ = scratch_database
+    for path in UP_FILES:
+        if path.name < "0008":
+            run_file(connection, path)
+
+    # Quiz 1 was played only in class 1, quiz 2 in classes 1 and 2, quiz 3
+    # only as an open session and quiz 4 never.
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO account (account_id, auth0_sub, email, display_name)
+            VALUES (1, 'test|prof', 'prof@test.invalid', 'Prof');
+            INSERT INTO class (class_id, name, created_by_id, join_code)
+            VALUES (1, 'A', 1, 'AAAA0001'), (2, 'B', 1, 'BBBB0002');
+            INSERT INTO quiz (quiz_id, author_id)
+            VALUES (1, 1), (2, 1), (3, 1), (4, 1);
+            INSERT INTO quiz_version (quiz_version_id, quiz_id, version_number, title)
+            VALUES (1, 1, 1, 'One'), (2, 1, 2, 'One again'),
+                   (3, 2, 1, 'Two'), (4, 3, 1, 'Three'), (5, 4, 1, 'Four');
+            INSERT INTO live_session
+                (quiz_version_id, host_id, class_id, join_code, status)
+            VALUES (1, 1, 1, '100001', 'COMPLETED'),
+                   (2, 1, 1, '100002', 'COMPLETED'),
+                   (3, 1, 1, '100003', 'COMPLETED'),
+                   (3, 1, 2, '100004', 'COMPLETED'),
+                   (4, 1, NULL, '100005', 'COMPLETED');
+            """
+        )
+        while cursor.nextset():
+            pass
+
+    run_file(connection, MIGRATIONS / "0008_quiz_class.up.sql")
+    assert quiz_classes(connection) == {1: 1, 2: None, 3: None, 4: None}
+
+    run_file(connection, MIGRATIONS / "0008_quiz_class.down.sql")
+    with connection.cursor() as cursor:
+        cursor.execute("SHOW COLUMNS FROM quiz LIKE 'class_id'")
+        assert cursor.fetchall() == ()
+    assert "0008_quiz_class" not in applied(connection)

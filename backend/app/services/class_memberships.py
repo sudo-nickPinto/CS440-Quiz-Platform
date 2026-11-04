@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
-from app.models.account import Account
+from app.models.account import Account, AccountRole, effective_role
 from app.models.classes import (
     Class,
     ClassRole,
@@ -19,6 +19,7 @@ from app.schemas.class_membership import (
     ClassMemberResponse,
     ClassMemberUpdate,
 )
+from app.services.class_authorization import require_class_organizer
 
 
 def _load_class(db: Session, class_id: int, *, lock: bool = False) -> Class:
@@ -61,23 +62,9 @@ def _require_class_organizer(
     *,
     lock_class: bool = False,
 ) -> None:
-    # Every mutation takes this lock before reading actor or target
-    # memberships. Serializing roster changes per class prevents two organizers
-    # from locking each other's rows in opposite order.
+    # Preserve the existing class-first locking order for roster mutations.
     _load_class(db, class_id, lock=lock_class)
-    if account.is_admin:
-        return
-    membership = db.scalar(_membership_statement(class_id, account.account_id))
-    if membership is None or membership.status != MembershipStatus.ACTIVE:
-        # Match an unknown class so outsiders and removed members cannot use
-        # roster endpoints to discover that a class ID exists.
-        raise APIError(404, "class_not_found", "Class not found.")
-    if membership.role != ClassRole.ORGANIZER:
-        raise APIError(
-            403,
-            "not_class_organizer",
-            "Only a class organizer or global Admin can perform this action.",
-        )
+    require_class_organizer(db, account, class_id)
 
 
 def _to_response(membership: ClassMembership) -> ClassMemberResponse:
@@ -102,31 +89,47 @@ def _commit(db: Session, code: str, message: str) -> None:
         raise APIError(500, code, message) from exc
 
 
-def _lock_active_organizers(db: Session, class_id: int) -> list[ClassMembership]:
+def _lock_active_organizers(
+    db: Session,
+    class_id: int,
+) -> list[ClassMembership]:
     return list(
         db.scalars(
             select(ClassMembership)
+            .join(Account, Account.account_id == ClassMembership.account_id)
             .where(
                 ClassMembership.class_id == class_id,
                 ClassMembership.status == MembershipStatus.ACTIVE,
                 ClassMembership.role == ClassRole.ORGANIZER,
+                Account.is_active.is_(True),
+                Account.account_type == "ADMINISTRATOR",
             )
             .with_for_update()
         ).all()
     )
 
 
-def _protect_last_organizer(db: Session, membership: ClassMembership) -> None:
+def _protect_last_organizer(
+    db: Session,
+    membership: ClassMembership,
+) -> None:
     if not (
         membership.status == MembershipStatus.ACTIVE
         and membership.role == ClassRole.ORGANIZER
     ):
         return
-    if len(_lock_active_organizers(db, membership.class_id)) <= 1:
+
+    usable_organizers = _lock_active_organizers(db, membership.class_id)
+
+    target_is_usable = any(
+        organizer.account_id == membership.account_id for organizer in usable_organizers
+    )
+
+    if target_is_usable and len(usable_organizers) <= 1:
         raise APIError(
             409,
             "last_organizer",
-            "The last active class organizer cannot be removed or demoted.",
+            "The last active faculty organizer cannot be removed or demoted.",
         )
 
 
@@ -306,11 +309,37 @@ def update_class_member(
     payload: ClassMemberUpdate,
 ) -> ClassMemberResponse:
     _require_class_organizer(db, account, class_id, lock_class=True)
+
     membership = _load_membership(db, class_id, account_id, lock=True)
+
     if membership.status != MembershipStatus.ACTIVE:
-        raise APIError(409, "class_member_not_active", "Class member is not active.")
+        raise APIError(
+            409,
+            "class_member_not_active",
+            "Class member is not active.",
+        )
 
     new_role = payload.role
+
+    if new_role == ClassRole.ORGANIZER:
+        target = db.scalar(
+            select(Account)
+            .where(Account.account_id == account_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+
+        if (
+            target is None
+            or not target.is_active
+            or effective_role(target.account_type) != AccountRole.ADMIN
+        ):
+            raise APIError(
+                409,
+                "organizer_requires_faculty",
+                "Only an active faculty account can become an organizer.",
+            )
+
     if membership.role == ClassRole.ORGANIZER and new_role == ClassRole.MEMBER:
         _protect_last_organizer(db, membership)
 
@@ -318,6 +347,7 @@ def update_class_member(
         membership.role = new_role
         membership.decided_by_id = account.account_id
         membership.decided_at = datetime.now(UTC).replace(tzinfo=None)
+
         _commit(
             db,
             "class_member_update_failed",

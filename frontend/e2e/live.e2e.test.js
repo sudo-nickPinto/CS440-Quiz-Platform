@@ -83,7 +83,10 @@ const phase = (name) => (state) => livePhase(state) === name
 const choice = (state, correct) => state.currentQuestion.choices[correct ? 0 : 1].choice_id
 
 async function newGame() {
-  const quiz = await rest('host', 'POST', '/quizzes', QUIZ)
+  const course = await rest('host', 'POST', '/classes', { name: 'E2E class' })
+  const quiz = await rest('host', 'POST', `/classes/${course.class_id}/quizzes`, QUIZ)
+  // New quizzes are drafts; the e2e server publishes them directly.
+  await rest('host', 'POST', `/e2e/quizzes/${quiz.quiz_id}/publish`)
   return rest('host', 'POST', `/quizzes/${quiz.quiz_id}/sessions`)
 }
 

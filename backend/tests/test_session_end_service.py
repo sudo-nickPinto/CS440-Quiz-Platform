@@ -382,10 +382,13 @@ def test_final_results_access_and_views(setup: Setup) -> None:
     setup.db.get(SessionParticipant, PARTICIPANT_IDS["bob"]).left_at = T0
     setup.db.commit()
 
-    for account in (HOST, ADMIN):
-        results, viewer = get_final_results(setup.db, account, SESSION_ID)
-        assert viewer is None
-        assert [r.display_name for r in results.standings] == ["Alice", "Bob", "Carol"]
+    results, viewer = get_final_results(setup.db, HOST, SESSION_ID)
+    assert viewer is None
+    assert [r.display_name for r in results.standings] == ["Alice", "Bob", "Carol"]
+
+    with pytest.raises(APIError) as error:
+        get_final_results(setup.db, ADMIN, SESSION_ID)
+    assert error.value.code == "session_access_denied"
 
     results, viewer = get_final_results(setup.db, BOB, SESSION_ID)
     assert viewer == PARTICIPANT_IDS["bob"]

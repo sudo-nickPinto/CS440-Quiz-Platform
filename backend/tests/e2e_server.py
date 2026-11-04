@@ -4,10 +4,12 @@
 
 Uses a throwaway SQLite file and the test RSA key instead of Auth0, prints one
 JSON line {"base_url": ..., "tokens": {name: jwt}} to stdout, then serves until
-killed. frontend/e2e/live.e2e.test.js starts it; it is not a pytest module.
+killed. New quizzes are drafts and the API can't publish them yet, so this
+server adds a test-only POST /e2e/quizzes/{quiz_id}/publish. frontend/e2e/live.e2e.test.js starts it; it is not a pytest module.
 """
 
 import json
+from datetime import UTC, datetime
 import socket
 import sys
 import tempfile
@@ -21,6 +23,7 @@ from app import accounts, auth
 from app.config import Settings
 from app.database import Base
 from app.main import create_app
+from app.models.quiz import Quiz, QuizStatus
 from tests.test_accounts import AUDIENCE, DOMAIN, PRIVATE_KEY, make_token
 
 PEOPLE = ("host", "alice", "bob")
@@ -71,6 +74,17 @@ def main() -> None:
     app = create_app(
         Settings(database_url=database_url, auth0_domain=DOMAIN, auth0_audience=AUDIENCE)
     )
+
+    @app.post("/e2e/quizzes/{quiz_id}/publish")
+    def publish(quiz_id: int) -> dict:
+        with app.state.database.session_factory() as db:
+            quiz = db.get(Quiz, quiz_id)
+            quiz.status = QuizStatus.PUBLISHED
+            for version in quiz.versions:
+                version.published_at = datetime.now(UTC).replace(tzinfo=None)
+            db.commit()
+        return {"quiz_id": quiz_id}
+
     print(
         json.dumps(
             {

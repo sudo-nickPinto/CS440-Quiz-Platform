@@ -1,0 +1,226 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer commit on the same PR (or branch) cancels the run it makes obsolete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# Read-only token: nothing here pushes images, deploys, or writes to the repo.
+# Deployment stays manual (docs/DEPLOYMENT.md) until the Reclaim migration,
+# backups, credentials and rollback steps are settled.
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+# The job names (backend, frontend, containers) are the required status checks
+# in the main branch ruleset. Renaming one blocks every PR until the ruleset is
+# updated to match.
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          # Test-only password for a throwaway container. Not a secret.
+          MYSQL_ROOT_PASSWORD: ci-root-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -u root -pci-root-password --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      # Test-only account created below. The database name must contain "test"
+      # or the integration fixtures refuse to touch it.
+      TEST_DATABASE_URL: mysql+pymysql://quiz_ci:ci-test-password@127.0.0.1:3306/quizdb_test?charset=utf8mb4
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Create test database and user
+        env:
+          MYSQL_PWD: ci-root-password
+        run: |
+          mysql --host 127.0.0.1 --user root <<'SQL'
+          CREATE DATABASE quizdb_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE USER 'quiz_ci'@'%' IDENTIFIED BY 'ci-test-password';
+          -- Covers quizdb_test and the quizdb_test_migrations scratch database
+          -- that tests/integration/test_migrations.py creates and drops.
+          GRANT ALL PRIVILEGES ON `quizdb\_test%`.* TO 'quiz_ci'@'%';
+          -- tests/integration/test_class_crud.py creates a trigger. With binary
+          -- logging on (the MySQL 8 default) that needs SUPER unless this is set.
+          SET GLOBAL log_bin_trust_function_creators = 1;
+          SQL
+
+      - name: Apply migrations
+        env:
+          MYSQL_PWD: ci-test-password
+        run: |
+          for file in ../ulugbek-err/migrations/*.up.sql; do
+            echo "Applying ${file##*/}"
+            mysql --host 127.0.0.1 --user quiz_ci quizdb_test < "$file"
+          done
+
+      - name: Run backend test suite on MySQL
+        run: python -m pytest -ra --junitxml=reports/junit.xml
+
+      # The MySQL tests (migrations, answer/close locking races, optimistic
+      # quiz-version conflicts, class authorization on real tables) skip
+      # themselves when they can't reach a database. In CI that must fail
+      # instead of passing quietly.
+      - name: Check that no MySQL test was skipped
+        run: |
+          python - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          cases = list(ET.parse("reports/junit.xml").getroot().iter("testcase"))
+          skipped = [
+              f"{case.get('classname')}::{case.get('name')}"
+              for case in cases
+              if case.find("skipped") is not None
+          ]
+          integration = [
+              case for case in cases
+              if case.get("classname", "").startswith("tests.integration.")
+          ]
+          if skipped:
+              sys.exit("Skipped tests:\n  " + "\n  ".join(skipped))
+          if not integration:
+              sys.exit("No MySQL integration tests ran.")
+          print(f"{len(cases)} tests ran, {len(integration)} of them integration tests; none skipped.")
+          PY
+
+      - name: Save MySQL server log
+        if: failure()
+        env:
+          MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          mkdir -p reports
+          docker logs "$MYSQL_CONTAINER" > reports/mysql.log 2>&1
+
+      - name: Upload backend reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-reports
+          path: backend/reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # Non-secret placeholders. CI never talks to Auth0; the build only needs
+      # values to embed.
+      VITE_AUTH0_DOMAIN: ci-tenant.example.auth0.com
+      VITE_AUTH0_CLIENT_ID: ci-test-client-id
+      VITE_AUTH0_AUDIENCE: https://quiz-platform-api
+      VITE_API_BASE_URL: /api
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          # Same major version as the frontend Dockerfile's build stage.
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        id: install
+        run: npm ci
+
+      # Lint and build still run when tests fail, so one push reports every
+      # problem.
+      - name: Test
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm test -- --reporter=default --reporter=junit --outputFile.junit=reports/junit.xml
+
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run lint
+
+      - name: Build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run build
+
+      - name: Upload frontend reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-reports
+          path: |
+            frontend/reports/
+            ~/.npm/_logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  containers:
+    name: containers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # deploy/.env.example supplies placeholder values, so this also catches
+      # a variable the example file forgot.
+      - name: Validate Docker Compose configuration
+        run: |
+          docker compose --env-file deploy/.env.example -f compose.yaml config --quiet
+          docker compose --env-file deploy/.env.example -f compose.yaml -f compose.mysql.yaml config --quiet
+
+      - uses: docker/setup-buildx-action@v4
+
+      # push: false and no registry login: images are built to prove they
+      # build, then thrown away.
+      - name: Build backend image
+        uses: docker/build-push-action@v7
+        with:
+          context: backend
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v7
+        with:
+          context: frontend
+          push: false
+          build-args: |
+            VITE_AUTH0_DOMAIN=ci-tenant.example.auth0.com
+            VITE_AUTH0_CLIENT_ID=ci-test-client-id
+            VITE_AUTH0_AUDIENCE=https://quiz-platform-api
+            VITE_API_BASE_URL=/api
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max

@@ -9,6 +9,7 @@ from app.database import Base
 from app.main import create_app
 from app.models import Account, AccountRole, LiveSession, LiveSessionStatus
 from app.services import sessions as session_service
+from tests.class_quiz_helpers import post_class_quiz
 
 
 QUIZ_PAYLOAD = {
@@ -64,7 +65,7 @@ def use_account(client: TestClient, account: CurrentAccount) -> None:
 
 
 def create_quiz(client: TestClient) -> dict:
-    response = client.post("/quizzes", json=QUIZ_PAYLOAD)
+    response = post_class_quiz(client, QUIZ_PAYLOAD)
     assert response.status_code == 201
     return response.json()
 
@@ -210,7 +211,7 @@ def test_late_join_is_allowed_but_completed_session_is_not_joinable(
     assert response.json()["error"]["code"] == "join_code_not_found"
 
 
-def test_host_and_admin_can_view_lobby_participants(
+def test_host_can_view_lobby_participants_but_unrelated_faculty_cannot(
     session_client: tuple[TestClient, dict[str, CurrentAccount]],
 ) -> None:
     client, accounts = session_client
@@ -231,11 +232,10 @@ def test_host_and_admin_can_view_lobby_participants(
 
     use_account(client, accounts["admin"])
     admin_view = client.get(f"/sessions/{session['session_id']}/participants")
-    assert admin_view.status_code == 200
-    assert len(admin_view.json()) == 1
+    assert admin_view.status_code == 403
 
 
-def test_session_detail_is_limited_to_host_participants_and_admin(
+def test_session_detail_is_limited_to_host_and_participants(
     session_client: tuple[TestClient, dict[str, CurrentAccount]],
 ) -> None:
     client, accounts = session_client
@@ -252,4 +252,4 @@ def test_session_detail_is_limited_to_host_participants_and_admin(
     assert client.get(f"/sessions/{session['session_id']}").status_code == 200
 
     use_account(client, accounts["admin"])
-    assert client.get(f"/sessions/{session['session_id']}").status_code == 200
+    assert client.get(f"/sessions/{session['session_id']}").status_code == 403

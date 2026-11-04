@@ -74,7 +74,9 @@
 }
 
 .qp .cl-titlebar small {
-  font: 700 13px "Space Grotesk", sans-serif;
+  font:
+    700 13px "Space Grotesk",
+    sans-serif;
   color: var(--gray);
 }
 
@@ -542,9 +544,6 @@
   border-top: var(--b-thin);
 }
 
-
-
-
 .qp .cl-app-nav {
   display: flex;
   flex-wrap: wrap;
@@ -854,4 +853,34 @@
   .qp .cl-live-dot {
     animation: none;
   }
+}
+
+/* Class reports: retain the existing theme and allow wide tables. */
+.cl-page .cl-table-wrap {
+  overflow-x: auto;
+}
+
+.cl-page .cl-table th,
+.cl-page .cl-table td {
+  vertical-align: top;
+}
+
+.cl-page .cl-table a {
+  text-underline-offset: 0.2em;
+}
+
+.cl-page .cl-section-tabs > div {
+  flex-wrap: wrap;
+}
+
+.cl-page .cl-summary {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.cl-page .cl-class-title {
+  min-width: 0;
+}
+
+.cl-page .cl-class-title h1 {
+  overflow-wrap: anywhere;
 }

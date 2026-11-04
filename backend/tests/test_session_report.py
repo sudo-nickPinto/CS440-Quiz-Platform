@@ -198,9 +198,11 @@ def test_participant_only_receives_own_answers_even_after_leaving(db):
     assert report["questions"][0]["choices"][0]["correct"] is True
 
 
-def test_admin_can_read_full_report(db):
-    assert get_session_report(db, ADMIN, 10)["view"] == "host"
-
+def test_unrelated_faculty_cannot_read_full_report(db):
+    with pytest.raises(APIError) as error:
+        get_session_report(db, ADMIN, 10)
+    assert error.value.status_code == 403
+    assert error.value.code == "session_access_denied"
 
 def test_outsider_denied(db):
     with pytest.raises(APIError) as error:
@@ -246,6 +248,7 @@ def test_csv_contains_saved_scores_and_escapes_formulas(db):
 
 
 def test_publishing_revision_preserves_historical_report(db):
+    from app.models.classes import Class, ClassMembership, ClassRole, JoinedVia
     from app.schemas.quiz import QuizUpdate
     from app.services.quizzes import update_quiz
 
@@ -253,6 +256,22 @@ def test_publishing_revision_preserves_historical_report(db):
     # publication timestamp. Mark it published for this edit test.
     original_version = db.get(QuizVersion, 1)
     original_version.published_at = NOW
+    class_ = Class(
+        name="Report class",
+        created_by_id=HOST.account_id,
+        joining_open=False,
+    )
+    db.add(class_)
+    db.flush()
+    db.add(
+        ClassMembership(
+            class_id=class_.class_id,
+            account_id=HOST.account_id,
+            role=ClassRole.ORGANIZER,
+            joined_via=JoinedVia.CREATOR,
+        )
+    )
+    db.get(Quiz, 1).class_id = class_.class_id
     db.commit()
 
     before = get_session_report(db, HOST, 10)
@@ -296,14 +315,14 @@ def test_taken_history_is_scoped_to_the_current_account(db):
     assert host_history["items"] == []
 
 
-def test_quiz_history_is_restricted_to_author_or_admin(db):
+def test_quiz_history_is_restricted_to_author(db):
     history = list_quiz_hosting_history(db, HOST, 1)
-
     assert [row["session_id"] for row in history["items"]] == [10]
-
-    with pytest.raises(APIError):
-        list_quiz_hosting_history(db, OUTSIDER, 1)
-
+    for account in (OUTSIDER, ADMIN):
+        with pytest.raises(APIError) as error:
+            list_quiz_hosting_history(db, account, 1)
+        assert error.value.status_code == 404
+        assert error.value.code == "quiz_not_found"
 
 def test_history_preserves_the_version_used_by_the_session(db):
     db.add(

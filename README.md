@@ -118,6 +118,23 @@ git push origin feature/question-response
 
 Then create a pull request to merge the feature into `main`.
 
+## Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request into `main`, on every push to `main`, and by hand from **Actions → CI → Run workflow**. It has three jobs, and a ruleset on `main` requires all three to pass before a PR can merge:
+
+| Check | What it does |
+|---|---|
+| `backend` | Applies every migration in `ulugbek-err/migrations/` to a fresh MySQL 8 container, then runs the whole pytest suite against it, including the migration, authorization, locking and optimistic-concurrency tests. Fails if any MySQL test is skipped. |
+| `frontend` | `npm ci`, `npm test`, `npm run lint` and `npm run build`, with placeholder Auth0 values. |
+| `containers` | Validates the Compose files with `deploy/.env.example` and builds the backend and frontend images. Images are never pushed and nothing is deployed. |
+
+- A newer push to the same PR cancels the older run.
+- When a job fails, its test reports and logs are attached to the run under **Artifacts**.
+- Don't rename the jobs. Their names are the required checks in the `main` ruleset (**Settings → Rules → Rulesets**).
+- Deployment stays manual ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)) until the Reclaim migration, backups, credentials and rollback steps are settled.
+
+To run the MySQL tests locally the way CI does, migrate a database whose name contains `test` and set `TEST_DATABASE_URL` (see `backend/.env.example`). Without it, those tests are skipped.
+
 ## Environment Variables
 
 Do not commit passwords, API keys, database credentials, or other secrets.
