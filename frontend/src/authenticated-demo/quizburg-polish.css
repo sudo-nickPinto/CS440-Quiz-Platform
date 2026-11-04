@@ -2801,7 +2801,8 @@
   font-weight: 700;
 }
 
-/* Answer colours, shared by the projector letter tiles and the phone */
+/* Answer colours, shared by the full projector cards, letter tiles and phone */
+.qp .lv-host-answer.ui-tone-0,
 .qp .lv .ui-tone-0 .lv-index,
 .qp .lv-index.ui-tone-0,
 .qp .lv-my-pick.ui-tone-0 {
@@ -2809,6 +2810,7 @@
   color: #ffffff;
 }
 
+.qp .lv-host-answer.ui-tone-1,
 .qp .lv .ui-tone-1 .lv-index,
 .qp .lv-index.ui-tone-1,
 .qp .lv-my-pick.ui-tone-1 {
@@ -2816,6 +2818,7 @@
   color: #ffffff;
 }
 
+.qp .lv-host-answer.ui-tone-2,
 .qp .lv .ui-tone-2 .lv-index,
 .qp .lv-index.ui-tone-2,
 .qp .lv-my-pick.ui-tone-2 {
@@ -2823,6 +2826,7 @@
   color: #222222;
 }
 
+.qp .lv-host-answer.ui-tone-3,
 .qp .lv .ui-tone-3 .lv-index,
 .qp .lv-index.ui-tone-3,
 .qp .lv-my-pick.ui-tone-3 {

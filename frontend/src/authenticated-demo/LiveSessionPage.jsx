@@ -7,6 +7,7 @@ import RequestError from "./RequestError";
 import ConfirmDialog from "./ConfirmDialog";
 import { useConfirm } from "./useConfirm";
 import { HostFinal, ParticipantFinal } from "./LiveFinal";
+import QuizStartCountdown from "./QuizStartCountdown";
 
 const CONNECTION_ERRORS = {
   unauthorized: "Your login needs to be renewed.",
@@ -561,6 +562,7 @@ function ConnectedSession({ sessionId }) {
   const action = useAction();
   const confirmer = useConfirm();
   const { state, phase } = live;
+  const starting = state.countdown !== null && phase === "lobby";
 
   // The reducer clears lastResults when the next question opens, so keep the
   // participant's latest score and rank to show while they answer.
@@ -676,7 +678,10 @@ function ConnectedSession({ sessionId }) {
         className="qb-btn"
         type="button"
         disabled={!canAdvance}
-        onClick={() => run(live.openNextQuestion)}
+        onClick={() => {
+          if (phase === "lobby") run(live.startCountdown);
+          else run(live.openNextQuestion);
+        }}
       >
         {phase === "lobby" ? "Start quiz →" : "Next question →"}
       </button>
@@ -821,7 +826,15 @@ function ConnectedSession({ sessionId }) {
               </div>
             )}
 
-            {phase === "lobby" && state.session && (
+            {starting && (
+              <QuizStartCountdown
+                number={state.countdown}
+                onCancel={host ? () => run(live.cancelCountdown) : undefined}
+                busy={!canAct}
+              />
+            )}
+
+            {phase === "lobby" && state.session && !starting && (
               host ? (
                 <HostLobby
                   state={state}

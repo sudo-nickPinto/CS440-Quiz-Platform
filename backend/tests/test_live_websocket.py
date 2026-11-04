@@ -161,6 +161,54 @@ def assert_closed_with(ws, code: int) -> None:
     assert closed.value.code == code
 
 
+def test_shared_countdown_opens_question_after_three_seconds(live):
+    client, people = live
+    session = make_session(client, people)
+    sid = session["session_id"]
+    join(client, people["alice"], session["join_code"])
+    with client.websocket_connect(ws_url(sid)) as host, client.websocket_connect(ws_url(sid)) as alice:
+        authenticate(host, "host")
+        authenticate(alice, "alice")
+        alice.send_json({"type": "start_countdown", "request_id": "denied"})
+        assert receive_until(alice, "error")[-1]["code"] == "session_host_denied"
+        started = time.monotonic()
+        host.send_json({"type": "start_countdown", "request_id": "start"})
+        assert receive_until(host, "countdown_tick")[-1]["number"] == 3
+        assert receive_until(alice, "countdown_tick")[-1]["number"] == 3
+        # Duplicate requests do not restart the clock or open twice.
+        host.send_json({"type": "start_countdown", "request_id": "duplicate"})
+        for number in (2, 1):
+            assert receive_until(host, "countdown_tick")[-1]["number"] == number
+            assert receive_until(alice, "countdown_tick")[-1]["number"] == number
+        # A fresh participant connection gets the current beat in its snapshot.
+        with client.websocket_connect(ws_url(sid)) as reconnected:
+            assert authenticate(reconnected, "alice")["countdown"] == 1
+            opened = receive_until(host, "question_opened")[-1]
+            assert time.monotonic() - started >= 2.9
+            assert receive_until(reconnected, "question_opened")[-1] == opened
+
+
+def test_host_can_cancel_shared_countdown(live):
+    client, people = live
+    session = make_session(client, people)
+    sid = session["session_id"]
+    join(client, people["alice"], session["join_code"])
+    with client.websocket_connect(ws_url(sid)) as host, client.websocket_connect(ws_url(sid)) as alice:
+        authenticate(host, "host")
+        authenticate(alice, "alice")
+        host.send_json({"type": "start_countdown"})
+        receive_until(alice, "countdown_tick")
+        host.send_json({"type": "cancel_countdown"})
+        receive_until(host, "countdown_cancelled")
+        receive_until(alice, "countdown_cancelled")
+        time.sleep(3.1)
+        with client.websocket_connect(ws_url(sid)) as fresh:
+            state = authenticate(fresh, "alice")
+            assert state["countdown"] is None
+            assert state["session"]["status"] == "LOBBY"
+            assert state["current_question"] is None
+
+
 def test_host_and_two_participants_play_one_question(live) -> None:
     client, people = live
     session = make_session(client, people)
@@ -467,4 +515,4 @@ def test_broadcast_during_snapshot_is_delivered_after_session_state() -> None:
         return socket.sent
 
     sent = asyncio.run(scenario())
-    assert sent == ['{"type": "session_state"}', '{"type": "question_opened"}']
+    assert sent == ['{"type": "session_state", "countdown": null}', '{"type": "question_opened"}']
