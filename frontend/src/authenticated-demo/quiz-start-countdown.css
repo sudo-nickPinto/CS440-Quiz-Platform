@@ -1,0 +1,33 @@
+.qp .lv-start-countdown {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 20px;
+  min-height: min(65vh, 620px);
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.qp .lv-start-number {
+  display: block;
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(120px, 24vw, 240px);
+  line-height: 1.1;
+  -webkit-text-stroke: 2px var(--ink);
+  text-shadow: 4px 4px 0 var(--ink);
+  animation: quiz-start-beat 280ms ease-out both;
+}
+
+/* Match answer choices A, B and C. */
+.qp .lv-start-number-3 { color: var(--navy); }
+.qp .lv-start-number-2 { color: var(--orange-deep); }
+.qp .lv-start-number-1 { color: #c9ddbf; }
+
+@keyframes quiz-start-beat {
+  from { opacity: 0.4; transform: translateY(8px) scale(0.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp .lv-start-number { animation: none; }
+}

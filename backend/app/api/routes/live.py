@@ -10,6 +10,8 @@ from app.live.auth import authenticate_token
 from app.live.hub import LiveConnection, LiveHub
 from app.live.protocol import (
     AuthMessage,
+    StartCountdownMessage,
+    CancelCountdownMessage,
     CancelSessionMessage,
     CloseCode,
     CloseQuestionMessage,
@@ -174,11 +176,22 @@ async def _receive_loop(hub: LiveHub, conn: LiveConnection) -> None:
 
 
 async def _handle(hub: LiveHub, conn: LiveConnection, message) -> None:
+    if isinstance(message, (StartCountdownMessage, CancelCountdownMessage)):
+        _require_host(conn)
+        if isinstance(message, StartCountdownMessage):
+            await hub.start_countdown(conn)
+        else:
+            await hub.cancel_countdown(conn.session_id)
+        await hub.send(conn, {"type": "ack", "request_id": message.request_id})
+        return
+
     if isinstance(message, PingMessage):
         await hub.send(conn, {"type": "pong"})
         return
 
     if isinstance(message, OpenQuestionMessage):
+        if hub.countdown_running(conn.session_id):
+            raise APIError(409, "countdown_running", "Wait for the countdown to finish.")
         event = await hub.run_db(
             open_question, conn.account, conn.session_id, message.question_order
         )

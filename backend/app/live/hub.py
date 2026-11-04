@@ -10,6 +10,8 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from app.auth import CurrentAccount
+from app.errors import APIError
+from app.models import LiveSession, LiveSessionStatus
 from app.live.protocol import CloseCode, encode
 from app.live.snapshot import (
     LiveRole,
@@ -20,7 +22,7 @@ from app.live.snapshot import (
 )
 from app.schemas.live_question import QuestionClosedEvent
 from app.schemas.results import FinalResults, participant_final_view
-from app.services.live_questions import answer_progress, close_question_if_ready
+from app.services.live_questions import answer_progress, close_question_if_ready, open_question
 from app.services.results import get_closed_question_results
 from app.services.session_end import (
     ParticipantLeft,
@@ -36,6 +38,16 @@ DEADLINE_SLACK_SECONDS = 0.25
 
 def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _validate_countdown(db, account, session_id):
+    session = db.get(LiveSession, session_id)
+    if session is None or session.host_id != account.account_id:
+        raise APIError(403, "session_host_denied", "Only this session's host can start it.")
+    if session.status != LiveSessionStatus.LOBBY:
+        raise APIError(409, "session_not_lobby", "The quiz has already started.")
+    if active_participant_count(db, session_id) < 1:
+        raise APIError(409, "no_participants", "Wait for a participant to join.")
 
 
 @dataclass(eq=False)
@@ -63,6 +75,8 @@ class LiveHub:
         self._app = app
         self._sessions: dict[int, dict[int, LiveConnection]] = {}
         self._timers: dict[int, asyncio.Task] = {}
+        self._countdowns: dict[int, asyncio.Task] = {}
+        self._countdown_numbers: dict[int, int] = {}
         # When each live session was last seen without a host socket (§5).
         self._host_away_since: dict[int, datetime] = {}
         self._reaper: asyncio.Task | None = None
@@ -105,6 +119,9 @@ class LiveHub:
             if previous is not None:
                 await self._close(previous, CloseCode.REPLACED, "replaced")
             state = await build_snapshot()
+            if isinstance(state, BaseModel):
+                state = state.model_dump()
+            state["countdown"] = self._countdown_numbers.get(conn.session_id)
             await conn.websocket.send_text(encode(state))
             conn.ready = True
         if conn.role == "host":
@@ -123,6 +140,7 @@ class LiveHub:
         if not connections:
             del self._sessions[conn.session_id]
         if conn.role == "host" and not self.host_connected(conn.session_id):
+            await self.cancel_countdown(conn.session_id)
             self._host_away_since[conn.session_id] = _utc_now()
         if conn.role == "host" and conn.ready:
             await self.broadcast(
@@ -163,6 +181,57 @@ class LiveHub:
             logger.debug("Socket was already closed", exc_info=True)
 
     # Question lifecycle -------------------------------------------------
+
+    async def start_countdown(self, conn: LiveConnection) -> None:
+        await self.run_db(_validate_countdown, conn.account, conn.session_id)
+        sid = conn.session_id
+        if self._sessions.get(sid, {}).get(conn.account.account_id) is not conn:
+            raise APIError(409, "host_disconnected", "Reconnect before starting the quiz.")
+        if sid in self._countdowns:
+            return  # Duplicate clicks must not restart the clock.
+        self._countdown_numbers[sid] = 3
+        self._countdowns[sid] = asyncio.create_task(self._count_down(conn))
+
+    async def cancel_countdown(self, session_id: int) -> None:
+        task = self._countdowns.get(session_id)
+        # Once opening begins, let the transaction and its broadcast finish.
+        if task is not None and session_id in self._countdown_numbers:
+            self._countdown_numbers.pop(session_id, None)
+            self._countdowns.pop(session_id, None)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            await self.broadcast(session_id, {"type": "countdown_cancelled"})
+
+    async def _count_down(self, conn: LiveConnection) -> None:
+        sid = conn.session_id
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        try:
+            for number in (3, 2, 1):
+                self._countdown_numbers[sid] = number
+                await self.broadcast(sid, {"type": "countdown_tick", "number": number})
+                await asyncio.sleep(max(0, started + (4 - number) - loop.time()))
+            self._countdown_numbers.pop(sid, None)
+            await self.run_db(_validate_countdown, conn.account, sid)
+            event = await self.run_db(open_question, conn.account, sid, 1)
+            await self.broadcast(sid, event)
+            self.schedule_deadline(sid, event.session_question_id, event.closes_at)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            await self.broadcast(sid, {"type": "countdown_cancelled"})
+            await self.send(conn, {"type": "error", "request_id": None,
+                "code": exc.code if isinstance(exc, APIError) else "start_failed",
+                "message": exc.message if isinstance(exc, APIError) else "Could not start the quiz. Please try again."})
+            if not isinstance(exc, APIError):
+                logger.exception("Countdown failed for session %s", sid)
+        finally:
+            if self._countdowns.get(sid) is asyncio.current_task():
+                self._countdowns.pop(sid, None)
+                self._countdown_numbers.pop(sid, None)
+
+    def countdown_running(self, session_id: int) -> bool:
+        return session_id in self._countdowns
 
     def schedule_deadline(
         self,
@@ -264,6 +333,7 @@ class LiveHub:
 
     async def session_ended(self, session_id: int, results: FinalResults) -> None:
         """Send everyone their final view, then close every socket with 1000."""
+        await self.cancel_countdown(session_id)
         connections = self._sessions.pop(session_id, {})
         self._host_away_since.pop(session_id, None)
         await asyncio.gather(
@@ -289,6 +359,8 @@ class LiveHub:
 
     async def participant_left(self, conn: LiveConnection, left: ParticipantLeft) -> None:
         """Close the leaver's socket, then tell the host (§4)."""
+        if left.participant_count == 0:
+            await self.cancel_countdown(conn.session_id)
         connections = self._sessions.get(conn.session_id, {})
         if connections.get(conn.account.account_id) is conn:
             del connections[conn.account.account_id]
@@ -399,7 +471,9 @@ class LiveHub:
             self._reaper.cancel()
             await asyncio.gather(self._reaper, return_exceptions=True)
             self._reaper = None
-        timers = list(self._timers.values())
+        timers = list(self._timers.values()) + list(self._countdowns.values())
+        self._countdowns.clear()
+        self._countdown_numbers.clear()
         self._timers.clear()
         for timer in timers:
             timer.cancel()

@@ -87,6 +87,8 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 | `auth` | anyone, first message | `token` | §2 |
 | `ping` | anyone | — | reply `pong` |
 | `open_question` | host | `question_order` | `open_question()` → broadcast `question_opened`, schedule the deadline check (§6) |
+| `start_countdown` | host | none | In the lobby with at least one participant, broadcast 3, 2, 1 at one-second intervals, then open question 1 on the server. Duplicate starts do not restart it. |
+| `cancel_countdown` | host | none | Return everyone to the lobby before question opening begins. |
 | `close_question` | host | `session_question_id` | **NEW**: force-close now with reason `HOST`, then the same steps as an automatic close |
 | `submit_answer` | participant | `session_question_id`, `choice_id` | `submit_response()` → `ack` to the sender only → `close_question_if_ready()` (§6) |
 | `end_session` | host | — | **NEW** `end_session()`: closes any open question, writes `result` rows, sets `COMPLETED` → broadcast `session_ended` |
@@ -100,6 +102,8 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 | `type` | To | Payload |
 |---|---|---|
 | `session_state` | the one client, on (re)connect | snapshot, see below |
+| `countdown_tick` | host and participants | `number`: 3, 2, or 1. Render the same animated number; clients do not open the question themselves. |
+| `countdown_cancelled` | host and participants | Return to the lobby. Also sent when the host disconnects, the last participant leaves, or starting fails. |
 | `participant_joined` | host | `session_participant_id`, `display_name`, `participant_count`. Joining happens over REST, not the socket, so `join_session_route` (`POST /sessions/join`) gets an after-commit hook into the WebSocket hub, the same pattern as the REST answer hook: once `join_session()` has committed, it broadcasts `participant_joined` to the host's socket(s) using the new `SessionParticipantResponse`. If the host isn't connected nothing is sent, and they see the count in their next `session_state` |
 | `participant_left` | host | same fields. Produced by **NEW** `leave` |
 | `question_opened` | everyone | `QuestionOpenedEvent` (no correctness, just as today) |
@@ -114,6 +118,12 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 | `pong` | the sender | — |
 
 **`session_state` snapshot** (sent on every connect and reconnect):
+
+The snapshot also includes `countdown` (3, 2, 1, or null), so reconnecting clients
+resume the current beat. The countdown is transient state in the single-worker
+hub: a server restart cancels it and leaves the session in the lobby. Question
+timestamps are created only after the three seconds, preserving the full answer
+time. Direct `open_question` commands are rejected while the countdown runs.
 
 ```json
 {
