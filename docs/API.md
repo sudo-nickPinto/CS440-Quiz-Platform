@@ -58,10 +58,18 @@ The caller's account, created on first call.
 
 ## Quizzes
 
-A quiz is saved and published in one step (one version, `version_number` 1). There are no drafts in the MVP.
+Since V3, **every quiz belongs to a class** (`class_id`), and there is no app-wide quiz list. Who can do what:
+- **Create:** any active member or organizer of the class. The creator becomes the quiz's owner (`author_id`). Nobody needs a special permission.
+- **See:** the owner and the class's organizers (the class-level `ORGANIZER` role), and only while they're active in the class. Other classmates and outsiders get `404`. Being an Admin doesn't help: there is no app-wide authority over classes.
+- **New quizzes are drafts:** `status: "DRAFT"`, and `version.published_at` is null. A draft can't be hosted. Publishing (task 3) makes an unchangeable version, and doesn't approve it for hosting (task 4).
+- `visibility` is always `PRIVATE` for new quizzes. `PUBLIC` no longer shows a quiz outside its class.
 
-### `POST /quizzes` → `201 QuizResponse`
-Any active account. Unknown fields are rejected.
+Responses show the version people work on: the newest draft if there is one, otherwise the newest published version.
+
+Quizzes made before V3 may have `class_id: null` until someone gives them a class ([migrations README](../ulugbek-err/migrations/README.md#quizzes-without-a-class)). Only their owner can see them.
+
+### `POST /classes/{class_id}/quizzes` → `201 QuizResponse`
+Active members and organizers of the class. Unknown fields are rejected. (`POST /quizzes` is gone.)
 
 ```json
 {
@@ -92,26 +100,45 @@ Validation:
   - `base_points` of at least 1 (default 1000).
 - Each choice: 1 to 500 characters.
 
-Errors: `500 quiz_save_failed`.
+Errors:
+- `404 class_not_found`: the class doesn't exist, or the caller isn't an active member (invited, left, removed or never joined).
+- `409 class_archived`.
+- `500 quiz_save_failed`.
 
-### `GET /quizzes` → `200 QuizListItem[]`
-Published quizzes, newest first. An Admin also gets archived ones.
+### `GET /classes/{class_id}/quizzes` → `200 ClassQuizListPage`
+The class's quizzes, newest first. Organizers get every quiz in the class; members get only their own. It takes `page` and `page_size` (1–100, default 25).
 
 ```json
-[{ "quiz_id": 3, "author_id": 7, "status": "PUBLISHED", "title": "…", "description": null, "question_count": 10, "created_at": "…" }]
+{
+  "class_id": 4,
+  "items": [{ "quiz_id": 3, "author_id": 7, "author_name": "Amy", "class_id": 4, "status": "PUBLISHED", "title": "…", "description": null, "question_count": 10, "version_number": 2, "created_at": "…", "updated_at": "…" }],
+  "pagination": { "page": 1, "page_size": 25, "total_items": 1, "total_pages": 1 }
+}
+```
+
+Errors: `404 class_not_found`.
+
+### `GET /classes/{class_id}/quizzes/{quiz_id}` → `200 QuizResponse`
+One quiz in the class, for its owner or a class organizer. Errors: `404 class_not_found`, and `404 quiz_not_found` when the quiz isn't in this class or the caller can't see it.
+
+### `GET /quizzes` → `200 QuizListItem[]`
+The caller's own quizzes, across every class they're active in, newest first. Includes archived ones.
+
+```json
+[{ "quiz_id": 3, "author_id": 7, "class_id": 4, "status": "PUBLISHED", "title": "…", "description": null, "question_count": 10, "created_at": "…" }]
 ```
 
 ### `GET /quizzes/{quiz_id}` → `200 QuizResponse`
-Full quiz, including correct answers. A non-published quiz is visible only to its author or an Admin; anyone else gets 404.
+Full quiz, including correct answers. Same rule as above: only the owner or an organizer of the quiz's class, and anyone else gets 404.
 
-`QuizResponse`: `quiz_id, author_id, status, visibility, created_at, updated_at, version`. `version` holds `quiz_version_id, version_number, title, description, created_at, published_at, questions[]`. Each question holds `question_id, question_order, question_type, question_text, explanation, time_limit_seconds, base_points, choices[]`. Each choice holds `choice_id, choice_order, choice_text, is_correct`.
+`QuizResponse`: `quiz_id, author_id, class_id, status, visibility, created_at, updated_at, version`. `version` holds `quiz_version_id, version_number, title, description, created_at, published_at, questions[]`. Each question holds `question_id, question_order, question_type, question_text, explanation, time_limit_seconds, base_points, choices[]`. Each choice holds `choice_id, choice_order, choice_text, is_correct`.
 
 Errors: `404 quiz_not_found`, `500 invalid_quiz`.
 
 ### `PATCH /quizzes/{quiz_id}/archive` → `200 QuizResponse`
-Author or Admin. Sets `status` to `ARCHIVED`.
+The quiz's owner only. Sets `status` to `ARCHIVED`.
 
-Errors: `403 quiz_access_denied`, `404 quiz_not_found`, `500 quiz_archive_failed`.
+Errors: `403 quiz_access_denied` (an organizer who isn't the owner), `404 quiz_not_found`, `500 quiz_archive_failed`.
 
 ## Sessions
 
@@ -260,7 +287,7 @@ Built from the class's `COMPLETED` sessions only; open sessions never count. Sco
   - `session_id, quiz_id, quiz_title, status, host_name, is_host, started_at, ended_at, participant_count`;
   - `average_score` and `top_score`, which are organizers only;
   - `my_score` and `my_rank`, the caller's own result or null.
-- `GET /classes/{class_id}/quizzes`: for any member. Completed sessions grouped by quiz, with `presented_at, session_count, participant_count` and `average_score` (organizers only). It takes `sort=presented_at|title|participant_count`.
+- `GET /classes/{class_id}/presented-quizzes`: for any member. (It was `/quizzes` before V3; that address now lists the class's own quizzes.) Completed sessions grouped by quiz, with `presented_at, session_count, participant_count` and `average_score` (organizers only). It takes `sort=presented_at|title|participant_count`.
 - `GET /classes/{class_id}/students`: organizers only (`403 not_class_organizer`). Active `MEMBER`s, with:
   - `session_count, average_score, total_points`;
   - `attendance_rate` (0–1);
@@ -280,7 +307,7 @@ Organizers and Admins see everyone. Members see only their own rows, and class-w
 - `GET /classes/{class_id}/quizzes/{quiz_id}/results`: every completed presentation of the quiz in this class, newest first. It returns `{ class_id, quiz_id, title, session_count, participant_count, average_score, sessions }`.
   - Each session has the same fields as a `/sessions` item, plus `results: [{ account_id, name, rank, points, correct }]`. Members only get their own result.
   - `average_score` is averaged over every player in every session (organizers only).
-  - Errors: `404 quiz_not_found`. A quiz that was never presented here returns an empty `sessions` list.
+  - Errors: `404 quiz_not_found`, also for a quiz that has no completed session in this class.
 - `GET /classes/{class_id}/students/{account_id}/results`: one student's history in the class. Members can only ask for themselves (`403 not_class_organizer` otherwise). It returns:
   - `display_name`, `email` (organizers only), `role` and `status`. Removed and departed students keep their history;
   - `class_session_count`, `session_count`, `attendance_rate`, `total_points`, `average_score`, `correct_count` and `incorrect_count`;
