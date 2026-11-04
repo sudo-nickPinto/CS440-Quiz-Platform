@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from app.auth import CurrentAccount, get_active_account
+from tests.class_quiz_helpers import post_class_quiz
 
 
 PAYLOAD = {
@@ -25,12 +26,13 @@ def test_mvp_quiz_round_trip_uses_migrated_schema(
 ) -> None:
     client, author, reader = mysql_quiz_client
 
-    created = client.post("/quizzes", json=PAYLOAD)
+    created = post_class_quiz(client, PAYLOAD)
     assert created.status_code == 201
     body = created.json()
     assert body["author_id"] == author.account_id
     assert body["status"] == "PUBLISHED"
-    assert body["visibility"] == "PUBLIC"
+    assert body["visibility"] == "PRIVATE"
+    assert body["class_id"] is not None
     assert body["version"]["version_number"] == 1
 
     with client.app.state.database.engine.connect() as connection:
@@ -45,9 +47,13 @@ def test_mvp_quiz_round_trip_uses_migrated_schema(
             == 2
         )
 
-    client.app.dependency_overrides[get_active_account] = lambda: reader
     assert client.get("/quizzes").json()[0]["quiz_id"] == body["quiz_id"]
     assert client.get(f"/quizzes/{body['quiz_id']}").status_code == 200
+
+    # The reader isn't in the quiz's class, so it's hidden from them.
+    client.app.dependency_overrides[get_active_account] = lambda: reader
+    assert client.get("/quizzes").json() == []
+    assert client.get(f"/quizzes/{body['quiz_id']}").status_code == 404
 
     client.app.dependency_overrides[get_active_account] = lambda: author
     archived = client.patch(f"/quizzes/{body['quiz_id']}/archive")

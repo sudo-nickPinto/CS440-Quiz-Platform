@@ -39,7 +39,9 @@ def class_dashboard_route(
     return get_class_dashboard(db, account, class_id)
 
 
-@router.get("/quizzes", response_model=ClassQuizPage)
+# The class's own quizzes live at /quizzes (class_quizzes.py); this is the
+# history of quizzes that were played in the class.
+@router.get("/presented-quizzes", response_model=ClassQuizPage)
 def class_quizzes_route(
     class_id: int,
     page: Page = 1,

@@ -7,6 +7,7 @@ from app.errors import APIError
 from app.models.quiz import QuizVersion
 from app.schemas.quiz import QuizUpdate
 from app.services.quizzes import update_quiz
+from tests.class_quiz_helpers import post_class_quiz
 
 
 PAYLOAD = {
@@ -29,7 +30,7 @@ PAYLOAD = {
 def test_competing_edits_publish_only_one_revision(mysql_quiz_client):
     client, author, _ = mysql_quiz_client
 
-    created = client.post("/quizzes", json=PAYLOAD)
+    created = post_class_quiz(client, PAYLOAD)
     assert created.status_code == 201
     quiz_id = created.json()["quiz_id"]
 
