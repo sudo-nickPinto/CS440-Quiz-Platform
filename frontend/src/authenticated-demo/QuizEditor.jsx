@@ -13,6 +13,7 @@ import QuizCollaborators from "./QuizCollaborators";
 
 import { blankEditor, LETTERS, newQuestion } from "./model";
 import {
+  questionPayloadChanged,
   quizQuestionToEditor,
   toQuestionCreate,
   toQuizCreate,
@@ -134,6 +135,7 @@ export function QuizEditor({
   const conflict = ["quiz_edit_conflict", "question_edit_conflict"].includes(
     requestError?.code,
   );
+  const questionSaving = Object.values(questionSaveStatus).includes("saving");
 
   const collaborationStatus = useQuizCollaboration(
     editing ? existingQuiz.quiz_id : null,
@@ -402,6 +404,16 @@ export function QuizEditor({
         cancelLabel: "Keep it",
       })
     ) {
+      if (question.questionId) {
+        const timer = autosaveTimers.current.get(question.questionId);
+        if (timer) window.clearTimeout(timer);
+        autosaveTimers.current.delete(question.questionId);
+        setQuestionSaveStatus((currentStatus) => {
+          const nextStatus = { ...currentStatus };
+          delete nextStatus[question.questionId];
+          return nextStatus;
+        });
+      }
       edit({
         ...editor,
         questions: editor.questions.filter((item) => item.id !== question.id),
@@ -422,11 +434,17 @@ export function QuizEditor({
     }
   }
 
-  function questionChanged(question) {
+  function questionChanged(question, index) {
     const saved = baselineEditor.questions.find(
       (item) => item.questionId === question.questionId,
     );
-    return !saved || JSON.stringify(saved) !== JSON.stringify(question);
+    return questionPayloadChanged(
+      question,
+      saved,
+      index,
+      editor.defaultTime,
+      baselineEditor.defaultTime,
+    );
   }
 
   function setQuestionStatus(questionId, status) {
@@ -548,7 +566,14 @@ export function QuizEditor({
   }
 
   async function save() {
-    if (conflict) return;
+    if (conflict || savingQuestions.current.size > 0) return;
+
+    // The final save owns every still-pending local change. Prevent a delayed
+    // question autosave from racing the requests below with the same revision.
+    for (const timer of autosaveTimers.current.values()) {
+      window.clearTimeout(timer);
+    }
+    autosaveTimers.current.clear();
 
     const quiz = await action.run(async () => {
       const payload = toQuizCreate(editor);
@@ -580,7 +605,7 @@ export function QuizEditor({
           for (const [index, question] of editor.questions
             .slice(0, baselineEditor.questions.length)
             .entries()) {
-            if (!questionChanged(question)) continue;
+            if (!questionChanged(question, index)) continue;
             const questionPayload = toQuestionCreate(
               question,
               index,
@@ -1139,10 +1164,12 @@ export function QuizEditor({
                   <button
                     type="button"
                     className="qb-btn"
-                    disabled={conflict}
+                    disabled={conflict || questionSaving}
                     onClick={() => void save()}
                   >
-                    {action.busy
+                    {questionSaving
+                      ? "Finishing live save…"
+                      : action.busy
                       ? "Saving…"
                       : editing
                         ? "Save changes"

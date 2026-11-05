@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  questionPayloadChanged,
   quizQuestionToEditor,
   quizToEditor,
   toQuestionCreate,
@@ -128,5 +129,29 @@ describe("editing saved quizzes", () => {
     editor.questions[0].basePoints = 0;
 
     expect(() => toQuizCreate(editor)).toThrow("base points");
+  });
+
+  it("detects a changed inherited quiz-wide duration", () => {
+    const editor = quizToEditor(savedQuiz());
+    const question = editor.questions[0];
+
+    expect(
+      questionPayloadChanged(
+        question,
+        question,
+        0,
+        30,
+        editor.defaultTime,
+      ),
+    ).toBe(true);
+  });
+
+  it("does not rewrite an explicit duration when the default changes", () => {
+    const editor = quizToEditor(savedQuiz());
+    const question = { ...editor.questions[0], limit: 45 };
+
+    expect(
+      questionPayloadChanged(question, question, 0, 30, 20),
+    ).toBe(false);
   });
 });

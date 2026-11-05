@@ -2,7 +2,7 @@ import { Link, useParams } from "react-router";
 
 import { useResource } from "./rest";
 import { quizToEditor } from "./quizPayload";
-import { canEditQuiz } from "./quizEditing";
+import { canEditQuiz, quizEditorKey } from "./quizEditing";
 import { QuizEditor } from "./QuizEditor";
 import RequestError from "./RequestError";
 
@@ -79,7 +79,7 @@ export default function EditQuizPage() {
 
   return (
     <QuizEditor
-      key={`${quiz.quiz_id}:${quiz.version.quiz_version_id}`}
+      key={quizEditorKey(quiz)}
       initialEditor={initialEditor}
       existingQuiz={quiz}
       onReload={resource.reload}

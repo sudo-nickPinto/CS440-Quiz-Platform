@@ -117,6 +117,23 @@ export function toQuestionCreate(question, index, defaultTime) {
   };
 }
 
+export function questionPayloadChanged(
+  question,
+  savedQuestion,
+  index,
+  defaultTime,
+  savedDefaultTime,
+) {
+  if (!savedQuestion) return true;
+
+  return (
+    JSON.stringify(toQuestionCreate(question, index, defaultTime)) !==
+    JSON.stringify(
+      toQuestionCreate(savedQuestion, index, savedDefaultTime),
+    )
+  );
+}
+
 export function toQuizCreate(editor) {
   const title = editor.title.trim();
 

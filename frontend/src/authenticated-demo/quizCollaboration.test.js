@@ -29,6 +29,9 @@ describe("quiz collaboration WebSocket", () => {
     expect(quizEditSocketUrl("https://quiz.example", 8)).toBe(
       "wss://quiz.example/ws/quizzes/8",
     );
+    expect(quizEditSocketUrl("/api", 9)).toBe(
+      "/api/ws/quizzes/9",
+    );
   });
 
   it("authenticates and forwards committed question notifications", async () => {
@@ -68,5 +71,32 @@ describe("quiz collaboration WebSocket", () => {
       expect.objectContaining({ type: "question_updated", quiz_id: 3 }),
     );
     client.close();
+  });
+
+  it("does not reconnect after authorization is revoked", async () => {
+    FakeSocket.instances = [];
+    const onStatus = vi.fn();
+    const retry = vi.fn(() => 2);
+    createQuizEditClient({
+      url: "ws://test/ws/quizzes/3",
+      getToken: async () => "token",
+      onStatus,
+      WebSocketImpl: FakeSocket,
+      timers: {
+        setInterval: () => 1,
+        clearInterval: () => {},
+        setTimeout: retry,
+        clearTimeout: () => {},
+      },
+    });
+    await Promise.resolve();
+
+    FakeSocket.instances[0].onclose({ code: 4403 });
+
+    expect(onStatus).toHaveBeenLastCalledWith(
+      "failed",
+      expect.objectContaining({ code: 4403 }),
+    );
+    expect(retry).not.toHaveBeenCalled();
   });
 });
