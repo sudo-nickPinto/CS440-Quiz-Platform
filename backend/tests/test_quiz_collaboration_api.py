@@ -3,11 +3,13 @@ from copy import deepcopy
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from app.auth import CurrentAccount, get_active_account
 from app.api.routes import quiz_editing_live
 from app.config import Settings
 from app.database import Base
+from app.live.protocol import CloseCode
 from app.main import create_app
 from app.models.account import Account, AccountRole
 from app.models.classes import (
@@ -336,6 +338,44 @@ def test_question_save_broadcasts_committed_update(
     assert event["editor_account_id"] == owner.account_id
     assert event["question"]["question_text"] == "Broadcast this"
     assert event["question"]["revision"] == 2
+
+
+def test_deactivated_editor_is_closed_before_later_broadcast(
+    collaboration_client,
+    monkeypatch,
+) -> None:
+    client, class_id, owner, editor, _ = collaboration_client
+    quiz = _create(client, class_id)
+    question = quiz["version"]["questions"][0]
+    base = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    client.post(
+        f"{base}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+    monkeypatch.setattr(
+        quiz_editing_live,
+        "authenticate_token",
+        lambda db, settings, token: editor,
+    )
+
+    with client.websocket_connect(f"/ws/quizzes/{quiz['quiz_id']}") as socket:
+        socket.send_json({"type": "auth", "token": "test-token"})
+        socket.receive_json()
+        with client.app.state.database.session_factory() as db:
+            stored = db.get(Account, editor.account_id)
+            stored.is_active = False
+            db.commit()
+
+        client.app.dependency_overrides[get_active_account] = lambda: owner
+        saved = client.patch(
+            f"{base}/questions/{question['question_id']}",
+            json=_question_payload(1, "Do not broadcast to inactive editor"),
+        )
+        assert saved.status_code == 200
+        with pytest.raises(WebSocketDisconnect) as closed:
+            socket.receive_json()
+
+    assert closed.value.code == CloseCode.FORBIDDEN
 
 
 def test_question_append_broadcasts_without_reloading_other_questions(

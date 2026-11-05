@@ -72,11 +72,13 @@ async def update_class_quiz_route(
     quiz_id: int,
     payload: QuizUpdate,
     request: Request,
-    db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizResponse:
-    result = update_class_quiz(db, account, class_id, quiz_id, payload)
-    await request.app.state.quiz_edit_hub.broadcast(
+    hub = request.app.state.quiz_edit_hub
+    result = await hub.run_db(
+        update_class_quiz, account, class_id, quiz_id, payload
+    )
+    await hub.broadcast(
         quiz_id,
         {
             "type": "quiz_structure_updated",
@@ -98,13 +100,18 @@ async def update_class_quiz_question_route(
     question_id: int,
     payload: QuestionUpdate,
     request: Request,
-    db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuestionUpdateResponse:
-    result = update_class_quiz_question(
-        db, account, class_id, quiz_id, question_id, payload
+    hub = request.app.state.quiz_edit_hub
+    result = await hub.run_db(
+        update_class_quiz_question,
+        account,
+        class_id,
+        quiz_id,
+        question_id,
+        payload,
     )
-    await request.app.state.quiz_edit_hub.broadcast(
+    await hub.broadcast(
         quiz_id,
         {
             "type": "question_updated",
@@ -127,13 +134,13 @@ async def add_class_quiz_question_route(
     quiz_id: int,
     payload: QuestionCreate,
     request: Request,
-    db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuestionUpdateResponse:
-    result = add_class_quiz_question(
-        db, account, class_id, quiz_id, payload
+    hub = request.app.state.quiz_edit_hub
+    result = await hub.run_db(
+        add_class_quiz_question, account, class_id, quiz_id, payload
     )
-    await request.app.state.quiz_edit_hub.broadcast(
+    await hub.broadcast(
         quiz_id,
         {
             "type": "question_added",
@@ -152,11 +159,13 @@ async def publish_class_quiz_route(
     quiz_id: int,
     payload: QuizPublish,
     request: Request,
-    db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizResponse:
-    result = publish_class_quiz(db, account, class_id, quiz_id, payload)
-    await request.app.state.quiz_edit_hub.broadcast(
+    hub = request.app.state.quiz_edit_hub
+    result = await hub.run_db(
+        publish_class_quiz, account, class_id, quiz_id, payload
+    )
+    await hub.broadcast(
         quiz_id,
         {
             "type": "quiz_published",
@@ -205,8 +214,14 @@ async def revoke_quiz_collaborator_route(
     quiz_id: int,
     account_id: int,
     request: Request,
-    db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> None:
-    revoke_quiz_collaborator(db, account, class_id, quiz_id, account_id)
-    await request.app.state.quiz_edit_hub.close_account(quiz_id, account_id)
+    hub = request.app.state.quiz_edit_hub
+    await hub.run_db(
+        revoke_quiz_collaborator,
+        account,
+        class_id,
+        quiz_id,
+        account_id,
+    )
+    await hub.close_account(quiz_id, account_id)

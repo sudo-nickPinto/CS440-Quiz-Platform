@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
-from app.models.account import Account
+from app.models.account import Account, effective_role
 from app.models.classes import ClassMembership, ClassRole, MembershipStatus
 from app.models.quiz import (
     AnswerChoice,
@@ -536,6 +536,14 @@ def require_quiz_editor_access(
     quiz_id: int,
 ) -> Quiz:
     """Authorize an editor connection without exposing unreadable quiz IDs."""
+    stored_account = db.get(Account, account.account_id)
+    if stored_account is None or not stored_account.is_active:
+        raise APIError(403, "inactive_account", "This account is inactive.")
+    account = CurrentAccount(
+        account_id=stored_account.account_id,
+        role=effective_role(stored_account.account_type),
+        is_active=True,
+    )
     quiz = _load_quiz(db, quiz_id)
     try:
         _require_quiz_editor(db, account, quiz)
@@ -608,6 +616,8 @@ def update_class_quiz_question(
             db.add(draft)
             db.flush()
             editor_version = draft
+            quiz.status = QuizStatus.DRAFT
+            db.flush()
         question = next(
             item for item in editor_version.questions
             if item.question_order == source_order
@@ -623,6 +633,34 @@ def update_class_quiz_question(
         )
 
     now = datetime.now(UTC).replace(tzinfo=None)
+    # Claim the draft before mutating a question. Publication updates this
+    # same quiz row to PUBLISHED, so MySQL serializes the two operations and
+    # exactly one side can proceed. The revision increment has no expected
+    # value, allowing different-question saves to queue briefly and both win.
+    claimed_draft = db.execute(
+        update(Quiz)
+        .where(
+            Quiz.quiz_id == quiz_id,
+            Quiz.status == QuizStatus.DRAFT,
+        )
+        .values(
+            revision=Quiz.revision + 1,
+            updated_at=now,
+        )
+    )
+    if claimed_draft.rowcount != 1:
+        db.rollback()
+        current_revision = db.scalar(
+            select(Quiz.revision).where(Quiz.quiz_id == quiz_id)
+        )
+        raise APIError(
+            409,
+            "quiz_edit_conflict",
+            "This quiz was published while the question was being saved. "
+            "Reload the latest version before editing again.",
+            details={"current_revision": current_revision},
+        )
+
     changed = db.execute(
         update(Question)
         .where(
@@ -663,15 +701,6 @@ def update_class_quiz_question(
             )
             for choice_order, choice in enumerate(payload.choices, start=1)
         ]
-        db.execute(
-            update(Quiz)
-            .where(Quiz.quiz_id == quiz_id)
-            .values(
-                revision=Quiz.revision + 1,
-                status=QuizStatus.DRAFT,
-                updated_at=now,
-            )
-        )
         db.flush()
         db.expire(question)
         quiz_revision = db.scalar(
