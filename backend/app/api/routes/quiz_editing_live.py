@@ -69,7 +69,13 @@ async def quiz_editor_socket(websocket: WebSocket, quiz_id: int) -> None:
                 await websocket.close(code=CloseCode.MALFORMED, reason="invalid_json")
                 return
             if message == {"type": "ping"}:
-                await hub.send(connection, {"type": "pong"})
+                # Pings also revalidate access so a quiet, revoked connection
+                # cannot remain open forever when no quiz edits are broadcast.
+                if not await hub.send_if_authorized(
+                    connection,
+                    {"type": "pong"},
+                ):
+                    return
             else:
                 await websocket.close(code=CloseCode.MALFORMED, reason="invalid_message")
                 return

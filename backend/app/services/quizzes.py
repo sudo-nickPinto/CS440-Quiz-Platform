@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
-from app.models.account import Account, effective_role
+from app.models.account import Account
 from app.models.classes import ClassMembership, ClassRole, MembershipStatus
 from app.models.quiz import (
     AnswerChoice,
@@ -64,14 +64,35 @@ def _active_collaborator(
     db: Session,
     quiz_id: int,
     account_id: int,
+    *,
+    lock: bool = False,
 ) -> QuizCollaborator | None:
-    return db.scalar(
-        select(QuizCollaborator).where(
-            QuizCollaborator.quiz_id == quiz_id,
-            QuizCollaborator.account_id == account_id,
-            QuizCollaborator.revoked_at.is_(None),
-        )
+    statement = select(QuizCollaborator).where(
+        QuizCollaborator.quiz_id == quiz_id,
+        QuizCollaborator.account_id == account_id,
+        QuizCollaborator.revoked_at.is_(None),
     )
+    if lock:
+        statement = statement.with_for_update()
+    return db.scalar(statement)
+
+
+def _require_current_active_account(
+    db: Session,
+    account: CurrentAccount,
+    *,
+    lock: bool = False,
+) -> Account:
+    statement = select(Account).where(
+        Account.account_id == account.account_id,
+        Account.is_active.is_(True),
+    )
+    if lock:
+        statement = statement.with_for_update()
+    stored_account = db.scalar(statement)
+    if stored_account is None:
+        raise APIError(403, "inactive_account", "This account is inactive.")
+    return stored_account
 
 
 def _require_active_membership(
@@ -242,6 +263,29 @@ def _clone_questions(questions: list[Question]) -> list[Question]:
         )
         for question in questions
     ]
+
+
+def _same_question_content(left: Question, right: Question) -> bool:
+    """Whether an ID remap still points at an unchanged logical question.
+
+    Question order alone is not sufficient: a whole-quiz edit can replace the
+    question at that position while resetting its row revision to one.
+    """
+    return (
+        left.question_type == right.question_type
+        and left.question_text == right.question_text
+        and left.explanation == right.explanation
+        and left.time_limit_seconds == right.time_limit_seconds
+        and left.base_points == right.base_points
+        and [
+            (choice.choice_order, choice.choice_text, choice.is_correct)
+            for choice in left.choices
+        ]
+        == [
+            (choice.choice_order, choice.choice_text, choice.is_correct)
+            for choice in right.choices
+        ]
+    )
 
 
 def _to_list_item(quiz: Quiz) -> QuizListItem:
@@ -443,6 +487,17 @@ def archive_quiz(
     account: CurrentAccount,
     quiz_id: int,
 ) -> QuizResponse:
+    # Archive shares the quiz row as its serialization boundary with draft
+    # edits and publication. Without this lock (and a revision increment), a
+    # publisher that read the old revision could change ARCHIVED back to
+    # PUBLISHED after the archive committed.
+    db.execute(
+        select(Quiz.quiz_id)
+        .where(Quiz.quiz_id == quiz_id)
+        .with_for_update()
+    )
+    db.expire_all()
+    _require_current_active_account(db, account, lock=True)
     quiz = _load_readable_quiz(db, account, quiz_id)
     # Only the owner; being an Admin or a class organizer isn't enough.
     if quiz.author_id != account.account_id:
@@ -455,6 +510,8 @@ def archive_quiz(
         return _to_response(db, account, quiz)
 
     quiz.status = QuizStatus.ARCHIVED
+    quiz.revision += 1
+    quiz.updated_at = datetime.now(UTC).replace(tzinfo=None)
     try:
         db.commit()
     except SQLAlchemyError as exc:
@@ -471,22 +528,32 @@ def _active_membership(
     db: Session,
     class_id: int,
     account_id: int,
+    *,
+    lock: bool = False,
 ) -> ClassMembership | None:
-    return db.scalar(
-        select(ClassMembership).where(
-            ClassMembership.class_id == class_id,
-            ClassMembership.account_id == account_id,
-            ClassMembership.status == MembershipStatus.ACTIVE,
-        )
+    statement = select(ClassMembership).where(
+        ClassMembership.class_id == class_id,
+        ClassMembership.account_id == account_id,
+        ClassMembership.status == MembershipStatus.ACTIVE,
     )
+    if lock:
+        statement = statement.with_for_update()
+    return db.scalar(statement)
 
 
 def _require_active_class_member(
     db: Session,
     account: CurrentAccount,
     class_id: int,
+    *,
+    lock: bool = False,
 ) -> ClassMembership:
-    membership = _active_membership(db, class_id, account.account_id)
+    membership = _active_membership(
+        db,
+        class_id,
+        account.account_id,
+        lock=lock,
+    )
     if membership is None:
         raise APIError(404, "class_not_found", "Class not found.")
     return membership
@@ -503,12 +570,25 @@ def _require_quiz_editor(
     db: Session,
     account: CurrentAccount,
     quiz: Quiz,
+    *,
+    lock_access: bool = False,
 ) -> None:
+    _require_current_active_account(db, account, lock=lock_access)
     if quiz.class_id is not None:
-        _require_active_class_member(db, account, quiz.class_id)
+        _require_active_class_member(
+            db,
+            account,
+            quiz.class_id,
+            lock=lock_access,
+        )
     if quiz.author_id == account.account_id:
         return
-    if _active_collaborator(db, quiz.quiz_id, account.account_id) is not None:
+    if _active_collaborator(
+        db,
+        quiz.quiz_id,
+        account.account_id,
+        lock=lock_access,
+    ) is not None:
         return
     raise APIError(
         403,
@@ -536,14 +616,6 @@ def require_quiz_editor_access(
     quiz_id: int,
 ) -> Quiz:
     """Authorize an editor connection without exposing unreadable quiz IDs."""
-    stored_account = db.get(Account, account.account_id)
-    if stored_account is None or not stored_account.is_active:
-        raise APIError(403, "inactive_account", "This account is inactive.")
-    account = CurrentAccount(
-        account_id=stored_account.account_id,
-        role=effective_role(stored_account.account_type),
-        is_active=True,
-    )
     quiz = _load_quiz(db, quiz_id)
     try:
         _require_quiz_editor(db, account, quiz)
@@ -585,10 +657,49 @@ def update_class_quiz_question(
         (question for question in editor_version.questions if question.question_id == question_id),
         None,
     )
-    if source is None:
-        raise APIError(404, "question_not_found", "Question not found.")
-
     question = source
+    mapped_source = None
+    if source is None and editor_version.published_at is None:
+        # A client may still hold IDs from the published version while another
+        # editor has already created the next draft. Map only from the direct
+        # published predecessor; older historical IDs must not target a newer
+        # draft merely because their question order happens to match.
+        predecessor = max(
+            (
+                version
+                for version in quiz.versions
+                if version.published_at is not None
+                and version.version_number < editor_version.version_number
+            ),
+            key=lambda version: version.version_number,
+            default=None,
+        )
+        stale_source = (
+            next(
+                (
+                    item
+                    for item in predecessor.questions
+                    if item.question_id == question_id
+                ),
+                None,
+            )
+            if predecessor is not None
+            else None
+        )
+        if stale_source is not None:
+            mapped_source = stale_source
+            question = next(
+                (
+                    item
+                    for item in editor_version.questions
+                    if item.question_order == stale_source.question_order
+                ),
+                None,
+            )
+    if source is None:
+        if question is None:
+            raise APIError(404, "question_not_found", "Question not found.")
+
     if editor_version.published_at is not None:
         # Serialize only the one-time immutable-version copy. If another
         # editor created the draft while we waited, map the original question
@@ -621,6 +732,20 @@ def update_class_quiz_question(
         question = next(
             item for item in editor_version.questions
             if item.question_order == source_order
+        )
+        if question.question_id != source.question_id:
+            mapped_source = source
+
+    if (
+        mapped_source is not None
+        and not _same_question_content(mapped_source, question)
+    ):
+        db.rollback()
+        raise APIError(
+            409,
+            "question_edit_conflict",
+            "This question changed after you opened it. Reload that question before saving.",
+            details={"current_revision": question.revision},
         )
 
     if payload.expected_revision != question.revision:
@@ -660,6 +785,12 @@ def update_class_quiz_question(
             "Reload the latest version before editing again.",
             details={"current_revision": current_revision},
         )
+
+    # Coordinate access revocation with the same quiz-row boundary. A roster
+    # removal or collaborator revocation that commits first blocks this save;
+    # if this transaction holds the access row first, the save linearizes
+    # before the revocation.
+    _require_quiz_editor(db, account, quiz, lock_access=True)
 
     changed = db.execute(
         update(Question)
@@ -747,7 +878,7 @@ def add_class_quiz_question(
     )
     db.expire_all()
     quiz = _class_quiz(db, class_id, quiz_id)
-    _require_quiz_editor(db, account, quiz)
+    _require_quiz_editor(db, account, quiz, lock_access=True)
     if quiz.status == QuizStatus.ARCHIVED:
         raise APIError(409, "quiz_not_editable", "An archived quiz cannot be edited.")
 
@@ -823,6 +954,7 @@ def update_class_quiz(
         .where(
             Quiz.quiz_id == quiz_id,
             Quiz.revision == payload.expected_revision,
+            Quiz.status != QuizStatus.ARCHIVED,
         )
         .values(revision=Quiz.revision + 1, updated_at=now)
     )
@@ -838,6 +970,8 @@ def update_class_quiz(
             "Reload the latest version before saving again.",
             details={"current_revision": current_revision},
         )
+
+    _require_quiz_editor(db, account, quiz, lock_access=True)
 
     draft = next(
         (version for version in reversed(quiz.versions) if version.published_at is None),
@@ -943,6 +1077,7 @@ def publish_class_quiz(
             .where(
                 Quiz.quiz_id == quiz_id,
                 Quiz.revision == payload.expected_revision,
+                Quiz.status == QuizStatus.DRAFT,
             )
             .values(
                 revision=Quiz.revision + 1,
@@ -962,6 +1097,7 @@ def publish_class_quiz(
                 details={"current_revision": current_revision},
             )
 
+        _require_current_active_account(db, account, lock=True)
         draft.published_at = now
         db.flush()
         response = QuizResponse(
@@ -1129,8 +1265,23 @@ def revoke_quiz_collaborator(
     quiz_id: int,
     target_account_id: int,
 ) -> None:
+    # Use the same lock order as editor mutations: quiz, then access row.
+    db.execute(
+        select(Quiz.quiz_id)
+        .where(Quiz.quiz_id == quiz_id)
+        .with_for_update()
+    )
+    db.expire_all()
+    _require_current_active_account(db, account, lock=True)
     _require_collaborator_owner(db, account, class_id, quiz_id)
-    collaborator = db.get(QuizCollaborator, (quiz_id, target_account_id))
+    collaborator = db.scalar(
+        select(QuizCollaborator)
+        .where(
+            QuizCollaborator.quiz_id == quiz_id,
+            QuizCollaborator.account_id == target_account_id,
+        )
+        .with_for_update()
+    )
     if collaborator is None or collaborator.revoked_at is not None:
         raise APIError(404, "quiz_collaborator_not_found", "Collaborator not found.")
     collaborator.revoked_at = datetime.now(UTC).replace(tzinfo=None)

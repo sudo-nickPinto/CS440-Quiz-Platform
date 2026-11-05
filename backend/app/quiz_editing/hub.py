@@ -62,22 +62,27 @@ class QuizEditHub:
         self,
         connection: QuizEditConnection,
         payload: BaseModel | dict,
-    ) -> None:
+    ) -> bool:
         try:
             async with connection.send_lock:
                 await connection.websocket.send_text(encode(payload))
+            return True
         except Exception:
             logger.debug("Dropped quiz edit notification", exc_info=True)
+            await self.disconnect(connection)
+            return False
 
     async def broadcast(self, quiz_id: int, payload: BaseModel | dict) -> None:
         targets = list(self._quizzes.get(quiz_id, set()))
-        await asyncio.gather(*(self._send_if_authorized(target, payload) for target in targets))
+        await asyncio.gather(
+            *(self.send_if_authorized(target, payload) for target in targets)
+        )
 
-    async def _send_if_authorized(
+    async def send_if_authorized(
         self,
         connection: QuizEditConnection,
         payload: BaseModel | dict,
-    ) -> None:
+    ) -> bool:
         # Membership and collaborator access may be revoked while a socket is
         # open. Re-check before exposing any later edit notification.
         from app.services.quizzes import require_quiz_editor_access
@@ -97,11 +102,11 @@ class QuizEditHub:
                 )
             except Exception:
                 logger.debug("Revoked quiz editor socket already closed", exc_info=True)
-            return
+            return False
         except Exception:
             logger.exception("Could not re-authorize quiz editor notification")
-            return
-        await self.send(connection, payload)
+            return False
+        return await self.send(connection, payload)
 
     async def close_account(self, quiz_id: int, account_id: int) -> None:
         targets = [

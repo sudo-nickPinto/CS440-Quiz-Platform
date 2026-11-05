@@ -10,6 +10,7 @@ from app.services import quizzes as quiz_service
 from app.services.quizzes import (
     add_class_quiz_question,
     publish_class_quiz,
+    revoke_quiz_collaborator,
     update_class_quiz_question,
 )
 
@@ -260,6 +261,67 @@ def test_publish_wins_controlled_race_without_mutating_published_question(
     with client.app.state.database.session_factory() as db:
         version = db.get(QuizVersion, quiz["version"]["quiz_version_id"])
         assert version.published_at is not None
+        stored = db.get(Question, first["question_id"])
+        assert stored.question_text == "First question?"
+
+
+def test_revocation_wins_controlled_race_without_committing_late_edit(
+    mysql_quiz_client,
+    monkeypatch,
+) -> None:
+    client, owner, editor, class_id, quiz = _setup_shared_quiz(
+        mysql_quiz_client
+    )
+    first = quiz["version"]["questions"][0]
+    question_read = Event()
+    allow_question_save = Event()
+    original_latest = quiz_service._latest_editor_version
+
+    def pause_after_read(loaded_quiz):
+        version = original_latest(loaded_quiz)
+        question_read.set()
+        assert allow_question_save.wait(timeout=10)
+        return version
+
+    monkeypatch.setattr(
+        quiz_service,
+        "_latest_editor_version",
+        pause_after_read,
+    )
+
+    def save_question():
+        with client.app.state.database.session_factory() as db:
+            try:
+                update_class_quiz_question(
+                    db,
+                    editor,
+                    class_id,
+                    quiz["quiz_id"],
+                    first["question_id"],
+                    _question_update(first["revision"], "Revoked edit"),
+                )
+                return "saved"
+            except APIError as exc:
+                return exc.code
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        pending_save = executor.submit(save_question)
+        try:
+            assert question_read.wait(timeout=10)
+            with client.app.state.database.session_factory() as db:
+                revoke_quiz_collaborator(
+                    db,
+                    owner,
+                    class_id,
+                    quiz["quiz_id"],
+                    editor.account_id,
+                )
+        finally:
+            allow_question_save.set()
+        outcome = pending_save.result(timeout=30)
+
+    assert outcome == "quiz_edit_denied"
+    with client.app.state.database.session_factory() as db:
         stored = db.get(Question, first["question_id"])
         assert stored.question_text == "First question?"
 
