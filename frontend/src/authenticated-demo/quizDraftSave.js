@@ -18,6 +18,22 @@ export function remoteStructureDecision({
   };
 }
 
+export function canApplyRemoteQuestion(localQuestion, baselineQuestion) {
+  return Boolean(
+    localQuestion &&
+      baselineQuestion &&
+      JSON.stringify(localQuestion) === JSON.stringify(baselineQuestion),
+  );
+}
+
+export function nextAggregateRevision(
+  currentRevision,
+  incomingRevision,
+  aggregateStale,
+) {
+  return aggregateStale ? currentRevision : incomingRevision;
+}
+
 export function canSaveDraftIndependently(editor, baselineEditor) {
   const appendOnlyStructure =
     editor.questions.length >= baselineEditor.questions.length &&

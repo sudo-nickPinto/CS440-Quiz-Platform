@@ -19,7 +19,9 @@ import {
   toQuizCreate,
 } from "./quizPayload";
 import {
+  canApplyRemoteQuestion,
   canSaveDraftIndependently,
+  nextAggregateRevision,
   remoteStructureDecision,
   saveAggregateQuiz,
   saveDraftQuestions,
@@ -121,7 +123,7 @@ export function QuizEditor({
   const editorRef = useRef(initial);
   const baselineEditorRef = useRef(initial);
   const quizRevisionRef = useRef(existingQuiz?.revision ?? null);
-  const structureStaleRef = useRef(false);
+  const aggregateStaleRef = useRef(false);
 
   const api = useApi();
   const action = useAction();
@@ -156,7 +158,8 @@ export function QuizEditor({
         const baseline = currentBaseline.questions.find(
           (question) => question.questionId === questionId,
         );
-        if (!local || !baseline || JSON.stringify(local) !== JSON.stringify(baseline)) {
+        if (!canApplyRemoteQuestion(local, baseline)) {
+          aggregateStaleRef.current = true;
           setRemoteNotice({
             tone: "warning",
             text: "A collaborator saved this question while you have local changes.",
@@ -189,12 +192,14 @@ export function QuizEditor({
         setBaselineEditor(nextBaseline);
         acceptQuizRevision(message.quiz_revision);
         setQuestionStatus(questionId, "remote");
-        setRemoteNotice({
-          tone: "success",
-          text: `Question ${index + 1} was updated by a collaborator.`,
-          detail: "The saved change is now shown in your editor.",
-          reload: false,
-        });
+        if (!aggregateStaleRef.current) {
+          setRemoteNotice({
+            tone: "success",
+            text: `Question ${index + 1} was updated by a collaborator.`,
+            detail: "The saved change is now shown in your editor.",
+            reload: false,
+          });
+        }
         return;
       }
       if (message.type === "question_added") {
@@ -226,12 +231,14 @@ export function QuizEditor({
         setEditor(nextEditor);
         setBaselineEditor(nextBaseline);
         acceptQuizRevision(message.quiz_revision);
-        setRemoteNotice({
-          tone: "success",
-          text: "A collaborator added a new question.",
-          detail: "It was added without changing your unsaved question work.",
-          reload: false,
-        });
+        if (!aggregateStaleRef.current) {
+          setRemoteNotice({
+            tone: "success",
+            text: "A collaborator added a new question.",
+            detail: "It was added without changing your unsaved question work.",
+            reload: false,
+          });
+        }
         return;
       }
       if (message.type === "quiz_structure_updated") {
@@ -246,7 +253,7 @@ export function QuizEditor({
           onReload?.();
           return;
         }
-        structureStaleRef.current = true;
+        aggregateStaleRef.current = true;
         setRemoteNotice({
           tone: "warning",
           text: "A collaborator changed the quiz structure.",
@@ -265,7 +272,7 @@ export function QuizEditor({
           onReload?.();
           return;
         }
-        structureStaleRef.current = true;
+        aggregateStaleRef.current = true;
         setRemoteNotice({
           tone: "info",
           text: "The quiz was published by its owner.",
@@ -464,8 +471,11 @@ export function QuizEditor({
   }
 
   function acceptQuizRevision(revision) {
-    if (structureStaleRef.current) return;
-    quizRevisionRef.current = revision;
+    quizRevisionRef.current = nextAggregateRevision(
+      quizRevisionRef.current,
+      revision,
+      aggregateStaleRef.current,
+    );
   }
 
   function setQuestionStatus(questionId, status) {
@@ -554,11 +564,20 @@ export function QuizEditor({
       editorRef.current = nextEditor;
       setEditor(nextEditor);
       acceptQuizRevision(result.quiz_revision);
-      setRemoteNotice(null);
+      if (!aggregateStaleRef.current) setRemoteNotice(null);
       setQuestionStatus(questionId, "saved");
       savedSuccessfully = true;
     } catch (failure) {
       setAutosaveError(failure);
+      if (failure.code === "question_edit_conflict") {
+        aggregateStaleRef.current = true;
+        setRemoteNotice({
+          tone: "warning",
+          text: "A collaborator saved this question before your changes.",
+          detail: "Reload the latest quiz before making an aggregate save.",
+          reload: true,
+        });
+      }
       setQuestionStatus(
         questionId,
         failure.code === "question_edit_conflict" ? "conflict" : "error",

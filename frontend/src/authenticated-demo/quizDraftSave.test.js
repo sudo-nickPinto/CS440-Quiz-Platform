@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  canApplyRemoteQuestion,
+  nextAggregateRevision,
   remoteStructureDecision,
   saveAggregateQuiz,
   saveDraftQuestions,
@@ -51,6 +53,36 @@ function response(questionId, text, quizRevision) {
 }
 
 describe("collaborative draft saves", () => {
+  it("keeps aggregate saves stale after an ignored question update and unrelated event", async () => {
+    const baseline = question("saved-1", 1, "Original");
+    const locallyEdited = question("saved-1", 1, "Local edit");
+
+    const aggregateStale = !canApplyRemoteQuestion(locallyEdited, baseline);
+    const revisionAfterUnrelatedEvent = nextAggregateRevision(
+      4,
+      5,
+      aggregateStale,
+    );
+
+    expect(aggregateStale).toBe(true);
+    expect(revisionAfterUnrelatedEvent).toBe(4);
+
+    const api = vi.fn().mockResolvedValue({ quiz_id: 9 });
+    await saveAggregateQuiz({
+      editor: {
+        title: "Locally renamed quiz",
+        description: "",
+        defaultTime: 20,
+        questions: [locallyEdited],
+      },
+      revision: revisionAfterUnrelatedEvent,
+      existingQuiz: { class_id: 3, quiz_id: 9 },
+      api,
+    });
+
+    expect(JSON.parse(api.mock.calls[0][1].body).expected_revision).toBe(4);
+  });
+
   it("keeps the loaded revision after a remote structural update when local content is dirty", async () => {
     const baselineEditor = {
       title: "Quiz",
