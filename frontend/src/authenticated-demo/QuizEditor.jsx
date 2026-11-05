@@ -157,7 +157,11 @@ export function QuizEditor({
           return;
         }
         const index = editor.questions.indexOf(local);
-        const updated = quizQuestionToEditor(message.question, index);
+        const updated = quizQuestionToEditor(
+          message.question,
+          index,
+          editor.defaultTime,
+        );
         setEditor((currentEditor) => ({
           ...currentEditor,
           questions: currentEditor.questions.map((question) =>
@@ -197,6 +201,7 @@ export function QuizEditor({
               quizQuestionToEditor(
                 message.question,
                 currentEditor.questions.length,
+                currentEditor.defaultTime,
               ),
             ],
           };
@@ -214,18 +219,26 @@ export function QuizEditor({
       }
       if (message.type === "quiz_structure_updated") {
         setQuizRevision(message.quiz_revision);
+        if (!dirty) {
+          onReload?.();
+          return;
+        }
         setRemoteNotice({
           tone: "warning",
           text: "A collaborator changed the quiz structure.",
-          detail: "Reload before adding, deleting, reordering, or renaming content.",
+          detail: "Reload when you are ready. Your unsaved work has not been replaced.",
           reload: true,
         });
       } else if (message.type === "quiz_published") {
         setQuizRevision(message.quiz_revision);
+        if (!dirty) {
+          onReload?.();
+          return;
+        }
         setRemoteNotice({
           tone: "info",
           text: "The quiz was published by its owner.",
-          detail: "Reload to continue from the published version.",
+          detail: "Reload when you are ready. Your unsaved work has not been replaced.",
           reload: true,
         });
       }
@@ -475,7 +488,11 @@ export function QuizEditor({
           `/questions/${questionId}`,
         { method: "PATCH", body: JSON.stringify(payload) },
       );
-      const saved = quizQuestionToEditor(result.question, index);
+      const saved = quizQuestionToEditor(
+        result.question,
+        index,
+        editorRef.current.defaultTime,
+      );
       const nextBaseline = {
         ...baselineEditorRef.current,
         questions: baselineEditorRef.current.questions.map((item) =>
@@ -716,30 +733,28 @@ export function QuizEditor({
           </TimePicker>
         </div>
 
-        {editing && (
+        {editing && (collaborationStatus !== "open" || remoteNotice) && (
           <div
             className={`qe-collaboration is-${collaborationStatus}`}
             aria-live="polite"
           >
-            <div className="qe-live-state">
-              <span className="qe-live-dot" aria-hidden="true" />
-              <span>
-                <b>
-                  {collaborationStatus === "open"
-                    ? "Live editing connected"
-                    : collaborationStatus === "reconnecting"
+            {collaborationStatus !== "open" && (
+              <div className="qe-live-state">
+                <span className="qe-live-dot" aria-hidden="true" />
+                <span>
+                  <b>
+                    {collaborationStatus === "reconnecting"
                       ? "Reconnecting live editing…"
                       : collaborationStatus === "failed"
                         ? "Live editing unavailable"
                         : "Connecting live editing…"}
-                </b>
-                <small>
-                  {collaborationStatus === "open"
-                    ? "Saved question changes appear for every editor."
-                    : "You can still save; refresh before editing shared content."}
-                </small>
-              </span>
-            </div>
+                  </b>
+                  <small>
+                    You can still save; refresh before editing shared content.
+                  </small>
+                </span>
+              </div>
+            )}
 
             {remoteNotice && (
               <div className={`qe-live-message is-${remoteNotice.tone}`}>

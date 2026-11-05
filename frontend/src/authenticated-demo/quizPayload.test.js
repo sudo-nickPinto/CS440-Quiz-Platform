@@ -62,6 +62,27 @@ describe("editing saved quizzes", () => {
     });
   });
 
+  it("reconstructs the saved quiz-wide timer instead of resetting to 20s", () => {
+    const quiz = savedQuiz();
+    const second = structuredClone(quiz.version.questions[0]);
+    const third = structuredClone(quiz.version.questions[0]);
+    second.question_id = 13;
+    second.question_order = 2;
+    third.question_id = 14;
+    third.question_order = 3;
+    third.time_limit_seconds = 45;
+    quiz.version.questions.push(second, third);
+
+    const editor = quizToEditor(quiz);
+
+    expect(editor.defaultTime).toBe(600);
+    expect(editor.questions.map((question) => question.limit)).toEqual([
+      null,
+      null,
+      45,
+    ]);
+  });
+
   it("preserves question identity and revision for independent saves", () => {
     const question = savedQuiz().version.questions[0];
     question.revision = 4;

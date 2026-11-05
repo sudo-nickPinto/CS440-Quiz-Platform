@@ -1,17 +1,36 @@
 export function quizToEditor(quiz) {
   const version = quiz.version;
+  const questions = [...version.questions].sort(
+    (a, b) => a.question_order - b.question_order,
+  );
+  const timerCounts = new Map();
+  let defaultTime = 20;
+  let highestCount = 0;
+
+  // Quiz versions currently persist the effective timer on each question,
+  // not a separate editor-default value. Reconstruct the default from the
+  // most common saved timer so reopening does not incorrectly reset it to 20s.
+  for (const question of questions) {
+    const seconds = Number(question.time_limit_seconds);
+    const count = (timerCounts.get(seconds) ?? 0) + 1;
+    timerCounts.set(seconds, count);
+    if (count > highestCount) {
+      defaultTime = seconds;
+      highestCount = count;
+    }
+  }
 
   return {
     title: version.title,
     description: version.description ?? "",
-    defaultTime: 20,
-    questions: [...version.questions]
-      .sort((a, b) => a.question_order - b.question_order)
-      .map((question, index) => quizQuestionToEditor(question, index)),
+    defaultTime,
+    questions: questions.map((question, index) =>
+      quizQuestionToEditor(question, index, defaultTime),
+    ),
   };
 }
 
-export function quizQuestionToEditor(question, index = 0) {
+export function quizQuestionToEditor(question, index = 0, defaultTime = null) {
   const choices = [...question.choices].sort(
     (a, b) => a.choice_order - b.choice_order,
   );
@@ -39,7 +58,11 @@ export function quizQuestionToEditor(question, index = 0) {
     explanation: question.explanation ?? "",
     options: choices.map((choice) => choice.choice_text),
     correct: choices.findIndex((choice) => choice.is_correct),
-    limit: question.time_limit_seconds,
+    limit:
+      defaultTime != null &&
+      Number(question.time_limit_seconds) === Number(defaultTime)
+        ? null
+        : question.time_limit_seconds,
     basePoints: question.base_points,
   };
 }
