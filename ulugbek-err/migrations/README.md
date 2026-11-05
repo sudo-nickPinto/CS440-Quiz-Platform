@@ -16,6 +16,7 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0008_quiz_class` | Adds `quiz.class_id`: every quiz belongs to a class, and only that class can see it (V3 task 2). Fills it in for quizzes played in exactly one class |
 | `0009_quiz_collaboration` | Adds optimistic quiz revisions, collaborator permission/state, and append-only share/revocation audit events (V3 task 3) |
 | `0010_quiz_submission` | Adds class quiz submission/approval audit records and concurrency-safe active-submission uniqueness (V3 task 4) |
+| `0012_question_revision` | Adds per-question optimistic revisions so collaborators can save different questions concurrently (`0011` is reserved by account-profile work) |
 
 Each migration comes in two files:
 

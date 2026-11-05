@@ -1,12 +1,16 @@
 from collections.abc import Iterator
 from copy import deepcopy
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from app.auth import CurrentAccount, get_active_account
+from app.api.routes import quiz_editing_live
 from app.config import Settings
 from app.database import Base
+from app.live.protocol import CloseCode
 from app.main import create_app
 from app.models.account import Account, AccountRole
 from app.models.classes import (
@@ -16,7 +20,11 @@ from app.models.classes import (
     JoinedVia,
     MembershipStatus,
 )
-from app.models.quiz import CollaboratorEventType, QuizCollaboratorEvent
+from app.models.quiz import (
+    CollaboratorEventType,
+    QuizCollaborator,
+    QuizCollaboratorEvent,
+)
 
 
 QUIZ_PAYLOAD = {
@@ -124,6 +132,25 @@ def _edit_payload(expected_revision: int, title: str = "Edited") -> dict:
     return payload
 
 
+def _question_payload(expected_revision: int, text: str) -> dict:
+    return {
+        "expected_revision": expected_revision,
+        "question_text": text,
+        "time_limit_seconds": 30,
+        "base_points": 500,
+        "choices": [
+            {"choice_text": "Yes", "is_correct": True},
+            {"choice_text": "No", "is_correct": False},
+        ],
+    }
+
+
+def _new_question_payload(text: str) -> dict:
+    payload = _question_payload(1, text)
+    payload.pop("expected_revision")
+    return payload
+
+
 def test_owner_shares_with_named_active_member_and_editor_updates(
     collaboration_client,
 ) -> None:
@@ -151,6 +178,368 @@ def test_owner_shares_with_named_active_member_and_editor_updates(
     assert updated.json()["version"]["version_number"] == 1
     assert updated.json()["version"]["published_at"] is None
     assert updated.json()["version"]["title"] == "Edited"
+    assert client.get(path).json()["can_edit"] is True
+
+
+def test_collaborators_save_different_questions_without_conflicting(
+    collaboration_client,
+) -> None:
+    client, class_id, owner, editor, _ = collaboration_client
+    payload = deepcopy(QUIZ_PAYLOAD)
+    payload["questions"].append(
+        {
+            "question_text": "Second question?",
+            "choices": [
+                {"choice_text": "A", "is_correct": True},
+                {"choice_text": "B", "is_correct": False},
+            ],
+        }
+    )
+    created = client.post(f"/classes/{class_id}/quizzes", json=payload).json()
+    path = f"/classes/{class_id}/quizzes/{created['quiz_id']}"
+    first, second = created["version"]["questions"]
+    client.post(
+        f"{path}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+
+    first_saved = client.patch(
+        f"{path}/questions/{first['question_id']}",
+        json=_question_payload(1, "Owner changed the first"),
+    )
+    client.app.dependency_overrides[get_active_account] = lambda: editor
+    second_saved = client.patch(
+        f"{path}/questions/{second['question_id']}",
+        json=_question_payload(1, "Editor changed the second"),
+    )
+
+    assert first_saved.status_code == 200
+    assert second_saved.status_code == 200
+    assert first_saved.json()["question"]["revision"] == 2
+    assert second_saved.json()["question"]["revision"] == 2
+    assert second_saved.json()["quiz_revision"] == 3
+
+    client.app.dependency_overrides[get_active_account] = lambda: owner
+    current = client.get(path).json()
+    assert [q["question_text"] for q in current["version"]["questions"]] == [
+        "Owner changed the first",
+        "Editor changed the second",
+    ]
+
+
+def test_append_question_does_not_block_another_question_save(
+    collaboration_client,
+) -> None:
+    client, class_id, owner, editor, _ = collaboration_client
+    payload = deepcopy(QUIZ_PAYLOAD)
+    payload["questions"].append(_new_question_payload("Second question?"))
+    created = client.post(f"/classes/{class_id}/quizzes", json=payload).json()
+    path = f"/classes/{class_id}/quizzes/{created['quiz_id']}"
+    second = created["version"]["questions"][1]
+    client.post(
+        f"{path}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+
+    appended = client.post(
+        f"{path}/questions",
+        json=_new_question_payload("Owner appended a third"),
+    )
+    assert appended.status_code == 201
+    assert appended.json()["question"]["question_order"] == 3
+
+    client.app.dependency_overrides[get_active_account] = lambda: editor
+    edited = client.patch(
+        f"{path}/questions/{second['question_id']}",
+        json=_question_payload(second["revision"], "Editor saved question two"),
+    )
+    assert edited.status_code == 200
+
+    client.app.dependency_overrides[get_active_account] = lambda: owner
+    current = client.get(path).json()
+    assert [q["question_text"] for q in current["version"]["questions"]] == [
+        "Which answer?",
+        "Editor saved question two",
+        "Owner appended a third",
+    ]
+
+
+def test_same_question_stale_save_returns_question_revision(
+    collaboration_client,
+) -> None:
+    client, class_id, _, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    question = quiz["version"]["questions"][0]
+    path = (
+        f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+        f"/questions/{question['question_id']}"
+    )
+
+    assert client.patch(path, json=_question_payload(1, "First save")).status_code == 200
+    stale = client.patch(path, json=_question_payload(1, "Stale save"))
+
+    assert stale.status_code == 409
+    assert stale.json()["error"] == {
+        "code": "question_edit_conflict",
+        "message": "This question changed after you opened it. Reload that question before saving.",
+        "details": {"current_revision": 2},
+    }
+
+
+def test_first_question_edit_after_publish_creates_editable_draft(
+    collaboration_client,
+) -> None:
+    client, class_id, _, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    base = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    published = client.post(
+        f"{base}/publish", json={"expected_revision": quiz["revision"]}
+    ).json()
+    question = published["version"]["questions"][0]
+
+    saved = client.patch(
+        f"{base}/questions/{question['question_id']}",
+        json=_question_payload(question["revision"], "New draft question"),
+    )
+
+    assert saved.status_code == 200
+    current = client.get(base).json()
+    assert current["status"] == "DRAFT"
+    assert current["version"]["version_number"] == 2
+    assert current["version"]["questions"][0]["question_text"] == (
+        "New draft question"
+    )
+
+
+def test_published_question_ids_map_only_to_the_direct_successor_draft(
+    collaboration_client,
+) -> None:
+    client, class_id, _, _, _ = collaboration_client
+    payload = deepcopy(QUIZ_PAYLOAD)
+    payload["questions"].append(_new_question_payload("Second question?"))
+    quiz = client.post(f"/classes/{class_id}/quizzes", json=payload).json()
+    base = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    published = client.post(
+        f"{base}/publish",
+        json={"expected_revision": quiz["revision"]},
+    ).json()
+    first, second = published["version"]["questions"]
+
+    # This first save clones the published version, changing every question ID.
+    changed_second = client.patch(
+        f"{base}/questions/{second['question_id']}",
+        json=_question_payload(second["revision"], "Changed in the new draft"),
+    )
+    assert changed_second.status_code == 200
+
+    # A second editor still holding the immediately-published first-question
+    # ID can save an untouched question; the server maps it by stable order.
+    changed_first = client.patch(
+        f"{base}/questions/{first['question_id']}",
+        json=_question_payload(first["revision"], "Mapped into the new draft"),
+    )
+    assert changed_first.status_code == 200
+    assert changed_first.json()["question"]["question_id"] != first["question_id"]
+
+    # The old ID cannot overwrite the question that changed during cloning.
+    stale_second = client.patch(
+        f"{base}/questions/{second['question_id']}",
+        json=_question_payload(second["revision"], "Must not overwrite"),
+    )
+    assert stale_second.status_code == 409
+    assert stale_second.json()["error"]["code"] == "question_edit_conflict"
+
+
+def test_stale_published_id_cannot_overwrite_replaced_question_at_same_order(
+    collaboration_client,
+) -> None:
+    client, class_id, _, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    base = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    published = client.post(
+        f"{base}/publish",
+        json={"expected_revision": quiz["revision"]},
+    ).json()
+    old_question = published["version"]["questions"][0]
+
+    replacement = _edit_payload(published["revision"], "Rebuilt draft")
+    replacement["questions"][0]["question_text"] = "A different question"
+    rebuilt = client.put(base, json=replacement)
+    assert rebuilt.status_code == 200
+    assert rebuilt.json()["version"]["questions"][0]["revision"] == 1
+
+    stale = client.patch(
+        f"{base}/questions/{old_question['question_id']}",
+        json=_question_payload(old_question["revision"], "Must not overwrite"),
+    )
+    assert stale.status_code == 409
+    assert stale.json()["error"]["code"] == "question_edit_conflict"
+    current = client.get(base).json()
+    assert current["version"]["questions"][0]["question_text"] == (
+        "A different question"
+    )
+
+
+def test_question_save_broadcasts_committed_update(
+    collaboration_client,
+    monkeypatch,
+) -> None:
+    client, class_id, owner, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    question = quiz["version"]["questions"][0]
+    monkeypatch.setattr(
+        quiz_editing_live,
+        "authenticate_token",
+        lambda db, settings, token: owner,
+    )
+
+    with client.websocket_connect(f"/ws/quizzes/{quiz['quiz_id']}") as socket:
+        socket.send_json({"type": "auth", "token": "test-token"})
+        assert socket.receive_json() == {
+            "type": "quiz_editor_state",
+            "quiz_id": quiz["quiz_id"],
+        }
+
+        saved = client.patch(
+            f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+            f"/questions/{question['question_id']}",
+            json=_question_payload(1, "Broadcast this"),
+        )
+        assert saved.status_code == 200
+        event = socket.receive_json()
+
+    assert event["type"] == "question_updated"
+    assert event["editor_account_id"] == owner.account_id
+    assert event["question"]["question_text"] == "Broadcast this"
+    assert event["question"]["revision"] == 2
+
+
+def test_deactivated_editor_is_closed_before_later_broadcast(
+    collaboration_client,
+    monkeypatch,
+) -> None:
+    client, class_id, owner, editor, _ = collaboration_client
+    quiz = _create(client, class_id)
+    question = quiz["version"]["questions"][0]
+    base = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    client.post(
+        f"{base}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+    monkeypatch.setattr(
+        quiz_editing_live,
+        "authenticate_token",
+        lambda db, settings, token: editor,
+    )
+
+    with client.websocket_connect(f"/ws/quizzes/{quiz['quiz_id']}") as socket:
+        socket.send_json({"type": "auth", "token": "test-token"})
+        socket.receive_json()
+        with client.app.state.database.session_factory() as db:
+            stored = db.get(Account, editor.account_id)
+            stored.is_active = False
+            db.commit()
+
+        client.app.dependency_overrides[get_active_account] = lambda: owner
+        saved = client.patch(
+            f"{base}/questions/{question['question_id']}",
+            json=_question_payload(1, "Do not broadcast to inactive editor"),
+        )
+        assert saved.status_code == 200
+        with pytest.raises(WebSocketDisconnect) as closed:
+            socket.receive_json()
+
+    assert closed.value.code == CloseCode.FORBIDDEN
+
+
+def test_revoked_editor_ping_rechecks_access_without_waiting_for_an_edit(
+    collaboration_client,
+    monkeypatch,
+) -> None:
+    client, class_id, _, editor, _ = collaboration_client
+    quiz = _create(client, class_id)
+    base = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    client.post(
+        f"{base}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+    monkeypatch.setattr(
+        quiz_editing_live,
+        "authenticate_token",
+        lambda db, settings, token: editor,
+    )
+
+    with client.websocket_connect(f"/ws/quizzes/{quiz['quiz_id']}") as socket:
+        socket.send_json({"type": "auth", "token": "test-token"})
+        socket.receive_json()
+        # Change the database directly so this test exercises ping-time
+        # reauthorization rather than the DELETE route's proactive close.
+        with client.app.state.database.session_factory() as db:
+            collaborator = db.get(
+                QuizCollaborator,
+                (quiz["quiz_id"], editor.account_id),
+            )
+            collaborator.revoked_at = datetime.now(UTC).replace(tzinfo=None)
+            db.commit()
+
+        socket.send_json({"type": "ping"})
+        with pytest.raises(WebSocketDisconnect) as closed:
+            socket.receive_json()
+
+    assert closed.value.code == CloseCode.FORBIDDEN
+
+
+def test_archiving_advances_revision_and_closes_editor_sockets(
+    collaboration_client,
+    monkeypatch,
+) -> None:
+    client, class_id, owner, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    monkeypatch.setattr(
+        quiz_editing_live,
+        "authenticate_token",
+        lambda db, settings, token: owner,
+    )
+
+    with client.websocket_connect(f"/ws/quizzes/{quiz['quiz_id']}") as socket:
+        socket.send_json({"type": "auth", "token": "test-token"})
+        socket.receive_json()
+        archived = client.patch(f"/quizzes/{quiz['quiz_id']}/archive")
+        assert archived.status_code == 200
+        assert archived.json()["status"] == "ARCHIVED"
+        assert archived.json()["revision"] == quiz["revision"] + 1
+        with pytest.raises(WebSocketDisconnect) as closed:
+            socket.receive_json()
+
+    assert closed.value.code == CloseCode.FORBIDDEN
+
+
+def test_question_append_broadcasts_without_reloading_other_questions(
+    collaboration_client,
+    monkeypatch,
+) -> None:
+    client, class_id, owner, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    monkeypatch.setattr(
+        quiz_editing_live,
+        "authenticate_token",
+        lambda db, settings, token: owner,
+    )
+
+    with client.websocket_connect(f"/ws/quizzes/{quiz['quiz_id']}") as socket:
+        socket.send_json({"type": "auth", "token": "test-token"})
+        socket.receive_json()
+        saved = client.post(
+            f"/classes/{class_id}/quizzes/{quiz['quiz_id']}/questions",
+            json=_new_question_payload("Broadcast appended question"),
+        )
+        assert saved.status_code == 201
+        event = socket.receive_json()
+
+    assert event["type"] == "question_added"
+    assert event["editor_account_id"] == owner.account_id
+    assert event["question"]["question_text"] == "Broadcast appended question"
+    assert event["question"]["question_order"] == 2
 
 
 def test_stale_revision_returns_current_revision_without_partial_save(
