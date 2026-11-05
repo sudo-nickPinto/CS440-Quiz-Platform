@@ -13,6 +13,7 @@ import QuizCollaborators from "./QuizCollaborators";
 
 import { blankEditor, LETTERS, newQuestion } from "./model";
 import {
+  normalizeEditorDefaultTime,
   questionPayloadChanged,
   quizQuestionToEditor,
   toQuestionCreate,
@@ -143,10 +144,12 @@ export function QuizEditor({
       if (message.editor_account_id === account.account_id) return;
       if (message.type === "question_updated") {
         const questionId = message.question.question_id;
-        const local = editor.questions.find(
+        const currentEditor = editorRef.current;
+        const currentBaseline = baselineEditorRef.current;
+        const local = currentEditor.questions.find(
           (question) => question.questionId === questionId,
         );
-        const baseline = baselineEditor.questions.find(
+        const baseline = currentBaseline.questions.find(
           (question) => question.questionId === questionId,
         );
         if (!local || !baseline || JSON.stringify(local) !== JSON.stringify(baseline)) {
@@ -158,24 +161,28 @@ export function QuizEditor({
           });
           return;
         }
-        const index = editor.questions.indexOf(local);
+        const index = currentEditor.questions.indexOf(local);
         const updated = quizQuestionToEditor(
           message.question,
           index,
-          editor.defaultTime,
+          currentEditor.defaultTime,
         );
-        setEditor((currentEditor) => ({
+        const nextEditor = normalizeEditorDefaultTime({
           ...currentEditor,
           questions: currentEditor.questions.map((question) =>
             question.questionId === questionId ? updated : question,
           ),
-        }));
-        setBaselineEditor((currentBaseline) => ({
+        });
+        const nextBaseline = normalizeEditorDefaultTime({
           ...currentBaseline,
           questions: currentBaseline.questions.map((question) =>
             question.questionId === questionId ? updated : question,
           ),
-        }));
+        });
+        editorRef.current = nextEditor;
+        baselineEditorRef.current = nextBaseline;
+        setEditor(nextEditor);
+        setBaselineEditor(nextBaseline);
         setQuizRevision(message.quiz_revision);
         setQuestionStatus(questionId, "remote");
         setRemoteNotice({
@@ -208,8 +215,12 @@ export function QuizEditor({
             ],
           };
         };
-        setEditor(append);
-        setBaselineEditor(append);
+        const nextEditor = append(editorRef.current);
+        const nextBaseline = append(baselineEditorRef.current);
+        editorRef.current = nextEditor;
+        baselineEditorRef.current = nextBaseline;
+        setEditor(nextEditor);
+        setBaselineEditor(nextBaseline);
         setQuizRevision(message.quiz_revision);
         setRemoteNotice({
           tone: "success",

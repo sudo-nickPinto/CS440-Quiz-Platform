@@ -67,6 +67,39 @@ export function quizQuestionToEditor(question, index = 0, defaultTime = null) {
   };
 }
 
+export function normalizeEditorDefaultTime(editor) {
+  if (!editor.questions.length) return editor;
+
+  const previousDefault = Number(editor.defaultTime);
+  const effectiveTimes = editor.questions.map((question) =>
+    Number(question.limit ?? previousDefault),
+  );
+  const counts = new Map();
+  let nextDefault = effectiveTimes[0];
+  let highestCount = 0;
+
+  for (const seconds of effectiveTimes) {
+    const count = (counts.get(seconds) ?? 0) + 1;
+    counts.set(seconds, count);
+    if (
+      count > highestCount ||
+      (count === highestCount && seconds === previousDefault)
+    ) {
+      nextDefault = seconds;
+      highestCount = count;
+    }
+  }
+
+  return {
+    ...editor,
+    defaultTime: nextDefault,
+    questions: editor.questions.map((question, index) => ({
+      ...question,
+      limit: effectiveTimes[index] === nextDefault ? null : effectiveTimes[index],
+    })),
+  };
+}
+
 export function toQuestionCreate(question, index, defaultTime) {
   const label = `Question ${index + 1}`;
   const text = question.text.trim();

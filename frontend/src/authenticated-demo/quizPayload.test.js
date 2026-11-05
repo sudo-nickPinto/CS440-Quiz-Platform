@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  normalizeEditorDefaultTime,
   questionPayloadChanged,
   quizQuestionToEditor,
   quizToEditor,
@@ -153,5 +154,49 @@ describe("editing saved quizzes", () => {
     expect(
       questionPayloadChanged(question, question, 0, 30, 20),
     ).toBe(false);
+  });
+
+  it("reconstructs a remotely changed quiz-wide duration", () => {
+    const editor = {
+      defaultTime: 20,
+      questions: [
+        { id: "one", limit: 30 },
+        { id: "two", limit: null },
+        { id: "custom", limit: 45 },
+      ],
+    };
+
+    const afterFirstUpdate = normalizeEditorDefaultTime(editor);
+    expect(afterFirstUpdate.defaultTime).toBe(20);
+
+    const afterSecondUpdate = normalizeEditorDefaultTime({
+      ...afterFirstUpdate,
+      questions: afterFirstUpdate.questions.map((question) =>
+        question.id === "two" ? { ...question, limit: 30 } : question,
+      ),
+    });
+
+    expect(afterSecondUpdate.defaultTime).toBe(30);
+    expect(afterSecondUpdate.questions.map((question) => question.limit)).toEqual([
+      null,
+      null,
+      45,
+    ]);
+  });
+
+  it("keeps the existing quiz default while remote durations are tied", () => {
+    const editor = normalizeEditorDefaultTime({
+      defaultTime: 20,
+      questions: [
+        { id: "remote", limit: 30 },
+        { id: "unchanged", limit: null },
+      ],
+    });
+
+    expect(editor.defaultTime).toBe(20);
+    expect(editor.questions.map((question) => question.limit)).toEqual([
+      30,
+      null,
+    ]);
   });
 });
