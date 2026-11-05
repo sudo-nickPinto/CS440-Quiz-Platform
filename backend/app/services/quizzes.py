@@ -566,6 +566,26 @@ def _class_quiz(db: Session, class_id: int, quiz_id: int) -> Quiz:
     return quiz
 
 
+def _lock_class_quiz_for_update(
+    db: Session,
+    class_id: int,
+    quiz_id: int,
+) -> Quiz:
+    """Lock and reload a class quiz before choosing its editable version."""
+    locked_id = db.scalar(
+        select(Quiz.quiz_id)
+        .where(
+            Quiz.quiz_id == quiz_id,
+            Quiz.class_id == class_id,
+        )
+        .with_for_update()
+    )
+    if locked_id is None:
+        raise APIError(404, "quiz_not_found", "Quiz not found.")
+    db.expire_all()
+    return _class_quiz(db, class_id, quiz_id)
+
+
 def _require_quiz_editor(
     db: Session,
     account: CurrentAccount,
@@ -636,15 +656,14 @@ def update_class_quiz_question(
     question_id: int,
     payload: QuestionUpdate,
 ) -> QuestionUpdateResponse:
-    """Save one question without locking unrelated quiz questions.
+    """Save one question without revision-locking sibling questions.
 
-    The compare-and-swap on ``question.revision`` is the correctness boundary.
-    The quiz revision is still incremented so publish and structural edits can
-    detect that the aggregate changed while they were open.
+    The quiz lock makes version selection atomic with archive/publication and
+    draft creation. The compare-and-swap on ``question.revision`` then rejects
+    two editors that changed the same question from the same revision.
     """
-    _require_active_class_member(db, account, class_id)
-    quiz = _class_quiz(db, class_id, quiz_id)
-    _require_quiz_editor(db, account, quiz)
+    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
+    _require_quiz_editor(db, account, quiz, lock_access=True)
     if quiz.status == QuizStatus.ARCHIVED:
         raise APIError(
             409,
@@ -701,34 +720,25 @@ def update_class_quiz_question(
             raise APIError(404, "question_not_found", "Question not found.")
 
     if editor_version.published_at is not None:
-        # Serialize only the one-time immutable-version copy. If another
-        # editor created the draft while we waited, map the original question
-        # to that draft by its stable order and continue with its own revision.
+        # The quiz row is already locked, so this immutable-version copy and
+        # the selection of its target question cannot race archive, publish,
+        # or another editor creating the next draft.
         source_order = source.question_order
-        db.execute(
-            select(Quiz.quiz_id)
-            .where(Quiz.quiz_id == quiz_id)
-            .with_for_update()
+        draft = QuizVersion(
+            quiz_id=quiz_id,
+            version_number=max(
+                version.version_number for version in quiz.versions
+            ) + 1,
+            title=editor_version.title,
+            description=editor_version.description,
+            published_at=None,
+            questions=_clone_questions(editor_version.questions),
         )
-        db.expire_all()
-        quiz = _class_quiz(db, class_id, quiz_id)
-        editor_version = _latest_editor_version(quiz)
-        if editor_version.published_at is not None:
-            draft = QuizVersion(
-                quiz_id=quiz_id,
-                version_number=max(
-                    version.version_number for version in quiz.versions
-                ) + 1,
-                title=editor_version.title,
-                description=editor_version.description,
-                published_at=None,
-                questions=_clone_questions(editor_version.questions),
-            )
-            db.add(draft)
-            db.flush()
-            editor_version = draft
-            quiz.status = QuizStatus.DRAFT
-            db.flush()
+        db.add(draft)
+        db.flush()
+        editor_version = draft
+        quiz.status = QuizStatus.DRAFT
+        db.flush()
         question = next(
             item for item in editor_version.questions
             if item.question_order == source_order
@@ -758,10 +768,9 @@ def update_class_quiz_question(
         )
 
     now = datetime.now(UTC).replace(tzinfo=None)
-    # Claim the draft before mutating a question. Publication updates this
-    # same quiz row to PUBLISHED, so MySQL serializes the two operations and
-    # exactly one side can proceed. The revision increment has no expected
-    # value, allowing different-question saves to queue briefly and both win.
+    # Advance the aggregate revision while the quiz row is still locked.
+    # Different-question saves queue briefly on this row, then each applies
+    # its independent question compare-and-swap against the current draft.
     claimed_draft = db.execute(
         update(Quiz)
         .where(
@@ -785,12 +794,6 @@ def update_class_quiz_question(
             "Reload the latest version before editing again.",
             details={"current_revision": current_revision},
         )
-
-    # Coordinate access revocation with the same quiz-row boundary. A roster
-    # removal or collaborator revocation that commits first blocks this save;
-    # if this transaction holds the access row first, the save linearizes
-    # before the revocation.
-    _require_quiz_editor(db, account, quiz, lock_access=True)
 
     changed = db.execute(
         update(Question)
