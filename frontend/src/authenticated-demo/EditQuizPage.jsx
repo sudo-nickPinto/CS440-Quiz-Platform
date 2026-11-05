@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router";
 
+import { useAccount } from "./account";
 import { useResource } from "./rest";
 import { quizToEditor } from "./quizPayload";
 import { canEditQuiz } from "./quizEditing";
@@ -8,6 +9,7 @@ import RequestError from "./RequestError";
 
 export default function EditQuizPage() {
   const { quizId } = useParams();
+  const account = useAccount();
 
   const validId = /^[1-9]\d*$/.test(quizId ?? "");
   const resource = useResource(
@@ -37,11 +39,11 @@ export default function EditQuizPage() {
     return <p role="alert">The quiz could not be loaded.</p>;
   }
 
-  if (!quiz.can_edit) {
+  if (quiz.author_id !== account.account_id) {
     return (
       <section className="qp-content">
         <h1>Editing unavailable</h1>
-        <p>Only the quiz creator or an active collaborator can edit this quiz.</p>
+        <p>Only the quiz creator can edit this quiz.</p>
         <Link to={`/app/quizzes/${quiz.quiz_id}`}>
           Back to quiz
         </Link>
@@ -49,7 +51,7 @@ export default function EditQuizPage() {
     );
   }
 
-  if (!canEditQuiz(quiz)) {
+  if (!canEditQuiz(quiz, account.account_id)) {
     return (
       <section className="qp-content">
         <h1>Editing unavailable</h1>

@@ -1,6 +1,6 @@
-export function canEditQuiz(quiz) {
+export function canEditQuiz(quiz, accountId) {
   return (
-    quiz.can_edit === true &&
+    quiz.author_id === accountId &&
     (quiz.status === "DRAFT" || quiz.status === "PUBLISHED")
   );
 }
