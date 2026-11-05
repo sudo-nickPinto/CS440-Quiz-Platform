@@ -138,6 +138,12 @@ def _question_payload(expected_revision: int, text: str) -> dict:
     }
 
 
+def _new_question_payload(text: str) -> dict:
+    payload = _question_payload(1, text)
+    payload.pop("expected_revision")
+    return payload
+
+
 def test_owner_shares_with_named_active_member_and_editor_updates(
     collaboration_client,
 ) -> None:
@@ -211,6 +217,43 @@ def test_collaborators_save_different_questions_without_conflicting(
     assert [q["question_text"] for q in current["version"]["questions"]] == [
         "Owner changed the first",
         "Editor changed the second",
+    ]
+
+
+def test_append_question_does_not_block_another_question_save(
+    collaboration_client,
+) -> None:
+    client, class_id, owner, editor, _ = collaboration_client
+    payload = deepcopy(QUIZ_PAYLOAD)
+    payload["questions"].append(_new_question_payload("Second question?"))
+    created = client.post(f"/classes/{class_id}/quizzes", json=payload).json()
+    path = f"/classes/{class_id}/quizzes/{created['quiz_id']}"
+    second = created["version"]["questions"][1]
+    client.post(
+        f"{path}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+
+    appended = client.post(
+        f"{path}/questions",
+        json=_new_question_payload("Owner appended a third"),
+    )
+    assert appended.status_code == 201
+    assert appended.json()["question"]["question_order"] == 3
+
+    client.app.dependency_overrides[get_active_account] = lambda: editor
+    edited = client.patch(
+        f"{path}/questions/{second['question_id']}",
+        json=_question_payload(second["revision"], "Editor saved question two"),
+    )
+    assert edited.status_code == 200
+
+    client.app.dependency_overrides[get_active_account] = lambda: owner
+    current = client.get(path).json()
+    assert [q["question_text"] for q in current["version"]["questions"]] == [
+        "Which answer?",
+        "Editor saved question two",
+        "Owner appended a third",
     ]
 
 
@@ -293,6 +336,34 @@ def test_question_save_broadcasts_committed_update(
     assert event["editor_account_id"] == owner.account_id
     assert event["question"]["question_text"] == "Broadcast this"
     assert event["question"]["revision"] == 2
+
+
+def test_question_append_broadcasts_without_reloading_other_questions(
+    collaboration_client,
+    monkeypatch,
+) -> None:
+    client, class_id, owner, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    monkeypatch.setattr(
+        quiz_editing_live,
+        "authenticate_token",
+        lambda db, settings, token: owner,
+    )
+
+    with client.websocket_connect(f"/ws/quizzes/{quiz['quiz_id']}") as socket:
+        socket.send_json({"type": "auth", "token": "test-token"})
+        socket.receive_json()
+        saved = client.post(
+            f"/classes/{class_id}/quizzes/{quiz['quiz_id']}/questions",
+            json=_new_question_payload("Broadcast appended question"),
+        )
+        assert saved.status_code == 201
+        event = socket.receive_json()
+
+    assert event["type"] == "question_added"
+    assert event["editor_account_id"] == owner.account_id
+    assert event["question"]["question_text"] == "Broadcast appended question"
+    assert event["question"]["question_order"] == 2
 
 
 def test_stale_revision_returns_current_revision_without_partial_save(

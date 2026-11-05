@@ -11,12 +11,14 @@ from app.schemas.quiz import (
     QuizCollaboratorResponse,
     QuizCreate,
     QuizPublish,
+    QuestionCreate,
     QuestionUpdate,
     QuestionUpdateResponse,
     QuizResponse,
     QuizUpdate,
 )
 from app.services.quizzes import (
+    add_class_quiz_question,
     add_quiz_collaborator,
     create_quiz,
     get_class_quiz,
@@ -106,6 +108,35 @@ async def update_class_quiz_question_route(
         quiz_id,
         {
             "type": "question_updated",
+            "quiz_id": quiz_id,
+            "quiz_revision": result.quiz_revision,
+            "editor_account_id": account.account_id,
+            "question": result.question.model_dump(),
+        },
+    )
+    return result
+
+
+@router.post(
+    "/{quiz_id}/questions",
+    response_model=QuestionUpdateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_class_quiz_question_route(
+    class_id: int,
+    quiz_id: int,
+    payload: QuestionCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> QuestionUpdateResponse:
+    result = add_class_quiz_question(
+        db, account, class_id, quiz_id, payload
+    )
+    await request.app.state.quiz_edit_hub.broadcast(
+        quiz_id,
+        {
+            "type": "question_added",
             "quiz_id": quiz_id,
             "quiz_revision": result.quiz_revision,
             "editor_account_id": account.account_id,

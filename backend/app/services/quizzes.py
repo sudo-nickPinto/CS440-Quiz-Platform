@@ -30,6 +30,7 @@ from app.schemas.quiz import (
     QuizCreate,
     QuizListItem,
     QuizPublish,
+    QuestionCreate,
     QuestionResponse,
     QuestionUpdate,
     QuestionUpdateResponse,
@@ -195,6 +196,28 @@ def _questions_from_payload(payload: QuizCreate) -> list[Question]:
         )
         for question_order, question in enumerate(payload.questions, start=1)
     ]
+
+
+def _question_from_payload(
+    payload: QuestionCreate,
+    *,
+    question_order: int,
+) -> Question:
+    return Question(
+        question_order=question_order,
+        question_text=payload.question_text,
+        explanation=payload.explanation,
+        time_limit_seconds=payload.time_limit_seconds,
+        base_points=payload.base_points,
+        choices=[
+            AnswerChoice(
+                choice_order=choice_order,
+                choice_text=choice.choice_text,
+                is_correct=choice.is_correct,
+            )
+            for choice_order, choice in enumerate(payload.choices, start=1)
+        ],
+    )
 
 
 def _clone_questions(questions: list[Question]) -> list[Question]:
@@ -543,7 +566,11 @@ def update_class_quiz_question(
     quiz = _class_quiz(db, class_id, quiz_id)
     _require_quiz_editor(db, account, quiz)
     if quiz.status == QuizStatus.ARCHIVED:
-        raise APIError(409, "quiz_not_editable", "An archived quiz cannot be edited.")
+        raise APIError(
+            409,
+            "quiz_not_editable",
+            "An archived quiz cannot be edited.",
+        )
 
     editor_version = _latest_editor_version(quiz)
     source = next(
@@ -663,6 +690,79 @@ def update_class_quiz_question(
             500,
             "question_update_failed",
             "Could not save the question changes.",
+        ) from exc
+
+
+def add_class_quiz_question(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    quiz_id: int,
+    payload: QuestionCreate,
+) -> QuestionUpdateResponse:
+    """Append one question without replacing or revision-locking its siblings.
+
+    The quiz row lock only serializes concurrent appends and the one-time copy
+    from an immutable published version. Editors saving existing questions use
+    their independent question revisions and can proceed without a stale
+    whole-quiz conflict.
+    """
+    _require_active_class_member(db, account, class_id)
+
+    # Serialize order allocation for two simultaneous appends. This does not
+    # lock any Question row, so an editor may save another question at once.
+    db.execute(
+        select(Quiz.quiz_id)
+        .where(Quiz.quiz_id == quiz_id)
+        .with_for_update()
+    )
+    db.expire_all()
+    quiz = _class_quiz(db, class_id, quiz_id)
+    _require_quiz_editor(db, account, quiz)
+    if quiz.status == QuizStatus.ARCHIVED:
+        raise APIError(409, "quiz_not_editable", "An archived quiz cannot be edited.")
+
+    editor_version = _latest_editor_version(quiz)
+    if editor_version.published_at is not None:
+        editor_version = QuizVersion(
+            quiz_id=quiz_id,
+            version_number=max(
+                version.version_number for version in quiz.versions
+            ) + 1,
+            title=editor_version.title,
+            description=editor_version.description,
+            published_at=None,
+            questions=_clone_questions(editor_version.questions),
+        )
+        db.add(editor_version)
+        db.flush()
+
+    next_order = max(
+        (question.question_order for question in editor_version.questions),
+        default=0,
+    ) + 1
+    question = _question_from_payload(payload, question_order=next_order)
+    editor_version.questions.append(question)
+    now = datetime.now(UTC).replace(tzinfo=None)
+
+    try:
+        quiz.revision += 1
+        quiz.status = QuizStatus.DRAFT
+        quiz.updated_at = now
+        db.flush()
+        response = QuestionUpdateResponse(
+            quiz_id=quiz_id,
+            quiz_revision=quiz.revision,
+            question=QuestionResponse.model_validate(question),
+        )
+        db.commit()
+        return response
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(
+            500,
+            "question_create_failed",
+            "Could not add the question.",
         ) from exc
 
 
