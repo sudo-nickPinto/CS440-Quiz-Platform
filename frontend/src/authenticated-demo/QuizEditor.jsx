@@ -14,11 +14,16 @@ import QuizCollaborators from "./QuizCollaborators";
 import { blankEditor, LETTERS, newQuestion } from "./model";
 import {
   normalizeEditorDefaultTime,
-  questionPayloadChanged,
   quizQuestionToEditor,
   toQuestionCreate,
   toQuizCreate,
 } from "./quizPayload";
+import {
+  canSaveDraftIndependently,
+  remoteStructureDecision,
+  saveAggregateQuiz,
+  saveDraftQuestions,
+} from "./quizDraftSave";
 import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 import ConfirmDialog from "./ConfirmDialog";
@@ -105,9 +110,6 @@ export function QuizEditor({
   const [initial] = useState(() => initialEditor ?? blankEditor());
   const [editor, setEditor] = useState(initial);
   const [baselineEditor, setBaselineEditor] = useState(initial);
-  const [quizRevision, setQuizRevision] = useState(
-    existingQuiz?.revision ?? null,
-  );
   const [reviewing, setReviewing] = useState(false);
   const [validation, setValidation] = useState("");
   const [explaining, setExplaining] = useState(() => new Set());
@@ -118,6 +120,8 @@ export function QuizEditor({
   const savingQuestions = useRef(new Set());
   const editorRef = useRef(initial);
   const baselineEditorRef = useRef(initial);
+  const quizRevisionRef = useRef(existingQuiz?.revision ?? null);
+  const structureStaleRef = useRef(false);
 
   const api = useApi();
   const action = useAction();
@@ -183,7 +187,7 @@ export function QuizEditor({
         baselineEditorRef.current = nextBaseline;
         setEditor(nextEditor);
         setBaselineEditor(nextBaseline);
-        setQuizRevision(message.quiz_revision);
+        acceptQuizRevision(message.quiz_revision);
         setQuestionStatus(questionId, "remote");
         setRemoteNotice({
           tone: "success",
@@ -221,7 +225,7 @@ export function QuizEditor({
         baselineEditorRef.current = nextBaseline;
         setEditor(nextEditor);
         setBaselineEditor(nextBaseline);
-        setQuizRevision(message.quiz_revision);
+        acceptQuizRevision(message.quiz_revision);
         setRemoteNotice({
           tone: "success",
           text: "A collaborator added a new question.",
@@ -231,11 +235,18 @@ export function QuizEditor({
         return;
       }
       if (message.type === "quiz_structure_updated") {
-        setQuizRevision(message.quiz_revision);
-        if (!dirty) {
+        const decision = remoteStructureDecision({
+          editor: editorRef.current,
+          baselineEditor: baselineEditorRef.current,
+          currentRevision: quizRevisionRef.current,
+          incomingRevision: message.quiz_revision,
+        });
+        if (decision.reload) {
+          quizRevisionRef.current = decision.revision;
           onReload?.();
           return;
         }
+        structureStaleRef.current = true;
         setRemoteNotice({
           tone: "warning",
           text: "A collaborator changed the quiz structure.",
@@ -243,11 +254,18 @@ export function QuizEditor({
           reload: true,
         });
       } else if (message.type === "quiz_published") {
-        setQuizRevision(message.quiz_revision);
-        if (!dirty) {
+        const decision = remoteStructureDecision({
+          editor: editorRef.current,
+          baselineEditor: baselineEditorRef.current,
+          currentRevision: quizRevisionRef.current,
+          incomingRevision: message.quiz_revision,
+        });
+        if (decision.reload) {
+          quizRevisionRef.current = decision.revision;
           onReload?.();
           return;
         }
+        structureStaleRef.current = true;
         setRemoteNotice({
           tone: "info",
           text: "The quiz was published by its owner.",
@@ -445,17 +463,9 @@ export function QuizEditor({
     }
   }
 
-  function questionChanged(question, index) {
-    const saved = baselineEditor.questions.find(
-      (item) => item.questionId === question.questionId,
-    );
-    return questionPayloadChanged(
-      question,
-      saved,
-      index,
-      editor.defaultTime,
-      baselineEditor.defaultTime,
-    );
+  function acceptQuizRevision(revision) {
+    if (structureStaleRef.current) return;
+    quizRevisionRef.current = revision;
   }
 
   function setQuestionStatus(questionId, status) {
@@ -543,7 +553,7 @@ export function QuizEditor({
       };
       editorRef.current = nextEditor;
       setEditor(nextEditor);
-      setQuizRevision(result.quiz_revision);
+      acceptQuizRevision(result.quiz_revision);
       setRemoteNotice(null);
       setQuestionStatus(questionId, "saved");
       savedSuccessfully = true;
@@ -587,79 +597,47 @@ export function QuizEditor({
     autosaveTimers.current.clear();
 
     const quiz = await action.run(async () => {
-      const payload = toQuizCreate(editor);
+      const savingEditor = editorRef.current;
+      const savingBaseline = baselineEditorRef.current;
 
       if (editing) {
-        const appendOnlyStructure =
-          editor.questions.length >= baselineEditor.questions.length &&
-          baselineEditor.questions.every(
-            (question, index) =>
-              question.questionId === editor.questions[index]?.questionId,
-          ) &&
-          editor.questions
-            .slice(baselineEditor.questions.length)
-            .every((question) => !question.questionId);
-        const sameMetadata =
-          editor.title === baselineEditor.title &&
-          editor.description === baselineEditor.description;
-
         // Published quizzes need one aggregate save to create the next draft.
         // Existing questions and questions appended to a draft use independent
         // mutations. Deleting, reordering, inserting in the middle, or renaming
         // still uses the aggregate revision until those operations are split.
         if (
           existingQuiz.status === "DRAFT" &&
-          appendOnlyStructure &&
-          sameMetadata
+          canSaveDraftIndependently(savingEditor, savingBaseline)
         ) {
-          let lastResult = null;
-          for (const [index, question] of editor.questions
-            .slice(0, baselineEditor.questions.length)
-            .entries()) {
-            if (!questionChanged(question, index)) continue;
-            const questionPayload = toQuestionCreate(
-              question,
-              index,
-              editor.defaultTime,
-            );
-            questionPayload.expected_revision = question.revision;
-            lastResult = await api(
-              `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}` +
-                `/questions/${question.questionId}`,
-              { method: "PATCH", body: JSON.stringify(questionPayload) },
-            );
-          }
-
-          for (const [offset, question] of editor.questions
-            .slice(baselineEditor.questions.length)
-            .entries()) {
-            const index = baselineEditor.questions.length + offset;
-            const questionPayload = toQuestionCreate(
-              question,
-              index,
-              editor.defaultTime,
-            );
-            lastResult = await api(
-              `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}` +
-                "/questions",
-              { method: "POST", body: JSON.stringify(questionPayload) },
-            );
-          }
-          return lastResult
+          const result = await saveDraftQuestions({
+            editor: savingEditor,
+            baselineEditor: savingBaseline,
+            existingQuiz,
+            api,
+            onProgress: (progress) => {
+              editorRef.current = progress.editor;
+              baselineEditorRef.current = progress.baselineEditor;
+              setEditor(progress.editor);
+              setBaselineEditor(progress.baselineEditor);
+              acceptQuizRevision(progress.quizRevision);
+            },
+          });
+          return result.lastResult
             ? { quiz_id: existingQuiz.quiz_id }
             : existingQuiz;
         }
 
-        payload.expected_revision = quizRevision;
+        return saveAggregateQuiz({
+          editor: savingEditor,
+          revision: quizRevisionRef.current,
+          existingQuiz,
+          api,
+        });
       }
 
-      const path = editing
-        ? `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}`
-        : `/classes/${classId}/quizzes`;
-
-      return api(path, {
-        method: editing ? "PUT" : "POST",
-        body: JSON.stringify(payload),
+      return api(`/classes/${classId}/quizzes`, {
+        method: "POST",
+        body: JSON.stringify(toQuizCreate(savingEditor)),
       });
     });
 
