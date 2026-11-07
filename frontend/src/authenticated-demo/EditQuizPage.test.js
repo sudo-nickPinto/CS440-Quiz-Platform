@@ -1,18 +1,29 @@
 import { describe, expect, it } from "vitest";
 
-import { canEditQuiz } from "./quizEditing";
+import { canEditQuiz, quizEditorKey } from "./quizEditing";
 
 describe("quiz editing availability", () => {
-  it("lets the owner reopen a saved draft", () => {
-    expect(canEditQuiz({ author_id: 7, status: "DRAFT" }, 7)).toBe(true);
+  it("lets an authorized editor reopen a saved draft", () => {
+    expect(canEditQuiz({ can_edit: true, status: "DRAFT" })).toBe(true);
   });
 
-  it("lets the owner revise a published quiz", () => {
-    expect(canEditQuiz({ author_id: 7, status: "PUBLISHED" }, 7)).toBe(true);
+  it("lets an authorized editor revise a published quiz", () => {
+    expect(canEditQuiz({ can_edit: true, status: "PUBLISHED" })).toBe(true);
   });
 
-  it("rejects archived quizzes and non-owners", () => {
-    expect(canEditQuiz({ author_id: 7, status: "ARCHIVED" }, 7)).toBe(false);
-    expect(canEditQuiz({ author_id: 7, status: "DRAFT" }, 8)).toBe(false);
+  it("rejects archived quizzes and accounts without edit access", () => {
+    expect(canEditQuiz({ can_edit: true, status: "ARCHIVED" })).toBe(false);
+    expect(canEditQuiz({ can_edit: false, status: "DRAFT" })).toBe(false);
+  });
+
+  it("remounts the editor when the same draft receives a new revision", () => {
+    const quiz = {
+      quiz_id: 7,
+      revision: 3,
+      version: { quiz_version_id: 11 },
+    };
+
+    expect(quizEditorKey(quiz)).toBe("7:11:3");
+    expect(quizEditorKey({ ...quiz, revision: 4 })).toBe("7:11:4");
   });
 });
