@@ -34,6 +34,8 @@ from app.models import (
     ClassMembership,
     ClassRole,
     JoinedVia,
+    LiveSession,
+    LiveSessionStatus,
     MembershipStatus,
 )
 from tests.test_accounts import AUDIENCE, DOMAIN, PRIVATE_KEY, make_token
@@ -480,6 +482,189 @@ def test_removed_class_member_closes_with_4403_after_joining(live) -> None:
     with client.websocket_connect(ws_url(session.json()["session_id"])) as ws:
         ws.send_json({"type": "auth", "token": make_token(sub="test|alice")})
         assert_closed_with(ws, CloseCode.FORBIDDEN)
+
+
+def faculty_class_session(client: TestClient, people) -> tuple[int, dict]:
+    """A class where host and bob are faculty organizers and alice is a
+    member, with a lobby for an approved quiz that alice has joined."""
+    for name in ("host", "bob"):
+        account_id = people[name].account_id
+        with client.app.state.database.session_factory() as db:
+            db.get(Account, account_id).account_type = "ADMINISTRATOR"
+            db.commit()
+        people[name] = CurrentAccount(account_id, AccountRole.ADMIN, True)
+    with client.app.state.database.session_factory() as db:
+        class_ = Class(
+            name="Eviction class",
+            created_by_id=people["host"].account_id,
+            join_code="WSCLASS2",
+        )
+        db.add(class_)
+        db.flush()
+        for name, role in (
+            ("host", ClassRole.ORGANIZER),
+            ("bob", ClassRole.ORGANIZER),
+            ("alice", ClassRole.MEMBER),
+        ):
+            db.add(
+                ClassMembership(
+                    class_id=class_.class_id,
+                    account_id=people[name].account_id,
+                    role=role,
+                    status=MembershipStatus.ACTIVE,
+                    joined_via=JoinedVia.CODE,
+                )
+            )
+        db.commit()
+        class_id = class_.class_id
+
+    as_account(client, people["host"])
+    quiz = create_approved_quiz(client, class_id, QUIZ_PAYLOAD)
+    session = client.post(f"/classes/{class_id}/quizzes/{quiz['quiz_id']}/sessions")
+    assert session.status_code == 201
+    join(client, people["alice"], session.json()["join_code"])
+    return class_id, session.json()
+
+
+def set_membership_status(client, class_id: int, account_id: int, status) -> None:
+    with client.app.state.database.session_factory() as db:
+        membership = db.scalar(
+            select(ClassMembership).where(
+                ClassMembership.class_id == class_id,
+                ClassMembership.account_id == account_id,
+            )
+        )
+        membership.status = status
+        db.commit()
+
+
+def assert_eventually_closed_with(ws, code: int) -> list[dict]:
+    """Read past any queued messages until the server closes the socket."""
+    seen = []
+    with pytest.raises(WebSocketDisconnect) as closed:
+        while True:
+            seen.append(ws.receive_json())
+    assert closed.value.code == code
+    return seen
+
+
+def test_removed_host_cannot_reconnect(live) -> None:
+    client, people = live
+    class_id, session = faculty_class_session(client, people)
+    set_membership_status(
+        client, class_id, people["host"].account_id, MembershipStatus.REMOVED
+    )
+
+    with client.websocket_connect(ws_url(session["session_id"])) as ws:
+        ws.send_json({"type": "auth", "token": make_token(sub="test|host")})
+        assert_closed_with(ws, CloseCode.FORBIDDEN)
+
+
+def test_host_of_an_old_session_without_a_class_cannot_connect(live) -> None:
+    client, people = live
+    _, session = faculty_class_session(client, people)
+    with client.app.state.database.session_factory() as db:
+        old = LiveSession(
+            quiz_version_id=session["quiz_version_id"],
+            host_id=people["host"].account_id,
+            class_id=None,
+            join_code="135790",
+            status=LiveSessionStatus.LOBBY,
+        )
+        db.add(old)
+        db.commit()
+        old_id = old.session_id
+
+    with client.websocket_connect(ws_url(old_id)) as ws:
+        ws.send_json({"type": "auth", "token": make_token(sub="test|host")})
+        assert_closed_with(ws, CloseCode.FORBIDDEN)
+
+
+def test_host_removed_while_connected_is_disconnected(live) -> None:
+    client, people = live
+    class_id, session = faculty_class_session(client, people)
+    sid = session["session_id"]
+    hub = client.app.state.live_hub
+
+    with client.websocket_connect(ws_url(sid)) as host_ws, client.websocket_connect(
+        ws_url(sid)
+    ) as alice_ws:
+        assert authenticate(host_ws, "host")["type"] == "session_state"
+        assert authenticate(alice_ws, "alice")["type"] == "session_state"
+
+        as_account(client, people["bob"])
+        removed = client.delete(
+            f"/classes/{class_id}/members/{people['host'].account_id}"
+        )
+        assert removed.status_code == 204
+
+        assert_eventually_closed_with(host_ws, CloseCode.FORBIDDEN)
+        # The participant hears that the host is gone, as with any disconnect.
+        status = receive_until(alice_ws, "host_status")[-1]
+        assert status["connected"] is False
+        assert not hub.host_connected(sid)
+
+
+def test_participant_removed_while_connected_stops_getting_events(live) -> None:
+    client, people = live
+    class_id, session = faculty_class_session(client, people)
+    sid = session["session_id"]
+    hub = client.app.state.live_hub
+
+    with client.websocket_connect(ws_url(sid)) as host_ws, client.websocket_connect(
+        ws_url(sid)
+    ) as alice_ws:
+        assert authenticate(host_ws, "host")["type"] == "session_state"
+        assert authenticate(alice_ws, "alice")["type"] == "session_state"
+
+        as_account(client, people["host"])
+        removed = client.delete(
+            f"/classes/{class_id}/members/{people['alice'].account_id}"
+        )
+        assert removed.status_code == 204
+
+        assert_eventually_closed_with(alice_ws, CloseCode.FORBIDDEN)
+        assert people["alice"].account_id not in hub._sessions.get(sid, {})
+
+    # Reconnecting is refused too.
+    with client.websocket_connect(ws_url(sid)) as ws:
+        ws.send_json({"type": "auth", "token": make_token(sub="test|alice")})
+        assert_closed_with(ws, CloseCode.FORBIDDEN)
+
+
+def test_participant_who_leaves_the_class_is_disconnected(live) -> None:
+    client, people = live
+    class_id, session = faculty_class_session(client, people)
+    sid = session["session_id"]
+
+    with client.websocket_connect(ws_url(sid)) as alice_ws:
+        assert authenticate(alice_ws, "alice")["type"] == "session_state"
+
+        as_account(client, people["alice"])
+        assert client.delete(f"/classes/{class_id}/membership").status_code == 204
+
+        assert_eventually_closed_with(alice_ws, CloseCode.FORBIDDEN)
+
+
+def test_removing_a_member_leaves_other_classes_sessions_alone(live) -> None:
+    client, people = live
+    class_id, session = faculty_class_session(client, people)
+    sid = session["session_id"]
+    hub = client.app.state.live_hub
+
+    with client.websocket_connect(ws_url(sid)) as alice_ws:
+        assert authenticate(alice_ws, "alice")["type"] == "session_state"
+        # A class with no live sessions: nothing to close.
+        other_class = Class(
+            name="Other", created_by_id=people["host"].account_id, join_code="OTHER123"
+        )
+        with client.app.state.database.session_factory() as db:
+            db.add(other_class)
+            db.commit()
+            other_id = other_class.class_id
+        client.portal.call(hub.evict_class_member, other_id, people["alice"].account_id)
+
+        assert people["alice"].account_id in hub._sessions[sid]
 
 
 def test_unknown_session_closes_with_4404(live) -> None:

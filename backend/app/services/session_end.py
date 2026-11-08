@@ -279,6 +279,21 @@ def cancel_session(
     )
 
 
+def live_class_session_ids(db: Session, class_id: int) -> list[int]:
+    """The class's LOBBY or ACTIVE sessions, for closing a removed member's
+    live sockets."""
+    return list(
+        db.scalars(
+            select(LiveSession.session_id).where(
+                LiveSession.class_id == class_id,
+                LiveSession.status.in_(
+                    (LiveSessionStatus.LOBBY, LiveSessionStatus.ACTIVE)
+                ),
+            )
+        )
+    )
+
+
 def live_session_ids(db: Session) -> list[int]:
     """Every LOBBY or ACTIVE session, for the abandoned-session reaper."""
     return list(

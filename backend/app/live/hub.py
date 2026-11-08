@@ -27,6 +27,7 @@ from app.services.results import get_closed_question_results
 from app.services.session_end import (
     ParticipantLeft,
     abandon_session,
+    live_class_session_ids,
     live_session_ids,
 )
 
@@ -376,8 +377,36 @@ class LiveHub:
             role="host",
         )
 
+    async def evict_class_member(self, class_id: int, account_id: int) -> None:
+        """Close an account's live sockets in the class's sessions.
+
+        Hook run after a committed removal or leave. Answers and reconnects
+        already check membership; this also stops broadcasts to sockets that
+        were open when the account stopped being an active member. A removed
+        host loses control the same way.
+        """
+        try:
+            session_ids = await self.run_db(live_class_session_ids, class_id)
+        except Exception:
+            logger.exception("Could not look up live sessions for class %s", class_id)
+            return
+        for session_id in session_ids:
+            conn = self._sessions.get(session_id, {}).get(account_id)
+            if conn is None:
+                continue
+            # Unregister first, so no broadcast reaches it from here on.
+            await self.disconnect(conn)
+            await self._finish(
+                conn, None, reason="not_class_member", code=CloseCode.FORBIDDEN
+            )
+
     async def _finish(
-        self, conn: LiveConnection, payload: BaseModel | dict | None, *, reason: str
+        self,
+        conn: LiveConnection,
+        payload: BaseModel | dict | None,
+        *,
+        reason: str,
+        code: int = CloseCode.NORMAL,
     ) -> None:
         """Send a last message (if any) and close normally, in that order."""
         async with conn.send_lock:
@@ -388,7 +417,7 @@ class LiveHub:
                 logger.debug("Dropped final message to a closed socket", exc_info=True)
             conn.ready = False
             conn.closed = True
-            await self._close(conn, CloseCode.NORMAL, reason)
+            await self._close(conn, code, reason)
 
     async def publish_results(self, session_id: int, session_question_id: int) -> None:
         snapshot = await self.run_db(

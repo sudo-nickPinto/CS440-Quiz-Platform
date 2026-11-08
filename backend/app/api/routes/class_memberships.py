@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
@@ -97,8 +97,14 @@ def update_class_member_route(
 def remove_class_member_route(
     class_id: int,
     account_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> Response:
     remove_class_member(db, account, class_id, account_id)
+    # After the commit: close the removed member's live sockets in this class.
+    background_tasks.add_task(
+        request.app.state.live_hub.evict_class_member, class_id, account_id
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

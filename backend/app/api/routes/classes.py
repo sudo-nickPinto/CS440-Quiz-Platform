@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
@@ -85,8 +85,16 @@ def archive_class_route(
 @router.delete("/{class_id}/membership", status_code=status.HTTP_204_NO_CONTENT)
 def leave_class_route(
     class_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> Response:
     leave_class(db, account, class_id)
+    # After the commit: close the leaver's live sockets in this class.
+    background_tasks.add_task(
+        request.app.state.live_hub.evict_class_member,
+        class_id,
+        account.account_id,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
