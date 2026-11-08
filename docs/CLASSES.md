@@ -52,7 +52,7 @@ Checked on the server every time. Hiding a button in the UI is not a permission 
 | Answer | Still an active member | `403 not_class_member` |
 | WebSocket | Still an active member, host included | close `4403 not_class_member` on connect, and right away for an open socket when the person is removed or leaves the class |
 
-A member (or host) removed mid-game, or who leaves the class, has their live socket closed with `4403` and can't reconnect, rejoin or answer. Timing, late join, scoring and duplicate-answer rules are the same as before classes ([LIVE_PROTOCOL.md](LIVE_PROTOCOL.md)).
+A member (or host) removed mid-game, or who leaves the class, has their live socket closed with `4403` and can't reconnect, rejoin or answer. They are marked as left in the class's running sessions: the host sees the smaller participant count, and they stop counting toward an open question, so it can still close when everyone else has answered. Timing, late join, scoring and duplicate-answer rules are the same as before classes ([LIVE_PROTOCOL.md](LIVE_PROTOCOL.md)).
 
 Code: `backend/app/services/class_access.py` (`may_play`, `require_session_class_member`).
 

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, TypeVar
@@ -27,6 +27,7 @@ from app.services.results import get_closed_question_results
 from app.services.session_end import (
     ParticipantLeft,
     abandon_session,
+    class_departure,
     live_class_session_ids,
     live_session_ids,
 )
@@ -377,13 +378,21 @@ class LiveHub:
             role="host",
         )
 
-    async def evict_class_member(self, class_id: int, account_id: int) -> None:
+    async def evict_class_member(
+        self,
+        class_id: int,
+        account_id: int,
+        left_sessions: Sequence[int] = (),
+    ) -> None:
         """Close an account's live sockets in the class's sessions.
 
         Hook run after a committed removal or leave. Answers and reconnects
         already check membership; this also stops broadcasts to sockets that
         were open when the account stopped being an active member. A removed
-        host loses control the same way.
+        host loses control the same way. left_sessions are the sessions whose
+        participant row the same transaction marked as left; their hosts get
+        the new count, and an open question closes if everyone left has now
+        answered.
         """
         try:
             session_ids = await self.run_db(live_class_session_ids, class_id)
@@ -399,6 +408,31 @@ class LiveHub:
             await self._finish(
                 conn, None, reason="not_class_member", code=CloseCode.FORBIDDEN
             )
+        for session_id in left_sessions:
+            try:
+                departure = await self.run_db(class_departure, session_id, account_id)
+                if departure is None:
+                    continue
+                left, open_question_id = departure
+                if left.participant_count == 0:
+                    await self.cancel_countdown(session_id)
+                await self.broadcast(
+                    session_id,
+                    {
+                        "type": "participant_left",
+                        "session_participant_id": left.session_participant_id,
+                        "display_name": left.display_name,
+                        "participant_count": left.participant_count,
+                    },
+                    role="host",
+                )
+                if open_question_id is not None:
+                    # Same as after an answer: new progress, maybe close now.
+                    await self.after_answer(session_id, open_question_id)
+            except Exception:
+                logger.exception(
+                    "Could not update session %s after a class departure", session_id
+                )
 
     async def _finish(
         self,

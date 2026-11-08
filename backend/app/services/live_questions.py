@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models import (
+    ClassMembership,
     LiveSession,
+    MembershipStatus,
     LiveSessionStatus,
     Question,
     Response,
@@ -71,6 +73,29 @@ def answer_progress(
         )
 
     opened_at = session_question.opened_at
+    roster = [
+        SessionParticipant.session_id == session_id,
+        SessionParticipant.joined_at <= opened_at,
+        or_(
+            SessionParticipant.left_at.is_(None),
+            SessionParticipant.left_at >= opened_at,
+        ),
+    ]
+    class_id = db.scalar(
+        select(LiveSession.class_id).where(LiveSession.session_id == session_id)
+    )
+    if class_id is not None:
+        # Someone removed from the class (or who left it) can't answer any
+        # more, so they must not hold the question open until the deadline.
+        roster.append(
+            select(ClassMembership.membership_id)
+            .where(
+                ClassMembership.class_id == class_id,
+                ClassMembership.account_id == SessionParticipant.account_id,
+                ClassMembership.status == MembershipStatus.ACTIVE,
+            )
+            .exists()
+        )
     eligible_count, answered_count = db.execute(
         select(
             func.count(
@@ -87,14 +112,7 @@ def answer_progress(
                 Response.session_question_id == session_question_id,
             ),
         )
-        .where(
-            SessionParticipant.session_id == session_id,
-            SessionParticipant.joined_at <= opened_at,
-            or_(
-                SessionParticipant.left_at.is_(None),
-                SessionParticipant.left_at >= opened_at,
-            ),
-        )
+        .where(*roster)
     ).one()
 
     return AnswerProgress(

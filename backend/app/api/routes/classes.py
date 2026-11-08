@@ -90,11 +90,13 @@ def leave_class_route(
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> Response:
-    leave_class(db, account, class_id)
-    # After the commit: close the leaver's live sockets in this class.
+    left_sessions = leave_class(db, account, class_id)
+    # After the commit: close the leaver's live sockets in this class and
+    # update the hosts of the sessions they were playing in.
     background_tasks.add_task(
         request.app.state.live_hub.evict_class_member,
         class_id,
         account.account_id,
+        left_sessions,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
