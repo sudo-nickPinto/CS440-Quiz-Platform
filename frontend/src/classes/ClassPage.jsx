@@ -439,7 +439,6 @@ function PresentTable({ classInfo }) {
                     <HostQuizButton
                       quiz={quiz}
                       action={action}
-                      classId={classInfo.id}
                       label="Host in this class"
                     />
                   </td>

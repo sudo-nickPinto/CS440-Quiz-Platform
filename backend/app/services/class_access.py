@@ -1,9 +1,9 @@
-"""Who may take part in a class's live sessions (task 6).
+"""Who may take part in a class's live sessions.
 
-The host picks the class when creating the session. When the session has a
-class, only ACTIVE members of that class may join it or answer in it; the join
-code alone is not enough. A session without a class (open session) behaves as
-it did before classes.
+Every session belongs to a class. Only ACTIVE members of that class may join
+it, reconnect, receive live events or answer; the join code alone is not
+enough. Sessions from before V3 with no class (old open sessions) are
+read-only history: nobody can join or answer in them any more.
 """
 
 from sqlalchemy.orm import Session
@@ -17,7 +17,7 @@ from app.services.class_authorization import get_class_membership
 def may_play(db: Session, session: LiveSession, account_id: int) -> bool:
     """True when the account may join or answer in the session."""
     if session.class_id is None:
-        return True
+        return False
     membership = get_class_membership(db, session.class_id, account_id)
     return membership is not None and membership.status == MembershipStatus.ACTIVE
 

@@ -5,13 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.session import LiveSessionStatus
 
 
-class SessionCreateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    # None: an open session anyone with the join code can join.
-    class_id: int | None = Field(default=None, ge=1)
-
-
 class SessionJoinRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -29,7 +22,7 @@ class SessionResponse(BaseModel):
     quiz_version_id: int
     quiz_title: str
     host_id: int
-    # The class the host picked; None is an open session.
+    # None only on old sessions from before V3 (read-only history).
     class_id: int | None
     join_code: str
     status: LiveSessionStatus

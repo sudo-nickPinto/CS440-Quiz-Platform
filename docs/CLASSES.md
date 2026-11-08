@@ -6,22 +6,21 @@ What the class features do today, and where the code for each one lives. The des
 
 - **Class:** a group of people who play quizzes together. Table `class` (migration `0006_classes`).
 - **Membership:** one `class_membership` row per person per class, with a `role` (`ORGANIZER` or `MEMBER`) and a `status` (`INVITED`, `ACTIVE`, `LEFT` or `REMOVED`). Only `ACTIVE` rows count for anything.
-- **Organizer:** an active member with the `ORGANIZER` role. Organizers manage the class and host its sessions. An Admin passes every organizer check.
-- **Open session:** `live_session.class_id` is `NULL`. Anyone signed in who has the six-digit code can join. This is how every session worked before classes.
-- **Class session:** `live_session.class_id` is set (migration `0007_session_class`). Only active members of that class can join or answer, even if they have the code.
+- **Organizer:** an active faculty member with the `ORGANIZER` role. Organizers manage the class and can host any approved quiz in it. Faculty status alone gives no access to a class.
+- **Class session:** every session belongs to a class through `live_session.class_id` (migration `0007_session_class`). Only active members of that class can join or answer, even if they have the code. There are no open sessions any more.
+- **Old sessions with no class:** sessions from before V3 may have `class_id = NULL`. They are read-only history: nobody can join or answer in them.
 
 ## 2. Hosting a class session
 
-1. The host must be the quiz's author **and** an active organizer of the class (or an Admin). The class must not be archived.
-2. They start the session in one of two places:
-   - **Dashboard → Present → ⋯ on a quiz.** A **For** menu offers *Open session* plus every class the caller organizes. This menu only appears for people who organize at least one class.
-   - **Class page → Present tab → Host in this class.** The class is preset.
-3. The frontend sends `POST /quizzes/{quiz_id}/sessions` with `{"class_id": …}`, or with no body for an open session.
+1. The quiz must belong to the class, and its newest published version must be approved for the class (see the quiz submission and approval endpoints in [API.md](API.md)).
+2. The host must be an active member of the class and either the quiz owner or a class organizer. Collaborators can't host just because they collaborate. The class must not be archived.
+3. They start the session from the quiz page or from **Class page → Present tab → Host in this class**. A quiz lives in exactly one class, so there is no class to choose.
+4. The frontend sends `POST /classes/{class_id}/quizzes/{quiz_id}/sessions` with no body.
 
 Code:
-- `frontend/src/authenticated-demo/HostQuizButton.jsx`: the For menu and the start request.
+- `frontend/src/authenticated-demo/HostQuizButton.jsx`: the start request.
 - `backend/app/services/sessions.py` `create_session`.
-- `require_class_host` in `backend/app/services/class_authorization.py`.
+- `require_approved_quiz_version` in `backend/app/services/quiz_submissions.py`.
 
 ## 3. The Live button
 
@@ -47,13 +46,13 @@ Checked on the server every time. Hiding a button in the UI is not a permission 
 
 | Action | Rule | Failure |
 |---|---|---|
-| Start | Quiz author and organizer/Admin, class not archived | `403 not_class_organizer`, `409 class_archived` |
+| Start | Active member who owns the quiz or organizes the class; quiz in this class and approved; class not archived | `404 class_not_found`, `404 quiz_not_found`, `403 session_host_denied`, `409 quiz_version_not_approved`, `409 class_archived` |
 | Join by code | Active member | `403 not_class_member` |
-| Join by id (Live button) | Active member, and the session must be a class session | `404 session_not_found` |
+| Join by id (Live button) | Active member | `404 session_not_found` |
 | Answer | Still an active member | `403 not_class_member` |
 | WebSocket | Still an active member | close `4403 not_class_member` |
 
-A member removed mid-game is refused on their next answer and can't rejoin. Timing, late join, scoring and duplicate-answer rules are the same as for open sessions ([LIVE_PROTOCOL.md](LIVE_PROTOCOL.md)).
+A member removed mid-game is refused on their next answer and can't rejoin. Timing, late join, scoring and duplicate-answer rules are the same as before classes ([LIVE_PROTOCOL.md](LIVE_PROTOCOL.md)).
 
 Code: `backend/app/services/class_access.py` (`may_play`, `require_session_class_member`).
 
@@ -103,4 +102,4 @@ Migration `0007_session_class` must be applied to the production database before
 docker compose --env-file deploy/.env up --build -d
 ```
 
-Older frontends keep working: they send no body when starting a session, which still creates an open session.
+Older frontends can't start sessions any more: `POST /quizzes/{quiz_id}/sessions` was removed in V3 Task 5. Deploy the frontend together with the backend.
