@@ -235,8 +235,10 @@ def _join(
             "host_cannot_join",
             "The host cannot join their own session as a participant.",
         )
-    # Knowing the code is not enough for a class session.
-    require_session_class_member(db, session, account)
+    # Knowing the code is not enough. The locking read waits for a removal
+    # or leave that is committing right now, so a member removed at the same
+    # moment can't slip in with an active participant row.
+    require_session_class_member(db, session, account, lock=True)
 
     existing = db.scalar(
         select(SessionParticipant).where(

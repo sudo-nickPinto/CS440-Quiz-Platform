@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models import (
+    ClassMembership,
     LiveSession,
     LiveSessionStatus,
     MembershipStatus,
@@ -22,11 +23,32 @@ from app.models import (
 from app.services.class_authorization import get_class_membership
 
 
-def may_play(db: Session, session: LiveSession, account_id: int) -> bool:
-    """True when the account may join or answer in the session."""
+def may_play(
+    db: Session,
+    session: LiveSession,
+    account_id: int,
+    *,
+    lock: bool = False,
+) -> bool:
+    """True when the account may join or answer in the session.
+
+    lock=True reads the membership with a shared lock, so the answer reflects
+    a removal or leave that commits at the same moment (they lock the row
+    FOR UPDATE) instead of an older snapshot.
+    """
     if session.class_id is None:
         return False
-    membership = get_class_membership(db, session.class_id, account_id)
+    if lock:
+        membership = db.scalar(
+            select(ClassMembership)
+            .where(
+                ClassMembership.class_id == session.class_id,
+                ClassMembership.account_id == account_id,
+            )
+            .with_for_update(read=True)
+        )
+    else:
+        membership = get_class_membership(db, session.class_id, account_id)
     return membership is not None and membership.status == MembershipStatus.ACTIVE
 
 
@@ -85,8 +107,10 @@ def require_session_class_member(
     db: Session,
     session: LiveSession,
     account: CurrentAccount,
+    *,
+    lock: bool = False,
 ) -> None:
-    if not may_play(db, session, account.account_id):
+    if not may_play(db, session, account.account_id, lock=lock):
         raise APIError(
             403,
             "not_class_member",
