@@ -60,8 +60,8 @@ class LiveSession(Base):
     group_id: Mapped[int | None] = mapped_column(
         INTEGER(unsigned=True), nullable=True
     )
-    # Migration 0007: the class the host picked when creating the session. NULL
-    # (an open session) means anyone with the join code can join.
+    # Migration 0007: the class the session belongs to. Every new session has
+    # one. NULL only on old pre-V3 sessions, which are read-only history.
     class_id: Mapped[int | None] = mapped_column(
         INTEGER(unsigned=True),
         ForeignKey("class.class_id", ondelete="RESTRICT"),

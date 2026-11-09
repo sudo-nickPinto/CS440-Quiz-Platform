@@ -9,7 +9,7 @@ from app.database import Base
 from app.main import create_app
 from app.models import Account, AccountRole, LiveSession, LiveSessionStatus
 from app.services import sessions as session_service
-from tests.class_quiz_helpers import post_class_quiz
+from tests.class_quiz_helpers import host_quiz, post_class_quiz
 
 
 QUIZ_PAYLOAD = {
@@ -71,7 +71,7 @@ def create_quiz(client: TestClient) -> dict:
 
 
 def create_session(client: TestClient, quiz_id: int) -> dict:
-    response = client.post(f"/quizzes/{quiz_id}/sessions")
+    response = host_quiz(client, quiz_id)
     assert response.status_code == 201
     return response.json()
 
@@ -93,14 +93,15 @@ def test_creator_can_open_lobby_for_saved_quiz(
     assert body["current_question_order"] is None
 
 
-def test_only_creator_can_host_even_when_requester_is_admin(
+def test_plain_member_cannot_host_even_when_requester_is_faculty(
     session_client: tuple[TestClient, dict[str, CurrentAccount]],
 ) -> None:
     client, accounts = session_client
     quiz = create_quiz(client)
     use_account(client, accounts["admin"])
 
-    response = client.post(f"/quizzes/{quiz['quiz_id']}/sessions")
+    # Faculty who are only a plain member of the class can't host.
+    response = host_quiz(client, quiz["quiz_id"])
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "session_host_denied"
@@ -113,7 +114,7 @@ def test_archived_quiz_cannot_be_hosted(
     quiz = create_quiz(client)
     assert client.patch(f"/quizzes/{quiz['quiz_id']}/archive").status_code == 200
 
-    response = client.post(f"/quizzes/{quiz['quiz_id']}/sessions")
+    response = host_quiz(client, quiz["quiz_id"])
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "quiz_not_hostable"

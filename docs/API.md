@@ -265,29 +265,36 @@ Task 4 also exposes
 `require_approved_quiz_version(db, class_id, quiz_version_id)` for Task 5. It
 uses the same filtering and raises `409 quiz_version_not_approved` when the
 exact version is not currently hostable, or `409 class_archived` when the class
-itself cannot host. Session creation does not call it yet.
+itself cannot host. Session creation calls it (Task 5).
 
 ## Sessions
 
 Statuses: `LOBBY → ACTIVE → COMPLETED`, or `LOBBY → CANCELLED`. Starting, advancing, ending and answering all happen over the WebSocket ([LIVE_PROTOCOL.md](LIVE_PROTOCOL.md) §1, §4). A session whose host is gone for 15 minutes is ended automatically (§5, PR #53).
 
-`SessionResponse`: `session_id, quiz_id, quiz_version_id, quiz_title, host_id, class_id, join_code, status, current_question_order, created_at, started_at, ended_at`. `class_id` is `null` for an open session.
+`SessionResponse`: `session_id, quiz_id, quiz_version_id, quiz_title, host_id, class_id, join_code, status, current_question_order, created_at, started_at, ended_at`. Every new session has a `class_id`. It's `null` only on old sessions from before V3, which are read-only history: nobody can join or answer in them.
 
-### `POST /quizzes/{quiz_id}/sessions` → `201 SessionResponse`
-Only the quiz's author can host it (Admins can't host other people's quizzes). Creates a `LOBBY` session with a fresh 6-digit `join_code`.
+### `POST /classes/{class_id}/quizzes/{quiz_id}/sessions` → `201 SessionResponse`
+Starts a `LOBBY` session in the class with a fresh 6-digit `join_code`. There are no open sessions: every session belongs to a class, and only the class's active members can join it. No body.
 
-Optional body: `{"class_id": 12}`. No body, or `{"class_id": null}`, creates an **open session** that anyone with the code can join. With a `class_id` it creates a **class session**: the caller must also be an active organizer of that class (or an Admin), and only the class's active members can join it.
+Rules, checked in this order:
+1. The caller is an active member of the class, and the class isn't archived.
+2. The quiz belongs to this class.
+3. The caller is the quiz owner or an active organizer of the class. Being a collaborator isn't enough, and faculty status gives no extra access.
+4. The quiz isn't archived and has a published version.
+5. That newest published version is approved for the class (Task 4). Pending, rejected, withdrawn and stale (a newer version was published) versions can't be hosted.
 
 | Status | Code | When |
 |---|---|---|
-| 403 | `session_host_denied` | Caller isn't the quiz author |
-| 403 | `not_class_organizer` | `class_id` given and the caller isn't an active organizer or Admin |
-| 404 | `class_not_found` | `class_id` given and the class doesn't exist or the caller isn't in it |
-| 409 | `class_archived` | `class_id` given and the class is archived |
-| 404 | `quiz_not_found` | |
+| 404 | `class_not_found` | The class doesn't exist or the caller isn't an active member |
+| 409 | `class_archived` | The class is archived |
+| 404 | `quiz_not_found` | The quiz doesn't exist or belongs to another class |
+| 403 | `session_host_denied` | Caller is neither the quiz owner nor a class organizer |
 | 409 | `quiz_not_hostable` | Quiz is archived, or has no published version |
+| 409 | `quiz_version_not_approved` | The newest published version isn't approved for the class |
 | 500 | `session_creation_failed` | |
 | 503 | `join_code_unavailable` | No free join code after several tries; retry |
+
+The old `POST /quizzes/{quiz_id}/sessions` route is gone.
 
 ### `POST /sessions/join` → `201 SessionJoinResponse`
 Any active account. Body: `{"join_code": "123456"}` (6 digits; surrounding spaces are trimmed). Works in `LOBBY` or `ACTIVE`; a late joiner starts from the next question. The host is notified over the WebSocket after the commit.
@@ -296,14 +303,14 @@ Response: `{ "session": SessionResponse, "participant": { "session_participant_i
 
 | Status | Code | When |
 |---|---|---|
-| 403 | `not_class_member` | It's a class session and the caller isn't an active member, even with the right code |
+| 403 | `not_class_member` | The caller isn't an active member of the session's class, even with the right code (also for old sessions with no class) |
 | 404 | `join_code_not_found` | No LOBBY/ACTIVE session uses the code |
 | 409 | `host_cannot_join` | The host tried to join their own session |
 | 409 | `session_already_joined` | This account already has a participant row, even one that has left |
 | 500 | `session_join_failed` | |
 
 ### `POST /sessions/{session_id}/join` → `201 SessionJoinResponse`
-The class page's Live button: join a **class session** by id, with no code. Same response, errors and late-join rules as joining by code. Only active members of the session's class can use it. Open sessions answer `404 session_not_found` so they still need their code.
+The class page's Live button: join a session by id, with no code. Same response, errors and late-join rules as joining by code. Only active members of the session's class can use it; anyone else gets `404 session_not_found`.
 
 ### `GET /classes/{class_id}/active-sessions` → `200 ClassActiveSession[]`
 Any active member. The class's `LOBBY` and `ACTIVE` sessions, newest first; the class page polls it every 5 seconds to draw the Live button.

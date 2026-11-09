@@ -23,7 +23,8 @@ from app.schemas.session import (
     SessionResponse,
 )
 from app.services.class_access import may_play, require_session_class_member
-from app.services.class_authorization import require_class_host, require_class_member
+from app.services.class_authorization import require_class_member
+from app.services.quiz_submissions import require_approved_quiz_version
 
 JOIN_CODE_ALPHABET = "0123456789"
 JOIN_CODE_LENGTH = 6
@@ -101,24 +102,35 @@ def _participant_response(
 def create_session(
     db: Session,
     account: CurrentAccount,
+    class_id: int,
     quiz_id: int,
-    class_id: int | None = None,
 ) -> SessionResponse:
-    """Host a quiz. class_id=None creates an open session anyone with the
-    code can join; otherwise only that class's active members can."""
+    """Host a quiz in a class. Every session belongs to a class.
+
+    The quiz must belong to the class, and its newest published version must
+    be approved for the class (Task 4). The quiz owner or an active organizer
+    of the class may host it; being a collaborator is not enough.
+    """
+    # People outside the class get the same 404 as a missing class.
+    access = require_class_member(db, account, class_id)
+    if access.class_.archived_at is not None:
+        raise APIError(
+            409,
+            "class_archived",
+            "An archived class cannot start new sessions.",
+        )
+
     quiz = db.get(Quiz, quiz_id)
-    if quiz is None:
+    if quiz is None or quiz.class_id != class_id:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
-    if quiz.author_id != account.account_id:
+    if quiz.author_id != account.account_id and not access.is_organizer:
         raise APIError(
             403,
             "session_host_denied",
-            "Only the quiz creator can host this quiz.",
+            "Only the quiz owner or a class organizer can host this quiz.",
         )
-    if quiz.status != QuizStatus.PUBLISHED:
-        raise APIError(409, "quiz_not_hostable", "Only a published quiz can be hosted.")
-    if class_id is not None:
-        require_class_host(db, account, class_id)
+    if quiz.status == QuizStatus.ARCHIVED:
+        raise APIError(409, "quiz_not_hostable", "An archived quiz cannot be hosted.")
 
     version = db.scalar(
         select(QuizVersion)
@@ -135,6 +147,9 @@ def create_session(
             "quiz_not_hostable",
             "The quiz does not have a published version.",
         )
+    # Pending, rejected, withdrawn and stale versions stop here.
+    require_approved_quiz_version(db, class_id, version.quiz_version_id)
+
     for _ in range(JOIN_CODE_ATTEMPTS):
         join_code = _generate_join_code()
         if _active_session_for_code(db, join_code) is not None:
@@ -196,14 +211,12 @@ def join_session_by_id(
 ) -> SessionJoinResponse:
     """Join from the class page's Live button instead of typing the code.
 
-    Only class sessions can be joined this way, and only by active members.
-    Open sessions still need the six-digit code. Anyone else gets the same 404
-    as a missing session, so session ids reveal nothing.
+    Only active members of the session's class can join this way. Anyone
+    else gets the same 404 as a missing session, so session ids reveal nothing.
     """
     session = _load_session(db, session_id)
-    if session.class_id is None or (
-        session.host_id != account.account_id
-        and not may_play(db, session, account.account_id)
+    if session.host_id != account.account_id and not may_play(
+        db, session, account.account_id
     ):
         raise APIError(404, "session_not_found", "Session not found.")
     if session.status not in JOINABLE_STATUSES:
@@ -222,8 +235,10 @@ def _join(
             "host_cannot_join",
             "The host cannot join their own session as a participant.",
         )
-    # Knowing the code is not enough for a class session.
-    require_session_class_member(db, session, account)
+    # Knowing the code is not enough. The locking read waits for a removal
+    # or leave that is committing right now, so a member removed at the same
+    # moment can't slip in with an active participant row.
+    require_session_class_member(db, session, account, lock=True)
 
     existing = db.scalar(
         select(SessionParticipant).where(

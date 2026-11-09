@@ -17,11 +17,15 @@ from app.models import (
     LiveSessionStatus,
     MembershipStatus,
     Question,
+    QuizSubmission,
+    QuizVersion,
     SessionParticipant,
     SessionQuestion,
     SessionQuestionStatus,
+    SubmissionStatus,
 )
-from tests.test_session_api import create_quiz, session_client, use_account
+from tests.class_quiz_helpers import approve_quiz, make_class, publish_quiz
+from tests.test_session_api import QUIZ_PAYLOAD, session_client, use_account
 
 __all__ = ["session_client"]
 
@@ -78,8 +82,25 @@ def class_setup(
     return client, accounts, class_id
 
 
-def host(client: TestClient, quiz_id: int, class_id: int | None):
-    return client.post(f"/quizzes/{quiz_id}/sessions", json={"class_id": class_id})
+def class_quiz(
+    client: TestClient,
+    class_id: int,
+    *,
+    approve: bool = True,
+) -> dict:
+    """A published quiz owned by the current account in the class,
+    approved for hosting there unless approve=False."""
+    created = client.post(f"/classes/{class_id}/quizzes", json=QUIZ_PAYLOAD)
+    assert created.status_code == 201
+    quiz_id = created.json()["quiz_id"]
+    publish_quiz(client, quiz_id)
+    if approve:
+        approve_quiz(client, quiz_id)
+    return client.get(f"/quizzes/{quiz_id}").json()
+
+
+def host(client: TestClient, quiz_id: int, class_id: int):
+    return client.post(f"/classes/{class_id}/quizzes/{quiz_id}/sessions")
 
 
 def error_code(response) -> str:
@@ -88,34 +109,187 @@ def error_code(response) -> str:
 
 def test_organizer_creates_class_scoped_session(class_setup) -> None:
     client, _, class_id = class_setup
-    quiz = create_quiz(client)
+    quiz = class_quiz(client, class_id)
 
     response = host(client, quiz["quiz_id"], class_id)
 
     assert response.status_code == 201
     assert response.json()["class_id"] == class_id
+    assert response.json()["quiz_version_id"] == quiz["version"]["quiz_version_id"]
 
 
-def test_plain_member_cannot_host_for_the_class(class_setup) -> None:
+def test_member_can_host_their_own_approved_quiz(class_setup) -> None:
     client, accounts, class_id = class_setup
     use_account(client, accounts["member"])
-    quiz = create_quiz(client)
+    quiz = class_quiz(client, class_id)
+
+    response = host(client, quiz["quiz_id"], class_id)
+
+    assert response.status_code == 201
+    assert response.json()["host_id"] == accounts["member"].account_id
+
+
+def test_organizer_can_host_a_members_approved_quiz(class_setup) -> None:
+    client, accounts, class_id = class_setup
+    use_account(client, accounts["member"])
+    quiz = class_quiz(client, class_id)
+    use_account(client, accounts["author"])
+
+    response = host(client, quiz["quiz_id"], class_id)
+
+    assert response.status_code == 201
+    assert response.json()["host_id"] == accounts["author"].account_id
+
+
+def test_plain_member_cannot_host_someone_elses_quiz(class_setup) -> None:
+    client, accounts, class_id = class_setup
+    quiz = class_quiz(client, class_id)
+    use_account(client, accounts["member"])
 
     response = host(client, quiz["quiz_id"], class_id)
 
     assert response.status_code == 403
-    assert error_code(response) == "not_class_organizer"
+    assert error_code(response) == "session_host_denied"
+
+
+def test_collaborator_cannot_host_just_by_collaborating(class_setup) -> None:
+    client, accounts, class_id = class_setup
+    quiz = class_quiz(client, class_id)
+    shared = client.post(
+        f"/classes/{class_id}/quizzes/{quiz['quiz_id']}/collaborators",
+        json={"email": "member@test.invalid", "permission": "EDITOR"},
+    )
+    assert shared.status_code == 201
+    use_account(client, accounts["member"])
+
+    response = host(client, quiz["quiz_id"], class_id)
+
+    assert response.status_code == 403
+    assert error_code(response) == "session_host_denied"
+
+
+@pytest.mark.parametrize("name", ["invited", "removed", "other"])
+def test_people_outside_the_class_cannot_host(class_setup, name) -> None:
+    client, accounts, class_id = class_setup
+    quiz = class_quiz(client, class_id)
+    use_account(client, accounts[name])
+
+    response = host(client, quiz["quiz_id"], class_id)
+
+    assert response.status_code == 404
+    assert error_code(response) == "class_not_found"
+
+
+def test_unrelated_faculty_cannot_host(class_setup) -> None:
+    client, accounts, class_id = class_setup
+    quiz = class_quiz(client, class_id)
+    use_account(client, accounts["admin"])
+
+    response = host(client, quiz["quiz_id"], class_id)
+
+    assert response.status_code == 404
+    assert error_code(response) == "class_not_found"
+
+
+def test_quiz_from_another_class_cannot_be_hosted(class_setup) -> None:
+    client, accounts, class_id = class_setup
+    other_class_id = make_class(client, accounts["author"].account_id, "Other")
+    quiz = class_quiz(client, other_class_id)
+
+    # Approved in its own class, but hosted in the wrong one.
+    response = host(client, quiz["quiz_id"], class_id)
+
+    assert response.status_code == 404
+    assert error_code(response) == "quiz_not_found"
+
+
+def test_missing_quiz_looks_the_same_as_another_classes_quiz(class_setup) -> None:
+    client, _, class_id = class_setup
+
+    response = host(client, 999_999, class_id)
+
+    assert response.status_code == 404
+    assert error_code(response) == "quiz_not_found"
+
+
+def test_unapproved_quiz_cannot_be_hosted(class_setup) -> None:
+    client, _, class_id = class_setup
+    quiz = class_quiz(client, class_id, approve=False)
+
+    response = host(client, quiz["quiz_id"], class_id)
+
+    assert response.status_code == 409
+    assert error_code(response) == "quiz_version_not_approved"
+
+
+@pytest.mark.parametrize("status", ["PENDING", "REJECTED", "WITHDRAWN"])
+def test_pending_rejected_and_withdrawn_versions_cannot_be_hosted(
+    class_setup, status
+) -> None:
+    client, accounts, class_id = class_setup
+    quiz = class_quiz(client, class_id, approve=False)
+    decided = status != "PENDING"
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            QuizSubmission(
+                class_id=class_id,
+                quiz_version_id=quiz["version"]["quiz_version_id"],
+                submitted_by_id=accounts["author"].account_id,
+                status=SubmissionStatus(status),
+                decided_by_id=accounts["author"].account_id if decided else None,
+                decided_at=datetime.now(UTC).replace(tzinfo=None) if decided else None,
+            )
+        )
+        db.commit()
+
+    response = host(client, quiz["quiz_id"], class_id)
+
+    assert response.status_code == 409
+    assert error_code(response) == "quiz_version_not_approved"
+
+
+def test_stale_approved_version_cannot_be_hosted(class_setup) -> None:
+    client, _, class_id = class_setup
+    quiz = class_quiz(client, class_id)
+    # A newer version is published after approval; it needs its own approval.
+    with client.app.state.database.session_factory() as db:
+        old = db.get(QuizVersion, quiz["version"]["quiz_version_id"])
+        db.add(
+            QuizVersion(
+                quiz_id=quiz["quiz_id"],
+                version_number=old.version_number + 1,
+                title="Edited",
+                published_at=datetime.now(UTC).replace(tzinfo=None),
+            )
+        )
+        db.commit()
+
+    response = host(client, quiz["quiz_id"], class_id)
+
+    assert response.status_code == 409
+    assert error_code(response) == "quiz_version_not_approved"
+
+
+def test_archived_quiz_cannot_be_hosted(class_setup) -> None:
+    client, _, class_id = class_setup
+    quiz = class_quiz(client, class_id)
+    assert client.patch(f"/quizzes/{quiz['quiz_id']}/archive").status_code == 200
+
+    response = host(client, quiz["quiz_id"], class_id)
+
+    assert response.status_code == 409
+    assert error_code(response) == "quiz_not_hostable"
 
 
 def test_archived_class_cannot_start_sessions(class_setup) -> None:
     client, _, class_id = class_setup
+    quiz = class_quiz(client, class_id)
     with client.app.state.database.session_factory() as db:
         class_ = db.get(Class, class_id)
         class_.archived_at = datetime(2026, 10, 1)
         class_.join_code = None
         class_.joining_open = False
         db.commit()
-    quiz = create_quiz(client)
 
     response = host(client, quiz["quiz_id"], class_id)
 
@@ -123,28 +297,50 @@ def test_archived_class_cannot_start_sessions(class_setup) -> None:
     assert error_code(response) == "class_archived"
 
 
-def test_no_class_creates_an_open_session(class_setup) -> None:
-    client, accounts, _ = class_setup
-    quiz = create_quiz(client)
+def test_sessions_cannot_be_created_without_a_class(class_setup) -> None:
+    client, _, class_id = class_setup
+    quiz = class_quiz(client, class_id)
 
-    with_null = host(client, quiz["quiz_id"], None)
-    without_body = client.post(f"/quizzes/{quiz['quiz_id']}/sessions")
+    # The old open-session route is gone.
+    response = client.post(f"/quizzes/{quiz['quiz_id']}/sessions")
 
-    assert with_null.status_code == 201
-    assert with_null.json()["class_id"] is None
-    assert without_body.status_code == 201
-    assert without_body.json()["class_id"] is None
-    # Anyone with the code can join an open session, as before classes.
-    use_account(client, accounts["other"])
-    joined = client.post(
-        "/sessions/join", json={"join_code": with_null.json()["join_code"]}
-    )
-    assert joined.status_code == 201
+    assert response.status_code in (404, 405)
+
+
+def legacy_open_session(client: TestClient, quiz: dict, host_id: int) -> LiveSession:
+    """A pre-V3 session with no class, as old data may still have."""
+    with client.app.state.database.session_factory() as db:
+        session = LiveSession(
+            quiz_version_id=quiz["version"]["quiz_version_id"],
+            host_id=host_id,
+            class_id=None,
+            join_code="246810",
+            status=LiveSessionStatus.LOBBY,
+        )
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        return session
+
+
+def test_old_sessions_without_a_class_cannot_be_joined(class_setup) -> None:
+    client, accounts, class_id = class_setup
+    quiz = class_quiz(client, class_id)
+    session = legacy_open_session(client, quiz, accounts["author"].account_id)
+    use_account(client, accounts["participant"])
+
+    by_code = client.post("/sessions/join", json={"join_code": "246810"})
+    by_id = client.post(f"/sessions/{session.session_id}/join")
+
+    assert by_code.status_code == 403
+    assert error_code(by_code) == "not_class_member"
+    assert by_id.status_code == 404
+    assert error_code(by_id) == "session_not_found"
 
 
 def test_active_members_join_a_class_session(class_setup) -> None:
     client, accounts, class_id = class_setup
-    quiz = create_quiz(client)
+    quiz = class_quiz(client, class_id)
     session = host(client, quiz["quiz_id"], class_id).json()
 
     use_account(client, accounts["participant"])
@@ -163,7 +359,7 @@ def test_active_members_join_a_class_session(class_setup) -> None:
 
 def test_departed_participant_is_labeled_and_cannot_rejoin(class_setup) -> None:
     client, accounts, class_id = class_setup
-    quiz = create_quiz(client)
+    quiz = class_quiz(client, class_id)
     session = host(client, quiz["quiz_id"], class_id).json()
     use_account(client, accounts["participant"])
     joined = client.post(
@@ -194,7 +390,7 @@ def test_departed_participant_is_labeled_and_cannot_rejoin(class_setup) -> None:
 
 def test_removed_member_cannot_answer_after_joining(class_setup) -> None:
     client, accounts, class_id = class_setup
-    quiz = create_quiz(client)
+    quiz = class_quiz(client, class_id)
     session = host(client, quiz["quiz_id"], class_id).json()
     use_account(client, accounts["participant"])
     joined = client.post(
@@ -254,7 +450,7 @@ def test_removed_member_cannot_answer_after_joining(class_setup) -> None:
 @pytest.mark.parametrize("name", ["invited", "removed", "other"])
 def test_invited_removed_and_outside_users_cannot_join(class_setup, name) -> None:
     client, accounts, class_id = class_setup
-    quiz = create_quiz(client)
+    quiz = class_quiz(client, class_id)
     session = host(client, quiz["quiz_id"], class_id).json()
     use_account(client, accounts[name])
 
@@ -270,13 +466,25 @@ def test_invited_removed_and_outside_users_cannot_join(class_setup, name) -> Non
     assert error_code(listed) == "class_not_found"
 
 
-def test_open_session_cannot_be_joined_by_session_id(class_setup) -> None:
-    client, accounts, _ = class_setup
-    quiz = create_quiz(client)
-    session = host(client, quiz["quiz_id"], None).json()
+def test_removed_member_cannot_view_their_old_results(class_setup) -> None:
+    client, accounts, class_id = class_setup
+    quiz = class_quiz(client, class_id)
+    session = host(client, quiz["quiz_id"], class_id).json()
     use_account(client, accounts["participant"])
+    joined = client.post("/sessions/join", json={"join_code": session["join_code"]})
+    assert joined.status_code == 201
+    with client.app.state.database.session_factory() as db:
+        db.get(LiveSession, session["session_id"]).status = LiveSessionStatus.COMPLETED
+        membership = db.scalar(
+            select(ClassMembership).where(
+                ClassMembership.class_id == class_id,
+                ClassMembership.account_id == accounts["participant"].account_id,
+            )
+        )
+        membership.status = MembershipStatus.REMOVED
+        db.commit()
 
-    response = client.post(f"/sessions/{session['session_id']}/join")
+    response = client.get(f"/sessions/{session['session_id']}/results")
 
     assert response.status_code == 404
-    assert error_code(response) == "session_not_found"
+    assert error_code(response) == "class_not_found"
