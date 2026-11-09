@@ -6,7 +6,6 @@ import {
   useParams,
   useSearchParams,
 } from "react-router";
-import { useClassesResource } from "../classes/classResources";
 import { useAccount } from "./account";
 import HostQuizButton from "./HostQuizButton";
 
@@ -774,14 +773,8 @@ export function QuizViewer() {
 
   const resource = useResource(validId ? `/quizzes/${quizId}` : null);
 
-  // Opened from a class page: host in that class. Otherwise offer the same
-  // open-session / class choice as the dashboard menu.
+  // Opened from a class page: the back link returns there.
   const fromClass = useLocation().state?.classId ?? null;
-  const classes = useClassesResource();
-  const hostClasses =
-    classes.status === "ready"
-      ? classes.data.filter((item) => item.canManage && !item.archived)
-      : [];
 
   if (!validId) {
     return <p role="alert">Invalid quiz ID.</p>;
@@ -904,14 +897,7 @@ export function QuizViewer() {
               <HostQuizButton
                 quiz={quiz}
                 action={action}
-                classId={fromClass}
-                hostClasses={hostClasses}
-                hostClassesStatus={classes.status}
-                hostClassesError={classes.error}
-                reloadHostClasses={classes.reload}
-                label={
-                  fromClass ? "Host in this class →" : "Host live session →"
-                }
+                label="Host in its class →"
               />
             </div>
           )}

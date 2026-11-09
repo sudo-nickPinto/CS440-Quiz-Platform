@@ -233,6 +233,9 @@ class Question(Base):
     base_points: Mapped[int] = mapped_column(
         INTEGER(unsigned=True), nullable=False, default=1000, server_default="1000"
     )
+    revision: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True), nullable=False, default=1, server_default="1"
+    )
     locked_by_id: Mapped[int | None] = mapped_column(
         INTEGER(unsigned=True), ForeignKey("account.account_id", ondelete="SET NULL")
     )

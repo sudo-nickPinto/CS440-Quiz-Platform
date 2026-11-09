@@ -19,6 +19,7 @@ from app.schemas.class_membership import (
     ClassMemberResponse,
     ClassMemberUpdate,
 )
+from app.services.class_access import leave_class_sessions
 from app.services.class_authorization import require_class_organizer
 
 
@@ -359,7 +360,9 @@ def update_class_member(
 
 def remove_class_member(
     db: Session, account: CurrentAccount, class_id: int, account_id: int
-) -> None:
+) -> list[int]:
+    """Remove an active member. Returns the live sessions they were playing
+    in, which now mark them as left."""
     _require_class_organizer(db, account, class_id, lock_class=True)
     membership = _load_membership(db, class_id, account_id, lock=True)
     if membership.status != MembershipStatus.ACTIVE:
@@ -368,9 +371,15 @@ def remove_class_member(
     _protect_last_organizer(db, membership)
     membership.status = MembershipStatus.REMOVED
     membership.decided_by_id = account.account_id
-    membership.decided_at = datetime.now(UTC).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    # Millisecond precision, like the session timestamps in MySQL.
+    membership.decided_at = now.replace(microsecond=now.microsecond // 1000 * 1000)
+    left_sessions = leave_class_sessions(
+        db, class_id, account_id, membership.decided_at
+    )
     _commit(
         db,
         "class_member_remove_failed",
         "Could not remove the class member.",
     )
+    return left_sessions

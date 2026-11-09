@@ -17,6 +17,7 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0009_quiz_collaboration` | Adds optimistic quiz revisions, collaborator permission/state, and append-only share/revocation audit events (V3 task 3) |
 | `0010_quiz_submission` | Adds class quiz submission/approval audit records and concurrency-safe active-submission uniqueness (V3 task 4) |
 | `0011_account_profile` | Adds `account.first_name`, `last_name` and `avatar_key`: the profile people fill in once after signing up. `display_name` becomes "first last" when it is saved |
+| `0012_question_revision` | Adds per-question optimistic revisions so collaborators can save different questions concurrently |
 
 Each migration comes in two files:
 

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router";
 
-import { useClassesResource } from "../classes/classResources";
 import { useAccount } from "./account";
 import HostQuizButton from "./HostQuizButton";
 import { useAction, useApi, useResource } from "./rest";
@@ -39,11 +38,6 @@ export default function PreviewDashboard() {
 
   const presenting = view === "present";
   const resource = useResource(presenting ? "/quizzes" : null);
-  const classes = useClassesResource();
-  const hostClasses =
-    classes.status === "ready"
-      ? classes.data.filter((item) => item.canManage && !item.archived)
-      : [];
 
   if (view === "taken") {
     return <Navigate to="/app/dashboard/participate" replace />;
@@ -340,10 +334,6 @@ export default function PreviewDashboard() {
                           <HostQuizButton
                             quiz={quiz}
                             action={action}
-                            hostClasses={hostClasses}
-                            hostClassesStatus={classes.status}
-                            hostClassesError={classes.error}
-                            reloadHostClasses={classes.reload}
                           />
                         </div>
                       )}

@@ -11,6 +11,7 @@ export const initialLiveState = {
   participantCount: 0,
   participants: [], // host only: [{ session_participant_id, display_name, avatar_key }]
   hostConnected: true,
+  countdown: null,
   currentQuestion: null, // question_opened payload while a question is OPEN
   myAnswer: null, // participant: { choice_id, submitted_at } for the open question
   answerProgress: null, // host: { answered_count, eligible_count }
@@ -45,12 +46,20 @@ function onServerMessage(state, message) {
         session: message.session,
         participantCount: message.participant_count,
         hostConnected: message.host_connected,
+        countdown: message.countdown ?? null,
         currentQuestion: message.current_question,
         myAnswer: message.my_answer,
         lastQuestion: closedQuestion,
         lastResults: message.last_results,
       }
     }
+
+    case 'countdown_tick':
+      return state.session?.status === 'LOBBY'
+        ? { ...state, countdown: message.number, lastError: null } : state
+
+    case 'countdown_cancelled':
+      return { ...state, countdown: null }
 
     case 'participant_joined':
       return {
@@ -84,6 +93,7 @@ function onServerMessage(state, message) {
           current_question_order: message.question_order,
         }),
         currentQuestion: question,
+        countdown: null,
         myAnswer: null,
         answerProgress: null,
         lastQuestion: null,
@@ -141,6 +151,7 @@ function onServerMessage(state, message) {
         session: withStatus(state, { status: message.reason }),
         currentQuestion: null,
         final: message,
+        countdown: null,
       }
 
     case 'ack':
@@ -173,7 +184,8 @@ export function liveReducer(state, action) {
     case 'server':
       return onServerMessage(state, action.message)
     case 'connection':
-      return { ...state, connection: action.status }
+      return { ...state, connection: action.status,
+        countdown: action.status === 'open' ? state.countdown : null }
     case 'participants':
       return { ...state, participants: action.participants }
     case 'final_results':
