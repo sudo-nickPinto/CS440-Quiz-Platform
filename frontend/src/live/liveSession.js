@@ -140,6 +140,8 @@ export function createLiveSession({
     close,
 
     // Host controls
+    startCountdown: () => command({ type: 'start_countdown' }),
+    cancelCountdown: () => command({ type: 'cancel_countdown' }),
     openQuestion: (questionOrder) =>
       command({ type: 'open_question', question_order: questionOrder }),
     openNextQuestion() {

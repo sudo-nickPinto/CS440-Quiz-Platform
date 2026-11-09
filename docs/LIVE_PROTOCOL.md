@@ -87,6 +87,8 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 | `auth` | anyone, first message | `token` | §2 |
 | `ping` | anyone | — | reply `pong` |
 | `open_question` | host | `question_order` | `open_question()` → broadcast `question_opened`, schedule the deadline check (§6) |
+| `start_countdown` | host | none | In the lobby with at least one participant, broadcast 3, 2, 1 at one-second intervals, then open question 1 on the server. Duplicate starts do not restart it. |
+| `cancel_countdown` | host | none | Return everyone to the lobby before question opening begins. |
 | `close_question` | host | `session_question_id` | **NEW**: force-close now with reason `HOST`, then the same steps as an automatic close |
 | `submit_answer` | participant | `session_question_id`, `choice_id` | `submit_response()` → `ack` to the sender only → `close_question_if_ready()` (§6) |
 | `end_session` | host | — | **NEW** `end_session()`: closes any open question, writes `result` rows, sets `COMPLETED` → broadcast `session_ended` |
@@ -100,6 +102,8 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 | `type` | To | Payload |
 |---|---|---|
 | `session_state` | the one client, on (re)connect | snapshot, see below |
+| `countdown_tick` | host and participants | `number`: 3, 2, or 1. Render the same animated number; clients do not open the question themselves. |
+| `countdown_cancelled` | host and participants | Return to the lobby. Also sent when the host disconnects, the last participant leaves, or starting fails. |
 | `participant_joined` | host | `session_participant_id`, `display_name`, `participant_count`. Joining happens over REST, not the socket, so `join_session_route` (`POST /sessions/join`) gets an after-commit hook into the WebSocket hub, the same pattern as the REST answer hook: once `join_session()` has committed, it broadcasts `participant_joined` to the host's socket(s) using the new `SessionParticipantResponse`. If the host isn't connected nothing is sent, and they see the count in their next `session_state` |
 | `participant_left` | host | same fields. Produced by **NEW** `leave` |
 | `question_opened` | everyone | `QuestionOpenedEvent` (no correctness, just as today) |
@@ -114,6 +118,12 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 | `pong` | the sender | — |
 
 **`session_state` snapshot** (sent on every connect and reconnect):
+
+The snapshot also includes `countdown` (3, 2, 1, or null), so reconnecting clients
+resume the current beat. The countdown is transient state in the single-worker
+hub: a server restart cancels it and leaves the session in the lobby. Question
+timestamps are created only after the three seconds, preserving the full answer
+time. Direct `open_question` commands are rejected while the countdown runs.
 
 ```json
 {
@@ -139,7 +149,7 @@ Times are ISO-8601 UTC strings. The server's DB timestamps have no timezone, so 
 ## 5. Rosters, disconnects and reconnects
 
 - **Roster = joined, not connected.** Eligibility for a question is "had an un-left `session_participant` row when it opened" (`answer_progress()` in #35). A dropped socket does **not** shrink the roster. If someone's Wi-Fi dies, the question waits for the deadline rather than closing early without them. Only an explicit `leave` sets `left_at`.
-- **The roster is frozen for the whole question.** It is fixed when the question opens and does not change until the next one. Someone who joins mid-question is not in it. Someone who explicitly `leave`s mid-question still counts for that question, but can no longer answer it, so it may wait until the deadline. `left_at` only affects eligibility from the next question onward.
+- **The roster is frozen for the whole question.** It is fixed when the question opens and does not change until the next one. Someone who joins mid-question is not in it. Someone who explicitly `leave`s mid-question still counts for that question, but can no longer answer it, so it may wait until the deadline. `left_at` only affects eligibility from the next question onward. The exception is class membership: someone removed from the session's class, or who leaves it, drops out of the open question's roster right away (their `left_at` is set in the same transaction). The host gets `participant_left` and `answer_progress`, and the question closes as `ALL_ANSWERED` if everyone left in the roster has answered.
 - **Reconnect** means connect + `auth` again. The server replies with `session_state`, and the client renders from that snapshot alone. Duplicate answers are still rejected (`response_already_submitted`), so a client that retries after reconnecting is safe.
 - **Host disconnects:** the session is not ended. Open questions keep their server timers and still close on schedule. Participants get `host_status {connected:false}` and see a "waiting for host" state. When the host reconnects they get `session_state` and carry on. If no host socket comes back for **15 minutes** (`LIVE_ABANDON_AFTER_SECONDS`, default 900; 0 turns it off), the server ends the session itself. A `LOBBY` is `CANCELLED`. An `ACTIVE` session is ended exactly as the host's `end_session` would: any open question closes (`question_closed` + results), result rows are written, and it becomes `COMPLETED`. Everyone still connected then gets the usual `session_ended` and a 1000 close, so clients need no special case. The check runs every `LIVE_ABANDON_CHECK_SECONDS` (default 60). After a restart, the clock for a host-less session starts at the first check.
 - **Same account, two tabs:** the newest socket replaces the older one, which is closed with `4409`.
@@ -189,7 +199,7 @@ Problems with the connection itself close the socket:
 | `1000` | Session ended normally | Show final screen |
 | `4400` | Malformed message / first message wasn't `auth` | Bug: log it |
 | `4401` | Missing, invalid or expired token; auth timeout | Get a new token, reconnect once, then send to login |
-| `4403` | Not the host or a participant of this session, account inactive, or no longer an active member of the session's class (`not_class_member`) | Send to dashboard |
+| `4403` | Not the host or a participant of this session, account inactive, or no longer an active member of the session's class (`not_class_member`). Applies to the host too. Also sent to an open socket when its account is removed from, or leaves, the class. | Send to dashboard |
 | `4404` | Session not found | Send to dashboard |
 | `4409` | Replaced by a newer connection from the same account | Show "opened in another tab" |
 | `4410` | Session is `COMPLETED` / `CANCELLED` | Show final screen |

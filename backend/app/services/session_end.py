@@ -279,6 +279,63 @@ def cancel_session(
     )
 
 
+def class_departure(
+    db: Session,
+    session_id: int,
+    account_id: int,
+) -> tuple[ParticipantLeft, int | None] | None:
+    """What the host needs after someone was dropped from a session because
+    they left or were removed from its class: who left, the new participant
+    count, and the open question to re-check, if any."""
+    row = db.execute(
+        select(SessionParticipant.session_participant_id, Account.display_name)
+        .join(Account, Account.account_id == SessionParticipant.account_id)
+        .where(
+            SessionParticipant.session_id == session_id,
+            SessionParticipant.account_id == account_id,
+        )
+    ).one_or_none()
+    if row is None:
+        return None
+    participant_count = int(
+        db.scalar(
+            select(func.count(SessionParticipant.session_participant_id)).where(
+                SessionParticipant.session_id == session_id,
+                SessionParticipant.left_at.is_(None),
+            )
+        )
+        or 0
+    )
+    open_question_id = db.scalar(
+        select(SessionQuestion.session_question_id).where(
+            SessionQuestion.session_id == session_id,
+            SessionQuestion.status == SessionQuestionStatus.OPEN,
+        )
+    )
+    left = ParticipantLeft(
+        session_id=session_id,
+        session_participant_id=row.session_participant_id,
+        display_name=row.display_name or "",
+        participant_count=participant_count,
+    )
+    return left, open_question_id
+
+
+def live_class_session_ids(db: Session, class_id: int) -> list[int]:
+    """The class's LOBBY or ACTIVE sessions, for closing a removed member's
+    live sockets."""
+    return list(
+        db.scalars(
+            select(LiveSession.session_id).where(
+                LiveSession.class_id == class_id,
+                LiveSession.status.in_(
+                    (LiveSessionStatus.LOBBY, LiveSessionStatus.ACTIVE)
+                ),
+            )
+        )
+    )
+
+
 def live_session_ids(db: Session) -> list[int]:
     """Every LOBBY or ACTIVE session, for the abandoned-session reaper."""
     return list(

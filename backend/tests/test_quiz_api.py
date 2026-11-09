@@ -10,7 +10,7 @@ from app.database import Base
 from app.main import create_app
 from app.models.account import Account, AccountRole
 from app.models.classes import ClassMembership, ClassRole
-from tests.class_quiz_helpers import post_class_quiz
+from tests.class_quiz_helpers import host_quiz, post_class_quiz
 
 QUIZ_PAYLOAD = {
     "title": "MVP Quiz",
@@ -398,7 +398,7 @@ def test_old_sessions_keep_version_and_new_sessions_use_revision(
     original = create_quiz(client)
     quiz_id = original["quiz_id"]
 
-    response = client.post(f"/quizzes/{quiz_id}/sessions")
+    response = host_quiz(client, quiz_id)
     assert response.status_code == 201
     old_session = response.json()
 
@@ -419,7 +419,7 @@ def test_old_sessions_keep_version_and_new_sessions_use_revision(
     )
     assert published.status_code == 200
 
-    response = client.post(f"/quizzes/{quiz_id}/sessions")
+    response = host_quiz(client, quiz_id)
     assert response.status_code == 201
     new_session = response.json()
 

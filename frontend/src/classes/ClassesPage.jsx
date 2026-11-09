@@ -138,7 +138,7 @@ export default function ClassesPage() {
           aria-controls="class-join-panel"
           onClick={() => togglePanel("join")}
         >
-          Join
+          Join class
         </button>
       </div>
 

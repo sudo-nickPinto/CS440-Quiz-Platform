@@ -130,9 +130,12 @@ real-MySQL concurrency tests cover the workflow. Task 4 also exposes a reusable
 approval helper; Task 5 will connect that helper to live-session creation and
 hosting.
 
-See the [API reference](docs/API.md) for endpoint contracts and the
-[Task 4 design](docs/V3_TASK4_SUBMISSION_APPROVAL_DRAFT.md) for the complete
-authorization, state-machine, migration, and Task 5 boundary decisions.
+See the [Task 4 overview](docs/V3_TASK4_QUIZ_SUBMISSION_APPROVAL.md) for the
+workflow and test scenarios, the [API reference](docs/API.md) for endpoint
+contracts, and the
+[detailed Task 4 design](docs/V3_TASK4_SUBMISSION_APPROVAL_DRAFT.md) for the
+complete authorization, state-machine, migration, and Task 5 boundary
+decisions.
 
 ## Development Workflow
 

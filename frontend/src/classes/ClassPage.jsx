@@ -330,12 +330,19 @@ function ClassSummary({ dashboard }) {
 }
 
 // Quizzes the caller wrote in this class: drafts to finish and publish, and
-// published quizzes organizers can host as a session of this class.
+// published quizzes. Publishing doesn't make a quiz hostable: its version must
+// also be submitted to the class and approved by an organizer (Task 4), so
+// only approved quizzes get a Host button.
 function PresentTable({ classInfo }) {
   const account = useAccount();
   const action = useAction();
   const member = classInfo.membershipStatus === "ACTIVE";
   const resource = useResource(member ? "/quizzes" : null);
+  const approved = useResource(
+    member && !classInfo.archived
+      ? `/classes/${classInfo.id}/approved-quizzes`
+      : null,
+  );
   const [query, setQuery] = useState("");
 
   if (!member) {
@@ -355,21 +362,26 @@ function PresentTable({ classInfo }) {
     );
   }
 
-  if (resource.loading) {
+  if (resource.loading || approved.loading) {
     return <ResourceMessage resource={{ status: "loading" }} />;
   }
 
-  if (resource.error) {
+  const failed = resource.error ? resource : approved.error ? approved : null;
+  if (failed) {
     return (
       <ResourceMessage
         resource={{
           status: "error",
-          error: resource.error,
-          reload: resource.reload,
+          error: failed.error,
+          reload: failed.reload,
         }}
       />
     );
   }
+
+  const approvedIds = new Set(
+    (approved.data || []).map((item) => item.quiz_id),
+  );
 
   const needle = query.trim().toLowerCase();
   const quizzes = (resource.data || []).filter(
@@ -421,7 +433,7 @@ function PresentTable({ classInfo }) {
                     <p>
                       {needle
                         ? "No quiz matches your search."
-                        : "Choose + New quiz to write one. Save it as a draft, then publish it to host it here."}
+                        : "Choose + New quiz to write one. Publish it, and once an organizer of this class approves it you can host it here."}
                     </p>
                   </div>
                 </td>
@@ -443,7 +455,11 @@ function PresentTable({ classInfo }) {
                         quiz.status === "DRAFT" ? " cl-chip-member" : ""
                       }`}
                     >
-                      {quiz.status === "DRAFT" ? "Draft" : "Published"}
+                      {quiz.status === "DRAFT"
+                        ? "Draft"
+                        : approvedIds.has(quiz.quiz_id)
+                          ? "Approved"
+                          : "Published"}
                     </span>
                   </td>
                   <td>{quiz.question_count}</td>
@@ -456,15 +472,16 @@ function PresentTable({ classInfo }) {
                       >
                         Review &amp; publish
                       </Link>
-                    ) : classInfo.canManage ? (
+                    ) : approvedIds.has(quiz.quiz_id) ? (
                       <HostQuizButton
                         quiz={quiz}
                         action={action}
-                        classId={classInfo.id}
                         label="Host in this class"
                       />
                     ) : (
-                      <span className="cl-muted">Organizers host</span>
+                      <span className="cl-muted">
+                        Needs organizer approval
+                      </span>
                     )}
                   </td>
                 </tr>

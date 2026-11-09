@@ -42,6 +42,8 @@ export function useLiveSession(sessionId) {
       phase: livePhase(state),
       nextQuestionOrder: nextQuestionOrder(state),
       openQuestion: store.openQuestion,
+      startCountdown: store.startCountdown,
+      cancelCountdown: store.cancelCountdown,
       openNextQuestion: store.openNextQuestion,
       skip: store.skip,
       end: store.end,
