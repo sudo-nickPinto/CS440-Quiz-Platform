@@ -12,6 +12,7 @@ import HostQuizButton from "./HostQuizButton";
 
 import { blankEditor, LETTERS, newQuestion } from "./model";
 import { toQuizCreate } from "./quizPayload";
+import { quizClassChoices, saveQuiz } from "./quizSave";
 import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 import ConfirmDialog from "./ConfirmDialog";
@@ -94,11 +95,7 @@ function JumpChips({ ids, current }) {
 function ChooseQuizClass() {
   const classes = useClassesResource();
   const choices =
-    classes.status === "ready"
-      ? classes.data.filter(
-          (item) => item.membershipStatus === "ACTIVE" && !item.archived,
-        )
-      : [];
+    classes.status === "ready" ? quizClassChoices(classes.data) : [];
 
   return (
     <section className="qp-content" aria-labelledby="choose-class-heading">
@@ -321,42 +318,16 @@ export function QuizEditor({
   async function save({ publish = false } = {}) {
     if (conflict) return;
 
-    let publishFailed = false;
-
-    const quiz = await action.run(async () => {
-      const payload = toQuizCreate(editor);
-
-      if (editing) {
-        payload.expected_revision = existingQuiz.revision;
-      }
-
-      const path = editing
-        ? `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}`
-        : `/classes/${classId}/quizzes`;
-
-      const saved = await api(path, {
-        method: editing ? "PUT" : "POST",
-        body: JSON.stringify(payload),
-      });
-
-      if (!publish) return saved;
-
-      // The draft is saved either way. If publishing fails, open the draft
-      // anyway (not this form, where saving again would duplicate it); its
-      // page has a Publish button to retry.
-      try {
-        return await api(
-          `/classes/${saved.class_id}/quizzes/${saved.quiz_id}/publish`,
-          {
-            method: "POST",
-            body: JSON.stringify({ expected_revision: saved.revision }),
-          },
-        );
-      } catch {
-        publishFailed = true;
-        return saved;
-      }
-    });
+    const result = await action.run(() =>
+      saveQuiz(api, {
+        payload: toQuizCreate(editor),
+        existingQuiz,
+        classId,
+        publish,
+      }),
+    );
+    const quiz = result?.quiz;
+    const publishFailed = result?.publishFailed;
 
     if (quiz) {
       navigate(`/app/quizzes/${quiz.quiz_id}`, {
@@ -768,8 +739,8 @@ export function QuizEditor({
                   </h2>
                   <p>
                     {canPublish
-                      ? "Save a draft to keep working on it, or publish it now so it can be hosted."
-                      : "This saves a draft. The quiz owner publishes it when it is ready to host."}
+                      ? "Save a draft to keep working on it, or publish it now. A published quiz can be hosted once an organizer of its class approves it."
+                      : "This saves a draft. Only the quiz owner can publish it."}
                   </p>
                 </div>
 
@@ -850,16 +821,10 @@ export function QuizViewer() {
 
   const resource = useResource(validId ? `/quizzes/${quizId}` : null);
 
-  // Opened from a class page: host in that class. Otherwise offer the same
-  // open-session / class choice as the dashboard menu.
+  // Opened from a class page: the back link returns there.
   const location = useLocation();
   const fromClass = location.state?.classId ?? null;
   const notice = location.state?.notice ?? null;
-  const classes = useClassesResource();
-  const hostClasses =
-    classes.status === "ready"
-      ? classes.data.filter((item) => item.canManage && !item.archived)
-      : [];
 
   if (!validId) {
     return <p role="alert">Invalid quiz ID.</p>;
@@ -982,14 +947,7 @@ export function QuizViewer() {
               <HostQuizButton
                 quiz={quiz}
                 action={action}
-                classId={fromClass}
-                hostClasses={hostClasses}
-                hostClassesStatus={classes.status}
-                hostClassesError={classes.error}
-                reloadHostClasses={classes.reload}
-                label={
-                  fromClass ? "Host in this class →" : "Host live session →"
-                }
+                label="Host in its class →"
               />
             </div>
           )}

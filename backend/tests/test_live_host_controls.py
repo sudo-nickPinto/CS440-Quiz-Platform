@@ -24,7 +24,10 @@ from app.models import Account, AccountRole
 from tests.integration.conftest import cleanup_database
 from tests.test_accounts import AUDIENCE, DOMAIN, PRIVATE_KEY, make_token
 from tests.test_live_websocket import serialize_db_calls
-from tests.class_quiz_helpers import post_class_quiz
+from tests.class_quiz_helpers import (
+    host_quiz,
+    post_class_quiz,
+)
 
 QUIZ_PAYLOAD = {
     "title": "Host Controls Quiz",
@@ -122,7 +125,16 @@ def make_session(client: TestClient, people: dict[str, CurrentAccount]) -> dict:
     as_account(client, people["host"])
     quiz = post_class_quiz(client, QUIZ_PAYLOAD)
     assert quiz.status_code == 201
-    session = client.post(f"/quizzes/{quiz.json()['quiz_id']}/sessions")
+    session = host_quiz(
+        client,
+        quiz.json()["quiz_id"],
+        # Everyone but the outsider is in the class.
+        members=[
+            account.account_id
+            for name, account in people.items()
+            if name != "outsider"
+        ],
+    )
     assert session.status_code == 201
     return session.json()
 
@@ -416,6 +428,8 @@ def test_results_rest_rejects_outsiders_and_unfinished_sessions(live) -> None:
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "results_not_ready"
 
+    # Someone outside the session's class gets the class's non-leaking 404.
     as_account(client, people["outsider"])
     response = client.get(f"/sessions/{sid}/results")
-    assert response.status_code == 403
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "class_not_found"

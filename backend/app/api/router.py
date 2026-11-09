@@ -10,6 +10,7 @@ from app.api.routes.live import router as live_router
 from app.api.routes.me import router as me_router
 from app.api.routes.quizzes import router as quizzes_router
 from app.api.routes.quiz_submissions import router as quiz_submissions_router
+from app.api.routes.quiz_editing_live import router as quiz_editing_live_router
 from app.api.routes.responses import router as responses_router
 from app.api.routes.session_history import router as session_history_router
 from app.api.routes.sessions import router as sessions_router
@@ -26,6 +27,7 @@ api_router.include_router(live_router)
 api_router.include_router(me_router)
 api_router.include_router(quizzes_router)
 api_router.include_router(quiz_submissions_router)
+api_router.include_router(quiz_editing_live_router)
 api_router.include_router(responses_router)
 api_router.include_router(session_history_router)
 api_router.include_router(sessions_router)

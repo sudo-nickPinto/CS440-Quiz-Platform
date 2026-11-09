@@ -718,32 +718,13 @@
   text-decoration: none;
 }
 
-/* Host live session inside the menu: "For [class ▾]" above the button */
+/* Host live session button inside the menu */
 .qp .ui-row-options > .ui-host-item {
   display: grid;
   gap: 8px;
   padding: 10px 14px;
   border-bottom: var(--b-thin);
   background: var(--paper);
-}
-
-.qp .ui-host-item .ui-host-for {
-  display: flex;
-  justify-content: space-between;
-  color: var(--gray);
-  font-size: 11px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.qp .ui-host-item .ui-host-for select {
-  flex: 1;
-  max-width: none;
-  min-height: 34px;
-  color: var(--ink);
-  font-size: 14px;
-  letter-spacing: 0;
-  text-transform: none;
 }
 
 .qp .ui-host-item > button {
@@ -2136,30 +2117,12 @@
   font-size: 14px;
 }
 
-/* Host: "For [open session / class ▾]" next to the orange button */
+/* Host: the orange button on the quiz page */
 .qp .qv-host {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-}
-
-.qp .qv-host .ui-host-for {
-  color: var(--gray);
-  font-size: 12px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.qp .qv-host .ui-host-for select {
-  max-width: 320px;
-  min-height: 44px;
-  border: var(--b);
-  box-shadow: 3px 3px 0 var(--ink);
-  color: var(--ink);
-  font-size: 14px;
-  letter-spacing: 0;
-  text-transform: none;
 }
 
 .qp .qv-host > button {
@@ -2819,7 +2782,8 @@
   font-weight: 700;
 }
 
-/* Answer colours, shared by the projector letter tiles and the phone */
+/* Answer colours, shared by the full projector cards, letter tiles and phone */
+.qp .lv-host-answer.ui-tone-0,
 .qp .lv .ui-tone-0 .lv-index,
 .qp .lv-index.ui-tone-0,
 .qp .lv-my-pick.ui-tone-0 {
@@ -2827,6 +2791,7 @@
   color: #ffffff;
 }
 
+.qp .lv-host-answer.ui-tone-1,
 .qp .lv .ui-tone-1 .lv-index,
 .qp .lv-index.ui-tone-1,
 .qp .lv-my-pick.ui-tone-1 {
@@ -2834,6 +2799,7 @@
   color: #ffffff;
 }
 
+.qp .lv-host-answer.ui-tone-2,
 .qp .lv .ui-tone-2 .lv-index,
 .qp .lv-index.ui-tone-2,
 .qp .lv-my-pick.ui-tone-2 {
@@ -2841,6 +2807,7 @@
   color: #222222;
 }
 
+.qp .lv-host-answer.ui-tone-3,
 .qp .lv .ui-tone-3 .lv-index,
 .qp .lv-index.ui-tone-3,
 .qp .lv-my-pick.ui-tone-3 {

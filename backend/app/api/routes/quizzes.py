@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
@@ -40,9 +40,22 @@ def update_quiz_route(
 
 
 @router.patch("/{quiz_id}/archive", response_model=QuizResponse)
-def archive_quiz_route(
+async def archive_quiz_route(
     quiz_id: int,
-    db: Session = Depends(get_db),
+    request: Request,
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizResponse:
-    return archive_quiz(db, account, quiz_id)
+    hub = request.app.state.quiz_edit_hub
+    result = await hub.run_db(archive_quiz, account, quiz_id)
+    # Reauthorization closes every editor socket now that the quiz is no
+    # longer editable, even if no later question event occurs.
+    await hub.broadcast(
+        quiz_id,
+        {
+            "type": "quiz_archived",
+            "quiz_id": quiz_id,
+            "quiz_revision": result.revision,
+            "editor_account_id": account.account_id,
+        },
+    )
+    return result
