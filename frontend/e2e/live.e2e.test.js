@@ -3,20 +3,12 @@
 //
 //   npm run test:e2e
 //
-// Needs the backend's Python environment. Set BACKEND_PYTHON if it isn't at
-// backend/.venv/bin/python.
+// Server and helpers: e2e/harness.js.
 
-import { spawn } from 'node:child_process'
-import { once } from 'node:events'
-import { existsSync } from 'node:fs'
-import { createInterface } from 'node:readline'
-import { fileURLToPath } from 'node:url'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { livePhase } from '../src/live/liveReducer.js'
-import { createLiveSession } from '../src/live/liveSession.js'
+import { describe, expect, it } from 'vitest'
+import { connect, phase, rest, runE2EServer, until } from './harness.js'
 
-const backendDir = fileURLToPath(new URL('../../backend', import.meta.url))
-const python = process.env.BACKEND_PYTHON || `${backendDir}/.venv/bin/python`
+runE2EServer()
 
 const QUIZ = {
   title: 'E2E Live Quiz',
@@ -30,56 +22,6 @@ const QUIZ = {
   })),
 }
 
-let server
-let baseUrl
-let tokens
-const sessions = []
-
-async function rest(person, method, path, body) {
-  const res = await fetch(`${baseUrl}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${tokens[person]}`,
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  const json = await res.json()
-  if (!res.ok) throw new Error(`${method} ${path} -> ${res.status} ${JSON.stringify(json)}`)
-  return json
-}
-
-function connect(person, sessionId) {
-  const live = createLiveSession({
-    sessionId,
-    apiBaseUrl: baseUrl,
-    getToken: async () => tokens[person],
-  })
-  live.start()
-  sessions.push(live)
-  return live
-}
-
-// Resolves once predicate(state) holds; fails with the last state otherwise.
-function until(live, predicate, label, timeoutMs = 5000) {
-  return new Promise((resolve, reject) => {
-    const check = () => {
-      if (!predicate(live.getState())) return false
-      unsubscribe()
-      clearTimeout(timer)
-      resolve(live.getState())
-      return true
-    }
-    const unsubscribe = live.subscribe(check)
-    const timer = setTimeout(() => {
-      unsubscribe()
-      reject(new Error(`Timed out waiting for ${label}: ${JSON.stringify(live.getState())}`))
-    }, timeoutMs)
-    check()
-  })
-}
-
-const phase = (name) => (state) => livePhase(state) === name
 const choice = (state, correct) => state.currentQuestion.choices[correct ? 0 : 1].choice_id
 
 // Every session belongs to a class and needs an approved quiz version:
@@ -105,32 +47,6 @@ async function newGame() {
   })
   return rest('host', 'POST', `${base}/quizzes/${quiz.quiz_id}/sessions`)
 }
-
-beforeAll(async () => {
-  if (!existsSync(python)) {
-    throw new Error(`No backend Python at ${python}; set BACKEND_PYTHON.`)
-  }
-  server = spawn(python, ['-m', 'tests.e2e_server'], {
-    cwd: backendDir,
-    stdio: ['ignore', 'pipe', 'inherit'],
-  })
-  const [line] = await once(createInterface({ input: server.stdout }), 'line')
-  ;({ base_url: baseUrl, tokens } = JSON.parse(line))
-  for (let i = 0; i < 100; i += 1) {
-    try {
-      if ((await fetch(`${baseUrl}/health`)).ok) return
-    } catch {
-      // not listening yet
-    }
-    await new Promise((r) => setTimeout(r, 100))
-  }
-  throw new Error('e2e server did not start')
-}, 30_000)
-
-afterAll(() => {
-  for (const live of sessions) live.close()
-  server?.kill()
-})
 
 describe('live session over a real socket', () => {
   it('runs the demo: join, skip, answer, end, final leaderboard', async () => {
