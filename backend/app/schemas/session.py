@@ -36,6 +36,8 @@ class SessionParticipantResponse(BaseModel):
     session_participant_id: int
     account_id: int
     display_name: str
+    # A preset such as "owl.sky" (app/avatars.py); None shows initials.
+    avatar_key: str | None = None
     joined_at: datetime
 
 

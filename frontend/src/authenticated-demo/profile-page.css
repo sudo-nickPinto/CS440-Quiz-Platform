@@ -1,0 +1,32 @@
+/* Edit profile page; the form itself is styled by ProfileForm.css. */
+.qp .qb-profile-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 36px 22px 48px;
+}
+
+.qp .qb-profile-page h1 {
+  margin: 0 0 14px;
+}
+
+.qp .qb-profile-page > p {
+  margin: 0;
+}
+
+.qp .qb-profile-email {
+  overflow-wrap: anywhere;
+}
+
+.qp .qb-profile-page .pf-actions .qp-primary {
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .qp .qb-profile-page {
+    padding: 24px 16px 36px;
+  }
+
+  .qp .qb-profile-page .pf-actions > * {
+    flex: 1 1 100%;
+  }
+}

@@ -9,7 +9,7 @@ export const initialLiveState = {
   role: null, // 'host' | 'participant'
   session: null, // { session_id, status, current_question_order, total_questions, join_code? }
   participantCount: 0,
-  participants: [], // host only: [{ session_participant_id, display_name }]
+  participants: [], // host only: [{ session_participant_id, display_name, avatar_key }]
   hostConnected: true,
   countdown: null,
   currentQuestion: null, // question_opened payload while a question is OPEN
@@ -28,9 +28,9 @@ function withStatus(state, patch) {
   return state.session ? { ...state.session, ...patch } : state.session
 }
 
-function upsertParticipant(list, { session_participant_id, display_name }) {
+function upsertParticipant(list, { session_participant_id, display_name, avatar_key }) {
   if (list.some((p) => p.session_participant_id === session_participant_id)) return list
-  return [...list, { session_participant_id, display_name }]
+  return [...list, { session_participant_id, display_name, avatar_key: avatar_key ?? null }]
 }
 
 function onServerMessage(state, message) {

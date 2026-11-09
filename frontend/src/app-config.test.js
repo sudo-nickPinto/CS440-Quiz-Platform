@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
-import { hasRequiredAppConfig } from '../src/app-config.js'
+import { test } from 'vitest'
+import { hasRequiredAppConfig } from './app-config.js'
 
 const completeConfig = {
   VITE_AUTH0_DOMAIN: 'tenant.example.auth0.com',

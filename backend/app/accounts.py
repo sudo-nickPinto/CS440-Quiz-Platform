@@ -1,13 +1,20 @@
 import json
+import unicodedata
 import urllib.request
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.avatars import is_valid_avatar_key
 from app.errors import APIError
 
-COLUMNS = "account_id, email, display_name, account_type, is_active"
+COLUMNS = (
+    "account_id, email, display_name, first_name, last_name, avatar_key, "
+    "account_type, is_active"
+)
+NAME_MAX_LENGTH = 50
+DISPLAY_NAME_MAX_LENGTH = 100
 
 
 def _fetch_profile(domain: str, token: str) -> dict:
@@ -92,3 +99,60 @@ def get_or_create_account(db: Session, domain: str, sub: str, token: str) -> dic
             return account
         raise
     return _by_sub(db, sub)
+
+
+def clean_name(value: str, label: str) -> str:
+    """Trim a first or last name and check it is printable and 1-50 characters."""
+    name = " ".join(value.split())
+    if not name:
+        raise APIError(422, "invalid_profile", f"Please enter your {label}.")
+    if len(name) > NAME_MAX_LENGTH:
+        raise APIError(
+            422,
+            "invalid_profile",
+            f"Your {label} can be at most {NAME_MAX_LENGTH} characters.",
+        )
+    if any(unicodedata.category(char) == "Cc" for char in name):
+        raise APIError(422, "invalid_profile", f"Your {label} contains invalid characters.")
+    return name
+
+
+def update_profile(
+    db: Session,
+    account_id: int,
+    first_name: str,
+    last_name: str,
+    avatar_key: str | None,
+) -> dict:
+    """Save the profile and make display_name "first last", which every screen shows."""
+    first = clean_name(first_name, "first name")
+    last = clean_name(last_name, "last name")
+    if avatar_key is not None and not is_valid_avatar_key(avatar_key):
+        raise APIError(422, "invalid_profile", "Please pick one of the avatars.")
+    display = f"{first} {last}"
+    if len(display) > DISPLAY_NAME_MAX_LENGTH:
+        # 50 + space + 50 is one over display_name's 100; reject instead of cutting it off.
+        raise APIError(
+            422,
+            "invalid_profile",
+            f"Your first and last name together can be at most "
+            f"{DISPLAY_NAME_MAX_LENGTH - 1} characters.",
+        )
+    db.execute(
+        text(
+            "UPDATE account SET first_name = :first, last_name = :last, "
+            "avatar_key = :avatar, display_name = :display WHERE account_id = :id"
+        ),
+        {
+            "first": first,
+            "last": last,
+            "avatar": avatar_key,
+            "display": display,
+            "id": account_id,
+        },
+    )
+    db.commit()
+    row = db.execute(
+        text(f"SELECT {COLUMNS} FROM account WHERE account_id = :id"), {"id": account_id}
+    ).mappings().one()
+    return dict(row)

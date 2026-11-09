@@ -80,6 +80,7 @@ def participant_results_view(
         "leaderboard": [
             {
                 "display_name": row.display_name,
+                "avatar_key": row.avatar_key,
                 "cumulative_score": row.cumulative_score,
                 "rank": row.rank,
             }
