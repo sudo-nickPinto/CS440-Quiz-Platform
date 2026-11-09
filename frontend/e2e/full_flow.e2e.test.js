@@ -10,7 +10,7 @@
 //   3. quiz A      prof edits with revisions, publishes, submits, approves
 //   4. quiz B      ana writes one with ben as a live co-editor; prof approves
 //   5. session 1   prof hosts A: countdown, 4 questions, every close reason,
-//                  reconnects, a late joiner
+//                  reconnects, a mid-question joiner
 //   6. session 2   ana hosts B for ben and cy
 //   7. session 3   ta hosts A and cancels it in the lobby
 //   8. results     final results, reports, CSV export, history
@@ -495,20 +495,27 @@ describe('full flow: one class from sign-in to grade export', () => {
     await until(host, opened(2), 'host back in Q2')
     await until(ben, (s) => s.hostConnected, 'host back')
 
+    // dee joins mid-question: they start with the next question, so they
+    // can't answer Q2 and Q2's roster stays at 3. (The wait is over a second
+    // because SQLite stores joined_at to whole seconds.)
+    await new Promise((resolve) => setTimeout(resolve, 1_100))
+    await rest('dee', 'POST', `/sessions/${sid}/join`)
+    await until(host, (s) => s.participantCount === 4, 'dee joined')
+    expect(await refused('dee', 'POST', answerPath, { choice_id: tokyo })).toMatchObject({
+      status: 409,
+      code: 'joined_after_question_opened',
+    })
+
     await host.skip()
     for (const live of [host, ana, ben, cy]) {
       const state = await until(live, resultsFor(2), 'Q2 results')
-      expect(state.lastClosed.reason).toBe('HOST')
+      // dee isn't on Q2's roster: still 3 eligible.
+      expect(state.lastClosed).toMatchObject({ reason: 'HOST', answered_count: 2, eligible_count: 3 })
     }
     expect(cy.getState().lastResults.me).toMatchObject({ selected_choice_id: null, points_awarded: 0 })
     expect(ana.getState().lastResults.me.is_correct).toBe(true)
 
-    // dee joins late, between questions, and plays from Q3 on. (Joining
-    // mid-question is not covered: the server currently lets that person
-    // answer and score the open question, which LIVE_PROTOCOL.md §5 says
-    // they can't.)
-    await rest('dee', 'POST', `/sessions/${sid}/join`)
-    await until(host, (s) => s.participantCount === 4, 'dee joined')
+    // dee, who joined during Q2, connects between questions and plays from Q3 on.
     const dee = connect('dee', sid)
     await until(dee, (s) => s.session?.status === 'ACTIVE', 'dee connected')
     expect(dee.getState().currentQuestion).toBeNull()
