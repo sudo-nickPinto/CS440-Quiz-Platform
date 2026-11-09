@@ -8,13 +8,17 @@ from app.models.classes import (
 )
 from app.models.quiz import (
     AnswerChoice,
+    CollaboratorPermission,
     Question,
     QuestionType,
     Quiz,
+    QuizCollaborator,
+    QuizCollaboratorEvent,
     QuizStatus,
     QuizVersion,
     QuizVisibility,
 )
+from app.models.quiz_submission import QuizSubmission, SubmissionStatus
 from app.models.session import (
     LiveSession,
     LiveSessionStatus,
@@ -29,6 +33,7 @@ __all__ = [
     "Account",
     "AccountRole",
     "AnswerChoice",
+    "CollaboratorPermission",
     "Class",
     "ClassMembership",
     "ClassRole",
@@ -37,9 +42,13 @@ __all__ = [
     "Question",
     "QuestionType",
     "Quiz",
+    "QuizCollaborator",
+    "QuizCollaboratorEvent",
     "QuizStatus",
+    "QuizSubmission",
     "QuizVersion",
     "QuizVisibility",
+    "SubmissionStatus",
     "effective_role",
     "LiveSession",
     "LiveSessionStatus",

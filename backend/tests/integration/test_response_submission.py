@@ -17,6 +17,10 @@ from app.models import (
     LiveSessionStatus,
     Question,
     Quiz,
+    Class,
+    ClassMembership,
+    ClassRole,
+    JoinedVia,
     QuizStatus,
     QuizVersion,
     QuizVisibility,
@@ -101,8 +105,28 @@ def response_context(
         published_at=datetime.now(UTC).replace(tzinfo=None),
         questions=[question, other_question],
     )
+    # Every session belongs to a class, and only its active members answer.
+    class_ = Class(
+        name=f"Response class {unique[:8]}",
+        created_by_id=host_account.account_id,
+        memberships=[
+            ClassMembership(
+                account_id=host_account.account_id,
+                role=ClassRole.ORGANIZER,
+                joined_via=JoinedVia.CREATOR,
+            ),
+            ClassMembership(
+                account_id=participant_account.account_id,
+                role=ClassRole.MEMBER,
+                joined_via=JoinedVia.CODE,
+            ),
+        ],
+    )
+    mysql_session.add(class_)
+    mysql_session.flush()
     quiz = Quiz(
         author_id=host_account.account_id,
+        class_id=class_.class_id,
         status=QuizStatus.PUBLISHED,
         visibility=QuizVisibility.PUBLIC,
         versions=[version],
@@ -115,6 +139,7 @@ def response_context(
         quiz_version_id=version.quiz_version_id,
         host_id=host_account.account_id,
         group_id=None,
+        class_id=class_.class_id,
         join_code=unique[:6].upper(),
         status=LiveSessionStatus.ACTIVE,
         current_question_order=1,

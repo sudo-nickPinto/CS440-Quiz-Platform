@@ -37,6 +37,15 @@ class QuestionType(str, Enum):
     FILL_IN_BLANK = "FILL_IN_BLANK"
 
 
+class CollaboratorPermission(str, Enum):
+    EDITOR = "EDITOR"
+
+
+class CollaboratorEventType(str, Enum):
+    SHARED = "SHARED"
+    REVOKED = "REVOKED"
+
+
 def enum_values(enum_class: type[Enum]) -> list[str]:
     return [member.value for member in enum_class]
 
@@ -55,16 +64,19 @@ class Quiz(Base):
         ForeignKey("class.class_id", ondelete="RESTRICT"),
         nullable=True,
     )
+    revision: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True), nullable=False, default=1, server_default="1"
+    )
     status: Mapped[QuizStatus] = mapped_column(
         SqlEnum(QuizStatus, values_callable=enum_values),
         nullable=False,
-        default=QuizStatus.PUBLISHED,
+        default=QuizStatus.DRAFT,
         server_default=QuizStatus.DRAFT.value,
     )
     visibility: Mapped[QuizVisibility] = mapped_column(
         SqlEnum(QuizVisibility, values_callable=enum_values),
         nullable=False,
-        default=QuizVisibility.PUBLIC,
+        default=QuizVisibility.PRIVATE,
         server_default=QuizVisibility.PRIVATE.value,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -82,6 +94,77 @@ class Quiz(Base):
         cascade="all, delete-orphan",
         order_by="QuizVersion.version_number",
         passive_deletes=True,
+    )
+    collaborators: Mapped[list[QuizCollaborator]] = relationship(
+        back_populates="quiz",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class QuizCollaborator(Base):
+    __tablename__ = "quiz_collaborator"
+
+    quiz_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("quiz.quiz_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    account_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    permission: Mapped[CollaboratorPermission] = mapped_column(
+        SqlEnum(CollaboratorPermission, values_callable=enum_values),
+        nullable=False,
+        default=CollaboratorPermission.EDITOR,
+        server_default=CollaboratorPermission.EDITOR.value,
+    )
+    shared_by_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DATETIME(fsp=3), nullable=False, server_default=func.now()
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
+    revoked_by_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="RESTRICT"),
+    )
+
+    quiz: Mapped[Quiz] = relationship(back_populates="collaborators")
+
+
+class QuizCollaboratorEvent(Base):
+    __tablename__ = "quiz_collaborator_event"
+
+    event_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True), primary_key=True
+    )
+    quiz_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("quiz.quiz_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    account_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    action: Mapped[CollaboratorEventType] = mapped_column(
+        SqlEnum(CollaboratorEventType, values_callable=enum_values),
+        nullable=False,
+    )
+    actor_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DATETIME(fsp=3), nullable=False, server_default=func.now()
     )
 
 
@@ -149,6 +232,9 @@ class Question(Base):
     )
     base_points: Mapped[int] = mapped_column(
         INTEGER(unsigned=True), nullable=False, default=1000, server_default="1000"
+    )
+    revision: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True), nullable=False, default=1, server_default="1"
     )
     locked_by_id: Mapped[int | None] = mapped_column(
         INTEGER(unsigned=True), ForeignKey("account.account_id", ondelete="SET NULL")

@@ -22,7 +22,7 @@ from app.schemas.live_question import QuestionCloseReason, QuestionOpenedEvent
 from app.schemas.response import ResponseSubmit
 from app.services.live_questions import close_question_if_ready, open_question
 from app.services.responses import submit_response
-from tests.class_quiz_helpers import post_class_quiz
+from tests.class_quiz_helpers import host_quiz, post_class_quiz
 
 
 QUIZ_PAYLOAD = {
@@ -49,7 +49,9 @@ CLEANUP_TABLES = [
     "live_session",
     "answer_choice",
     "question",
+    "quiz_submission",
     "quiz_version",
+    "quiz_collaborator_event",
     "quiz_collaborator",
     "quiz_group",
     "quiz",
@@ -176,9 +178,7 @@ def _create_and_open_question(
     assert quiz_response.status_code == 201
     quiz = quiz_response.json()
 
-    lobby_response = context.client.post(
-        f"/quizzes/{quiz['quiz_id']}/sessions"
-    )
+    lobby_response = host_quiz(context.client, quiz["quiz_id"])
     assert lobby_response.status_code == 201
     lobby = lobby_response.json()
     assert lobby["status"] == LiveSessionStatus.LOBBY.value

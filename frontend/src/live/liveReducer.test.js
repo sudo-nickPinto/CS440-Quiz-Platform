@@ -3,6 +3,19 @@ import { initialLiveState, livePhase, liveReducer, nextQuestionOrder } from './l
 
 const server = (message) => ({ type: 'server', message })
 
+it('shows shared countdown for either role and restores it on reconnect', () => {
+  for (const role of ['host', 'participant']) {
+    let state = apply(snapshot({ role }), { type: 'countdown_tick', number: 3 })
+    expect(state.countdown).toBe(3)
+    state = liveReducer(state, server({ type: 'countdown_tick', number: 2 }))
+    expect(state.countdown).toBe(2)
+    expect(apply(snapshot({ role, countdown: 1 })).countdown).toBe(1)
+    expect(liveReducer(state, server({ type: 'countdown_cancelled' })).countdown).toBeNull()
+    expect(liveReducer(state, server(opened(1))).countdown).toBeNull()
+    expect(liveReducer(state, { type: 'connection', status: 'reconnecting' }).countdown).toBeNull()
+  }
+})
+
 function apply(...messages) {
   return messages.reduce((state, message) => liveReducer(state, server(message)), initialLiveState)
 }

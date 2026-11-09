@@ -129,6 +129,15 @@ def update_profile(
     last = clean_name(last_name, "last name")
     if avatar_key is not None and not is_valid_avatar_key(avatar_key):
         raise APIError(422, "invalid_profile", "Please pick one of the avatars.")
+    display = f"{first} {last}"
+    if len(display) > DISPLAY_NAME_MAX_LENGTH:
+        # 50 + space + 50 is one over display_name's 100; reject instead of cutting it off.
+        raise APIError(
+            422,
+            "invalid_profile",
+            f"Your first and last name together can be at most "
+            f"{DISPLAY_NAME_MAX_LENGTH - 1} characters.",
+        )
     db.execute(
         text(
             "UPDATE account SET first_name = :first, last_name = :last, "
@@ -138,7 +147,7 @@ def update_profile(
             "first": first,
             "last": last,
             "avatar": avatar_key,
-            "display": f"{first} {last}"[:DISPLAY_NAME_MAX_LENGTH],
+            "display": display,
             "id": account_id,
         },
     )

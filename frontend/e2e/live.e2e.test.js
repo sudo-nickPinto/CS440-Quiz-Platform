@@ -82,12 +82,28 @@ function until(live, predicate, label, timeoutMs = 5000) {
 const phase = (name) => (state) => livePhase(state) === name
 const choice = (state, correct) => state.currentQuestion.choices[correct ? 0 : 1].choice_id
 
+// Every session belongs to a class and needs an approved quiz version:
+// faculty host makes a class, alice and bob join it by code, and the host
+// creates, publishes, submits and approves the quiz before hosting it there.
 async function newGame() {
+  await rest('host', 'GET', '/me')
+  await rest('host', 'POST', '/e2e/faculty/host')
   const course = await rest('host', 'POST', '/classes', { name: 'E2E class' })
-  const quiz = await rest('host', 'POST', `/classes/${course.class_id}/quizzes`, QUIZ)
-  // New quizzes are drafts; the e2e server publishes them directly.
-  await rest('host', 'POST', `/e2e/quizzes/${quiz.quiz_id}/publish`)
-  return rest('host', 'POST', `/quizzes/${quiz.quiz_id}/sessions`)
+  for (const person of ['alice', 'bob']) {
+    await rest(person, 'POST', '/classes/join', { code: course.join_code })
+  }
+  const base = `/classes/${course.class_id}`
+  const draft = await rest('host', 'POST', `${base}/quizzes`, QUIZ)
+  const quiz = await rest('host', 'POST', `${base}/quizzes/${draft.quiz_id}/publish`, {
+    expected_revision: draft.revision,
+  })
+  const submission = await rest('host', 'POST', `${base}/quiz-submissions`, {
+    quiz_version_id: quiz.version.quiz_version_id,
+  })
+  await rest('host', 'PATCH', `${base}/quiz-submissions/${submission.submission_id}`, {
+    status: 'APPROVED',
+  })
+  return rest('host', 'POST', `${base}/quizzes/${quiz.quiz_id}/sessions`)
 }
 
 beforeAll(async () => {

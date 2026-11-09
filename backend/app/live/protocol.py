@@ -65,6 +65,14 @@ class OpenQuestionMessage(InboundMessage):
     question_order: int = Field(gt=0)
 
 
+class StartCountdownMessage(InboundMessage):
+    type: Literal["start_countdown"]
+
+
+class CancelCountdownMessage(InboundMessage):
+    type: Literal["cancel_countdown"]
+
+
 class SubmitAnswerMessage(InboundMessage):
     type: Literal["submit_answer"]
     session_question_id: int = Field(gt=0)
@@ -93,6 +101,8 @@ class LeaveMessage(InboundMessage):
 CommandMessage = Annotated[
     PingMessage
     | OpenQuestionMessage
+    | StartCountdownMessage
+    | CancelCountdownMessage
     | SubmitAnswerMessage
     | CloseQuestionMessage
     | EndSessionMessage

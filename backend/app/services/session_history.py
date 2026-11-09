@@ -91,7 +91,7 @@ def _visible_session_class(account: CurrentAccount):
         .exists()
     )
 
-    # Preserve existing open-session history during the V3 transition.
+    # Old pre-V3 sessions with no class stay readable as history.
     # Class session history always requires active class membership.
     return LiveSession.class_id.is_(None) | active_membership
 

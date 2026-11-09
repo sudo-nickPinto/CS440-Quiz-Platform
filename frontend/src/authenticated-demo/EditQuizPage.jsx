@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router";
 import { useAccount } from "./account";
 import { useResource } from "./rest";
 import { quizToEditor } from "./quizPayload";
+import { canEditQuiz } from "./quizEditing";
 import { QuizEditor } from "./QuizEditor";
 import RequestError from "./RequestError";
 
@@ -50,11 +51,11 @@ export default function EditQuizPage() {
     );
   }
 
-  if (quiz.status !== "PUBLISHED") {
+  if (!canEditQuiz(quiz, account.account_id)) {
     return (
       <section className="qp-content">
         <h1>Editing unavailable</h1>
-        <p>This quiz is not currently published.</p>
+        <p>Archived quizzes cannot be edited.</p>
         <Link to="/app/dashboard/present">
           Back to dashboard
         </Link>

@@ -2,9 +2,9 @@
 
 **Owner:** Pronob
 
-**Status:** Draft for team review
+**Status:** Backend implemented; Task 5 hosting integration remains separate
 
-**Last updated:** November 1, 2026
+**Last updated:** November 4, 2026
 
 ## Purpose
 
@@ -14,34 +14,32 @@ version, and an active organizer of that same class may approve or reject it.
 Only an approved, current version should appear in the class's hostable quiz
 list.
 
-This document is a design draft. It does not add a migration, model, API route,
-service, schema, or test.
+Task 4 now includes migration `0010_quiz_submission`, the SQLAlchemy model,
+strict schemas, API routes, service rules, and focused tests. It intentionally
+does not change session creation or any live-session behavior; Task 5 will call
+the reusable approval helper.
 
 ## Dependency Status and Ownership
 
 Task 4 depends on the final contracts from Tasks 1 through 3.
 
-| Dependency | Interface Task 4 needs | Current blocker |
+| Dependency | Interface Task 4 uses | Final status |
 |---|---|---|
-| Task 1: Admin semantics | Class access must require an active membership; only an active `ORGANIZER` may decide submissions. `ADMIN` must not bypass membership. | No V3 Task 1 branch or pull request is currently available. Existing `main` still contains global Admin bypasses. |
-| Task 2: Class-scoped quizzes | `quiz.class_id`, class quiz endpoints, and migration `0008_quiz_class`. | PR #75 is approved but not merged. |
-| Task 3: Sharing and locking | Final `QuizCollaborator` contract, collaborator eligibility, immutable version behavior, and migration `0009` after rebasing onto Task 2. | PR #74 is still a draft and currently overlaps Task 2, including its migration number. |
+| Task 1: Admin semantics | Active class membership is required; only active faculty `ORGANIZER`s decide. Faculty has no global bypass. | Merged and used through `class_authorization`. |
+| Task 2: Class-scoped quizzes | `quiz.class_id`, class quiz endpoints, and migration `0008_quiz_class`. | Merged; `quiz.class_id` is authoritative. |
+| Task 3: Sharing and locking | Active collaborator state, immutable publication, and migration `0009_quiz_collaboration`. | Merged and used by submission eligibility checks. |
 
-Task 4 should begin implementation only after those interfaces are stable. The
-expected migration order is:
+The final migration order is:
 
 1. Task 2: `0008_quiz_class`
 2. Task 3: `0009_quiz_collaboration`
-3. Task 4: likely `0010_quiz_submission`
+3. Task 4: `0010_quiz_submission`
 
-The final number must be checked against `main` immediately before creating the
-migration.
+## Final Data Model
 
-## Proposed Data Model
+Table: `quiz_submission`
 
-Proposed table: `quiz_submission`
-
-| Field | Proposed type and rule | Purpose |
+| Field | Type and rule | Purpose |
 |---|---|---|
 | `submission_id` | Unsigned integer primary key | Identifies one submission attempt. |
 | `class_id` | Required foreign key to `class.class_id` | Class receiving the submission. |
@@ -52,7 +50,7 @@ Proposed table: `quiz_submission`
 | `submitted_at` | Required UTC timestamp | When the submission was created. |
 | `decided_at` | Nullable UTC timestamp | When the pending state ended. |
 
-Proposed invariants:
+Final invariants:
 
 - The submitted version must be published and immutable.
 - The version's quiz must belong to `class_id`.
@@ -65,16 +63,16 @@ Proposed invariants:
 - Submission history is retained. Rejection and withdrawal never delete the
   database row.
 - Only one active submission may exist for the same class and quiz version.
-  The proposed meaning of active is `PENDING` or `APPROVED`.
-- The duplicate rule must be concurrency-safe on MySQL. The exact database
-  constraint or transaction strategy needs review because MySQL does not
-  provide a normal partial unique index.
+  Active means `PENDING` or `APPROVED`.
+- A stored generated `active_version_id` equals `quiz_version_id` for
+  `PENDING`/`APPROVED`, otherwise `NULL`. The unique key on
+  `(class_id, active_version_id)` makes active duplicates concurrency-safe
+  while allowing rejected or withdrawn versions to be submitted again.
 
-Foreign-key delete behavior should preserve the audit trail. The team should
-confirm the project's account-retention policy before choosing `RESTRICT` or
-`SET NULL` for actor references.
+All class, version, submitter, and decision-actor foreign keys use `RESTRICT`
+to preserve the audit trail.
 
-## Proposed State Machine
+## Final State Machine
 
 ```mermaid
 stateDiagram-v2
@@ -96,7 +94,7 @@ stateDiagram-v2
 A new submission row may be created after rejection or withdrawal if the
 version remains eligible.
 
-## Draft API Contract
+## Implemented API Contract
 
 All endpoints require an active authenticated account. A missing class and a
 class that the caller may not access must produce the same non-leaking
@@ -106,7 +104,7 @@ class that the caller may not access must produce the same non-leaking
 
 `POST /classes/{class_id}/quiz-submissions`
 
-Proposed request:
+Request:
 
 ```json
 {
@@ -114,29 +112,29 @@ Proposed request:
 }
 ```
 
-Proposed result: `201 Created` with the submission response.
+Result: `201 Created` with the submission response.
 
 The service verifies class membership, quiz ownership or active collaboration,
 class ownership of the quiz, publication of the version, and the absence of an
-active duplicate in one transaction.
+active duplicate in one transaction. An archived class rejects new submissions
+with `409 class_archived`.
 
 ### List submissions
 
 `GET /classes/{class_id}/quiz-submissions`
 
-Proposed visibility:
+Visibility:
 
 - Active organizers see all submissions in the class.
 - Other active members see only submissions they created.
 - Being an unrelated `ADMIN` grants no visibility.
-- Sorting and pagination are deferred to Task 6 unless the team moves that
-  requirement into Task 4.
+- Results are newest first. Pagination remains Task 6 work.
 
 ### Decide a submission
 
 `PATCH /classes/{class_id}/quiz-submissions/{submission_id}`
 
-Proposed request:
+Request:
 
 ```json
 {
@@ -144,24 +142,30 @@ Proposed request:
 }
 ```
 
-The only accepted values are `APPROVED` and `REJECTED`. Only an active organizer
-of this class may decide a pending submission. Approval must recheck that the
-version is still published, belongs to the class, and is not stale.
+The only accepted values are `APPROVED` and `REJECTED`. Only an active faculty
+organizer of this class may decide a pending submission; self-approval is
+allowed. Approval rechecks that the version is still published, current, and
+in the class, and that the submitter is still active and still owns or actively
+collaborates on the quiz. Lost submitter eligibility blocks approval with
+`submission_no_longer_eligible`. An archived class blocks approval with
+`class_archived`; rejection remains available to close pending records.
 
 ### Withdraw a submission
 
 `DELETE /classes/{class_id}/quiz-submissions/{submission_id}`
 
-Proposed result: `204 No Content` after changing the status to `WITHDRAWN`.
+Result: `204 No Content` after changing the status to `WITHDRAWN`.
 This endpoint never physically deletes a row. Only the original submitter may
-withdraw, and only while the status is `PENDING`.
+withdraw, and only while the status is `PENDING`. Withdrawal remains available
+after class archival so the pending record can be closed cleanly.
 
 ### List approved quizzes
 
 `GET /classes/{class_id}/approved-quizzes`
 
 Active class members may retrieve approved, currently hostable immutable
-versions. A proposed item includes:
+versions. Archived classes return `409 class_archived` and never return a
+hostable list. An item includes:
 
 - `submission_id`
 - `quiz_id`
@@ -175,7 +179,7 @@ versions. A proposed item includes:
 This response grants availability only. It does not grant edit access, class
 management, hosting permission, report access, or results access.
 
-## Proposed Submission Response
+## Submission Response
 
 ```json
 {
@@ -197,49 +201,57 @@ management, hosting permission, report access, or results access.
 | Active quiz owner and class member | Yes | Own | Only if also organizer | Yes | Yes |
 | Active collaborator and class member | Yes | Own | Only if also organizer | Yes | Yes |
 | Active ordinary member without quiz access | No | Own, if any | No | Own only | Yes |
-| Active organizer | Only when owner or collaborator | All in class | Yes | Own only | Yes |
+| Active faculty organizer | Only when owner or collaborator | All in class | Yes | Own only | Yes |
 | Invited, removed, or departed member | No | Hidden `404` | No | No | No |
 | Unrelated `ADMIN` | No global bypass; hidden `404` | Hidden `404` | No | No | No |
 | Outsider | Hidden `404` | Hidden `404` | Hidden `404` | Hidden `404` | Hidden `404` |
 
 Revoked collaborators and removed class members lose submission eligibility
-immediately. A pending submission from someone who later loses access remains
-in the audit history; the team must confirm whether an organizer may still
-approve it or must reject it.
+immediately. A pending submission from someone who later loses account,
+membership, ownership, or collaborator access remains in the audit history but
+cannot be approved. An organizer may still reject it.
 
-## Proposed Errors
+## Final Errors
 
 | HTTP status | Code | When returned |
 |---:|---|---|
 | `404` | `class_not_found` | Class does not exist or caller lacks active access. |
 | `404` | `submission_not_found` | Submission does not exist in this class or is not visible to the caller. |
 | `404` | `quiz_version_not_found` | Version does not exist, belongs to another class, or is not visible. |
-| `403` | `not_submission_owner` | Active class member tries to withdraw another member's submission. |
-| `403` | `not_class_organizer` | Active non-organizer attempts to approve or reject. |
+| `403` | `not_submission_owner` | Caller can see the submission but is not its original submitter. |
+| `403` | `not_class_organizer` | Caller can see the submission but is not an active faculty organizer. |
 | `409` | `quiz_version_not_published` | Version is mutable or unpublished. |
+| `409` | `class_archived` | Archived class receives a new submission or approval, or is checked for hostable quizzes. |
 | `409` | `quiz_submission_conflict` | An active submission already exists for the class and version. |
 | `409` | `invalid_submission_transition` | Requested action is not valid from the current status. |
 | `409` | `quiz_version_stale` | Version is no longer the current publishable version. |
+| `409` | `submission_no_longer_eligible` | Approval recheck finds that the submitter lost account, membership, ownership, or active collaborator eligibility. |
+| `409` | `quiz_version_not_approved` | The Task 5 helper is asked for a version that is not currently approved and hostable. |
 
-Error names are proposals and should be aligned with the final Task 2 and Task
-3 error vocabulary before implementation.
+Create, decide, and withdraw database failures use
+`quiz_submission_failed`, `quiz_submission_decision_failed`, and
+`quiz_submission_withdrawal_failed`. Inaccessible submissions always return
+`404 submission_not_found`; 403 responses are reserved for visible resources.
 
-## Stale-Version Proposal
+## Final Stale-Version Rule
 
 A version becomes stale for new approval or hosting when the same quiz has a
 newer published immutable version. Publishing the newer version does not delete
 or rewrite the older submission. The older approval remains visible in audit
 history but is excluded from `approved-quizzes`.
 
-Creating or editing an unpublished draft does not immediately invalidate the
-currently approved published version. The class keeps a hostable version until
-a newer version is published. This interpretation needs team confirmation.
+Creating or editing an unpublished draft does not invalidate the currently
+approved published version. A newer published version immediately makes the
+older approval stale, and the newer version needs its own submission and
+approval before it becomes hostable.
 
 ## Task 5 Integration Boundary
 
-Task 4 should provide one reusable hostability query or service check that
-answers whether a specific immutable version is currently approved for a
-class. Task 5 will call that check when creating a live session.
+Task 4 provides
+`require_approved_quiz_version(db, class_id, quiz_version_id)`. It uses the
+same approved/current/published/non-archived/same-class query as
+`approved-quizzes` and rejects archived classes with `class_archived`. Task 5
+will call it when creating a live session.
 
 Task 4 will not redesign session routes, join codes, WebSocket behavior,
 question timing, scoring, reconnect behavior, or participant results. Those
@@ -263,6 +275,8 @@ remain Task 5 responsibilities.
 
 - Active organizer can approve a pending submission.
 - Active organizer can reject a pending submission.
+- Archived classes reject new submissions and approvals with `class_archived`.
+- Rejection and withdrawal remain available after archival for cleanup.
 - Active non-organizer cannot approve or reject.
 - Organizer of another class cannot decide the submission.
 - Original submitter can withdraw a pending submission.
@@ -275,7 +289,7 @@ remain Task 5 responsibilities.
 
 - A second pending submission for the same class and version is rejected.
 - An approved version cannot receive another active submission.
-- Rejected and withdrawn versions may be resubmitted under the proposed rule.
+- Rejected and withdrawn versions may be resubmitted.
 - Concurrent requests cannot create two active submissions.
 - Historical rejected and withdrawn rows remain queryable by authorized users.
 
@@ -284,6 +298,8 @@ remain Task 5 responsibilities.
 - Organizer sees all class submissions.
 - Member sees only their own submissions.
 - Active members see approved, current versions in `approved-quizzes`.
+- Archived classes cannot return hostable versions from the approved list or
+  hostability helper.
 - Pending, rejected, withdrawn, cross-class, and stale versions are excluded.
 - Approval does not grant editing access.
 - Approval does not grant class-wide results or report access.
@@ -299,22 +315,24 @@ remain Task 5 responsibilities.
 - Existing quiz versioning, collaboration, class authorization, reports, and
   live-quiz tests continue to pass.
 
-## Decisions Required From the Team
-
-The team should confirm these proposals before implementation:
+## Final Decisions
 
 1. `PENDING` and `APPROVED` both count as active for duplicate prevention.
 2. `REJECTED` and `WITHDRAWN` versions may be submitted again.
 3. `DELETE` means soft withdrawal by the original submitter, never hard delete.
 4. A newer published version makes the older approved version stale; an
    unpublished draft does not.
-5. A pending submission becomes unapprovable if its submitter later loses class
-   membership or collaborator access.
+5. A pending submission becomes unapprovable if its submitter later loses an
+   active account, class membership, quiz ownership, or collaborator access;
+   rejection remains possible.
 6. Task 4 exposes the hostability check, while Task 5 integrates it with live
    session creation.
-7. Sorting and pagination remain Task 6 work.
-8. The MySQL mechanism used to enforce one active submission is safe under
-   concurrent requests.
+7. Lists are newest first; pagination remains Task 6 work.
+8. A stored generated column plus unique key enforces active-submission
+   uniqueness safely under concurrent requests.
+9. Self-approval is allowed for active faculty organizers.
+10. Archival blocks submission, approval, and hostability; rejection,
+    withdrawal, and authorized audit reads remain available.
 
 ## Out of Scope
 
@@ -325,11 +343,11 @@ The team should confirm these proposals before implementation:
 - Editing, collaboration, or optimistic-locking changes
 - Retrofitting legacy quizzes or sessions
 
-## Review Checklist
+## Implementation Checklist
 
-- Task 1 removes global Admin bypasses before Task 4 uses the class helpers.
-- Task 2 is merged with the final class-scoped quiz contract.
-- Task 3 is rebased onto Task 2 and owns the next migration number.
-- Endpoint payloads and error names match the final shared schemas.
-- The stale-version and duplicate-submission proposals are approved.
-- The implementation starts from a clean Task 4 feature branch or worktree.
+- Tasks 1–3 are merged and their final helpers/models are used.
+- Migration `0010`, ORM metadata, strict schemas, and exports match.
+- Endpoint payloads, privacy behavior, and final error codes are documented.
+- Approve/reject/withdraw use atomic pending-state transitions.
+- Approved-list and Task 5 helper rules share one query.
+- Session creation, WebSockets, scoring, and frontend behavior remain unchanged.
