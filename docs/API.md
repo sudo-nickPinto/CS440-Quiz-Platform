@@ -356,6 +356,7 @@ The receipt deliberately leaves out correctness and points until the question cl
 | 409 | `session_not_active` | Session isn't ACTIVE |
 | 409 | `question_not_open` | Question is PENDING or CLOSED |
 | 409 | `response_deadline_passed` | Arrived after `closes_at` |
+| 409 | `joined_after_question_opened` | Joined after this question opened (`joined_at > opened_at`); they start with the next question |
 | 409 | `response_already_submitted` | Already answered this question |
 | 422 | `choice_not_for_question` | `choice_id` belongs to another question |
 | 500 | `invalid_question_timing` | Server timestamps are inconsistent |
