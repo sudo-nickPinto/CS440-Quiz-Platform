@@ -1,3 +1,4 @@
+import QuizCard from "./QuizCard";
 import { useState } from "react";
 import { Link } from "react-router";
 
@@ -100,15 +101,6 @@ export default function ParticipantHistory() {
         </span>
       </div>
 
-      <div className="ph-head" aria-hidden="true">
-        <span>Rank</span>
-        <span>Quiz</span>
-        <span className="ph-score-column">Correct</span>
-        <span className="ph-wide">Host</span>
-        <span className="ph-wide">Date</span>
-        <span>Review</span>
-      </div>
-
       {resource.loading && (
         <p className="ui-empty" role="status">
           Loading your quizzes…
@@ -119,6 +111,7 @@ export default function ParticipantHistory() {
 
       {!resource.loading && !resource.error && (
         <>
+          {items.length > 0 && <div className="qc-grid" aria-label="Completed quizzes">
           {items.map((session) => {
             const hasScore = session.correct != null;
             const percentage =
@@ -137,56 +130,24 @@ export default function ParticipantHistory() {
               : "Unavailable";
 
             return (
-              <Link
-                className="ph-row"
+              <QuizCard
                 key={session.session_id}
-                to={`/app/results/me/${session.session_id}`}
-                aria-label={`Review ${session.quiz_title}, session ${session.session_id}`}
+                title={session.quiz_title}
+                to={"/app/results/me/" + session.session_id}
+                status="Completed"
+                headline={session.rank == null ? "Rank unavailable" : "Rank #" + session.rank + " of " + session.total_participants}
+                linkLabel="View report"
               >
-                <span className="ph-rank">
-                  <strong>
-                    {session.rank == null ? "—" : `#${session.rank}`}
-                  </strong>
-                  <small>of {session.total_participants}</small>
+                <p>Session #{session.session_id} · {displayDate(session.ended_at)}</p>
+                <p>Hosted by {session.host_name}</p>
+                <p><strong>Correct: {score}</strong></p>
+                <span className="qc-progress" aria-hidden="true">
+                  <span style={{ width: percentage + "%" }} />
                 </span>
-
-                <span className="ph-title">
-                  <strong>{session.quiz_title}</strong>
-                  <small>
-                    Session #{session.session_id}
-                  </small>
-                  <small className="ph-mobile-meta">
-                    Hosted by {session.host_name}
-                    {" · "}
-                    {displayDate(session.ended_at)}
-                  </small>
-                  <small className="ph-phone-score">
-                    Correct: {score}
-                  </small>
-                </span>
-
-                <span className="ph-cell ph-score-column">
-                  <strong className="ph-score">{score}</strong>
-
-                  <span className="ph-bar" aria-hidden="true">
-                    <span style={{ width: `${percentage}%` }} />
-                  </span>
-                </span>
-
-                <span className="ph-cell ph-wide">
-                  {session.host_name}
-                </span>
-
-                <span className="ph-cell ph-wide">
-                  {displayDate(session.ended_at)}
-                </span>
-
-                <span className="ph-review" aria-hidden="true">
-                  <span>→</span>
-                </span>
-              </Link>
+              </QuizCard>
             );
           })}
+          </div>}
 
           {!items.length && (
             <div className="ui-empty">

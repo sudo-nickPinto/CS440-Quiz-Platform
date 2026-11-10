@@ -1,3 +1,4 @@
+import QuizCard from "./QuizCard";
 import { useState } from "react";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router";
 
@@ -244,14 +245,6 @@ export default function PreviewDashboard() {
 
         {presenting ? (
           <>
-            <div className="ui-list-heading" aria-hidden="true">
-              <span>Status</span>
-              <span>Quiz</span>
-              <span>Qs</span>
-              <span>Created</span>
-              <span className="ui-sr">Actions</span>
-            </div>
-
             {resource.loading && (
               <p className="ui-empty" role="status">
                 Loading your quizzes…
@@ -280,62 +273,44 @@ export default function PreviewDashboard() {
               </div>
             )}
 
-            {quizzes.map((quiz) => (
-              <article className="ui-quiz-row" key={quiz.quiz_id}>
-                <span
-                  className={
-                    quiz.status === "ARCHIVED"
-                      ? "ui-published ui-archived"
-                      : "ui-published"
-                  }
-                >
-                  {quiz.status === "ARCHIVED" ? "Archived" : "Published"}
-                </span>
+            {!resource.loading && !resource.error && quizzes.length > 0 && (
+              <div className="qc-grid" aria-label="Your quizzes">
+                {quizzes.map((quiz) => (
+                  <QuizCard
+                    key={quiz.quiz_id}
+                    title={quiz.title}
+                    to={"/app/quizzes/" + quiz.quiz_id}
+                    status={quiz.status === "ARCHIVED" ? "Archived" : "Published"}
+                    archived={quiz.status === "ARCHIVED"}
+                    headline={quiz.question_count + " " + plural(quiz.question_count, "question")}
+                    actions={
+                    quiz.status === "PUBLISHED" ? (
+                      <details className="ui-row-menu">
+                        <summary aria-label={`Actions for ${quiz.title}`}>
+                          ⋯
+                        </summary>
 
-                <div className="ui-quiz-title">
-                  <Link to={`/app/quizzes/${quiz.quiz_id}`}>{quiz.title}</Link>
+                        <div className="ui-row-options" role="menu">
+                          {quiz.author_id === account.account_id && (
+                            <Link
+                              role="menuitem"
+                              to={`/app/quizzes/${quiz.quiz_id}/edit`}
+                            >
+                              <span aria-hidden="true">✎</span> Edit
+                            </Link>
+                          )}
 
-                  <small>
-                    {quiz.question_count}{" "}
-                    {plural(quiz.question_count, "question")}
-                    {" · created "}
-                    {displayDate(quiz.created_at)}
-                  </small>
-                </div>
-
-                <span className="ui-desktop-cell">{quiz.question_count}</span>
-
-                <span className="ui-desktop-cell">
-                  {displayDate(quiz.created_at)}
-                </span>
-
-                {quiz.status === "PUBLISHED" ? (
-                  <details className="ui-row-menu">
-                    <summary aria-label={`Actions for ${quiz.title}`}>
-                      ⋯
-                    </summary>
-
-                    <div className="ui-row-options" role="menu">
-                      {quiz.author_id === account.account_id && (
-                        <Link
-                          role="menuitem"
-                          to={`/app/quizzes/${quiz.quiz_id}/edit`}
-                        >
-                          <span aria-hidden="true">✎</span> Edit
-                        </Link>
-                      )}
-
-                      {quiz.author_id === account.account_id && (
-                        <div
-                          className="ui-host-item"
-                          role="group"
-                          aria-label="Host live session"
-                        >
-                          <HostQuizButton
-                            quiz={quiz}
-                            action={action}
-                          />
-                        </div>
+                          {quiz.author_id === account.account_id && (
+                            <div
+                              className="ui-host-item"
+                              role="group"
+                              aria-label="Host live session"
+                            >
+                              <HostQuizButton
+                                quiz={quiz}
+                                action={action}
+                              />
+                            </div>
                       )}
 
                       <button
@@ -352,8 +327,12 @@ export default function PreviewDashboard() {
                 ) : (
                   <span className="ui-row-menu" aria-hidden="true" />
                 )}
-              </article>
+              >
+                <p>Created {displayDate(quiz.created_at)}</p>
+              </QuizCard>
             ))}
+              </div>
+            )}
           </>
         ) : (
           <ParticipantHistory />
