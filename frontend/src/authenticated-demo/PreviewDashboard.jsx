@@ -51,7 +51,7 @@ export default function PreviewDashboard() {
     .filter(
       (quiz) =>
         quiz.author_id === account.account_id &&
-        ["PUBLISHED", "ARCHIVED"].includes(quiz.status) &&
+        ["DRAFT", "PUBLISHED", "ARCHIVED"].includes(quiz.status) &&
         quiz.title.toLowerCase().includes(query.trim().toLowerCase()),
     )
     .sort((a, b) => {
@@ -184,7 +184,7 @@ export default function PreviewDashboard() {
           <input
             type="search"
             className="ui-search"
-            aria-label="Search your published and archived quizzes"
+            aria-label="Search your draft, published and archived quizzes"
             placeholder="Search your quizzes…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -286,10 +286,16 @@ export default function PreviewDashboard() {
                   className={
                     quiz.status === "ARCHIVED"
                       ? "ui-published ui-archived"
-                      : "ui-published"
+                      : quiz.status === "DRAFT"
+                        ? "ui-published ui-draft"
+                        : "ui-published"
                   }
                 >
-                  {quiz.status === "ARCHIVED" ? "Archived" : "Published"}
+                  {quiz.status === "ARCHIVED"
+                    ? "Archived"
+                    : quiz.status === "DRAFT"
+                      ? "Draft"
+                      : "Published"}
                 </span>
 
                 <div className="ui-quiz-title">
@@ -309,7 +315,36 @@ export default function PreviewDashboard() {
                   {displayDate(quiz.created_at)}
                 </span>
 
-                {quiz.status === "PUBLISHED" ? (
+                {quiz.status === "DRAFT" ? (
+                  <details className="ui-row-menu">
+                    <summary aria-label={`Actions for ${quiz.title}`}>
+                      ⋯
+                    </summary>
+
+                    <div className="ui-row-options" role="menu">
+                      <Link role="menuitem" to={`/app/quizzes/${quiz.quiz_id}`}>
+                        <span aria-hidden="true">✓</span> Review &amp; publish
+                      </Link>
+
+                      <Link
+                        role="menuitem"
+                        to={`/app/quizzes/${quiz.quiz_id}/edit`}
+                      >
+                        <span aria-hidden="true">✎</span> Edit draft
+                      </Link>
+
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="ui-danger"
+                        disabled={action.busy}
+                        onClick={() => void archive(quiz)}
+                      >
+                        <span aria-hidden="true">▣</span> Archive
+                      </button>
+                    </div>
+                  </details>
+                ) : quiz.status === "PUBLISHED" ? (
                   <details className="ui-row-menu">
                     <summary aria-label={`Actions for ${quiz.title}`}>
                       ⋯

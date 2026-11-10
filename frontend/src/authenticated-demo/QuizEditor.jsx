@@ -6,11 +6,13 @@ import {
   useParams,
   useSearchParams,
 } from "react-router";
+import { useClassesResource } from "../classes/classResources";
 import { useAccount } from "./account";
 import HostQuizButton from "./HostQuizButton";
 
 import { blankEditor, LETTERS, newQuestion } from "./model";
 import { toQuizCreate } from "./quizPayload";
+import { quizClassChoices, saveQuiz } from "./quizSave";
 import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 import ConfirmDialog from "./ConfirmDialog";
@@ -88,6 +90,52 @@ function JumpChips({ ids, current }) {
   );
 }
 
+// Quizzes belong to a class. Opened without ?class (the dashboard's +),
+// let the author pick one instead of sending them off to find it.
+function ChooseQuizClass() {
+  const classes = useClassesResource();
+  const choices =
+    classes.status === "ready" ? quizClassChoices(classes.data) : [];
+
+  return (
+    <section className="qp-content" aria-labelledby="choose-class-heading">
+      <h1 id="choose-class-heading">Create a quiz</h1>
+
+      {classes.status === "loading" ? (
+        <p role="status">Loading your classes…</p>
+      ) : classes.status !== "ready" ? (
+        <RequestError error={classes.error} retry={classes.reload} />
+      ) : choices.length ? (
+        <>
+          <p>Which class is this quiz for?</p>
+          <ul className="qe-class-choices">
+            {choices.map((item) => (
+              <li key={item.id}>
+                <Link
+                  className="qp-button"
+                  to={`/app/quizzes/new?class=${item.id}`}
+                >
+                  {item.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <>
+          <p>
+            Quizzes belong to a class. Create or join a class first, then come
+            back here.
+          </p>
+          <Link className="qp-button" to="/app/classes">
+            Go to my classes
+          </Link>
+        </>
+      )}
+    </section>
+  );
+}
+
 export function QuizEditor({
   initialEditor = null,
   existingQuiz = null,
@@ -100,12 +148,16 @@ export function QuizEditor({
   const [explaining, setExplaining] = useState(() => new Set());
 
   const api = useApi();
+  const account = useAccount();
   const action = useAction();
   const navigate = useNavigate();
   const confirmer = useConfirm();
   const [searchParams] = useSearchParams();
 
   const editing = existingQuiz !== null;
+  // Collaborators may edit a draft, but only its owner may publish it.
+  const canPublish =
+    !editing || existingQuiz.author_id === account.account_id;
   // New quizzes belong to a class: the class page links here with ?class=ID.
   const classId = searchParams.get("class");
   const validClass = /^[1-9][0-9]*$/.test(classId ?? "");
@@ -263,46 +315,35 @@ export function QuizEditor({
     }
   }
 
-  async function save() {
+  async function save({ publish = false } = {}) {
     if (conflict) return;
 
-    const quiz = await action.run(() => {
-      const payload = toQuizCreate(editor);
-
-      if (editing) {
-        payload.expected_revision = existingQuiz.revision;
-      }
-
-      const path = editing
-        ? `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}`
-        : `/classes/${classId}/quizzes`;
-
-      return api(path, {
-        method: editing ? "PUT" : "POST",
-        body: JSON.stringify(payload),
-      });
-    });
+    const result = await action.run(() =>
+      saveQuiz(api, {
+        payload: toQuizCreate(editor),
+        existingQuiz,
+        classId,
+        publish,
+      }),
+    );
+    const quiz = result?.quiz;
+    const publishFailed = result?.publishFailed;
 
     if (quiz) {
       navigate(`/app/quizzes/${quiz.quiz_id}`, {
         replace: true,
+        state: {
+          classId: quiz.class_id,
+          notice: publishFailed
+            ? "Saved as a draft, but it couldn't be published. Try Publish quiz again."
+            : null,
+        },
       });
     }
   }
 
   if (!editing && !validClass) {
-    return (
-      <section className="qp-content">
-        <h1>Create a quiz</h1>
-        <p>
-          Quizzes now belong to a class. Open one of your classes and choose
-          "+ New quiz" there.
-        </p>
-        <Link className="qp-button" to="/app/classes">
-          Go to my classes
-        </Link>
-      </section>
-    );
+    return <ChooseQuizClass />;
   }
 
   return (
@@ -697,9 +738,9 @@ export function QuizEditor({
                     {editing ? "Save these changes?" : "Save this quiz?"}
                   </h2>
                   <p>
-                    {editing
-                      ? "This saves a draft. Publish it from the quiz page when it is ready to host."
-                      : "It's saved as a draft in this class. A draft can't be hosted until it's published."}
+                    {canPublish
+                      ? "Save a draft to keep working on it, or publish it now. A published quiz can be hosted once an organizer of its class approves it."
+                      : "This saves a draft. Only the quiz owner can publish it."}
                   </p>
                 </div>
 
@@ -714,16 +755,23 @@ export function QuizEditor({
 
                   <button
                     type="button"
-                    className="qb-btn"
+                    className={canPublish ? "qb-btn qb-btn-paper" : "qb-btn"}
                     disabled={conflict}
                     onClick={() => void save()}
                   >
-                    {action.busy
-                      ? "Saving…"
-                      : editing
-                        ? "Save changes"
-                        : "Save draft"}
+                    {action.busy ? "Saving…" : "Save draft"}
                   </button>
+
+                  {canPublish && (
+                    <button
+                      type="button"
+                      className="qb-btn"
+                      disabled={conflict}
+                      onClick={() => void save({ publish: true })}
+                    >
+                      {action.busy ? "Saving…" : "Save & publish"}
+                    </button>
+                  )}
                 </div>
               </>
             ) : (
@@ -774,7 +822,9 @@ export function QuizViewer() {
   const resource = useResource(validId ? `/quizzes/${quizId}` : null);
 
   // Opened from a class page: the back link returns there.
-  const fromClass = useLocation().state?.classId ?? null;
+  const location = useLocation();
+  const fromClass = location.state?.classId ?? null;
+  const notice = location.state?.notice ?? null;
 
   if (!validId) {
     return <p role="alert">Invalid quiz ID.</p>;
@@ -905,6 +955,12 @@ export function QuizViewer() {
       </div>
 
       <div className="qe-stack">
+        {notice && quiz.status === "DRAFT" && (
+          <p className="qe-bad" role="alert">
+            {notice}
+          </p>
+        )}
+
         <RequestError error={action.error} />
 
         {questions.map((question, index) => {

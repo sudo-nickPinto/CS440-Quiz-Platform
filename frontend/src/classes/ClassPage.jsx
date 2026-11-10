@@ -329,14 +329,23 @@ function ClassSummary({ dashboard }) {
   );
 }
 
-// Quizzes the caller wrote and may host as a session of this class.
+// Quizzes the caller wrote in this class: drafts to finish and publish, and
+// published quizzes. Publishing doesn't make a quiz hostable: its version must
+// also be submitted to the class and approved by an organizer (Task 4), so
+// only approved quizzes get a Host button.
 function PresentTable({ classInfo }) {
   const account = useAccount();
   const action = useAction();
-  const resource = useResource(classInfo.canManage ? "/quizzes" : null);
+  const member = classInfo.membershipStatus === "ACTIVE";
+  const resource = useResource(member ? "/quizzes" : null);
+  const approved = useResource(
+    member && !classInfo.archived
+      ? `/classes/${classInfo.id}/approved-quizzes`
+      : null,
+  );
   const [query, setQuery] = useState("");
 
-  if (!classInfo.canManage) {
+  if (!member) {
     return (
       <EmptyMessage title="Present">
         Only organizers of this class can host its sessions. When one starts, a
@@ -353,21 +362,26 @@ function PresentTable({ classInfo }) {
     );
   }
 
-  if (resource.loading) {
+  if (resource.loading || approved.loading) {
     return <ResourceMessage resource={{ status: "loading" }} />;
   }
 
-  if (resource.error) {
+  const failed = resource.error ? resource : approved.error ? approved : null;
+  if (failed) {
     return (
       <ResourceMessage
         resource={{
           status: "error",
-          error: resource.error,
-          reload: resource.reload,
+          error: failed.error,
+          reload: failed.reload,
         }}
       />
     );
   }
+
+  const approvedIds = new Set(
+    (approved.data || []).map((item) => item.quiz_id),
+  );
 
   const needle = query.trim().toLowerCase();
   const quizzes = (resource.data || []).filter(
@@ -375,7 +389,7 @@ function PresentTable({ classInfo }) {
       // GET /quizzes spans all of the caller's classes; show only this one.
       quiz.class_id === classInfo.id &&
       quiz.author_id === account.account_id &&
-      quiz.status === "PUBLISHED" &&
+      ["DRAFT", "PUBLISHED"].includes(quiz.status) &&
       quiz.title.toLowerCase().includes(needle),
   );
 
@@ -401,10 +415,11 @@ function PresentTable({ classInfo }) {
 
       <div className="cl-table-wrap">
         <table className="cl-table">
-          <caption className="cl-sr">Quizzes you can host</caption>
+          <caption className="cl-sr">Your quizzes in this class</caption>
           <thead>
             <tr>
               <th scope="col">Quiz</th>
+              <th scope="col">Status</th>
               <th scope="col">Questions</th>
               <th scope="col">Actions</th>
             </tr>
@@ -412,13 +427,13 @@ function PresentTable({ classInfo }) {
           <tbody>
             {quizzes.length === 0 ? (
               <tr>
-                <td colSpan={3}>
+                <td colSpan={4}>
                   <div className="cl-state" role="status">
-                    <h2>No quizzes to host</h2>
+                    <h2>No quizzes yet</h2>
                     <p>
                       {needle
-                        ? "No published quiz matches your search."
-                        : "Publish a quiz to host it in this class."}
+                        ? "No quiz matches your search."
+                        : "Choose + New quiz to write one. Publish it, and once an organizer of this class approves it you can host it here."}
                     </p>
                   </div>
                 </td>
@@ -434,13 +449,40 @@ function PresentTable({ classInfo }) {
                       {quiz.title}
                     </Link>
                   </td>
+                  <td>
+                    <span
+                      className={`cl-chip${
+                        quiz.status === "DRAFT" ? " cl-chip-member" : ""
+                      }`}
+                    >
+                      {quiz.status === "DRAFT"
+                        ? "Draft"
+                        : approvedIds.has(quiz.quiz_id)
+                          ? "Approved"
+                          : "Published"}
+                    </span>
+                  </td>
                   <td>{quiz.question_count}</td>
                   <td>
-                    <HostQuizButton
-                      quiz={quiz}
-                      action={action}
-                      label="Host in this class"
-                    />
+                    {quiz.status === "DRAFT" ? (
+                      <Link
+                        className="cl-button cl-secondary"
+                        to={`/app/quizzes/${quiz.quiz_id}`}
+                        state={{ classId: classInfo.id }}
+                      >
+                        Review &amp; publish
+                      </Link>
+                    ) : approvedIds.has(quiz.quiz_id) ? (
+                      <HostQuizButton
+                        quiz={quiz}
+                        action={action}
+                        label="Host in this class"
+                      />
+                    ) : (
+                      <span className="cl-muted">
+                        Needs organizer approval
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))
@@ -629,6 +671,16 @@ function ClassWorkspace({ classInfo, onChange }) {
           <div className="cl-actions">
             {adminView && (
               <>
+                {classInfo.membershipStatus === "ACTIVE" &&
+                  !classInfo.archived && (
+                    <Link
+                      className="cl-button"
+                      to={`/app/quizzes/new?class=${classInfo.id}`}
+                    >
+                      + New quiz
+                    </Link>
+                  )}
+
                 <button
                   type="button"
                   disabled={classInfo.archived}
