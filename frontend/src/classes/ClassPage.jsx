@@ -1,3 +1,4 @@
+import QuizCard from "../authenticated-demo/QuizCard";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
@@ -399,55 +400,27 @@ function PresentTable({ classInfo }) {
 
       <RequestError error={action.error} />
 
-      <div className="cl-table-wrap">
-        <table className="cl-table">
-          <caption className="cl-sr">Quizzes you can host</caption>
-          <thead>
-            <tr>
-              <th scope="col">Quiz</th>
-              <th scope="col">Questions</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {quizzes.length === 0 ? (
-              <tr>
-                <td colSpan={3}>
-                  <div className="cl-state" role="status">
-                    <h2>No quizzes to host</h2>
-                    <p>
-                      {needle
-                        ? "No published quiz matches your search."
-                        : "Publish a quiz to host it in this class."}
-                    </p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              quizzes.map((quiz) => (
-                <tr key={quiz.quiz_id}>
-                  <td>
-                    <Link
-                      to={`/app/quizzes/${quiz.quiz_id}`}
-                      state={{ classId: classInfo.id }}
-                    >
-                      {quiz.title}
-                    </Link>
-                  </td>
-                  <td>{quiz.question_count}</td>
-                  <td>
-                    <HostQuizButton
-                      quiz={quiz}
-                      action={action}
-                      label="Host in this class"
-                    />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {quizzes.length === 0 ? (
+        <EmptyMessage title="No quizzes to host">
+          {needle ? "No published quiz matches your search." : "Publish a quiz to host it in this class."}
+        </EmptyMessage>
+      ) : (
+        <div className="qc-grid" aria-label="Quizzes you can host">
+          {quizzes.map((quiz) => (
+            <QuizCard
+              key={quiz.quiz_id}
+              title={quiz.title}
+              to={"/app/quizzes/" + quiz.quiz_id}
+              state={{ classId: classInfo.id }}
+              status="Published"
+              headline={quiz.question_count + (quiz.question_count === 1 ? " question" : " questions")}
+              actions={<HostQuizButton quiz={quiz} action={action} label="Host in this class" />}
+            >
+              <p>{classInfo.name}</p>
+            </QuizCard>
+          ))}
+        </div>
+      )}
     </>
   );
 }
