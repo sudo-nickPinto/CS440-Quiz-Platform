@@ -2642,7 +2642,11 @@
 }
 
 .qp .lv-chip {
-  padding: 8px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 6px 14px 6px 6px;
   border: var(--b-thin);
   background: var(--sky-soft);
   box-shadow: 3px 3px 0 var(--ink);
@@ -2651,6 +2655,14 @@
   font-weight: 700;
   overflow-wrap: anywhere;
   animation: lv-chip-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.qp .lv-chip-avatar {
+  --avatar-size: 32px;
+}
+
+.qp .lv-chip-name {
+  min-width: 0;
 }
 
 @keyframes lv-chip-in {
@@ -3118,7 +3130,7 @@
 
 .qp .lv-board li {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) auto;
+  grid-template-columns: 72px auto minmax(0, 1fr) auto;
   align-items: center;
   min-height: 68px;
   padding-right: 22px;
@@ -3156,9 +3168,14 @@
   color: var(--ink);
 }
 
+.qp .lv-board-avatar {
+  --avatar-size: 40px;
+  margin-left: 18px;
+}
+
 .qp .lv-board li > strong {
   min-width: 0;
-  padding-left: 18px;
+  padding: 0 12px;
   overflow: hidden;
   font: 19px "Archivo Black", sans-serif;
   text-overflow: ellipsis;
@@ -3485,7 +3502,13 @@
   white-space: nowrap;
 }
 
-.qp .lv-podium-name span {
+.qp .lv-podium-avatar {
+  --avatar-size: 48px;
+  display: grid;
+  margin: 0 auto 8px;
+}
+
+.qp .lv-podium-name .lv-podium-pts {
   color: var(--gray);
   font-size: 14px;
   font-weight: 700;
@@ -3688,8 +3711,13 @@
   }
 
   .qp .lv-chip {
-    padding: 6px 10px;
+    gap: 8px;
+    padding: 5px 10px 5px 5px;
     font-size: 14px;
+  }
+
+  .qp .lv-chip-avatar {
+    --avatar-size: 26px;
   }
 
   .qp .lv-hq,
@@ -3764,12 +3792,17 @@
   }
 
   .qp .lv-board li {
-    grid-template-columns: 52px minmax(0, 1fr) auto;
+    grid-template-columns: 52px auto minmax(0, 1fr) auto;
     padding-right: 10px;
   }
 
+  .qp .lv-board-avatar {
+    --avatar-size: 32px;
+    margin-left: 10px;
+  }
+
   .qp .lv-board li > strong {
-    padding-left: 10px;
+    padding: 0 8px;
     font-size: 16px;
   }
 
@@ -3791,7 +3824,12 @@
     font-size: 15px;
   }
 
-  .qp .lv-podium-name span {
+  .qp .lv-podium-avatar {
+    --avatar-size: 34px;
+    margin-bottom: 6px;
+  }
+
+  .qp .lv-podium-name .lv-podium-pts {
     font-size: 12px;
   }
 
@@ -5506,4 +5544,17 @@
   font-weight: 700;
   text-decoration-thickness: 2px;
   text-underline-offset: 4px;
+}
+
+/* Header avatar: the summary keeps its border and shadow; the preset tile
+   fills it. */
+.qp .ui-avatar .avatar {
+  --avatar-size: 38px;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.qp .ui-user .qb-account-menu button + button {
+  border-top: var(--b-thin);
 }

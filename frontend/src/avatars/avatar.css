@@ -1,0 +1,236 @@
+/* Preset avatars and the picker. Tile colors are design tokens only:
+   --sky stays the logo dot, so the sky tile uses --sky-soft. */
+
+.avatar {
+  --avatar-size: 40px;
+  --avatar-bg: var(--orange-deep);
+  --avatar-fill: var(--paper);
+  --avatar-accent: var(--apricot);
+  --avatar-dark: var(--navy);
+  --avatar-eye: var(--paper);
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  overflow: hidden;
+  border: var(--b-thin);
+  border-radius: 0;
+  background: var(--avatar-bg);
+  color: var(--paper);
+  vertical-align: middle;
+}
+
+.avatar svg {
+  display: block;
+  width: 88%;
+  height: 88%;
+  overflow: visible;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.avatar .af {
+  fill: var(--avatar-fill);
+}
+
+.avatar .aa {
+  fill: var(--avatar-accent);
+}
+
+.avatar .ad {
+  fill: var(--avatar-dark);
+}
+
+.avatar .ae {
+  fill: var(--avatar-eye);
+  stroke: none;
+}
+
+.avatar .ai {
+  fill: var(--ink);
+  stroke: none;
+}
+
+.avatar .ns {
+  stroke: none;
+}
+
+.avatar-sky {
+  --avatar-bg: var(--sky-soft);
+}
+
+.avatar-apricot {
+  --avatar-bg: var(--apricot);
+  --avatar-accent: var(--sand);
+}
+
+.avatar-sand {
+  --avatar-bg: var(--sand);
+}
+
+.avatar-paper {
+  --avatar-bg: var(--paper);
+  --avatar-fill: var(--sand);
+}
+
+/* Dark details would vanish on navy, and navy must not sit on orange. */
+.avatar-navy {
+  --avatar-bg: var(--navy);
+  --avatar-dark: var(--sky-soft);
+  --avatar-eye: var(--ink);
+}
+
+.avatar-orange {
+  --avatar-bg: var(--orange-deep);
+  --avatar-dark: var(--ink);
+}
+
+.avatar-initials-text {
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-size: calc(var(--avatar-size) * 0.38);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+/* Picker */
+
+.avatar-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 22px;
+  min-width: 0;
+}
+
+.avatar-picker .avatar-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.avatar-picker legend {
+  margin: 0 0 10px;
+  padding: 0;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.avatar-figures {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.avatar-colors {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 56px));
+  gap: 10px;
+}
+
+.avatar-picker .avatar-option {
+  position: relative;
+  display: block;
+  min-width: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.avatar-picker .avatar-option input.avatar-radio {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.avatar-picker .avatar-option-tile,
+.avatar-picker .avatar-swatch {
+  display: grid;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  border: var(--b-thin);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.avatar-picker .avatar-swatch {
+  box-sizing: border-box;
+  background: var(--avatar-bg);
+}
+
+.avatar-picker .avatar-option:hover .avatar-option-tile,
+.avatar-picker .avatar-option:hover .avatar-swatch {
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+/* Orange marks the selection, on an ink-bordered badge so it never sits
+   directly on a navy tile. */
+.avatar-picker .avatar-radio:checked + .avatar-option-tile,
+.avatar-picker .avatar-radio:checked + .avatar-swatch {
+  border: var(--b);
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.avatar-picker .avatar-check {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  display: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: var(--b-thin);
+  background: var(--orange-deep);
+  color: var(--paper);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.avatar-picker .avatar-radio:checked ~ .avatar-check {
+  display: grid;
+}
+
+.avatar-picker .avatar-radio:focus-visible + .avatar-option-tile,
+.avatar-picker .avatar-radio:focus-visible + .avatar-swatch {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 4px;
+}
+
+.avatar-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (min-width: 641px) {
+  .avatar-figures {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar-picker .avatar-option-tile,
+  .avatar-picker .avatar-swatch {
+    transition: none;
+  }
+}

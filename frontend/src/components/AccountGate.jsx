@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
 import { apiFetch, NEEDS_INTERACTION, returnToState } from '../api'
 import AccountDisabledScreen from './AccountDisabledScreen'
+import ProfileSetupScreen from './ProfileSetupScreen'
 import VerifyEmailScreen from './VerifyEmailScreen'
 
 const REDIRECTED = 'quiz-interactive-login-tried'
@@ -14,6 +15,23 @@ export default function AccountGate({ children }) {
   const [error, setError] = useState('')
   const [unverified, setUnverified] = useState(false)
   const [disabled, setDisabled] = useState(false)
+  // The /me body while the one-time profile setup screen is showing.
+  const [needsProfile, setNeedsProfile] = useState(null)
+
+  // Decide what a successful /me leads to.
+  const admit = useCallback((account) => {
+    // /me still answers for a deactivated account; every other route
+    // would refuse it with inactive_account.
+    if (account?.is_active === false) {
+      setDisabled(true)
+      return
+    }
+    if (account?.profile_complete === false) {
+      setNeedsProfile(account)
+      return
+    }
+    setReady(true)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -25,13 +43,7 @@ export default function AccountGate({ children }) {
         } catch {
           // Storage may be unavailable.
         }
-        // /me still answers for a deactivated account; every other route
-        // would refuse it with inactive_account.
-        if (account?.is_active === false) {
-          setDisabled(true)
-          return
-        }
-        setReady(true)
+        admit(account)
       })
       .catch((err) => {
         if (cancelled) return
@@ -73,15 +85,27 @@ export default function AccountGate({ children }) {
     return () => {
       cancelled = true
     }
-  }, [getAccessTokenSilently, loginWithRedirect, user?.email])
+  }, [admit, getAccessTokenSilently, loginWithRedirect, user?.email])
 
   if (disabled) return <AccountDisabledScreen />
 
   if (unverified) {
     return (
       <VerifyEmailScreen
-        onVerified={() => {
+        onVerified={(account) => {
           setUnverified(false)
+          admit(account)
+        }}
+      />
+    )
+  }
+
+  if (needsProfile) {
+    return (
+      <ProfileSetupScreen
+        account={needsProfile}
+        onSaved={() => {
+          setNeedsProfile(null)
           setReady(true)
         }}
       />

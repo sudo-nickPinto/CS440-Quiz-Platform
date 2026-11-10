@@ -82,10 +82,12 @@ def _participant_response(
     db: Session,
     participant: SessionParticipant,
 ) -> SessionParticipantResponse:
-    display_name = db.scalar(
-        select(Account.display_name).where(Account.account_id == participant.account_id)
-    )
-    if display_name is None:
+    row = db.execute(
+        select(Account.display_name, Account.avatar_key).where(
+            Account.account_id == participant.account_id
+        )
+    ).first()
+    if row is None or row.display_name is None:
         raise APIError(
             500,
             "invalid_participant",
@@ -94,7 +96,8 @@ def _participant_response(
     return SessionParticipantResponse(
         session_participant_id=participant.session_participant_id,
         account_id=participant.account_id,
-        display_name=display_name,
+        display_name=row.display_name,
+        avatar_key=row.avatar_key,
         joined_at=participant.joined_at,
     )
 

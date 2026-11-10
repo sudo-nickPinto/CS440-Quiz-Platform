@@ -7,6 +7,7 @@ import RequestError from "./RequestError";
 import ConfirmDialog from "./ConfirmDialog";
 import { useConfirm } from "./useConfirm";
 import { HostFinal, ParticipantFinal } from "./LiveFinal";
+import Avatar from "../avatars/Avatar";
 import QuizStartCountdown from "./QuizStartCountdown";
 
 const CONNECTION_ERRORS = {
@@ -81,6 +82,11 @@ function Leaderboard({ rows }) {
           style={{ "--i": index }}
         >
           <span className="lv-rank">{row.rank}</span>
+          <Avatar
+            className="lv-board-avatar"
+            avatarKey={row.avatar_key}
+            name={row.display_name}
+          />
           <strong>{row.display_name}</strong>
           <span className="lv-pts">
             {row.cumulative_score.toLocaleString()} pts
@@ -129,7 +135,12 @@ function HostLobby({ state, title, actions }) {
         <div className="lv-players">
           {state.participants.map((person) => (
             <span className="lv-chip" key={person.session_participant_id}>
-              {person.display_name}
+              <Avatar
+                className="lv-chip-avatar"
+                avatarKey={person.avatar_key}
+                name={person.display_name}
+              />
+              <span className="lv-chip-name">{person.display_name}</span>
             </span>
           ))}
 

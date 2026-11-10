@@ -51,10 +51,27 @@ No auth. `200 {"status": "ok", "components": {"database": "ok"}}`, or `503 datab
 The caller's account, created on first call.
 
 ```json
-{ "account_id": 7, "email": "a@gettysburg.edu", "display_name": "Ana", "role": "USER", "is_active": true }
+{
+  "account_id": 7, "email": "a@gettysburg.edu", "display_name": "Ana Lopez",
+  "first_name": "Ana", "last_name": "Lopez", "avatar_key": "owl.sky",
+  "profile_complete": true, "role": "USER", "is_active": true
+}
 ```
 
-`role` is `USER` or `ADMIN`.
+`role` is `USER` or `ADMIN`. `profile_complete` is false until both names are saved; the app shows the profile setup screen until then. `first_name`, `last_name` and `avatar_key` are `null` on a new account.
+
+### `PATCH /me`
+Saves the caller's profile and returns the same body as `GET /me`. Always send all three fields:
+
+```json
+{ "first_name": "Ana", "last_name": "Lopez", "avatar_key": "owl.sky" }
+```
+
+- Names are trimmed and must be 1–50 characters with no control characters.
+- `avatar_key` is `"figure.color"` from the preset list in `backend/app/avatars.py`, or `null` for initials. There are no uploads.
+- `display_name` becomes `"First Last"`, so every screen, report and export that shows names picks up the change.
+
+Errors: `403 inactive_account`, `422 invalid_profile` (blank or too-long name, bad characters, unknown avatar).
 
 ## Quizzes
 
@@ -323,7 +340,7 @@ Host, Admin, or a participant who hasn't left.
 Errors: `403 session_access_denied`, `404 session_not_found`, `500 invalid_session`.
 
 ### `GET /sessions/{session_id}/participants` → `200 SessionParticipant[]`
-Host or Admin. Participants who haven't left, in join order.
+Host or Admin. Participants who haven't left, in join order. Each row is `{ session_participant_id, account_id, display_name, avatar_key, joined_at }`.
 
 Errors: `403 session_access_denied`, `404 session_not_found`, `500 invalid_participant`.
 
@@ -353,8 +370,8 @@ Shared errors: `403 session_access_denied`, `404 session_not_found`, `409 result
 
 ### `GET /sessions/{session_id}/results` → `200 FinalResults | ParticipantFinalResults`
 Final standings, matching the live `session_ended` event. Ties share a rank (1, 1, 3).
-- Host or Admin: `{ session_id, status, ended_at, standings: [{ session_participant_id, display_name, total_score, correct_count, final_rank }] }`.
-- Participant: `{ session_id, status, ended_at, me: <own standing or null>, leaderboard: [{ display_name, total_score, final_rank }] }` (top 5).
+- Host or Admin: `{ session_id, status, ended_at, standings: [{ session_participant_id, display_name, avatar_key, total_score, correct_count, final_rank }] }`.
+- Participant: `{ session_id, status, ended_at, me: <own standing or null>, leaderboard: [{ display_name, avatar_key, total_score, final_rank }] }` (top 5).
 
 ### `GET /sessions/{session_id}/report` → `200`
 Per-question breakdown for the results pages, sent with `Cache-Control: no-store`.

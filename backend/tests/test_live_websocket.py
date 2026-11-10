@@ -90,6 +90,8 @@ def live(monkeypatch) -> Iterator[tuple[TestClient, dict[str, CurrentAccount]]]:
                     auth0_sub=f"test|{name}",
                     email=f"{name}@test.invalid",
                     display_name=name.title(),
+                    # One preset avatar so the payloads carry a non-null value.
+                    avatar_key="owl.sky" if name == "alice" else None,
                 )
                 db.add(model)
                 db.flush()
@@ -246,6 +248,7 @@ def test_host_and_two_participants_play_one_question(live) -> None:
                     "session_participant_id"
                 ],
                 "display_name": name.title(),
+                "avatar_key": "owl.sky" if name == "alice" else None,
                 "participant_count": 1 if name == "alice" else 2,
             }
 
