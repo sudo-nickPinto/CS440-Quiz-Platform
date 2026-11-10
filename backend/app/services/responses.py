@@ -175,6 +175,19 @@ def _submit_response(
             "session_question_not_found",
             "The question was not found in this session.",
         )
+    # Same rule as the answer-progress roster (joined_at <= opened_at): someone
+    # who joins mid-question starts with the next question. Without this they
+    # could score a question that ALL_ANSWERED doesn't wait for.
+    if (
+        session_question.opened_at is not None
+        and participant.joined_at > session_question.opened_at
+    ):
+        raise APIError(
+            409,
+            "joined_after_question_opened",
+            "You joined after this question opened. "
+            "You can answer from the next question.",
+        )
 
     existing_response_id = db.scalar(
         select(Response.response_id).where(

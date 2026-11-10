@@ -120,6 +120,7 @@ class DuplicateRaceSession:
                     session_participant_id=60,
                     session_id=20,
                     account_id=7,
+                    joined_at=OPENED_AT - timedelta(minutes=1),
                 ),
                 question,
                 None,
