@@ -738,3 +738,163 @@ def test_approval_grants_no_editing_or_results_permissions(submissions) -> None:
         f"/classes/{class_id}/students/{data['ids']['owner']}/results"
     )
     assert_error(results, 403, "not_class_organizer")
+
+
+# Submission preview (GET /classes/{id}/dashboard/submissions/{id}/preview).
+# The preview shows every question and correct answer of the version that was
+# sent, so it must follow the same access rules as the submission itself.
+
+
+def preview(client: TestClient, class_id: int, submission_id: int):
+    return client.get(
+        f"/classes/{class_id}/dashboard/submissions/{submission_id}/preview"
+    )
+
+
+@pytest.mark.parametrize("newer_published", [False, True])
+def test_preview_returns_the_submitted_version_not_a_newer_one(
+    submissions, newer_published: bool
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    version_id = data["versions"]["main"]
+    created = post_submission(client, class_id, version_id)
+    assert created.status_code == 201
+    submission_id = created.json()["submission_id"]
+
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            QuizVersion(
+                quiz_id=data["quizzes"]["main"],
+                version_number=2,
+                title="Different newer content",
+                published_at=(
+                    datetime(2026, 11, 4, 12, 0) if newer_published else None
+                ),
+            )
+        )
+        db.commit()
+
+    act_as(actor, identities, "faculty")
+    response = preview(client, class_id, submission_id)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["version"]["quiz_version_id"] == version_id
+    assert body["version"]["title"] == "Main published quiz"
+    assert body["version"]["version_number"] == 1
+    # A newer unpublished draft doesn't make the submission stale; a newer
+    # published version does, and then it can only be rejected.
+    assert body["submission"]["is_current_version"] is (not newer_published)
+    if newer_published:
+        assert_error(
+            decide(client, class_id, submission_id, "APPROVED"),
+            409,
+            "quiz_version_stale",
+        )
+
+
+@pytest.mark.parametrize(
+    ("name", "code"),
+    [
+        ("classmate", "submission_not_found"),
+        ("collaborator", "submission_not_found"),
+        ("revoked", "submission_not_found"),
+        ("invited", "class_not_found"),
+        ("removed", "class_not_found"),
+        ("outsider", "class_not_found"),
+        ("unrelated_faculty", "class_not_found"),
+    ],
+)
+def test_preview_is_hidden_from_everyone_but_organizers_and_the_submitter(
+    submissions, name: str, code: str
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    created = post_submission(client, class_id, data["versions"]["main"])
+    submission_id = created.json()["submission_id"]
+
+    act_as(actor, identities, name)
+
+    assert_error(preview(client, class_id, submission_id), 404, code)
+
+
+def test_submitter_can_preview_but_not_decide(submissions) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    created = post_submission(client, class_id, data["versions"]["main"])
+    submission_id = created.json()["submission_id"]
+
+    response = preview(client, class_id, submission_id)
+    assert response.status_code == 200
+    assert response.json()["submission"]["status"] == "PENDING"
+
+    assert_error(
+        decide(client, class_id, submission_id, "APPROVED"),
+        403,
+        "not_class_organizer",
+    )
+    assert_error(
+        decide(client, class_id, submission_id, "REJECTED"),
+        403,
+        "not_class_organizer",
+    )
+
+    wrong_class = preview(client, data["classes"]["other"], submission_id)
+    assert wrong_class.status_code == 404
+
+
+def test_collaborator_submitter_loses_preview_when_access_is_revoked(
+    submissions,
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    act_as(actor, identities, "collaborator")
+    created = post_submission(client, class_id, data["versions"]["main"])
+    assert created.status_code == 201
+    submission_id = created.json()["submission_id"]
+    assert preview(client, class_id, submission_id).status_code == 200
+
+    with client.app.state.database.session_factory() as db:
+        collaborator = db.scalar(
+            select(QuizCollaborator).where(
+                QuizCollaborator.quiz_id == data["quizzes"]["main"],
+                QuizCollaborator.account_id == data["ids"]["collaborator"],
+            )
+        )
+        collaborator.revoked_at = datetime(2026, 11, 5, 12, 0)
+        collaborator.revoked_by_id = data["ids"]["owner"]
+        db.commit()
+
+    assert_error(
+        preview(client, class_id, submission_id), 404, "submission_not_found"
+    )
+
+    # Organizers still review it; they decide whether to reject it.
+    act_as(actor, identities, "faculty")
+    assert preview(client, class_id, submission_id).status_code == 200
+
+
+def test_archived_quiz_preview_stays_readable_but_cannot_be_approved(
+    submissions,
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    created = post_submission(client, class_id, data["versions"]["main"])
+    submission_id = created.json()["submission_id"]
+
+    with client.app.state.database.session_factory() as db:
+        db.get(Quiz, data["quizzes"]["main"]).status = QuizStatus.ARCHIVED
+        db.commit()
+
+    act_as(actor, identities, "faculty")
+    response = preview(client, class_id, submission_id)
+
+    assert response.status_code == 200
+    assert response.json()["version"]["title"] == "Main published quiz"
+    assert_error(
+        decide(client, class_id, submission_id, "APPROVED"),
+        409,
+        "quiz_version_not_published",
+    )
+    assert decide(client, class_id, submission_id, "REJECTED").status_code == 200
