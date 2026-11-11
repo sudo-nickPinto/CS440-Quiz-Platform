@@ -35,6 +35,7 @@ import "./taha-ui.css";
 import "../classes/classes.css";
 import "./quizburg-polish.css";
 import "./dismissPopovers.js";
+import ClassQuizWorkflow from "../classes/ClassQuizWorkflow";
 
 export default function PreviewApp({ onSignOut }) {
   const account = useResource("/me");
@@ -184,6 +185,11 @@ export default function PreviewApp({ onSignOut }) {
             <Route
               path="*"
               element={<Navigate to="/app/dashboard/present" replace />}
+            />
+
+            <Route
+              path="classes/:classId/quiz-workflow"
+              element={<ClassQuizWorkflow key={pathname} />}
             />
           </Routes>
         </main>

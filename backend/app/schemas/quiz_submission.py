@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.quiz_submission import SubmissionStatus
+from app.schemas.quiz import QuizVersionResponse
 
 
 class QuizSubmissionRequest(BaseModel):
@@ -42,3 +43,14 @@ class ApprovedQuizResponse(BaseModel):
     author_id: int = Field(gt=0, strict=True)
     approved_at: datetime
     approved_by_id: int = Field(gt=0, strict=True)
+
+
+class QuizSubmissionPreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    submission: QuizSubmissionResponse
+    quiz_id: int
+    submitted_by_name: str
+    version: QuizVersionResponse
+    can_approve: bool
+    approval_block_reason: str | None = None

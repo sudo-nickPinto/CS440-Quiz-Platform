@@ -27,7 +27,6 @@ from app.models import (
 )
 from app.services.quiz_submissions import require_approved_quiz_version
 
-
 QUIZ_UPDATE = {
     "title": "Changed title",
     "description": None,
@@ -62,9 +61,7 @@ def submissions() -> Iterator[tuple[TestClient, dict, dict, dict]]:
                     auth0_sub=f"auth0|{name}",
                     email=f"{name}@example.edu",
                     display_name=name.replace("_", " ").title(),
-                    account_type=(
-                        "ADMINISTRATOR" if name in faculty_names else None
-                    ),
+                    account_type=("ADMINISTRATOR" if name in faculty_names else None),
                     is_active=True,
                 )
                 for name in (
@@ -273,9 +270,10 @@ def test_owner_and_active_collaborator_can_submit_and_lists_are_scoped(
     assert owner_submission.json()["submitted_at"] is not None
 
     owner_id = owner_submission.json()["submission_id"]
-    assert client.delete(
-        f"/classes/{class_id}/quiz-submissions/{owner_id}"
-    ).status_code == 204
+    assert (
+        client.delete(f"/classes/{class_id}/quiz-submissions/{owner_id}").status_code
+        == 204
+    )
 
     act_as(actor, identities, "collaborator")
     collaborator_submission = post_submission(client, class_id, version_id)
@@ -370,9 +368,7 @@ def test_active_duplicate_is_a_conflict_for_pending_and_approved_rows(
         "quiz_submission_conflict",
     )
     act_as(actor, identities, "faculty")
-    approved = decide(
-        client, class_id, created.json()["submission_id"], "APPROVED"
-    )
+    approved = decide(client, class_id, created.json()["submission_id"], "APPROVED")
     assert approved.status_code == 200
 
     act_as(actor, identities, "owner")
@@ -414,9 +410,7 @@ def test_faculty_organizer_can_approve_reject_and_self_approve(
     assert self_approved.json()["decided_by_id"] == data["ids"]["faculty"]
 
 
-@pytest.mark.parametrize(
-    "lost_access", ["account", "membership", "collaboration"]
-)
+@pytest.mark.parametrize("lost_access", ["account", "membership", "collaboration"])
 def test_approval_rechecks_submitter_eligibility_but_rejection_remains_possible(
     submissions, lost_access: str
 ) -> None:
@@ -474,9 +468,12 @@ def test_withdrawal_is_soft_audited_and_terminal_transitions_are_protected(
         "not_submission_owner",
     )
     act_as(actor, identities, "owner")
-    assert client.delete(
-        f"/classes/{class_id}/quiz-submissions/{submission_id}"
-    ).status_code == 204
+    assert (
+        client.delete(
+            f"/classes/{class_id}/quiz-submissions/{submission_id}"
+        ).status_code
+        == 204
+    )
 
     with client.app.state.database.session_factory() as db:
         stored = db.get(QuizSubmission, submission_id)
@@ -545,12 +542,13 @@ def test_archived_class_blocks_submission_approval_and_hostability_but_allows_cl
 
     approved = post_submission(client, class_id, main_version_id)
     act_as(actor, identities, "faculty")
-    assert decide(
-        client, class_id, approved.json()["submission_id"], "APPROVED"
-    ).status_code == 200
-    pending_rejection = post_submission(
-        client, class_id, data["versions"]["self"]
+    assert (
+        decide(
+            client, class_id, approved.json()["submission_id"], "APPROVED"
+        ).status_code
+        == 200
     )
+    pending_rejection = post_submission(client, class_id, data["versions"]["self"])
 
     with client.app.state.database.session_factory() as db:
         cleanup_quiz = Quiz(
@@ -571,9 +569,7 @@ def test_archived_class_blocks_submission_approval_and_hostability_but_allows_cl
         cleanup_version_id = cleanup_version.quiz_version_id
 
     act_as(actor, identities, "owner")
-    pending_withdrawal = post_submission(
-        client, class_id, cleanup_version_id
-    )
+    pending_withdrawal = post_submission(client, class_id, cleanup_version_id)
 
     with client.app.state.database.session_factory() as db:
         class_ = db.get(Class, class_id)
@@ -600,10 +596,13 @@ def test_archived_class_blocks_submission_approval_and_hostability_but_allows_cl
     assert rejected.json()["status"] == "REJECTED"
 
     act_as(actor, identities, "owner")
-    assert client.delete(
-        f"/classes/{class_id}/quiz-submissions/"
-        f"{pending_withdrawal.json()['submission_id']}"
-    ).status_code == 204
+    assert (
+        client.delete(
+            f"/classes/{class_id}/quiz-submissions/"
+            f"{pending_withdrawal.json()['submission_id']}"
+        ).status_code
+        == 204
+    )
 
     assert_error(
         client.get(f"/classes/{class_id}/approved-quizzes"),
@@ -618,9 +617,7 @@ def test_archived_class_blocks_submission_approval_and_hostability_but_allows_cl
     act_as(actor, identities, "faculty")
     statuses = {
         row["status"]
-        for row in client.get(
-            f"/classes/{class_id}/quiz-submissions"
-        ).json()
+        for row in client.get(f"/classes/{class_id}/quiz-submissions").json()
     }
     assert statuses == {"APPROVED", "REJECTED", "WITHDRAWN"}
 
@@ -637,13 +634,19 @@ def test_approved_list_and_helper_share_current_version_rules(submissions) -> No
         assert error.value.code == "quiz_version_not_approved"
 
     act_as(actor, identities, "faculty")
-    assert decide(
-        client, class_id, created.json()["submission_id"], "APPROVED"
-    ).status_code == 200
+    assert (
+        decide(
+            client, class_id, created.json()["submission_id"], "APPROVED"
+        ).status_code
+        == 200
+    )
     rejected = post_submission(client, class_id, data["versions"]["self"])
-    assert decide(
-        client, class_id, rejected.json()["submission_id"], "REJECTED"
-    ).status_code == 200
+    assert (
+        decide(
+            client, class_id, rejected.json()["submission_id"], "REJECTED"
+        ).status_code
+        == 200
+    )
 
     act_as(actor, identities, "classmate")
     approved = client.get(f"/classes/{class_id}/approved-quizzes")
@@ -659,9 +662,10 @@ def test_approved_list_and_helper_share_current_version_rules(submissions) -> No
         "approved_by_id": data["ids"]["faculty"],
     }
     with client.app.state.database.session_factory() as db:
-        assert require_approved_quiz_version(
-            db, class_id, version_id
-        ).quiz_version_id == version_id
+        assert (
+            require_approved_quiz_version(db, class_id, version_id).quiz_version_id
+            == version_id
+        )
         draft = QuizVersion(
             quiz_id=data["quizzes"]["main"],
             version_number=2,
@@ -672,9 +676,10 @@ def test_approved_list_and_helper_share_current_version_rules(submissions) -> No
         db.commit()
 
     # A newer draft does not displace the current approved published version.
-    assert [row["quiz_version_id"] for row in client.get(
-        f"/classes/{class_id}/approved-quizzes"
-    ).json()] == [version_id]
+    assert [
+        row["quiz_version_id"]
+        for row in client.get(f"/classes/{class_id}/approved-quizzes").json()
+    ] == [version_id]
 
     with client.app.state.database.session_factory() as db:
         draft = db.scalar(
@@ -697,16 +702,20 @@ def test_approved_list_and_helper_share_current_version_rules(submissions) -> No
     act_as(actor, identities, "owner")
     newer_submission = post_submission(client, class_id, newer_version_id)
     act_as(actor, identities, "faculty")
-    assert decide(
-        client,
-        class_id,
-        newer_submission.json()["submission_id"],
-        "APPROVED",
-    ).status_code == 200
+    assert (
+        decide(
+            client,
+            class_id,
+            newer_submission.json()["submission_id"],
+            "APPROVED",
+        ).status_code
+        == 200
+    )
     act_as(actor, identities, "classmate")
-    assert [row["quiz_version_id"] for row in client.get(
-        f"/classes/{class_id}/approved-quizzes"
-    ).json()] == [newer_version_id]
+    assert [
+        row["quiz_version_id"]
+        for row in client.get(f"/classes/{class_id}/approved-quizzes").json()
+    ] == [newer_version_id]
 
     with client.app.state.database.session_factory() as db:
         db.get(Quiz, data["quizzes"]["main"]).status = QuizStatus.ARCHIVED
@@ -723,9 +732,12 @@ def test_approval_grants_no_editing_or_results_permissions(submissions) -> None:
     class_id = data["classes"]["main"]
     created = post_submission(client, class_id, data["versions"]["main"])
     act_as(actor, identities, "faculty")
-    assert decide(
-        client, class_id, created.json()["submission_id"], "APPROVED"
-    ).status_code == 200
+    assert (
+        decide(
+            client, class_id, created.json()["submission_id"], "APPROVED"
+        ).status_code
+        == 200
+    )
 
     act_as(actor, identities, "classmate")
     assert client.get(f"/classes/{class_id}/approved-quizzes").status_code == 200
@@ -734,7 +746,144 @@ def test_approval_grants_no_editing_or_results_permissions(submissions) -> None:
         json=QUIZ_UPDATE,
     )
     assert_error(edit, 403, "quiz_edit_denied")
-    results = client.get(
-        f"/classes/{class_id}/students/{data['ids']['owner']}/results"
-    )
+    results = client.get(f"/classes/{class_id}/students/{data['ids']['owner']}/results")
     assert_error(results, 403, "not_class_organizer")
+
+
+@pytest.mark.parametrize("newer_published", [False, True])
+def test_preview_returns_submitted_version_not_latest(submissions, newer_published):
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    version_id = data["versions"]["main"]
+
+    created = post_submission(client, class_id, version_id)
+    assert created.status_code == 201
+    submission_id = created.json()["submission_id"]
+
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            QuizVersion(
+                quiz_id=data["quizzes"]["main"],
+                version_number=2,
+                title="Different newer content",
+                published_at=(
+                    datetime(2026, 11, 4, 12, 0) if newer_published else None
+                ),
+            )
+        )
+        db.commit()
+
+    act_as(actor, identities, "faculty")
+
+    response = client.get(
+        f"/classes/{class_id}/quiz-submissions/" f"{submission_id}/preview"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["version"]["quiz_version_id"] == version_id
+    assert body["version"]["title"] == "Main published quiz"
+    assert body["version"]["version_number"] == 1
+    assert body["can_approve"] is (not newer_published)
+
+    if newer_published:
+        assert body["approval_block_reason"]
+        rejected = decide(client, class_id, submission_id, "APPROVED")
+        assert_error(rejected, 409, "quiz_version_stale")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "classmate",
+        "collaborator",
+        "revoked",
+        "invited",
+        "removed",
+        "outsider",
+        "unrelated_faculty",
+    ],
+)
+def test_preview_does_not_expose_another_members_submission(submissions, name):
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+
+    created = post_submission(client, class_id, data["versions"]["main"])
+    submission_id = created.json()["submission_id"]
+
+    act_as(actor, identities, name)
+
+    response = client.get(
+        f"/classes/{class_id}/quiz-submissions/" f"{submission_id}/preview"
+    )
+
+    assert response.status_code == 404
+
+
+def test_original_submitter_can_preview_but_not_approve(submissions):
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+
+    created = post_submission(client, class_id, data["versions"]["main"])
+    submission_id = created.json()["submission_id"]
+
+    response = client.get(
+        f"/classes/{class_id}/quiz-submissions/" f"{submission_id}/preview"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["can_approve"] is False
+
+    wrong_class = client.get(
+        f"/classes/{data['classes']['other']}/quiz-submissions/"
+        f"{submission_id}/preview"
+    )
+    assert wrong_class.status_code == 404
+
+
+def test_revoked_submitter_loses_preview_access(submissions):
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+
+    act_as(actor, identities, "collaborator")
+    created = post_submission(client, class_id, data["versions"]["main"])
+    assert created.status_code == 201
+    submission_id = created.json()["submission_id"]
+
+    with client.app.state.database.session_factory() as db:
+        collaborator = db.scalar(
+            select(QuizCollaborator).where(
+                QuizCollaborator.quiz_id == data["quizzes"]["main"],
+                QuizCollaborator.account_id == data["ids"]["collaborator"],
+            )
+        )
+        collaborator.revoked_at = datetime(2026, 11, 5, 12, 0)
+        db.commit()
+
+    response = client.get(
+        f"/classes/{class_id}/quiz-submissions/" f"{submission_id}/preview"
+    )
+    assert response.status_code == 404
+
+
+def test_archived_quiz_preview_remains_read_only(submissions):
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+
+    created = post_submission(client, class_id, data["versions"]["main"])
+    submission_id = created.json()["submission_id"]
+
+    with client.app.state.database.session_factory() as db:
+        quiz = db.get(Quiz, data["quizzes"]["main"])
+        quiz.status = QuizStatus.ARCHIVED
+        db.commit()
+
+    act_as(actor, identities, "faculty")
+
+    response = client.get(
+        f"/classes/{class_id}/quiz-submissions/" f"{submission_id}/preview"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["can_approve"] is False
+    assert response.json()["approval_block_reason"]

@@ -1,13 +1,11 @@
-import QuizCard from "../authenticated-demo/QuizCard";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
-import HostQuizButton from "../authenticated-demo/HostQuizButton";
 import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import RequestError from "../authenticated-demo/RequestError";
 import { useConfirm } from "../authenticated-demo/useConfirm";
 import { useFileDownload } from "../authenticated-demo/useFileDownload";
-import { useAction, useApi, useResource } from "../authenticated-demo/rest";
+import { useAction, useApi } from "../authenticated-demo/rest";
 import ClassLiveButton from "./ClassLiveButton";
 import { copyText } from "./classHelpers";
 import { EmptyMessage, ResourceMessage } from "./ClassUI";
@@ -332,96 +330,20 @@ function ClassSummary({ dashboard }) {
 
 // Quizzes the caller wrote and may host as a session of this class.
 function PresentTable({ classInfo }) {
-  const account = useAccount();
-  const action = useAction();
-  const resource = useResource(classInfo.canManage ? "/quizzes" : null);
-  const [query, setQuery] = useState("");
-
-  if (!classInfo.canManage) {
-    return (
-      <EmptyMessage title="Present">
-        Only organizers of this class can host its sessions. When one starts, a
-        Live button appears at the top of this page.
-      </EmptyMessage>
-    );
-  }
-
-  if (classInfo.archived) {
-    return (
-      <EmptyMessage title="Present">
-        This class is archived, so no new sessions can start in it.
-      </EmptyMessage>
-    );
-  }
-
-  if (resource.loading) {
-    return <ResourceMessage resource={{ status: "loading" }} />;
-  }
-
-  if (resource.error) {
-    return (
-      <ResourceMessage
-        resource={{
-          status: "error",
-          error: resource.error,
-          reload: resource.reload,
-        }}
-      />
-    );
-  }
-
-  const needle = query.trim().toLowerCase();
-  const quizzes = (resource.data || []).filter(
-    (quiz) =>
-      // GET /quizzes spans all of the caller's classes; show only this one.
-      quiz.class_id === classInfo.id &&
-      quiz.author_id === account.account_id &&
-      quiz.status === "PUBLISHED" &&
-      quiz.title.toLowerCase().includes(needle),
-  );
-
   return (
-    <>
-      <div className="cl-toolbar">
-        <label className="cl-search">
-          <span className="cl-sr">Search quizzes</span>
-          <input
-            type="search"
-            placeholder="Search quizzes…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
+    <EmptyMessage title="Class quizzes">
+      <p>
+        Find your drafts, submit published versions for approval, and host
+        approved quizzes from the class quiz workspace.
+      </p>
 
-        <span className="cl-count" aria-live="polite">
-          {quizzes.length} {quizzes.length === 1 ? "quiz" : "quizzes"}
-        </span>
-      </div>
-
-      <RequestError error={action.error} />
-
-      {quizzes.length === 0 ? (
-        <EmptyMessage title="No quizzes to host">
-          {needle ? "No published quiz matches your search." : "Publish a quiz to host it in this class."}
-        </EmptyMessage>
-      ) : (
-        <div className="qc-grid" aria-label="Quizzes you can host">
-          {quizzes.map((quiz) => (
-            <QuizCard
-              key={quiz.quiz_id}
-              title={quiz.title}
-              to={"/app/quizzes/" + quiz.quiz_id}
-              state={{ classId: classInfo.id }}
-              status="Published"
-              headline={quiz.question_count + (quiz.question_count === 1 ? " question" : " questions")}
-              actions={<HostQuizButton quiz={quiz} action={action} label="Host in this class" />}
-            >
-              <p>{classInfo.name}</p>
-            </QuizCard>
-          ))}
-        </div>
-      )}
-    </>
+      <Link
+        className="cl-button"
+        to={`/app/classes/${classInfo.id}/quiz-workflow`}
+      >
+        Open class quizzes
+      </Link>
+    </EmptyMessage>
   );
 }
 
@@ -626,6 +548,15 @@ function ClassWorkspace({ classInfo, onChange }) {
             )}
           </div>
         )}
+      </div>
+
+      <div className="cl-actions">
+        <Link
+          className="cl-button"
+          to={`/app/classes/${classInfo.id}/quiz-workflow`}
+        >
+          Quizzes, submissions & approval
+        </Link>
       </div>
 
       <ClassLiveButton classId={classInfo.id} />

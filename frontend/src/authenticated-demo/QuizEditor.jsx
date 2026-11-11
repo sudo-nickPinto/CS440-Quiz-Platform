@@ -162,7 +162,8 @@ export function QuizEditor({
           setRemoteNotice({
             tone: "warning",
             text: "A collaborator saved this question while you have local changes.",
-            detail: "Your work is still here. Save to check for a conflict, or reload the latest quiz.",
+            detail:
+              "Your work is still here. Save to check for a conflict, or reload the latest quiz.",
             reload: true,
           });
           return;
@@ -256,7 +257,8 @@ export function QuizEditor({
         setRemoteNotice({
           tone: "warning",
           text: "A collaborator changed the quiz structure.",
-          detail: "Reload when you are ready. Your unsaved work has not been replaced.",
+          detail:
+            "Reload when you are ready. Your unsaved work has not been replaced.",
           reload: true,
         });
       } else if (message.type === "quiz_published") {
@@ -275,7 +277,8 @@ export function QuizEditor({
         setRemoteNotice({
           tone: "info",
           text: "The quiz was published by its owner.",
-          detail: "Reload when you are ready. Your unsaved work has not been replaced.",
+          detail:
+            "Reload when you are ready. Your unsaved work has not been replaced.",
           reload: true,
         });
       }
@@ -671,8 +674,8 @@ export function QuizEditor({
       <section className="qp-content">
         <h1>Create a quiz</h1>
         <p>
-          Quizzes now belong to a class. Open one of your classes and choose
-          "+ New quiz" there.
+          Quizzes now belong to a class. Open one of your classes and choose "+
+          New quiz" there.
         </p>
         <Link className="qp-button" to="/app/classes">
           Go to my classes
@@ -689,9 +692,7 @@ export function QuizEditor({
         <div className="qe-bar">
           <Link className="qe-back" to={backTo} onClick={leaveEditor}>
             <span aria-hidden="true">←</span>
-            <span className="qe-back-word">
-              {editing ? "Quiz" : "Class"}
-            </span>
+            <span className="qe-back-word">{editing ? "Quiz" : "Class"}</span>
             <span className="ui-sr">
               {editing ? "Cancel editing" : "Back to class"}
             </span>
@@ -1076,19 +1077,27 @@ export function QuizEditor({
                             className={`is-${questionSaveStatus[question.questionId] ?? "saved"}`}
                             role="status"
                           >
-                            {questionSaveStatus[question.questionId] === "pending"
+                            {questionSaveStatus[question.questionId] ===
+                            "pending"
                               ? "Unsaved changes…"
-                              : questionSaveStatus[question.questionId] === "saving"
+                              : questionSaveStatus[question.questionId] ===
+                                  "saving"
                                 ? "Saving…"
-                                : questionSaveStatus[question.questionId] === "invalid"
+                                : questionSaveStatus[question.questionId] ===
+                                    "invalid"
                                   ? "Complete this question to autosave"
-                                  : questionSaveStatus[question.questionId] === "error"
+                                  : questionSaveStatus[question.questionId] ===
+                                      "error"
                                     ? "Autosave failed"
-                                    : questionSaveStatus[question.questionId] === "conflict"
+                                    : questionSaveStatus[
+                                          question.questionId
+                                        ] === "conflict"
                                       ? "Editing conflict"
-                                      : questionSaveStatus[question.questionId] === "remote"
+                                      : questionSaveStatus[
+                                            question.questionId
+                                          ] === "remote"
                                         ? "↻ Updated by collaborator"
-                                      : "✓ Saved live"}
+                                        : "✓ Saved live"}
                           </span>
                         </div>
                       )}
@@ -1149,9 +1158,7 @@ export function QuizEditor({
             {reviewing ? (
               <>
                 <div className="qe-confirm-text">
-                  <h2>
-                    {editing ? "Save these changes?" : "Save this quiz?"}
-                  </h2>
+                  <h2>{editing ? "Save these changes?" : "Save this quiz?"}</h2>
                   <p>
                     {editing
                       ? "This saves a draft. Publish it from the quiz page when it is ready to host."
@@ -1177,10 +1184,10 @@ export function QuizEditor({
                     {questionSaving
                       ? "Finishing live save…"
                       : action.busy
-                      ? "Saving…"
-                      : editing
-                        ? "Save changes"
-                        : "Save draft"}
+                        ? "Saving…"
+                        : editing
+                          ? "Save changes"
+                          : "Save draft"}
                   </button>
                 </div>
               </>
@@ -1261,13 +1268,10 @@ export function QuizViewer() {
 
   async function publishQuiz() {
     const publishedQuiz = await action.run(() =>
-      api(
-        `/classes/${quiz.class_id}/quizzes/${quiz.quiz_id}/publish`,
-        {
-          method: "POST",
-          body: JSON.stringify({ expected_revision: quiz.revision }),
-        },
-      ),
+      api(`/classes/${quiz.class_id}/quizzes/${quiz.quiz_id}/publish`, {
+        method: "POST",
+        body: JSON.stringify({ expected_revision: quiz.revision }),
+      }),
     );
     if (publishedQuiz) resource.reload();
   }
@@ -1307,8 +1311,7 @@ export function QuizViewer() {
               : quiz.status === "DRAFT"
                 ? "Draft"
                 : "Archived"}{" "}
-            · v
-            {quiz.version.version_number}
+            · v{quiz.version.version_number}
           </span>
         </div>
       </div>
@@ -1317,10 +1320,18 @@ export function QuizViewer() {
         <p className="qv-facts">
           <b>{plural(questions.length, "question")}</b>
           <span>{clock(totalTime)} total</span>
-          <span>{quiz.visibility === "PUBLIC" ? "Public" : "Private"}</span>
+          <span>Class access only</span>
         </p>
 
         <div className="qv-actions">
+          {quiz.class_id && (
+            <Link
+              className="qb-btn qb-btn-paper"
+              to={`/app/classes/${quiz.class_id}/quiz-workflow`}
+            >
+              Submissions & approval
+            </Link>
+          )}
           {mine && (
             <Link
               className="qb-btn qb-btn-paper"

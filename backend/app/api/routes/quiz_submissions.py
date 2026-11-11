@@ -7,6 +7,7 @@ from app.schemas.quiz_submission import (
     ApprovedQuizResponse,
     QuizSubmissionCreate,
     QuizSubmissionDecision,
+    QuizSubmissionPreviewResponse,
     QuizSubmissionResponse,
 )
 from app.services.quiz_submissions import (
@@ -14,6 +15,7 @@ from app.services.quiz_submissions import (
     decide_quiz_submission,
     list_approved_quizzes,
     list_quiz_submissions,
+    get_quiz_submission_preview,
     withdraw_quiz_submission,
 )
 
@@ -57,9 +59,7 @@ def decide_quiz_submission_route(
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizSubmissionResponse:
-    return decide_quiz_submission(
-        db, account, class_id, submission_id, payload
-    )
+    return decide_quiz_submission(db, account, class_id, submission_id, payload)
 
 
 @router.delete(
@@ -86,3 +86,16 @@ def list_approved_quizzes_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> list[ApprovedQuizResponse]:
     return list_approved_quizzes(db, account, class_id)
+
+
+@router.get(
+    "/quiz-submissions/{submission_id}/preview",
+    response_model=QuizSubmissionPreviewResponse,
+)
+def get_quiz_submission_preview_route(
+    class_id: int,
+    submission_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> QuizSubmissionPreviewResponse:
+    return get_quiz_submission_preview(db, account, class_id, submission_id)

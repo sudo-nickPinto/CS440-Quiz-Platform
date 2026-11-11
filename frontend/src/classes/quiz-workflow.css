@@ -1,0 +1,154 @@
+.qw {
+  color: #222222;
+}
+
+.qw .cl-classbar {
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.qw .cl-classbar h1 {
+  margin: 0;
+}
+
+.qw-tabs,
+.qw-toolbar,
+.qw-actions,
+.qw-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.qw-tabs,
+.qw-toolbar,
+.qw-pagination,
+.qw-message {
+  padding: 1rem;
+}
+
+.qw-tabs {
+  border-bottom: 3px solid #222222;
+}
+
+.qw-tabs button[aria-pressed="true"] {
+  background: #043371;
+  color: #ffffff;
+}
+
+.qw-toolbar {
+  align-items: end;
+  background: #f3ebe2;
+}
+
+.qw-toolbar label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 700;
+}
+
+.qw-toolbar label:first-child {
+  flex: 1 1 15rem;
+}
+
+.qw input,
+.qw select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.7rem;
+  border: 2px solid #222222;
+  background: #ffffff;
+  color: #222222;
+  font: inherit;
+}
+
+.qw-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1.25rem;
+  padding: 1rem;
+}
+
+.qw-card {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 3px solid #222222;
+  background: #fffdf9;
+  box-shadow: 5px 5px 0 #222222;
+  overflow-wrap: anywhere;
+}
+
+.qw-card h2 {
+  margin: 0.85rem 0;
+}
+
+.qw-badge {
+  display: inline-block;
+  padding: 0.35rem 0.6rem;
+  border: 2px solid #222222;
+  background: #8fdbff;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.qw button,
+.qw-actions a {
+  padding: 0.7rem 0.9rem;
+  border: 2px solid #222222;
+  background: #ffffff;
+  color: #043371;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.qw button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.qw button:focus-visible,
+.qw a:focus-visible,
+.qw summary:focus-visible,
+.qw input:focus-visible,
+.qw select:focus-visible {
+  outline: 3px solid #cc4e00;
+  outline-offset: 3px;
+}
+
+.qw-preview {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  border: 2px solid #222222;
+}
+
+.qw-preview summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.qw-preview ol,
+.qw-preview ul {
+  padding-left: 1.25rem;
+}
+
+.qw-preview li {
+  margin-top: 0.75rem;
+}
+
+.qw-pagination {
+  justify-content: center;
+}
+
+@media (max-width: 600px) {
+  .qw-toolbar label,
+  .qw-actions > * {
+    flex: 1 1 100%;
+  }
+
+  .qw-tabs button {
+    flex: 1 1 45%;
+  }
+}

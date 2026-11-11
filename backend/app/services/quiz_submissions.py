@@ -14,9 +14,11 @@ from app.schemas.quiz_submission import (
     ApprovedQuizResponse,
     QuizSubmissionCreate,
     QuizSubmissionDecision,
+    QuizSubmissionPreviewResponse,
     QuizSubmissionResponse,
 )
 from app.services.class_authorization import ClassAccess, require_class_member
+from app.schemas.quiz import QuizVersionResponse
 
 
 def _now() -> datetime:
@@ -79,9 +81,7 @@ def _load_visible_version(
     if row is None:
         raise APIError(404, "quiz_version_not_found", "Quiz version not found.")
     version, quiz = row
-    if quiz.class_id != class_id or not _has_quiz_access(
-        db, quiz, account.account_id
-    ):
+    if quiz.class_id != class_id or not _has_quiz_access(db, quiz, account.account_id):
         raise APIError(404, "quiz_version_not_found", "Quiz version not found.")
     return version, quiz
 
@@ -175,8 +175,7 @@ def list_quiz_submissions(
         QuizSubmission.submitted_at.desc(), QuizSubmission.submission_id.desc()
     )
     return [
-        _submission_response(submission)
-        for submission in db.scalars(statement).all()
+        _submission_response(submission) for submission in db.scalars(statement).all()
     ]
 
 
@@ -194,8 +193,7 @@ def _load_visible_submission(
         )
     )
     if submission is None or (
-        not access.is_organizer
-        and submission.submitted_by_id != account.account_id
+        not access.is_organizer and submission.submitted_by_id != account.account_id
     ):
         raise APIError(404, "submission_not_found", "Submission not found.")
     return submission
@@ -218,8 +216,10 @@ def _submitter_remains_eligible(
             ClassMembership.status == MembershipStatus.ACTIVE,
         )
     )
-    return bool(account_active) and membership_active is not None and _has_quiz_access(
-        db, quiz, submission.submitted_by_id
+    return (
+        bool(account_active)
+        and membership_active is not None
+        and _has_quiz_access(db, quiz, submission.submitted_by_id)
     )
 
 
@@ -231,9 +231,7 @@ def decide_quiz_submission(
     payload: QuizSubmissionDecision,
 ) -> QuizSubmissionResponse:
     access = require_class_member(db, account, class_id)
-    submission = _load_visible_submission(
-        db, account, access, class_id, submission_id
-    )
+    submission = _load_visible_submission(db, account, access, class_id, submission_id)
     if not access.is_organizer:
         raise APIError(
             403,
@@ -306,9 +304,7 @@ def withdraw_quiz_submission(
     submission_id: int,
 ) -> None:
     access = require_class_member(db, account, class_id)
-    submission = _load_visible_submission(
-        db, account, access, class_id, submission_id
-    )
+    submission = _load_visible_submission(db, account, access, class_id, submission_id)
     if submission.submitted_by_id != account.account_id:
         raise APIError(
             403,
@@ -431,3 +427,58 @@ def require_approved_quiz_version(
         )
     _, version, _ = row
     return version
+
+
+def get_quiz_submission_preview(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    submission_id: int,
+) -> QuizSubmissionPreviewResponse:
+    access = require_class_member(db, account, class_id)
+
+    submission = _load_visible_submission(db, account, access, class_id, submission_id)
+
+    row = _version_and_quiz(db, submission.quiz_version_id)
+    if row is None:
+        raise APIError(404, "submission_not_found", "Submission not found.")
+
+    version, quiz = row
+
+    if quiz.class_id != class_id or version.published_at is None:
+        raise APIError(404, "submission_not_found", "Submission not found.")
+
+    # Organizers review submissions for their class.
+    # Original submitters must still have access to the quiz.
+    # Losing collaborator access must also remove preview access.
+    if not access.is_organizer and not _has_quiz_access(db, quiz, account.account_id):
+        raise APIError(404, "submission_not_found", "Submission not found.")
+
+    reason = None
+
+    if not access.is_organizer:
+        reason = "Only a class organizer can approve submissions."
+    elif submission.status != SubmissionStatus.PENDING:
+        reason = "This submission is no longer pending."
+    else:
+        try:
+            _require_unarchived_class(access.class_)
+            _require_published_current_version(db, class_id, version, quiz)
+
+            if not _submitter_remains_eligible(db, submission, quiz):
+                reason = "The submitter is no longer eligible."
+        except APIError as error:
+            reason = error.message
+
+    submitter = db.get(Account, submission.submitted_by_id)
+
+    return QuizSubmissionPreviewResponse(
+        submission=_submission_response(submission),
+        quiz_id=quiz.quiz_id,
+        submitted_by_name=(
+            submitter.display_name if submitter is not None else "Former account"
+        ),
+        version=QuizVersionResponse.model_validate(version),
+        can_approve=reason is None,
+        approval_block_reason=reason,
+    )
