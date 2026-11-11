@@ -918,6 +918,54 @@ function ClassHistory({ classInfo, studentCount, view, onViewChange }) {
   );
 }
 
+// The session-code strip under the tabs (made-dashboard-main.html): six
+// digits from the host's screen, then straight into the game.
+function JoinPanel() {
+  const api = useApi();
+  const action = useAction();
+  const navigate = useNavigate();
+  const [code, setCode] = useState("");
+
+  async function join(event) {
+    event.preventDefault();
+    if (!/^\d{6}$/.test(code)) return;
+    const joined = await action.run(() =>
+      api("/sessions/join", {
+        method: "POST",
+        body: JSON.stringify({ join_code: code }),
+      }),
+    );
+    if (joined) navigate(`/app/play/${joined.session.session_id}`);
+  }
+
+  return (
+    <div className="cl-join-panel" id="cl-join-panel">
+      <form onSubmit={join}>
+        <label htmlFor="cl-join-code">Session code</label>
+        <input
+          id="cl-join-code"
+          autoFocus
+          required
+          inputMode="numeric"
+          autoComplete="off"
+          pattern="[0-9]{6}"
+          maxLength={6}
+          placeholder="000000"
+          value={code}
+          disabled={action.busy}
+          onChange={(event) =>
+            setCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+          }
+        />
+        <button type="submit" disabled={action.busy || code.length !== 6}>
+          {action.busy ? "Joining…" : "Go →"}
+        </button>
+      </form>
+      <RequestError error={action.error} />
+    </div>
+  );
+}
+
 function ClassWorkspace({ classInfo, onChange }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const showAdminLayout = classInfo.canManage === true;
@@ -983,6 +1031,7 @@ function ClassWorkspace({ classInfo, onChange }) {
     },
   );
   const [addOpen, setAddOpen] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(classInfo.name);
   const manage = useAction();
@@ -1214,6 +1263,19 @@ function ClassWorkspace({ classInfo, onChange }) {
           </div>
         )}
 
+        {!adminView && classInfo.membershipStatus === "ACTIVE" && (
+          <div className="cl-actions">
+            <button
+              type="button"
+              className="cl-secondary cl-danger"
+              disabled={leave.busy}
+              onClick={() => void leaveClass()}
+            >
+              Leave class
+            </button>
+          </div>
+        )}
+
         {/* Last in the bar, so it stays in the same spot in both views. */}
         {showAdminLayout && (
           <div
@@ -1277,30 +1339,35 @@ function ClassWorkspace({ classInfo, onChange }) {
           ))}
         </div>
 
+        {/* As in made-dashboard-main.html: a "+" cell for a new quiz and
+            a JOIN cell that opens the session-code strip. */}
         {!adminView && (
           <div className="cl-actions">
-            {classInfo.membershipStatus === "ACTIVE" && (
+            {classInfo.membershipStatus === "ACTIVE" && !classInfo.archived && (
               <Link
-                className="cl-button"
+                className="cl-plus"
                 to={`/app/quizzes/new?class=${classInfo.id}`}
+                aria-label="New quiz"
+                title="New quiz"
               >
-                + New quiz
+                +
               </Link>
             )}
 
-            {classInfo.membershipStatus === "ACTIVE" && (
-              <button
-                type="button"
-                className="cl-secondary"
-                disabled={leave.busy}
-                onClick={() => void leaveClass()}
-              >
-                Leave class
-              </button>
-            )}
+            <button
+              type="button"
+              className="cl-join"
+              aria-expanded={joinOpen}
+              aria-controls="cl-join-panel"
+              onClick={() => setJoinOpen((open) => !open)}
+            >
+              Join
+            </button>
           </div>
         )}
       </div>
+
+      {!adminView && joinOpen && <JoinPanel />}
 
       {activeSection === "Students" ? (
         <ClassStudents
