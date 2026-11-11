@@ -10,7 +10,7 @@ import { HostFinal, ParticipantFinal } from "./LiveFinal";
 import Avatar from "../avatars/Avatar";
 import QuizStartCountdown from "./QuizStartCountdown";
 import CopyCodeButton from "./CopyCodeButton";
-import { classPagePath } from "../classes/classHelpers";
+import { classPagePath } from "../classes/classPaths";
 
 const CONNECTION_ERRORS = {
   unauthorized: "Your login needs to be renewed.",

@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router";
-import { classPagePath } from "../classes/classHelpers";
+import { classPagePath } from "../classes/classPaths";
 
 import { useResource } from "./rest";
 import { quizToEditor } from "./quizPayload";

@@ -10,7 +10,7 @@ import { useAccount } from './account'
 import { useAction, useApi, useResource } from './rest'
 import RequestError from './RequestError'
 import CopyCodeButton from './CopyCodeButton'
-import { classPagePath } from '../classes/classHelpers'
+import { classPagePath } from '../classes/classPaths'
 
 export function ResumeSession({ mode }) {
   const [id, setId] = useState('')

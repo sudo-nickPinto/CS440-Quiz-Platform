@@ -30,7 +30,7 @@ import ConfirmDialog from "./ConfirmDialog";
 import { useConfirm } from "./useConfirm";
 import { QuestionMenu, TimePicker } from "./EditorParts";
 import { useQuizCollaboration } from "./useQuizCollaboration";
-import { classPagePath } from "../classes/classHelpers";
+import { classPagePath } from "../classes/classPaths";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
