@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 import HostQuizButton from "../authenticated-demo/HostQuizButton";
+import { hostingState, showsHostControl } from "../authenticated-demo/hosting";
 import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import RequestError from "../authenticated-demo/RequestError";
 import { useConfirm } from "../authenticated-demo/useConfirm";
@@ -10,22 +11,21 @@ import { useAction, useApi } from "../authenticated-demo/rest";
 import ClassLiveButton from "./ClassLiveButton";
 import {
   ADMIN_SECTIONS,
-  APPROVED_SORTS,
   approvalLabel,
   canSubmitForApproval,
   copyText,
   HISTORY_VIEWS,
   MY_QUIZ_SORTS,
-  quizAccessLabel,
-  quizStatusLabel,
+  presentStatus,
   resolveAdminSection,
+  resolveUserSection,
   SUBMISSION_FILTERS,
   SUBMISSION_SORTS,
+  USER_SECTIONS,
 } from "./classHelpers";
-import { EmptyMessage, ResourceMessage } from "./ClassUI";
+import { ResourceMessage } from "./ClassUI";
 import { AddMemberDialog, ClassStudents } from "./ClassManagement";
 import {
-  useApprovedQuizzes,
   useClassDashboard,
   useClassQuizzes,
   useClassSubmissions,
@@ -290,7 +290,10 @@ function PresentationsTable({ classInfo, studentCount, controls }) {
   );
 }
 
-// Member view: the class's sessions and how the caller did in each.
+const PARTICIPATE_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-wide", "cl-go-cell"];
+
+// Member view: the sessions the caller was part of, styled after the
+// Participate tab in made-dashboard-main.html.
 function ParticipateTable({ classInfo }) {
   const [page, setPage] = useState(1);
   const resource = useClassSessions(classInfo.id, page);
@@ -301,7 +304,9 @@ function ParticipateTable({ classInfo }) {
     <ReportTable
       caption="Sessions"
       noun="session"
-      headers={["Date", "Session", "Score", "Results"]}
+      tableClass="cl-rows cl-member-rows"
+      columnClasses={PARTICIPATE_COLUMNS}
+      headers={["Rank", "Quiz", "Score", "Host", "Date", ""]}
       emptyTitle="No sessions yet"
       emptyText={
         "When an organizer hosts a quiz here, a Live button appears at " +
@@ -309,26 +314,61 @@ function ParticipateTable({ classInfo }) {
       }
       pagination={resource.data.pagination}
       onPageChange={setPage}
-      rows={resource.data.items.map((session) => ({
-        key: session.session_id,
-        text: session.quiz_title,
-        cells: [
-          formatDate(session.started_at),
-          session.quiz_title,
-          session.my_score === null
-            ? "Absent"
-            : `${formatScore(session.my_score)} pts · #${session.my_rank}`,
-          classInfo.canManage || session.my_score != null ? (
-            <Link
-              to={`/app/classes/${classInfo.id}/sessions/${session.session_id}/report`}
-            >
-              {classInfo.canManage ? "Session report →" : "My results →"}
-            </Link>
-          ) : (
-            "—"
-          ),
-        ],
-      }))}
+      rows={resource.data.items.map((session) => {
+        const played = session.my_score != null;
+        const report =
+          classInfo.canManage || played
+            ? `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`
+            : null;
+        return {
+          key: session.session_id,
+          text: `${session.quiz_title} ${session.host_name}`,
+          leadClass: `cl-rank-lead${played ? "" : " is-none"}`,
+          cells: [
+            played ? (
+              <span className="cl-rank-block">
+                <b>#{session.my_rank}</b>
+                <small>of {formatScore(session.participant_count)}</small>
+              </span>
+            ) : (
+              "Absent"
+            ),
+            <span className="cl-quiz-cell">
+              {report ? (
+                <Link className="cl-quiz-name" to={report}>
+                  {session.quiz_title}
+                </Link>
+              ) : (
+                <strong className="cl-quiz-name">{session.quiz_title}</strong>
+              )}
+              <small className="cl-meta">
+                {played && (
+                  <span className="cl-phone-only">
+                    {formatScore(session.my_score)} pts ·{" "}
+                  </span>
+                )}
+                Hosted by {session.host_name} · {formatDate(session.started_at)}
+              </small>
+            </span>,
+            played ? (
+              <span className="cl-points">
+                <b>{formatScore(session.my_score)}</b>
+                <small>pts</small>
+              </span>
+            ) : (
+              <span className="cl-dim">—</span>
+            ),
+            session.host_name,
+            <span className="cl-dim">{formatDate(session.started_at)}</span>,
+            report ? (
+              <GoLink
+                to={report}
+                label={`${classInfo.canManage ? "Session report" : "My results"} for ${session.quiz_title}`}
+              />
+            ) : null,
+          ],
+        };
+      })}
     />
   );
 }
@@ -348,92 +388,84 @@ function SortSelect({ label, value, choices, onChange }) {
   );
 }
 
-// Approved quizzes in this class. Every active member sees them; the quiz
-// owner or an organizer can host (Task 5 checks the same on the server).
-function PresentTable({ classInfo }) {
-  const action = useAction();
-  const [page, setPage] = useState(1);
-  const [sortKey, setSortKey] = useState("recent");
-  const resource = useApprovedQuizzes(classInfo.id, page, sortKey);
+// The ⋯ button and its menu. The menu is fixed to the viewport so the
+// table's scroll box never clips it; it closes on outside click, Escape,
+// scroll, or after picking an item.
+function RowMenu({ label, children }) {
+  const [place, setPlace] = useState(null);
+  const wrap = useRef(null);
 
-  if (classInfo.archived) {
-    return (
-      <EmptyMessage title="Present">
-        This class is archived, so no new sessions can start in it.
-      </EmptyMessage>
+  useEffect(() => {
+    if (!place) return undefined;
+    const close = () => setPlace(null);
+    const outside = (event) => {
+      if (!wrap.current?.contains(event.target)) close();
+    };
+    const escape = (event) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [place]);
+
+  function toggle(event) {
+    if (place) {
+      setPlace(null);
+      return;
+    }
+    const box = event.currentTarget.getBoundingClientRect();
+    const right = document.documentElement.clientWidth - box.right;
+    setPlace(
+      window.innerHeight - box.bottom > 260
+        ? { right, top: box.bottom + 8 }
+        : { right, bottom: window.innerHeight - box.top + 8 },
     );
   }
 
-  const pending = reportResource(resource);
-  if (pending) return pending;
-
   return (
-    <>
-      <RequestError error={action.error} />
-      <ReportTable
-        caption="Approved quizzes"
-        noun="quiz"
-        headers={["Status", "Quiz", "Qs", "Approved", ""]}
-        emptyTitle="No approved quizzes yet"
-        emptyText="Publish a quiz, then send it for approval from My quizzes. Once an organizer approves it, it can be hosted here."
-        pagination={resource.data.pagination}
-        onPageChange={setPage}
-        controls={
-          <SortSelect
-            label="Sort approved quizzes"
-            value={sortKey}
-            choices={APPROVED_SORTS}
-            onChange={(key) => {
-              setSortKey(key);
-              setPage(1);
-            }}
-          />
-        }
-        rows={resource.data.items.map((quiz) => ({
-          key: quiz.quiz_id,
-          text: `${quiz.title} ${quiz.author_name}`,
-          leadClass: "cl-status is-approved",
-          cells: [
-            "Approved",
-            <span className="cl-quiz-cell">
-              {/* Only people who can open the quiz page get the link. */}
-              {quiz.can_view ? (
-                <Link
-                  className="cl-quiz-name"
-                  to={`/app/quizzes/${quiz.quiz_id}`}
-                  state={{ classId: classInfo.id }}
-                >
-                  {quiz.title}
-                </Link>
-              ) : (
-                <strong className="cl-quiz-name">{quiz.title}</strong>
-              )}
-              <small>By {quiz.author_name}</small>
-            </span>,
-            formatScore(quiz.question_count),
-            formatDate(quiz.approved_at),
-            // Owners and organizers see the Host button, or why it's blocked
-            // (e.g. "Publish changes first"). Everyone else learns who can.
-            quiz.hosting?.reason === "not_host" ? (
-              <small>Hosted by its owner or an organizer</small>
-            ) : (
-              <HostQuizButton
-                quiz={quiz}
-                classId={classInfo.id}
-                action={action}
-                label="Host"
-              />
-            ),
-          ],
-        }))}
-      />
-    </>
+    <div className="cl-kebab-wrap" ref={wrap}>
+      <button
+        type="button"
+        className="cl-kebab"
+        aria-haspopup="menu"
+        aria-expanded={Boolean(place)}
+        aria-label={label}
+        title={label}
+        onClick={toggle}
+      >
+        ⋯
+      </button>
+      {place && (
+        <div
+          className="cl-menu"
+          role="menu"
+          style={{ position: "fixed", ...place }}
+          onClick={() => setPlace(null)}
+        >
+          {children}
+        </div>
+      )}
+    </div>
   );
 }
 
-// Quizzes in this class the caller owns or edits as a collaborator.
-function MyQuizzesTable({ classInfo, onApprovalChange }) {
+const PRESENT_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-num cl-wide", "cl-wide", "cl-go-cell"];
+
+// Member view: the caller's own quizzes in this class (owned or shared with
+// them), styled after the Present tab in made-dashboard-main.html. The lead
+// block says Draft or Approved; the Approval column sends a published
+// version for approval; the ⋯ menu edits, hosts, withdraws or archives.
+function PresentTable({ classInfo, onApprovalChange }) {
   const api = useApi();
+  const account = useAccount();
   const action = useAction();
   const confirmer = useConfirm();
   const [page, setPage] = useState(1);
@@ -445,34 +477,36 @@ function MyQuizzesTable({ classInfo, onApprovalChange }) {
 
   if (pending) return pending;
 
+  function refresh(done) {
+    if (!done) return;
+    resource.reload();
+    onApprovalChange?.();
+  }
+
   async function submitForApproval(quiz) {
-    const sent = await action.run(() =>
-      api(`/classes/${classInfo.id}/quiz-submissions`, {
-        method: "POST",
-        body: JSON.stringify({ quiz_version_id: quiz.published_version_id }),
-      }),
+    refresh(
+      await action.run(() =>
+        api(`/classes/${classInfo.id}/quiz-submissions`, {
+          method: "POST",
+          body: JSON.stringify({ quiz_version_id: quiz.published_version_id }),
+        }),
+      ),
     );
-    if (sent) {
-      resource.reload();
-      onApprovalChange?.();
-    }
   }
 
   async function withdraw(quiz) {
-    const done = await action.run(async () => {
-      await api(
-        `/classes/${classInfo.id}/quiz-submissions/${quiz.approval_submission_id}`,
-        { method: "DELETE" },
-      );
-      return true;
-    });
-    if (done) {
-      resource.reload();
-      onApprovalChange?.();
-    }
+    refresh(
+      await action.run(async () => {
+        await api(
+          `/classes/${classInfo.id}/quiz-submissions/${quiz.approval_submission_id}`,
+          { method: "DELETE" },
+        );
+        return true;
+      }),
+    );
   }
 
-  // Moved here from the old global dashboard. Only the owner can archive.
+  // Only the owner can archive.
   async function archive(quiz) {
     const sure = await confirmer.confirm({
       label: "Archive quiz",
@@ -482,100 +516,178 @@ function MyQuizzesTable({ classInfo, onApprovalChange }) {
       cancelLabel: "Keep it",
     });
     if (!sure) return;
-    const done = await action.run(async () => {
-      await api(`/quizzes/${quiz.quiz_id}/archive`, { method: "PATCH" });
-      return true;
-    });
-    if (done) {
-      resource.reload();
-      onApprovalChange?.();
-    }
+    refresh(
+      await action.run(async () => {
+        await api(`/quizzes/${quiz.quiz_id}/archive`, { method: "PATCH" });
+        return true;
+      }),
+    );
+  }
+
+  function approvalText(quiz) {
+    if (quiz.status === "ARCHIVED") return "—";
+    if (!quiz.published_version_id) return "Not published yet";
+    return approvalLabel(quiz.approval_status);
+  }
+
+  function sendTitle(quiz) {
+    if (quiz.approval_status === "APPROVED") return "Already approved";
+    if (quiz.approval_status === "PENDING") return "Waiting for an organizer";
+    if (!quiz.published_version_id) return "Publish the quiz first";
+    return undefined;
   }
 
   return (
     <>
-    <ConfirmDialog confirmer={confirmer} />
-    <RequestError error={action.error} />
-    <ReportTable
-      caption="My quizzes"
-      noun="quiz"
-      headers={["Status", "Quiz", "Access", "Approval", "Qs", "Edited", "Manage"]}
-      emptyTitle="No quizzes yet"
-      emptyText={
-        classInfo.membershipStatus === "ACTIVE" && !classInfo.archived
-          ? "Create a quiz with + New quiz, or ask a classmate to share one with you."
-          : "Quizzes you own or that are shared with you in this class appear here."
-      }
-      pagination={resource.data.pagination}
-      onPageChange={setPage}
-      controls={
-        <SortSelect
-          label="Sort my quizzes"
-          value={sortKey}
-          choices={MY_QUIZ_SORTS}
-          onChange={(key) => {
-            setSortKey(key);
-            setPage(1);
-          }}
-        />
-      }
-      rows={resource.data.items.map((quiz) => ({
-        key: quiz.quiz_id,
-        text: `${quiz.title} ${quiz.author_name}`,
-        leadClass: `cl-status is-${String(quiz.status).toLowerCase()}`,
-        cells: [
-          quizStatusLabel(quiz.status),
-          <Link
-            className="cl-quiz-name"
-            to={`/app/quizzes/${quiz.quiz_id}`}
-            state={{ classId: classInfo.id }}
-          >
-            {quiz.title}
-          </Link>,
-          quiz.my_access === "EDITOR"
-            ? `Editor · shared by ${quiz.author_name}`
-            : quizAccessLabel(quiz.my_access),
-          <span className="cl-approval">
-            {quiz.status === "PUBLISHED" ? approvalLabel(quiz.approval_status) : "—"}
-            {canSubmit && canSubmitForApproval(quiz) && (
-              <button
-                type="button"
-                className="cl-secondary"
-                disabled={action.busy}
-                onClick={() => void submitForApproval(quiz)}
-              >
-                {quiz.approval_status ? "Send again" : "Send for approval"}
-              </button>
-            )}
-            {quiz.approval_status === "PENDING" && quiz.approval_sent_by_me && (
-              <button
-                type="button"
-                className="cl-secondary"
-                disabled={action.busy}
-                onClick={() => void withdraw(quiz)}
-              >
-                Withdraw
-              </button>
-            )}
-          </span>,
-          formatScore(quiz.question_count),
-          formatDate(quiz.updated_at),
-          quiz.my_access === "OWNER" && quiz.status !== "ARCHIVED" ? (
-            <button
-              type="button"
-              className="cl-secondary cl-danger-text"
-              disabled={action.busy}
-              aria-label={`Archive ${quiz.title}`}
-              onClick={() => void archive(quiz)}
-            >
-              Archive
-            </button>
-          ) : (
-            "—"
-          ),
-        ],
-      }))}
-    />
+      <ConfirmDialog confirmer={confirmer} />
+      <RequestError error={action.error} />
+      <ReportTable
+        caption="My quizzes"
+        noun="quiz"
+        tableClass="cl-rows cl-member-rows"
+        columnClasses={PRESENT_COLUMNS}
+        headers={["Status", "Quiz", "Approval", "Owner", "Qs", "Edited", ""]}
+        emptyTitle="No quizzes yet"
+        emptyText={
+          canSubmit
+            ? "Create a quiz with + New quiz, or ask a classmate to share one with you."
+            : "Quizzes you own or that are shared with you in this class appear here."
+        }
+        pagination={resource.data.pagination}
+        onPageChange={setPage}
+        controls={
+          <SortSelect
+            label="Sort my quizzes"
+            value={sortKey}
+            choices={MY_QUIZ_SORTS}
+            onChange={(key) => {
+              setSortKey(key);
+              setPage(1);
+            }}
+          />
+        }
+        rows={resource.data.items.map((quiz) => {
+          const status = presentStatus(quiz);
+          const owner = quiz.my_access === "OWNER";
+          const archived = quiz.status === "ARCHIVED";
+          const hostable =
+            status.key === "approved" &&
+            !classInfo.archived &&
+            showsHostControl(quiz, account?.account_id) &&
+            hostingState(quiz, classInfo.id).canHost;
+          const canWithdraw =
+            quiz.approval_status === "PENDING" && quiz.approval_sent_by_me;
+
+          return {
+            key: quiz.quiz_id,
+            text: `${quiz.title} ${quiz.author_name}`,
+            leadClass: `cl-status is-${status.key}`,
+            cells: [
+              status.label,
+              <span className="cl-quiz-cell">
+                <Link
+                  className="cl-quiz-name"
+                  to={`/app/quizzes/${quiz.quiz_id}`}
+                  state={{ classId: classInfo.id }}
+                >
+                  {quiz.title}
+                </Link>
+                <small className="cl-meta">
+                  {quiz.question_count}{" "}
+                  {quiz.question_count === 1 ? "question" : "questions"} · edited{" "}
+                  {formatDate(quiz.updated_at)}
+                  {owner ? "" : ` · shared by ${quiz.author_name}`}
+                </small>
+              </span>,
+              <span className="cl-approval-cell">
+                <small className={`cl-approval-state is-${status.key}`}>
+                  {approvalText(quiz)}
+                </small>
+                {canSubmit && !archived && (
+                  <button
+                    type="button"
+                    className="cl-send"
+                    disabled={action.busy || !canSubmitForApproval(quiz)}
+                    title={sendTitle(quiz)}
+                    onClick={() => void submitForApproval(quiz)}
+                  >
+                    {quiz.approval_status === "REJECTED" ||
+                    quiz.approval_status === "WITHDRAWN"
+                      ? "Send again"
+                      : "Send for approval"}
+                  </button>
+                )}
+              </span>,
+              owner ? (
+                <span className="cl-tag is-me">Me</span>
+              ) : (
+                <span className="cl-tag">Shared · {quiz.author_name}</span>
+              ),
+              <span className="cl-dim">{formatScore(quiz.question_count)}</span>,
+              <span className="cl-dim">{formatDate(quiz.updated_at)}</span>,
+              <RowMenu label={`Actions for ${quiz.title}`}>
+                {quiz.my_access && !archived && (
+                  <Link
+                    role="menuitem"
+                    to={`/app/quizzes/${quiz.quiz_id}/edit`}
+                    state={{ classId: classInfo.id }}
+                  >
+                    ✎ Edit
+                  </Link>
+                )}
+                <Link
+                  role="menuitem"
+                  to={`/app/quizzes/${quiz.quiz_id}`}
+                  state={{ classId: classInfo.id }}
+                >
+                  ◉ Open
+                </Link>
+                {hostable && (
+                  <HostQuizButton
+                    quiz={quiz}
+                    classId={classInfo.id}
+                    action={action}
+                    label="▶ Host live"
+                  />
+                )}
+                {/* The Approval column is hidden on phones. */}
+                {canSubmit && !archived && canSubmitForApproval(quiz) && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="cl-phone-only"
+                    disabled={action.busy}
+                    onClick={() => void submitForApproval(quiz)}
+                  >
+                    ⇪ Send for approval
+                  </button>
+                )}
+                {canWithdraw && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={action.busy}
+                    onClick={() => void withdraw(quiz)}
+                  >
+                    ↩ Withdraw request
+                  </button>
+                )}
+                {owner && !archived && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="is-danger"
+                    disabled={action.busy}
+                    onClick={() => void archive(quiz)}
+                  >
+                    Archive
+                  </button>
+                )}
+              </RowMenu>,
+            ],
+          };
+        })}
+      />
     </>
   );
 }
@@ -794,10 +906,7 @@ function ClassHistory({ classInfo, studentCount, view, onViewChange }) {
   );
 }
 
-const USER_SECTIONS = ["My quizzes", "Present", "Participate"];
-
 function ClassWorkspace({ classInfo, onChange }) {
-  const account = useAccount();
   const [searchParams] = useSearchParams();
   const showAdminLayout = classInfo.canManage === true;
   const api = useApi();
@@ -826,9 +935,7 @@ function ClassWorkspace({ classInfo, onChange }) {
 
   const [section, setSection] = useState(() => {
     if (startsInUserView) {
-      return USER_SECTIONS.includes(requestedSection)
-        ? requestedSection
-        : "My quizzes";
+      return resolveUserSection(requestedSection);
     }
     return adminStart.section;
   });
@@ -1128,15 +1235,6 @@ function ClassWorkspace({ classInfo, onChange }) {
             )}
 
             {classInfo.membershipStatus === "ACTIVE" && (
-              <Link
-                className="cl-button cl-secondary"
-                to={`/app/classes/${classInfo.id}/students/${account.account_id}/report`}
-              >
-                My class report
-              </Link>
-            )}
-
-            {classInfo.membershipStatus === "ACTIVE" && (
               <button
                 type="button"
                 className="cl-secondary"
@@ -1161,13 +1259,11 @@ function ClassWorkspace({ classInfo, onChange }) {
           classInfo={classInfo}
           onChange={dashboard.reload}
         />
-      ) : activeSection === "My quizzes" ? (
-        <MyQuizzesTable
+      ) : activeSection === "Present" ? (
+        <PresentTable
           classInfo={classInfo}
           onApprovalChange={dashboard.reload}
         />
-      ) : activeSection === "Present" ? (
-        <PresentTable classInfo={classInfo} />
       ) : activeSection === "Presentations" ? (
         <ClassHistory
           classInfo={classInfo}

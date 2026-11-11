@@ -987,10 +987,3 @@
   background: var(--ink);
   color: var(--paper);
 }
-
-/* Archive in the My quizzes row (moved from the old dashboard menu). */
-.qp button.cl-danger-text {
-  padding: 4px 10px;
-  font-size: 14px;
-  color: #9b1c1c;
-}
