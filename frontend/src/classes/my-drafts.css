@@ -11,7 +11,42 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 20px 24px 0;
+  padding: 14px 24px;
+}
+
+.qp .dr-section.is-open .dr-head {
+  padding-bottom: 0;
+}
+
+.qp .dr-head-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+/* Square arrow button, same border and shadow as the other buttons. */
+.qp .dr-toggle {
+  display: grid;
+  place-items: center;
+  height: auto;
+  min-height: 44px;
+  aspect-ratio: 1;
+  padding: 0;
+}
+
+.qp .dr-toggle svg {
+  display: block;
+  transition: transform 150ms ease;
+}
+
+.qp .dr-section.is-open .dr-toggle svg {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp .dr-toggle svg {
+    transition: none;
+  }
 }
 
 .qp .dr-head h2 {
