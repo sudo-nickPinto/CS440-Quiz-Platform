@@ -12,7 +12,13 @@ from app.models.session import (
     Result,
     SessionParticipant,
 )
-from tests.test_class_quizzes_api import act_as, classes, create  # noqa: F401
+from tests.class_quiz_helpers import publish_quiz
+from tests.test_class_quizzes_api import (  # noqa: F401
+    act_as,
+    as_admin,
+    classes,
+    create,
+)
 
 BASE_TIME = datetime(2026, 11, 1, 12, tzinfo=UTC).replace(tzinfo=None)
 
@@ -239,6 +245,8 @@ def test_dashboards_never_mix_sessions_or_results_across_classes(classes) -> Non
         "students",
         "grades/export.csv",
         "quizzes",
+        "dashboard/submissions",
+        "dashboard/approved-quizzes",
     ],
 )
 @pytest.mark.parametrize("name", ["outsider", "invited", "left", "removed"])
@@ -261,3 +269,186 @@ def test_members_cannot_read_roster_wide_grades(classes, path) -> None:
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "not_class_organizer"
+
+
+# Approval queue on the dashboard (Task 4 submissions, Task 6 views)
+
+
+def submit(client, class_id: int, quiz: dict) -> dict:
+    publish_quiz(client, quiz["quiz_id"])
+    response = client.post(
+        f"/classes/{class_id}/quiz-submissions",
+        json={"quiz_version_id": quiz["version"]["quiz_version_id"]},
+    )
+    assert response.status_code == 201, response.json()
+    return response.json()
+
+
+def decide(client, class_id: int, submission: dict, status: str) -> None:
+    response = client.patch(
+        f"/classes/{class_id}/quiz-submissions/{submission['submission_id']}",
+        json={"status": status},
+    )
+    assert response.status_code == 200, response.json()
+
+
+@pytest.fixture
+def queue(classes):
+    """Amy and Zoe each submit a quiz to the main class; Amy also submits
+    one to the Other class."""
+    client, identities, data = classes
+    identities = {**identities, "prof": as_admin(identities["prof"])}
+    main = data["main"]
+    act_as(client, identities["amy"])
+    amys = create(client, main, "Amy's quiz")
+    amy_sub = submit(client, main, amys)
+    elsewhere = create(client, data["other"], "Other class quiz")
+    submit(client, data["other"], elsewhere)
+    act_as(client, identities["zoe"])
+    zoes = create(client, main, "Zoe's quiz")
+    zoe_sub = submit(client, main, zoes)
+    return client, identities, data, {
+        "amy": (amys, amy_sub),
+        "zoe": (zoes, zoe_sub),
+    }
+
+
+def test_organizer_sees_pending_submissions_with_submitter_and_version(
+    queue,
+) -> None:
+    client, identities, data, _ = queue
+    act_as(client, identities["prof"])
+
+    body = client.get(
+        f"/classes/{data['main']}/dashboard/submissions"
+        "?status=PENDING&sort=title&order=asc"
+    ).json()
+
+    assert [
+        (item["quiz_title"], item["submitter_name"], item["version_number"])
+        for item in body["items"]
+    ] == [("Amy's quiz", "Amy", 1), ("Zoe's quiz", "Zoe", 1)]
+    assert all(item["question_count"] == 2 for item in body["items"])
+    assert all(item["is_current_version"] for item in body["items"])
+    assert body["pagination"]["total_items"] == 2
+
+
+def test_members_see_only_their_own_submission_status(queue) -> None:
+    client, identities, data, quizzes = queue
+    act_as(client, identities["prof"])
+    decide(client, data["main"], quizzes["zoe"][1], "REJECTED")
+    act_as(client, identities["zoe"])
+
+    body = client.get(f"/classes/{data['main']}/dashboard/submissions").json()
+    mine = client.get(f"/classes/{data['main']}/quizzes").json()["items"]
+
+    assert [(i["quiz_title"], i["status"]) for i in body["items"]] == [
+        ("Zoe's quiz", "REJECTED")
+    ]
+    assert body["items"][0]["decided_by_name"] == "Prof"
+    assert [(i["title"], i["approval_status"]) for i in mine] == [
+        ("Zoe's quiz", "REJECTED")
+    ]
+
+
+def test_my_quizzes_show_approval_state_of_newest_published_version(
+    queue,
+) -> None:
+    client, identities, data, quizzes = queue
+    act_as(client, identities["amy"])
+    draft = create(client, data["main"], "Amy's draft")
+
+    items = {
+        item["title"]: item
+        for item in client.get(f"/classes/{data['main']}/quizzes").json()["items"]
+    }
+
+    amys, amy_sub = quizzes["amy"]
+    assert items["Amy's quiz"]["approval_status"] == "PENDING"
+    assert items["Amy's quiz"]["approval_submission_id"] == amy_sub["submission_id"]
+    assert (
+        items["Amy's quiz"]["published_version_id"]
+        == amys["version"]["quiz_version_id"]
+    )
+    assert items[draft["version"]["title"]]["published_version_id"] is None
+    assert items[draft["version"]["title"]]["approval_status"] is None
+
+
+def test_approved_quizzes_are_listed_for_members_and_say_who_can_host(
+    queue,
+) -> None:
+    client, identities, data, quizzes = queue
+    act_as(client, identities["prof"])
+    decide(client, data["main"], quizzes["amy"][1], "APPROVED")
+    path = f"/classes/{data['main']}/dashboard/approved-quizzes"
+
+    def hostable(name):
+        act_as(client, identities[name])
+        body = client.get(path).json()
+        return [(item["title"], item["can_host"]) for item in body["items"]]
+
+    assert hostable("amy") == [("Amy's quiz", True)]
+    assert hostable("zoe") == [("Amy's quiz", False)]
+    assert hostable("prof") == [("Amy's quiz", True)]
+
+    act_as(client, identities["zoe"])
+    dashboard = client.get(f"/classes/{data['main']}/dashboard").json()
+    assert dashboard["approved_quiz_count"] == 1
+    assert dashboard["pending_submission_count"] == 1  # Zoe's own
+
+    act_as(client, identities["prof"])
+    dashboard = client.get(f"/classes/{data['main']}/dashboard").json()
+    assert dashboard["pending_submission_count"] == 1  # Zoe's, still pending
+
+
+def test_approval_queue_never_shows_another_class(queue) -> None:
+    client, identities, data, _ = queue
+    act_as(client, identities["amy"])
+
+    main = client.get(f"/classes/{data['main']}/dashboard/submissions").json()
+    other = client.get(f"/classes/{data['other']}/dashboard/submissions").json()
+
+    assert [item["quiz_title"] for item in main["items"]] == ["Amy's quiz"]
+    assert [item["quiz_title"] for item in other["items"]] == ["Other class quiz"]
+
+    act_as(client, as_admin(identities["outsider"]))
+    other = client.get(f"/classes/{data['other']}/dashboard/submissions").json()
+    assert [item["submitter_name"] for item in other["items"]] == ["Amy"]
+
+
+def test_submission_pages_do_not_overlap(queue) -> None:
+    client, identities, data, _ = queue
+    act_as(client, identities["prof"])
+    path = f"/classes/{data['main']}/dashboard/submissions?page_size=1&sort=submitter"
+
+    first = client.get(path + "&page=1").json()
+    second = client.get(path + "&page=2").json()
+
+    assert first["pagination"]["total_pages"] == 2
+    names = [first["items"][0]["submitter_name"], second["items"][0]["submitter_name"]]
+    assert names == ["Zoe", "Amy"]
+
+
+@pytest.mark.parametrize(
+    "query", ["sort=nope", "order=up", "status=MAYBE", "page=0", "page_size=101"]
+)
+def test_invalid_submission_params_are_rejected(classes, query) -> None:
+    client, _, data = classes
+
+    response = client.get(f"/classes/{data['main']}/dashboard/submissions?{query}")
+
+    assert response.status_code == 422
+
+
+def test_archived_class_lists_approved_quizzes_without_hosting(queue) -> None:
+    client, identities, data, quizzes = queue
+    act_as(client, identities["prof"])
+    decide(client, data["main"], quizzes["amy"][1], "APPROVED")
+    assert client.post(f"/classes/{data['main']}/archive").status_code == 200
+    act_as(client, identities["amy"])
+
+    body = client.get(f"/classes/{data['main']}/dashboard/approved-quizzes").json()
+
+    assert [(item["title"], item["can_host"]) for item in body["items"]] == [
+        ("Amy's quiz", False)
+    ]

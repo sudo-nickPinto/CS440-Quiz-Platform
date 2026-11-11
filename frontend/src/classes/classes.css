@@ -888,3 +888,38 @@
 .qp .cl-sort {
   flex: 0 0 auto;
 }
+
+/* V3 Task 6: approval queue */
+.qp .cl-badge {
+  display: inline-block;
+  min-width: 1.6em;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border: var(--b);
+  background: var(--orange);
+  color: var(--ink);
+  font-size: 0.6em;
+  line-height: 1.2;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.qp .cl-approval {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.qp .cl-approval button {
+  padding: 4px 10px;
+  font-size: 14px;
+}
+
+.qp .cl-subheading {
+  margin: 28px 0 0;
+  padding: 12px 14px 0;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 18px;
+  text-transform: uppercase;
+}

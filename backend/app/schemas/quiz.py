@@ -15,6 +15,7 @@ from app.models.quiz import (
     QuizStatus,
     QuizVisibility,
 )
+from app.models.quiz_submission import SubmissionStatus
 from app.schemas.pagination import PageInfo
 
 
@@ -204,6 +205,12 @@ class ClassQuizListItem(QuizListItem):
     # How the caller can work on the quiz; null when an organizer sees a
     # quiz they neither own nor collaborate on.
     my_access: QuizAccess | None
+    # The newest published version, and where it stands in this class's
+    # approval queue (null if it was never submitted). Only an APPROVED
+    # newest version can be hosted.
+    published_version_id: int | None = None
+    approval_status: SubmissionStatus | None = None
+    approval_submission_id: int | None = None
 
 
 class ClassQuizListPage(BaseModel):

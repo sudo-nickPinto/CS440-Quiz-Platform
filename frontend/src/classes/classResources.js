@@ -1,6 +1,10 @@
 import { useAccount } from "../authenticated-demo/account";
 import { useResource } from "../authenticated-demo/rest";
-import { myQuizzesPath } from "./classHelpers";
+import {
+  approvedQuizzesPath,
+  myQuizzesPath,
+  submissionsPath,
+} from "./classHelpers";
 
 function normalizeClass(record, account) {
   if (
@@ -158,4 +162,33 @@ export function useMyClassQuizzes(classId, page = 1, sortKey = "recent") {
 
     return data;
   });
+}
+
+function usePagedReport(path, what) {
+  const result = useResource(path);
+
+  return resourceState(result, (data) => {
+    if (!data || !Array.isArray(data.items)) {
+      throw new Error(`${what} could not be read.`);
+    }
+
+    return data;
+  });
+}
+
+// Organizers get every submission in the class; members only their own.
+export function useClassSubmissions(classId, page = 1, sortKey = "newest", status = "") {
+  return usePagedReport(
+    submissionsPath(classId, page, sortKey, status, REPORT_PAGE_SIZE),
+    "Quiz submissions",
+  );
+}
+
+// Approved quizzes any active member can see; can_host marks the ones the
+// caller may start.
+export function useApprovedQuizzes(classId, page = 1, sortKey = "recent") {
+  return usePagedReport(
+    approvedQuizzesPath(classId, page, sortKey),
+    "Approved quizzes",
+  );
 }

@@ -3,7 +3,6 @@ import { useState } from "react";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router";
 
 import { useAccount } from "./account";
-import HostQuizButton from "./HostQuizButton";
 import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 import ParticipantHistory from "./ParticipantHistory";
@@ -307,19 +306,16 @@ export default function PreviewDashboard() {
                               <span aria-hidden="true">✎</span> Edit
                             </Link>
 
-                            {quiz.status === "PUBLISHED" &&
-                              quiz.author_id === account.account_id && (
-                                <div
-                                  className="ui-host-item"
-                                  role="group"
-                                  aria-label="Host live session"
-                                >
-                                  <HostQuizButton
-                                    quiz={quiz}
-                                    action={action}
-                                  />
-                                </div>
-                              )}
+                            {/* Hosting needs class approval (V3), so it
+                                happens from the class's Present tab. */}
+                            {quiz.status === "PUBLISHED" && quiz.class_id && (
+                              <Link
+                                role="menuitem"
+                                to={`/app/classes/${quiz.class_id}?view=user&section=${encodeURIComponent("My quizzes")}`}
+                              >
+                                <span aria-hidden="true">▶</span> Host from its class
+                              </Link>
+                            )}
 
                             {quiz.author_id === account.account_id && (
                               <button

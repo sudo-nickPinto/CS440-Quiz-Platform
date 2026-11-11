@@ -37,6 +37,7 @@ from app.schemas.class_dashboard import (
 )
 from app.schemas.quiz import ClassQuizSort
 from app.services.quizzes import list_class_quizzes as list_my_class_quizzes
+from app.services.class_approvals import approval_counts
 from app.services.class_authorization import (
     ClassAccess,
     require_class_member,
@@ -445,6 +446,7 @@ def get_class_dashboard(
         mine=True,
     )
 
+    pending_count, approved_count = approval_counts(db, account, access, class_id)
     class_average = attendance_rate = None
     if organizer:
         averages = [s.average_score for s in students if s.average_score is not None]
@@ -472,6 +474,8 @@ def get_class_dashboard(
         ),
         my_quizzes=my_quizzes.items,
         my_quiz_count=my_quizzes.pagination.total_items,
+        pending_submission_count=pending_count,
+        approved_quiz_count=approved_count,
     )
 
 

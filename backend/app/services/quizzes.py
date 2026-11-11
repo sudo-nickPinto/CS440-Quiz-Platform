@@ -21,6 +21,7 @@ from app.models.quiz import (
     QuizVersion,
     QuizVisibility,
 )
+from app.models.quiz_submission import QuizSubmission
 from app.schemas.pagination import PageInfo, SortOrder
 from app.schemas.quiz import (
     ClassQuizListItem,
@@ -410,6 +411,25 @@ def get_quiz(
     return _to_response(db, account, _load_readable_quiz(db, account, quiz_id))
 
 
+def _latest_submissions(
+    db: Session, class_id: int, version_ids: list[int]
+) -> dict[int, QuizSubmission]:
+    """The newest submission of each version to this class."""
+    if not version_ids:
+        return {}
+    newest: dict[int, QuizSubmission] = {}
+    for submission in db.scalars(
+        select(QuizSubmission)
+        .where(
+            QuizSubmission.class_id == class_id,
+            QuizSubmission.quiz_version_id.in_(version_ids),
+        )
+        .order_by(QuizSubmission.submitted_at, QuizSubmission.submission_id)
+    ):
+        newest[submission.quiz_version_id] = submission
+    return newest
+
+
 def list_class_quizzes(
     db: Session,
     account: CurrentAccount,
@@ -450,10 +470,24 @@ def list_class_quizzes(
         .options(selectinload(Quiz.versions).selectinload(QuizVersion.questions))
     ).all()
     editing = set(db.scalars(collaborating))
+    newest_published = {
+        quiz.quiz_id: max(published, key=lambda v: v.version_number)
+        for quiz, _ in rows
+        if (published := [v for v in quiz.versions if v.published_at is not None])
+    }
+    approvals = _latest_submissions(
+        db,
+        class_id,
+        [version.quiz_version_id for version in newest_published.values()],
+    )
 
     items = []
     for quiz, author_name in rows:
         version = _latest_editor_version(quiz)
+        published = newest_published.get(quiz.quiz_id)
+        submission = (
+            approvals.get(published.quiz_version_id) if published else None
+        )
         if quiz.author_id == account.account_id:
             access = QuizAccess.OWNER
         elif quiz.quiz_id in editing:
@@ -467,6 +501,13 @@ def list_class_quizzes(
                 version_number=version.version_number,
                 updated_at=quiz.updated_at,
                 my_access=access,
+                published_version_id=(
+                    published.quiz_version_id if published else None
+                ),
+                approval_status=submission.status if submission else None,
+                approval_submission_id=(
+                    submission.submission_id if submission else None
+                ),
             )
         )
 

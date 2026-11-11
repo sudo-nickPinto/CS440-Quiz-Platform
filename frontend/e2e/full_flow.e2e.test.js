@@ -390,7 +390,32 @@ describe('full flow: one class from sign-in to grade export', () => {
       status: 404,
       code: 'submission_not_found',
     })
+    // The dashboard's queue (Task 6) names the submitter and version for
+    // organizers, and shows ben his own pending submission.
+    const queue = await rest('prof', 'GET', `${base}/dashboard/submissions?status=PENDING`)
+    expect(queue.items).toEqual([
+      expect.objectContaining({
+        submission_id: submission.submission_id,
+        quiz_title: '=2+2 warm-up',
+        submitter_name: expect.any(String),
+        submitted_by_id: me.ben.account_id,
+        is_current_version: true,
+      }),
+    ])
+    const bens = await rest('ben', 'GET', `${base}/dashboard/submissions`)
+    expect(bens.items.map((item) => [item.submission_id, item.status])).toEqual([
+      [submission.submission_id, 'PENDING'],
+    ])
+    expect((await rest('prof', 'GET', `${base}/dashboard`)).pending_submission_count).toBe(1)
+
     await rest('prof', 'PATCH', `${base}/quiz-submissions/${submission.submission_id}`, { status: 'APPROVED' })
+    const hostable = async (person) =>
+      (await rest(person, 'GET', `${base}/dashboard/approved-quizzes?sort=title&order=asc`)).items
+        .filter((item) => item.quiz_id === quizB.quiz_id)
+        .map((item) => item.can_host)
+    expect(await hostable('ana')).toEqual([true])
+    expect(await hostable('ben')).toEqual([false])
+    expect(await hostable('prof')).toEqual([true])
     expect(await refused('ben', 'POST', `${quizPath}/sessions`)).toMatchObject({
       status: 403,
       code: 'session_host_denied',
