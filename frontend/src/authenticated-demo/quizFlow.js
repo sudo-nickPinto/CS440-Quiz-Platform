@@ -1,5 +1,10 @@
+import { useEffect, useState } from "react";
+
 import { sendForApproval, submissionsPath } from "../classes/classHelpers";
-import { useResource } from "./rest";
+import { useApi } from "./rest";
+
+// The submissions list allows at most 100 per page.
+const SUBMISSION_PAGE_SIZE = 100;
 
 // The three steps every class quiz goes through before it can be hosted.
 export const FLOW_STEPS = ["Draft", "Approval", "Ready to host"];
@@ -114,24 +119,71 @@ export async function sendQuizForApproval(api, classId, quizId) {
   }
 }
 
+// The newest pending request for one quiz. The class's pending list is paged
+// (newest first), so keep reading pages until the quiz turns up or the list
+// ends; stopping at the first page would miss an older request in a busy
+// class and offer to send the quiz again.
+export async function findPendingSubmission(api, classId, quizId, options = {}) {
+  let page = 1;
+  let totalPages;
+  do {
+    const data = await api(
+      submissionsPath(classId, page, "newest", "PENDING", SUBMISSION_PAGE_SIZE),
+      options,
+    );
+    if (!data || !Array.isArray(data.items)) {
+      throw new Error("The approval status could not be read.");
+    }
+    // Newest first across pages, so the first match is the newest request.
+    const found = pendingSubmissionFor(data.items, quizId);
+    if (found) return found;
+    totalPages = data.pagination?.total_pages ?? 1;
+    page += 1;
+  } while (page <= totalPages);
+  return null;
+}
+
 // Where a quiz stands (Draft → Approval → Ready to host) for the people who
 // can move it along. Reads the class's pending submissions, because the quiz
 // itself doesn't say whether a request is waiting or who sent it.
 export function useQuizFlow(quiz, accountId) {
+  const api = useApi();
   const visible = showsQuizFlow(quiz);
-  const submissions = useResource(
-    visible ? submissionsPath(quiz.class_id, 1, "newest", "PENDING", 100) : null,
-  );
-  const loading = visible && submissions.loading;
-  const pending = loading
-    ? null
-    : pendingSubmissionFor(submissions.data?.items, quiz?.quiz_id);
+  const classId = quiz?.class_id;
+  const quizId = quiz?.quiz_id;
+  const [revision, setRevision] = useState(0);
+  const key = visible ? `${classId}:${quizId}:${revision}` : null;
+  const [result, setResult] = useState({ key: null, pending: null, error: null });
+
+  useEffect(() => {
+    if (!key) return undefined;
+    const controller = new AbortController();
+    findPendingSubmission(api, classId, quizId, { signal: controller.signal })
+      .then((pending) => {
+        if (!controller.signal.aborted) setResult({ key, pending, error: null });
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setResult({ key, pending: null, error });
+      });
+    return () => controller.abort();
+  }, [api, key, classId, quizId]);
+
+  const current = result.key === key;
+  const loading = visible && !current;
+  const error = visible && current ? result.error : null;
+  const pending = visible && current ? result.pending : null;
 
   return {
     visible,
     loading,
+    error,
     pending,
-    state: visible && !loading ? quizFlowState({ quiz, accountId, pending }) : null,
-    reload: submissions.reload,
+    // Without the pending list we can't tell Draft from Waiting, so show
+    // nothing rather than guess.
+    state:
+      visible && current && !error
+        ? quizFlowState({ quiz, accountId, pending })
+        : null,
+    reload: () => setRevision((value) => value + 1),
   };
 }

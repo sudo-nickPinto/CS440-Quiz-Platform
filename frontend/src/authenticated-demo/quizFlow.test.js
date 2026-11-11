@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  findPendingSubmission,
   pendingSubmissionFor,
   quizFlowState,
   sendQuizForApproval,
@@ -193,5 +194,80 @@ describe("sendQuizForApproval", () => {
     });
 
     await expect(sendQuizForApproval(api, 4, 10)).rejects.toThrow("Nope");
+  });
+});
+
+describe("findPendingSubmission", () => {
+  // A class with `total` pending requests, newest first, 100 per page.
+  // `target` is the position (0 = newest) of quiz 10's request, if any.
+  function pagedApi(total, target) {
+    const items = Array.from({ length: total }, (_, index) => ({
+      submission_id: 1000 + index,
+      quiz_id: index === target ? 10 : 500 + index,
+      status: "PENDING",
+      submitted_by_id: 7,
+      submitted_at: `2026-11-11T12:00:${String(59 - (index % 60)).padStart(2, "0")}Z`,
+    }));
+    const totalPages = Math.ceil(total / 100);
+    return vi.fn(async (path) => {
+      const page = Number(new URL(path, "http://test").searchParams.get("page"));
+      return {
+        items: items.slice((page - 1) * 100, page * 100),
+        pagination: { page, page_size: 100, total_items: total, total_pages: totalPages },
+      };
+    });
+  }
+
+  it("finds a request beyond the first 100 pending submissions", async () => {
+    const api = pagedApi(250, 180);
+
+    const found = await findPendingSubmission(api, 4, 10);
+
+    expect(found.submission_id).toBe(1180);
+    expect(api).toHaveBeenCalledTimes(2);
+    expect(api.mock.calls[0][0]).toContain("status=PENDING");
+    expect(api.mock.calls[0][0]).toContain("page_size=100");
+  });
+
+  it("stops at the first page that has the quiz", async () => {
+    const api = pagedApi(250, 3);
+
+    await findPendingSubmission(api, 4, 10);
+
+    expect(api).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads every page before deciding there's no request", async () => {
+    const api = pagedApi(250, null);
+
+    await expect(findPendingSubmission(api, 4, 10)).resolves.toBeNull();
+    expect(api).toHaveBeenCalledTimes(3);
+  });
+
+  it("handles an empty list in one request", async () => {
+    const api = vi.fn(async () => ({
+      items: [],
+      pagination: { page: 1, page_size: 100, total_items: 0, total_pages: 0 },
+    }));
+
+    await expect(findPendingSubmission(api, 4, 10)).resolves.toBeNull();
+    expect(api).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails loudly on an unreadable response instead of guessing", async () => {
+    const api = vi.fn(async () => ({ nope: true }));
+
+    await expect(findPendingSubmission(api, 4, 10)).rejects.toThrow(
+      "approval status could not be read",
+    );
+  });
+
+  it("passes the abort signal through", async () => {
+    const api = pagedApi(1, 0);
+    const controller = new AbortController();
+
+    await findPendingSubmission(api, 4, 10, { signal: controller.signal });
+
+    expect(api.mock.calls[0][1]).toEqual({ signal: controller.signal });
   });
 });

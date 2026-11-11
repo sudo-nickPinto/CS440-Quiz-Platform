@@ -42,6 +42,14 @@ export function QuizFlowPanel({ quiz, flow, onChange }) {
 
   if (!flow.visible) return null;
 
+  if (flow.error) {
+    return (
+      <section className="qf" aria-label="Approval status">
+        <RequestError error={flow.error} retry={flow.reload} />
+      </section>
+    );
+  }
+
   if (flow.loading || !flow.state) {
     return (
       <section className="qf" aria-label="Approval status">
