@@ -857,3 +857,35 @@
     display: none;
   }
 }
+
+/* Toolbar boxes (search, sort, stats, count) share one height and line up
+   on the same top and bottom edge. */
+.qp .cl-page .cl-toolbar {
+  align-items: center;
+}
+
+.qp .cl-page .cl-toolbar > label {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+
+.qp .cl-page .cl-toolbar > label > input,
+.qp .cl-page .cl-toolbar > label > select {
+  box-sizing: border-box;
+  height: 46px;
+  min-height: 46px;
+  margin: 0;
+}
+
+.qp .cl-page .cl-toolbar > label.cl-search > input {
+  width: 100%;
+}
+
+.qp .cl-page .cl-toolbar > .cl-mini-stats,
+.qp .cl-page .cl-toolbar > .cl-count {
+  box-sizing: border-box;
+  height: 46px;
+  min-height: 46px;
+  margin: 0;
+}
