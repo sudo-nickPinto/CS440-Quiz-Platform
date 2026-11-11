@@ -5,8 +5,8 @@ export const HOSTING_LABELS = {
   class_archived: "Class archived",
   not_host: "Owner or organizer only",
   quiz_archived: "Quiz archived",
-  not_published: "Publish first",
-  unpublished_changes: "Publish changes first",
+  not_published: "Needs approval",
+  unpublished_changes: "Edited — needs approval again",
   not_submitted: "Needs approval",
   pending_approval: "Waiting for approval",
   rejected: "Approval rejected",
@@ -39,7 +39,7 @@ export function hostingState(quiz, classId = quiz.class_id) {
 
 // Whether a page should show the Host control (a button, or the reason it
 // can't be hosted yet) for this quiz. It shows for the quiz owner and class
-// organizers, including on drafts, so "Publish first" can appear. Archived
+// organizers, including on drafts, so "Needs approval" can appear. Archived
 // quizzes and people who could never host it (collaborators, members) see
 // nothing.
 export function showsHostControl(quiz, accountId) {

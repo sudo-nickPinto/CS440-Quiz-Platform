@@ -21,7 +21,7 @@ function useRaised() {
   return raised;
 }
 
-export function HostFinal({ final, title, totalQuestions, sessionId }) {
+export function HostFinal({ final, title, totalQuestions, sessionId, backTo }) {
   const raised = useRaised();
   const standings = [...(final.standings ?? [])].sort(
     (a, b) => a.final_rank - b.final_rank,
@@ -96,8 +96,8 @@ export function HostFinal({ final, title, totalQuestions, sessionId }) {
       )}
 
       <div className="lv-actions">
-        <Link className="qb-btn qb-btn-paper" to="/app/dashboard/present">
-          Back to dashboard
+        <Link className="qb-btn qb-btn-paper" to={backTo || "/app/classes"}>
+          Back to class
         </Link>
         <Link className="qb-btn" to={`/app/results/host/${sessionId}`}>
           View full results →
@@ -107,7 +107,7 @@ export function HostFinal({ final, title, totalQuestions, sessionId }) {
   );
 }
 
-export function ParticipantFinal({ final, totalQuestions, sessionId }) {
+export function ParticipantFinal({ final, totalQuestions, sessionId, backTo }) {
   const me = final.me;
 
   return (
@@ -149,8 +149,8 @@ export function ParticipantFinal({ final, totalQuestions, sessionId }) {
         <Link className="qb-btn" to={`/app/results/me/${sessionId}`}>
           See your answers →
         </Link>
-        <Link className="qb-btn qb-btn-paper" to="/app/dashboard/participate">
-          Back to dashboard
+        <Link className="qb-btn qb-btn-paper" to={backTo || "/app/classes"}>
+          Back to class
         </Link>
       </div>
     </section>

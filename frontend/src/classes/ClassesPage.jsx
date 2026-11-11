@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useRemembered } from "../authenticated-demo/remember";
 import { useNavigate } from "react-router";
 
 import { useAction, useApi } from "../authenticated-demo/rest";
@@ -15,9 +16,10 @@ export default function ClassesPage() {
   const [panel, setPanel] = useState(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [sort, setSort] = useState("name");
+  const [sessionCode, setSessionCode] = useState("");
+  const [query, setQuery] = useRemembered("classes:query", "");
+  const [filter, setFilter] = useRemembered("classes:filter", "all");
+  const [sort, setSort] = useRemembered("classes:sort", "name");
 
   const account = useAccount();
   const canCreateClass = account.is_active === true && account.role === "ADMIN";
@@ -86,6 +88,23 @@ export default function ClassesPage() {
     }
   }
 
+  // Join quiz: the six-digit code on the host's screen, straight into the game.
+  async function joinQuiz(event) {
+    event.preventDefault();
+    if (!/^\d{6}$/.test(sessionCode)) return;
+
+    const joined = await action.run(() =>
+      api("/sessions/join", {
+        method: "POST",
+        body: JSON.stringify({ join_code: sessionCode }),
+      }),
+    );
+
+    if (joined) {
+      navigate(`/app/play/${joined.session.session_id}`);
+    }
+  }
+
   async function respondToInvitation(classId, decision) {
     const succeeded = await action.run(async () => {
       await api(`/classes/${classId}/invite/${decision}`, {
@@ -139,6 +158,16 @@ export default function ClassesPage() {
           onClick={() => togglePanel("join")}
         >
           Join class
+        </button>
+
+        <button
+          type="button"
+          className="cl-join-quiz"
+          aria-expanded={panel === "quiz"}
+          aria-controls="quiz-join-panel"
+          onClick={() => togglePanel("quiz")}
+        >
+          Join quiz
         </button>
       </div>
 
@@ -208,6 +237,50 @@ export default function ClassesPage() {
 
           <button type="submit" disabled={action.busy || !code.trim()}>
             {action.busy ? "Joining…" : "Join class →"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPanel(null)}
+            disabled={action.busy}
+          >
+            Close
+          </button>
+        </form>
+      )}
+
+      {panel === "quiz" && (
+        <form
+          id="quiz-join-panel"
+          className="cl-inline-panel"
+          onSubmit={joinQuiz}
+        >
+          <h2>Join a live quiz</h2>
+
+          <label>
+            Session code
+            <input
+              type="text"
+              value={sessionCode}
+              onChange={(event) =>
+                setSessionCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              placeholder="000000"
+              inputMode="numeric"
+              autoComplete="off"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              required
+              autoFocus
+              disabled={action.busy}
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={action.busy || sessionCode.length !== 6}
+          >
+            {action.busy ? "Joining…" : "Join quiz →"}
           </button>
 
           <button

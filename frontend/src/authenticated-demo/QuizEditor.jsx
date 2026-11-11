@@ -30,6 +30,8 @@ import ConfirmDialog from "./ConfirmDialog";
 import { useConfirm } from "./useConfirm";
 import { QuestionMenu, TimePicker } from "./EditorParts";
 import { useQuizCollaboration } from "./useQuizCollaboration";
+import { classPagePath } from "../classes/classPaths";
+import HostQuizButton from "./HostQuizButton";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -273,7 +275,7 @@ export function QuizEditor({
         aggregateStaleRef.current = true;
         setRemoteNotice({
           tone: "info",
-          text: "The quiz was published by its owner.",
+          text: "The owner sent this version for approval.",
           detail: "Reload when you are ready. Your unsaved work has not been replaced.",
           reload: true,
         });
@@ -285,7 +287,7 @@ export function QuizEditor({
     ? `/app/quizzes/${existingQuiz.quiz_id}`
     : validClass
       ? `/app/classes/${classId}`
-      : "/app/dashboard/present";
+      : "/app/classes";
 
   const ids = editor.questions.map((question) => question.id);
   const current = useCurrentQuestion(ids);
@@ -1153,8 +1155,8 @@ export function QuizEditor({
                   </h2>
                   <p>
                     {editing
-                      ? "This saves a draft. Publish it from the quiz page when it is ready to host."
-                      : "It's saved as a draft in this class. A draft can't be hosted until it's published."}
+                      ? "This saves a draft. If the quiz was approved, it needs approval again: send it from the class page."
+                      : "It's saved as a draft in this class. Send it for approval from the class page before hosting."}
                   </p>
                 </div>
 
@@ -1224,7 +1226,6 @@ export function QuizEditor({
 export function QuizViewer() {
   const { quizId } = useParams();
   const account = useAccount();
-  const api = useApi();
   const action = useAction();
   const validId = /^[1-9][0-9]*$/.test(quizId);
 
@@ -1249,7 +1250,9 @@ export function QuizViewer() {
 
   const quiz = resource.data;
   const mine = quiz.author_id === account.account_id;
-  const published = quiz.status === "PUBLISHED";
+  // Members see Draft or Approved; "publish" happens inside Send for
+  // approval on the class page.
+  const approved = quiz.hosting?.can_host === true;
   const questions = [...quiz.version.questions].sort(
     (a, b) => a.question_order - b.question_order,
   );
@@ -1258,35 +1261,16 @@ export function QuizViewer() {
     0,
   );
 
-  async function publishQuiz() {
-    const publishedQuiz = await action.run(() =>
-      api(
-        `/classes/${quiz.class_id}/quizzes/${quiz.quiz_id}/publish`,
-        {
-          method: "POST",
-          body: JSON.stringify({ expected_revision: quiz.revision }),
-        },
-      ),
-    );
-    if (publishedQuiz) resource.reload();
-  }
-
   return (
     <section className="qv" aria-labelledby="quiz-title">
       <div className="qe-bar">
         <Link
           className="qe-back"
-          to={
-            fromClass ? `/app/classes/${fromClass}` : "/app/dashboard/present"
-          }
+          to={classPagePath(fromClass ?? quiz.class_id)}
         >
           <span aria-hidden="true">←</span>
-          <span className="qe-back-word">
-            {fromClass ? "Class" : "Dashboard"}
-          </span>
-          <span className="ui-sr">
-            {fromClass ? "Back to class" : "Back to dashboard"}
-          </span>
+          <span className="qe-back-word">Class</span>
+          <span className="ui-sr">Back to class</span>
         </Link>
 
         <div className="qe-titlebox">
@@ -1300,12 +1284,12 @@ export function QuizViewer() {
         </div>
 
         <div className="qe-state">
-          <span className={"qe-pill" + (published ? " is-saved" : "")}>
-            {published
-              ? "Published"
-              : quiz.status === "DRAFT"
-                ? "Draft"
-                : "Archived"}{" "}
+          <span className={"qe-pill" + (approved ? " is-saved" : "")}>
+            {quiz.status === "ARCHIVED"
+              ? "Archived"
+              : approved
+                ? "Approved"
+                : "Draft"}{" "}
             · v
             {quiz.version.version_number}
           </span>
@@ -1338,29 +1322,32 @@ export function QuizViewer() {
             </Link>
           )}
 
-          {!published && mine && quiz.status === "DRAFT" && (
-            <button
-              type="button"
-              className="qb-btn"
-              disabled={action.busy}
-              onClick={() => void publishQuiz()}
-            >
-              {action.busy ? "Publishing…" : "Publish quiz"}
-            </button>
-          )}
-
-          {/* Hosting needs the class to approve this version first, which
-              happens on the class page (V3 Tasks 4–6). */}
-          {published && quiz.class_id && (
+          {/* Approved and you may host it: start the session right here.
+              Otherwise the approval button lives on the class page. */}
+          {quiz.class_id && quiz.status !== "ARCHIVED" && approved && (
             <div className="qv-host">
-              <Link
-                className="qb-btn"
-                to={`/app/classes/${quiz.class_id}?view=user&section=${encodeURIComponent("My quizzes")}`}
-              >
-                Host from its class →
-              </Link>
+              <HostQuizButton
+                quiz={quiz}
+                classId={quiz.class_id}
+                action={action}
+                label="Host live session →"
+              />
             </div>
           )}
+
+          {quiz.class_id &&
+            quiz.status !== "ARCHIVED" &&
+            !approved &&
+            (mine || quiz.can_edit) && (
+              <div className="qv-host">
+                <Link
+                  className="qb-btn"
+                  to={`/app/classes/${quiz.class_id}?view=user&section=Present`}
+                >
+                  Send for approval →
+                </Link>
+              </div>
+            )}
         </div>
       </div>
 

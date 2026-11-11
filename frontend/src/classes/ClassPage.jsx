@@ -1,8 +1,9 @@
-import QuizCard from "../authenticated-demo/QuizCard";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRemembered } from "../authenticated-demo/remember";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 import HostQuizButton from "../authenticated-demo/HostQuizButton";
+import { hostingState, showsHostControl } from "../authenticated-demo/hosting";
 import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import RequestError from "../authenticated-demo/RequestError";
 import { useConfirm } from "../authenticated-demo/useConfirm";
@@ -10,26 +11,28 @@ import { useFileDownload } from "../authenticated-demo/useFileDownload";
 import { useAction, useApi } from "../authenticated-demo/rest";
 import ClassLiveButton from "./ClassLiveButton";
 import {
-  APPROVED_SORTS,
+  ADMIN_SECTIONS,
   approvalLabel,
-  canSubmitForApproval,
+  approvalButton,
   copyText,
+  HISTORY_VIEWS,
   MY_QUIZ_SORTS,
-  quizAccessLabel,
-  quizStatusLabel,
+  presentStatus,
+  resolveAdminSection,
+  resolveUserSection,
+  sendForApproval,
   SUBMISSION_FILTERS,
   SUBMISSION_SORTS,
+  USER_SECTIONS,
 } from "./classHelpers";
-import { EmptyMessage, ResourceMessage } from "./ClassUI";
-import { ClassMembers, ClassSettings } from "./ClassManagement";
+import { ResourceMessage } from "./ClassUI";
+import { AddMemberDialog, ClassStudents } from "./ClassManagement";
 import {
-  useApprovedQuizzes,
   useClassDashboard,
   useClassQuizzes,
   useClassSubmissions,
   useClassResource,
   useClassSessions,
-  useClassStudents,
   useMyClassQuizzes,
 } from "./classResources";
 
@@ -47,12 +50,6 @@ function formatScore(value) {
   return value === null || value === undefined
     ? "—"
     : Number(value).toLocaleString();
-}
-
-function formatRate(value) {
-  return value === null || value === undefined
-    ? "—"
-    : `${Math.round(value * 100)}%`;
 }
 
 function reportResource(resource) {
@@ -73,8 +70,14 @@ function ReportTable({
   emptyTitle,
   emptyText,
   controls = null,
+  columnClasses = [],
+  tableClass = "",
+  rememberAs = null,
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRemembered(
+    rememberAs && `${rememberAs}:query`,
+    "",
+  );
   const needle = query.trim().toLowerCase();
   const visible = rows.filter((row) => row.text.toLowerCase().includes(needle));
   const totalItems = pagination?.total_items ?? rows.length;
@@ -84,6 +87,12 @@ function ReportTable({
   const firstItem = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastItem = Math.min(firstItem + rows.length - 1, totalItems);
   const nounLabel = totalItems === 1 ? noun : `${noun}s`;
+
+  // A remembered page can be past the end once rows are removed.
+  const pastEnd = Boolean(onPageChange) && page > Math.max(totalPages, 1);
+  useEffect(() => {
+    if (pastEnd) onPageChange(Math.max(totalPages, 1));
+  }, [pastEnd, totalPages, onPageChange]);
 
   return (
     <>
@@ -105,19 +114,25 @@ function ReportTable({
         <span className="cl-count" aria-live="polite">
           {needle
             ? `${visible.length} of ${rows.length} ${nounLabel} on this page`
-            : `${firstItem}–${lastItem} of ${totalItems} ${nounLabel}`}
+            : totalItems === 0
+              ? `0 ${nounLabel}`
+              : `${firstItem}–${lastItem} of ${totalItems} ${nounLabel}`}
         </span>
       </div>
 
       <div className="cl-table-wrap">
-        <table className="cl-table">
+        <table className={`cl-table ${tableClass}`.trim()}>
           <caption className="cl-sr">{caption}</caption>
 
           <thead>
             <tr>
-              {headers.map((heading) => (
-                <th key={heading} scope="col">
-                  {heading}
+              {headers.map((heading, index) => (
+                <th
+                  key={heading || index}
+                  scope="col"
+                  className={columnClasses[index] || undefined}
+                >
+                  {heading || <span className="cl-sr">Actions</span>}
                 </th>
               ))}
             </tr>
@@ -137,7 +152,16 @@ function ReportTable({
               visible.map((row) => (
                 <tr key={row.key}>
                   {row.cells.map((cell, index) => (
-                    <td key={headers[index]}>{cell}</td>
+                    <td
+                      key={headers[index] || index}
+                      className={
+                        [index === 0 ? row.leadClass : "", columnClasses[index]]
+                          .filter(Boolean)
+                          .join(" ") || undefined
+                      }
+                    >
+                      {cell}
+                    </td>
                   ))}
                 </tr>
               ))
@@ -171,129 +195,141 @@ function ReportTable({
   );
 }
 
-// Organizer view: every completed session of the class.
-function PresentationsTable({ classInfo, studentCount }) {
-  const [page, setPage] = useState(1);
+const MONTH = new Intl.DateTimeFormat(undefined, { month: "short" });
+
+// The apricot date block that leads each presentation row.
+function DateBlock({ value }) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return (
+    <span className="cl-date-block">
+      <small>{MONTH.format(date)}</small>
+      <b>{String(date.getDate()).padStart(2, "0")}</b>
+    </span>
+  );
+}
+
+// A navy bar for an average against the best score, with the number.
+function ScoreMeter({ value, max, label }) {
+  const share =
+    value === null || value === undefined || !max ? 0 : Math.min(value / max, 1);
+  return (
+    <span className="cl-meter-cell">
+      <span className="cl-meter" aria-hidden="true">
+        <i style={{ width: `${Math.round(share * 100)}%` }} />
+      </span>
+      <b className="cl-meter-num" aria-label={label}>
+        {formatScore(value == null ? value : Math.round(value))}
+      </b>
+    </span>
+  );
+}
+
+function Fraction({ value, total }) {
+  return (
+    <span className="cl-fraction">
+      <b>{formatScore(value)}</b>
+      {total ? <small> / {formatScore(total)}</small> : null}
+    </span>
+  );
+}
+
+function GoLink({ to, label }) {
+  return (
+    <Link className="cl-go" to={to} aria-label={label} title={label}>
+      →
+    </Link>
+  );
+}
+
+const PRESENTATION_COLUMNS = ["", "", "cl-num", "", "cl-top-col", "cl-go-cell"];
+
+// Organizer view: every completed session of the class, styled after the
+// Presentations list in class-admin-main.html.
+function PresentationsTable({ classInfo, studentCount, controls }) {
+  const memory = `class:${classInfo.id}:presentations`;
+  const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const resource = useClassSessions(classInfo.id, page);
   const pending = reportResource(resource);
   if (pending) return pending;
+
+  const { items, pagination } = resource.data;
+  const firstIndex = (pagination.page - 1) * pagination.page_size;
 
   return (
     <ReportTable
       caption="Presentations"
+      rememberAs={memory}
       noun="presentation"
-      headers={[
-        "Date",
-        "Presentation",
-        "Attendance",
-        "Average",
-        "Top score",
-        "Results",
-      ]}
+      tableClass="cl-rows"
+      columnClasses={PRESENTATION_COLUMNS}
+      headers={["Date", "Presentation", "Attended", "Avg score", "Top score", ""]}
       emptyTitle="No presentations yet"
       emptyText="Host a quiz in this class and it shows up here once it ends."
-      pagination={resource.data.pagination}
+      controls={controls}
+      pagination={pagination}
       onPageChange={setPage}
-      rows={resource.data.items.map((session) => ({
-        key: session.session_id,
-        text: `${session.quiz_title} ${session.host_name}`,
-        cells: [
-          formatDate(session.started_at),
-          session.quiz_title,
-          studentCount
-            ? `${session.participant_count} / ${studentCount}`
-            : session.participant_count,
-          formatScore(session.average_score),
-          formatScore(session.top_score),
-          <Link
-            to={`/app/classes/${classInfo.id}/sessions/${session.session_id}/report`}
-          >
-            Report →
-          </Link>,
-        ],
-      }))}
+      rows={items.map((session, index) => {
+        const report = `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`;
+        return {
+          key: session.session_id,
+          text: `${session.quiz_title} ${session.host_name}`,
+          leadClass: "cl-date",
+          cells: [
+            <DateBlock value={session.started_at} />,
+            <span className="cl-quiz-cell">
+              <Link className="cl-quiz-name" to={report}>
+                {session.quiz_title}
+              </Link>
+              <small>
+                P{pagination.total_items - firstIndex - index} · hosted by{" "}
+                {session.host_name}
+              </small>
+            </span>,
+            <Fraction value={session.participant_count} total={studentCount} />,
+            <ScoreMeter
+              value={session.average_score}
+              max={session.top_score}
+              label={`Average ${formatScore(session.average_score)} points`}
+            />,
+            <span className="cl-top-cell">
+              <b>{formatScore(session.top_score)}</b>
+              <small>top points</small>
+            </span>,
+            <GoLink to={report} label={`Results for ${session.quiz_title}`} />,
+          ],
+        };
+      })}
     />
   );
 }
 
-function StudentsTable({ classInfo }) {
-  const [page, setPage] = useState(1);
-  const resource = useClassStudents(classInfo.id, page);
-  const pending = reportResource(resource);
-  if (pending) return pending;
+const PARTICIPATE_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-wide", "cl-go-cell"];
 
-  return (
-    <ReportTable
-      caption="Students"
-      noun="student"
-      headers={[
-        "Rank",
-        "Student",
-        "Recent scores",
-        "Average",
-        "Attendance",
-        "Total",
-      ]}
-      emptyTitle="No students yet"
-      emptyText="Share the class code or invite members to get started."
-      pagination={resource.data.pagination}
-      onPageChange={setPage}
-      rows={resource.data.items.map((student, index) => ({
-        key: student.account_id,
-        text: `${student.display_name} ${student.email}`,
-        cells: [
-          student.average_score === null
-            ? "—"
-            : (resource.data.pagination.page - 1) *
-                resource.data.pagination.page_size +
-              index +
-              1,
-          <>
-            <Link
-              to={`/app/classes/${classInfo.id}/students/${student.account_id}/report`}
-            >
-              <strong>{student.display_name}</strong>
-            </Link>
-            <br />
-            <small>{student.email}</small>
-          </>,
-          student.recent_scores.length ? (
-            <span
-              className="cl-recent"
-              aria-label={`Most recent first: ${student.recent_scores
-                .map((score) => (score === null ? "absent" : score))
-                .join(", ")}`}
-            >
-              {student.recent_scores.map((score, scoreIndex) => (
-                <span key={scoreIndex} data-absent={score === null}>
-                  {score === null ? "–" : formatScore(score)}
-                </span>
-              ))}
-            </span>
-          ) : (
-            "—"
-          ),
-          formatScore(student.average_score),
-          formatRate(student.attendance_rate),
-          formatScore(student.total_points),
-        ],
-      }))}
-    />
-  );
-}
-
-// Member view: the class's sessions and how the caller did in each.
+// Member view: the sessions the caller was part of, styled after the
+// Participate tab in made-dashboard-main.html.
 function ParticipateTable({ classInfo }) {
-  const [page, setPage] = useState(1);
+  const memory = `class:${classInfo.id}:participate`;
+  const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const resource = useClassSessions(classInfo.id, page);
   const pending = reportResource(resource);
   if (pending) return pending;
 
+  // Members don't get class-wide scores, so the bar compares each score with
+  // the session's top score when it's shown, otherwise with your best here.
+  const best = Math.max(
+    0,
+    ...resource.data.items.map((session) => session.my_score ?? 0),
+  );
+
   return (
     <ReportTable
       caption="Sessions"
+      rememberAs={memory}
       noun="session"
-      headers={["Date", "Session", "Score", "Results"]}
+      tableClass="cl-rows cl-member-rows"
+      columnClasses={PARTICIPATE_COLUMNS}
+      headers={["Rank", "Quiz", "Score", "Host", "Date", ""]}
       emptyTitle="No sessions yet"
       emptyText={
         "When an organizer hosts a quiz here, a Live button appears at " +
@@ -301,48 +337,63 @@ function ParticipateTable({ classInfo }) {
       }
       pagination={resource.data.pagination}
       onPageChange={setPage}
-      rows={resource.data.items.map((session) => ({
-        key: session.session_id,
-        text: session.quiz_title,
-        cells: [
-          formatDate(session.started_at),
-          session.quiz_title,
-          session.my_score === null
-            ? "Absent"
-            : `${formatScore(session.my_score)} pts · #${session.my_rank}`,
-          classInfo.canManage || session.my_score != null ? (
-            <Link
-              to={`/app/classes/${classInfo.id}/sessions/${session.session_id}/report`}
-            >
-              {classInfo.canManage ? "Session report →" : "My results →"}
-            </Link>
-          ) : (
-            "—"
-          ),
-        ],
-      }))}
+      rows={resource.data.items.map((session) => {
+        const played = session.my_score != null;
+        const report =
+          classInfo.canManage || played
+            ? `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`
+            : null;
+        return {
+          key: session.session_id,
+          text: `${session.quiz_title} ${session.host_name}`,
+          leadClass: `cl-rank-lead${played ? "" : " is-none"}`,
+          cells: [
+            played ? (
+              <span className="cl-rank-block">
+                <b>#{session.my_rank}</b>
+                <small>of {formatScore(session.participant_count)}</small>
+              </span>
+            ) : (
+              "Absent"
+            ),
+            <span className="cl-quiz-cell">
+              {report ? (
+                <Link className="cl-quiz-name" to={report}>
+                  {session.quiz_title}
+                </Link>
+              ) : (
+                <strong className="cl-quiz-name">{session.quiz_title}</strong>
+              )}
+              <small className="cl-meta">
+                {played && (
+                  <span className="cl-phone-only">
+                    {formatScore(session.my_score)} pts ·{" "}
+                  </span>
+                )}
+                Hosted by {session.host_name} · {formatDate(session.started_at)}
+              </small>
+            </span>,
+            played ? (
+              <ScoreMeter
+                value={session.my_score}
+                max={session.top_score ?? best}
+                label={`Your score ${formatScore(session.my_score)} points`}
+              />
+            ) : (
+              <span className="cl-dim">—</span>
+            ),
+            session.host_name,
+            <span className="cl-dim">{formatDate(session.started_at)}</span>,
+            report ? (
+              <GoLink
+                to={report}
+                label={`${classInfo.canManage ? "Session report" : "My results"} for ${session.quiz_title}`}
+              />
+            ) : null,
+          ],
+        };
+      })}
     />
-  );
-}
-
-function ClassSummary({ dashboard }) {
-  const data = dashboard.status === "ready" ? dashboard.data : null;
-  const stats = [
-    ["Students", data?.student_count],
-    ["Presentations", data?.completed_session_count],
-    ["Class average", data && formatScore(data.class_average)],
-    ["Attendance", data && formatRate(data.attendance_rate)],
-  ];
-
-  return (
-    <section className="cl-summary" aria-label="Class summary">
-      {stats.map(([label, value]) => (
-        <div className="cl-stat" key={label}>
-          <span>{label}</span>
-          <strong>{value ?? "—"}</strong>
-        </div>
-      ))}
-    </section>
   );
 }
 
@@ -361,148 +412,91 @@ function SortSelect({ label, value, choices, onChange }) {
   );
 }
 
-function Pager({ caption, pagination, onPageChange }) {
-  if (!pagination || pagination.total_pages <= 1) return null;
-  const { page, total_pages: totalPages } = pagination;
+// The ⋯ button and its menu. The menu is fixed to the viewport so the
+// table's scroll box never clips it; it closes on outside click, Escape,
+// scroll, or after picking an item.
+function RowMenu({ label, children }) {
+  const [place, setPlace] = useState(null);
+  const wrap = useRef(null);
 
-  return (
-    <nav className="cl-pagination" aria-label={`${caption} pages`}>
-      <button
-        type="button"
-        disabled={page <= 1}
-        onClick={() => onPageChange(page - 1)}
-      >
-        ← Previous
-      </button>
-      <span>
-        Page {page} of {totalPages}
-      </span>
-      <button
-        type="button"
-        disabled={page >= totalPages}
-        onClick={() => onPageChange(page + 1)}
-      >
-        Next →
-      </button>
-    </nav>
-  );
-}
+  useEffect(() => {
+    if (!place) return undefined;
+    const close = () => setPlace(null);
+    const outside = (event) => {
+      if (!wrap.current?.contains(event.target)) close();
+    };
+    const escape = (event) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [place]);
 
-// Approved quizzes in this class. Every active member sees them; the quiz
-// owner or an organizer can host (Task 5 checks the same on the server).
-function PresentTable({ classInfo }) {
-  const action = useAction();
-  const [page, setPage] = useState(1);
-  const [sortKey, setSortKey] = useState("recent");
-  const [query, setQuery] = useState("");
-  const resource = useApprovedQuizzes(classInfo.id, page, sortKey);
-
-  if (classInfo.archived) {
-    return (
-      <EmptyMessage title="Present">
-        This class is archived, so no new sessions can start in it.
-      </EmptyMessage>
+  function toggle(event) {
+    if (place) {
+      setPlace(null);
+      return;
+    }
+    const box = event.currentTarget.getBoundingClientRect();
+    const right = document.documentElement.clientWidth - box.right;
+    setPlace(
+      window.innerHeight - box.bottom > 260
+        ? { right, top: box.bottom + 8 }
+        : { right, bottom: window.innerHeight - box.top + 8 },
     );
   }
 
-  const pending = reportResource(resource);
-  if (pending) return pending;
-
-  const needle = query.trim().toLowerCase();
-  const quizzes = resource.data.items.filter((quiz) =>
-    `${quiz.title} ${quiz.author_name}`.toLowerCase().includes(needle),
-  );
-  const total = resource.data.pagination.total_items;
-
   return (
-    <>
-      <div className="cl-toolbar">
-        <label className="cl-search">
-          <span className="cl-sr">Search this page of approved quizzes</span>
-          <input
-            type="search"
-            placeholder="Search this page of approved quizzes…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-
-        <SortSelect
-          label="Sort approved quizzes"
-          value={sortKey}
-          choices={APPROVED_SORTS}
-          onChange={(key) => {
-            setSortKey(key);
-            setPage(1);
-          }}
-        />
-
-        <span className="cl-count" aria-live="polite">
-          {total} approved {total === 1 ? "quiz" : "quizzes"}
-        </span>
-      </div>
-
-      <RequestError error={action.error} />
-
-      {quizzes.length === 0 ? (
-        <EmptyMessage title={needle ? "No matches" : "No approved quizzes yet"}>
-          {needle
-            ? "No approved quiz matches your search."
-            : "Publish a quiz, then send it for approval from My quizzes. Once an organizer approves it, it can be hosted here."}
-        </EmptyMessage>
-      ) : (
-        <div className="qc-grid" aria-label="Approved quizzes">
-          {quizzes.map((quiz) => (
-            <QuizCard
-              key={quiz.quiz_id}
-              title={quiz.title}
-              // Only people who can open the quiz page get the link.
-              to={quiz.can_view ? "/app/quizzes/" + quiz.quiz_id : null}
-              state={{ classId: classInfo.id }}
-              status="Approved"
-              headline={
-                quiz.question_count +
-                (quiz.question_count === 1 ? " question" : " questions")
-              }
-              actions={
-                // Owners and organizers see the Host button, or why it's
-                // blocked (e.g. "Publish changes first"). Everyone else
-                // just learns who can host.
-                quiz.hosting?.reason === "not_host" ? (
-                  <small>Hosted by its owner or an organizer</small>
-                ) : (
-                  <HostQuizButton
-                    quiz={quiz}
-                    classId={classInfo.id}
-                    action={action}
-                    label="Host in this class"
-                  />
-                )
-              }
-            >
-              <p>
-                By {quiz.author_name} · approved {formatDate(quiz.approved_at)}
-              </p>
-            </QuizCard>
-          ))}
+    <div className="cl-kebab-wrap" ref={wrap}>
+      <button
+        type="button"
+        className="cl-kebab"
+        aria-haspopup="menu"
+        aria-expanded={Boolean(place)}
+        aria-label={label}
+        title={label}
+        onClick={toggle}
+      >
+        ⋯
+      </button>
+      {place && (
+        <div
+          className="cl-menu"
+          role="menu"
+          style={{ position: "fixed", ...place }}
+          onClick={() => setPlace(null)}
+        >
+          {children}
         </div>
       )}
-
-      <Pager
-        caption="Approved quizzes"
-        pagination={resource.data.pagination}
-        onPageChange={setPage}
-      />
-    </>
+    </div>
   );
 }
 
-// Quizzes in this class the caller owns or edits as a collaborator.
-function MyQuizzesTable({ classInfo, onApprovalChange }) {
+const PRESENT_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-num cl-wide", "cl-wide", "cl-go-cell"];
+
+// Member view: the caller's own quizzes in this class (owned or shared with
+// them), styled after the Present tab in made-dashboard-main.html. The lead
+// block says Draft or Approved; one Approval button walks Send for approval
+// → Withdraw request → ✓ Approved; the ⋯ menu edits, hosts or archives.
+function PresentTable({ classInfo, onApprovalChange }) {
   const api = useApi();
+  const account = useAccount();
   const action = useAction();
-  const [page, setPage] = useState(1);
-  const [sortKey, setSortKey] = useState("recent");
+  const confirmer = useConfirm();
+  const memory = `class:${classInfo.id}:present`;
+  const [page, setPage] = useRemembered(`${memory}:page`, 1);
+  const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "recent", {
+    isValid: (key) => key in MY_QUIZ_SORTS,
+  });
   const resource = useMyClassQuizzes(classInfo.id, page, sortKey);
   const pending = reportResource(resource);
   const canSubmit =
@@ -510,107 +504,215 @@ function MyQuizzesTable({ classInfo, onApprovalChange }) {
 
   if (pending) return pending;
 
+  function refresh(done) {
+    if (!done) return;
+    resource.reload();
+    onApprovalChange?.();
+  }
+
   async function submitForApproval(quiz) {
-    const sent = await action.run(() =>
-      api(`/classes/${classInfo.id}/quiz-submissions`, {
-        method: "POST",
-        body: JSON.stringify({ quiz_version_id: quiz.published_version_id }),
+    refresh(await action.run(() => sendForApproval(api, classInfo.id, quiz)));
+  }
+
+  async function withdraw(quiz) {
+    refresh(
+      await action.run(async () => {
+        await api(
+          `/classes/${classInfo.id}/quiz-submissions/${quiz.approval_submission_id}`,
+          { method: "DELETE" },
+        );
+        return true;
       }),
     );
-    if (sent) {
-      resource.reload();
-      onApprovalChange?.();
-    }
+  }
+
+  // Only the owner can archive.
+  async function archive(quiz) {
+    const sure = await confirmer.confirm({
+      label: "Archive quiz",
+      title: `Archive “${quiz.title}”?`,
+      message: "It will no longer be available to host.",
+      confirmLabel: "Archive quiz",
+      cancelLabel: "Keep it",
+    });
+    if (!sure) return;
+    refresh(
+      await action.run(async () => {
+        await api(`/quizzes/${quiz.quiz_id}/archive`, { method: "PATCH" });
+        return true;
+      }),
+    );
   }
 
   return (
     <>
-    <RequestError error={action.error} />
-    <ReportTable
-      caption="My quizzes"
-      noun="quiz"
-      headers={["Quiz", "Access", "Status", "Approval", "Questions", "Last edited"]}
-      emptyTitle="No quizzes yet"
-      emptyText={
-        classInfo.membershipStatus === "ACTIVE" && !classInfo.archived
-          ? "Create a quiz with + New quiz, or ask a classmate to share one with you."
-          : "Quizzes you own or that are shared with you in this class appear here."
-      }
-      pagination={resource.data.pagination}
-      onPageChange={setPage}
-      controls={
-        <SortSelect
-          label="Sort my quizzes"
-          value={sortKey}
-          choices={MY_QUIZ_SORTS}
-          onChange={(key) => {
-            setSortKey(key);
-            setPage(1);
-          }}
-        />
-      }
-      rows={resource.data.items.map((quiz) => ({
-        key: quiz.quiz_id,
-        text: `${quiz.title} ${quiz.author_name}`,
-        cells: [
-          <Link
-            to={`/app/quizzes/${quiz.quiz_id}`}
-            state={{ classId: classInfo.id }}
-          >
-            {quiz.title}
-          </Link>,
-          quiz.my_access === "EDITOR"
-            ? `Editor · shared by ${quiz.author_name}`
-            : quizAccessLabel(quiz.my_access),
-          quizStatusLabel(quiz.status),
-          <span className="cl-approval">
-            {quiz.status === "PUBLISHED" ? approvalLabel(quiz.approval_status) : "—"}
-            {canSubmit && canSubmitForApproval(quiz) && (
-              <button
-                type="button"
-                className="cl-secondary"
-                disabled={action.busy}
-                onClick={() => void submitForApproval(quiz)}
-              >
-                {quiz.approval_status ? "Send again" : "Send for approval"}
-              </button>
-            )}
-          </span>,
-          formatScore(quiz.question_count),
-          formatDate(quiz.updated_at),
-        ],
-      }))}
-    />
-    <SubmissionsTable
-      classInfo={classInfo}
-      organizer={false}
-      onChange={() => {
-        resource.reload();
-        onApprovalChange?.();
-      }}
-    />
+      <ConfirmDialog confirmer={confirmer} />
+      <RequestError error={action.error} />
+      <ReportTable
+        caption="My quizzes"
+        rememberAs={memory}
+        noun="quiz"
+        tableClass="cl-rows cl-member-rows"
+        columnClasses={PRESENT_COLUMNS}
+        headers={["Status", "Quiz", "Approval", "Owner", "Qs", "Edited", ""]}
+        emptyTitle="No quizzes yet"
+        emptyText={
+          canSubmit
+            ? "Create a quiz with + New quiz, or ask a classmate to share one with you."
+            : "Quizzes you own or that are shared with you in this class appear here."
+        }
+        pagination={resource.data.pagination}
+        onPageChange={setPage}
+        controls={
+          <SortSelect
+            label="Sort my quizzes"
+            value={sortKey}
+            choices={MY_QUIZ_SORTS}
+            onChange={(key) => {
+              setSortKey(key);
+              setPage(1);
+            }}
+          />
+        }
+        rows={resource.data.items.map((quiz) => {
+          const status = presentStatus(quiz);
+          const owner = quiz.my_access === "OWNER";
+          const archived = quiz.status === "ARCHIVED";
+          const hostable =
+            status.key === "approved" &&
+            !classInfo.archived &&
+            showsHostControl(quiz, account?.account_id) &&
+            hostingState(quiz, classInfo.id).canHost;
+          const button = approvalButton(quiz);
+          // Send and Withdraw need an active membership in a live class.
+          const clickable =
+            button && !button.disabled && canSubmit && !action.busy;
+          const press = () =>
+            void (button.kind === "withdraw"
+              ? withdraw(quiz)
+              : submitForApproval(quiz));
+
+          return {
+            key: quiz.quiz_id,
+            text: `${quiz.title} ${quiz.author_name}`,
+            leadClass: `cl-status is-${status.key}`,
+            cells: [
+              status.label,
+              <span className="cl-quiz-cell">
+                <Link
+                  className="cl-quiz-name"
+                  to={`/app/quizzes/${quiz.quiz_id}`}
+                  state={{ classId: classInfo.id }}
+                >
+                  {quiz.title}
+                </Link>
+                <small className="cl-meta">
+                  {quiz.question_count}{" "}
+                  {quiz.question_count === 1 ? "question" : "questions"} · edited{" "}
+                  {formatDate(quiz.updated_at)}
+                  {owner ? "" : ` · shared by ${quiz.author_name}`}
+                </small>
+              </span>,
+              button ? (
+                <span className="cl-approval-cell">
+                  <button
+                    type="button"
+                    className={`cl-send is-${button.kind}`}
+                    disabled={!clickable}
+                    aria-disabled={button.kind === "approved" || undefined}
+                    title={button.title}
+                    onClick={press}
+                  >
+                    {button.label}
+                  </button>
+                  {button.note && (
+                    <small className="cl-approval-note">{button.note}</small>
+                  )}
+                </span>
+              ) : (
+                <span className="cl-dim">—</span>
+              ),
+              owner ? (
+                <span className="cl-tag is-me">Me</span>
+              ) : (
+                <span className="cl-tag">Shared · {quiz.author_name}</span>
+              ),
+              <span className="cl-dim">{formatScore(quiz.question_count)}</span>,
+              <span className="cl-dim">{formatDate(quiz.updated_at)}</span>,
+              <RowMenu label={`Actions for ${quiz.title}`}>
+                {quiz.my_access && !archived && (
+                  <Link
+                    role="menuitem"
+                    to={`/app/quizzes/${quiz.quiz_id}/edit`}
+                    state={{ classId: classInfo.id }}
+                  >
+                    ✎ Edit
+                  </Link>
+                )}
+                <Link
+                  role="menuitem"
+                  to={`/app/quizzes/${quiz.quiz_id}`}
+                  state={{ classId: classInfo.id }}
+                >
+                  ◉ Open
+                </Link>
+                {hostable && (
+                  <HostQuizButton
+                    quiz={quiz}
+                    classId={classInfo.id}
+                    action={action}
+                    label="▶ Host live"
+                  />
+                )}
+                {/* The Approval column is hidden on phones. */}
+                {clickable && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="cl-phone-only"
+                    onClick={press}
+                  >
+                    {button.kind === "withdraw" ? "↩ " : "⇪ "}
+                    {button.label}
+                  </button>
+                )}
+                {owner && !archived && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="is-danger"
+                    disabled={action.busy}
+                    onClick={() => void archive(quiz)}
+                  >
+                    Archive
+                  </button>
+                )}
+              </RowMenu>,
+            ],
+          };
+        })}
+      />
     </>
   );
 }
 
-// The approval queue. Organizers (Admin view) see every submission in the
-// class and decide pending ones; members see their own and may withdraw a
-// pending one.
-function SubmissionsTable({ classInfo, organizer, onChange }) {
+// The organizer's approval queue (Admin view): every submission in the class,
+// pending first by default. Members follow their own requests in My quizzes.
+function SubmissionsTable({ classInfo, onChange }) {
   const api = useApi();
   const action = useAction();
-  const [page, setPage] = useState(1);
-  const [sortKey, setSortKey] = useState(organizer ? "oldest" : "newest");
-  const [status, setStatus] = useState(organizer ? "PENDING" : "");
+  const memory = `class:${classInfo.id}:approvals`;
+  const [page, setPage] = useRemembered(`${memory}:page`, 1);
+  const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "oldest", {
+    isValid: (key) => key in SUBMISSION_SORTS,
+  });
+  const [status, setStatus] = useRemembered(`${memory}:status`, "PENDING", {
+    isValid: (key) => key in SUBMISSION_FILTERS,
+  });
   const resource = useClassSubmissions(classInfo.id, page, sortKey, status);
   const pending = reportResource(resource);
 
   if (pending) return pending;
-
-  // A member with nothing sent yet doesn't need an empty history table.
-  if (!organizer && resource.data.pagination.total_items === 0 && !status) {
-    return null;
-  }
 
   async function act(submission, request) {
     const done = await action.run(async () => {
@@ -631,26 +733,17 @@ function SubmissionsTable({ classInfo, organizer, onChange }) {
       method: "PATCH",
       body: JSON.stringify({ status: decision }),
     });
-  const withdraw = (submission) => act(submission, { method: "DELETE" });
 
   return (
     <>
-      {!organizer && <h2 className="cl-subheading">My submissions</h2>}
       <RequestError error={action.error} />
       <ReportTable
-        caption={organizer ? "Approvals" : "My submissions"}
+        caption="Approvals"
+        rememberAs={memory}
         noun="submission"
-        headers={
-          organizer
-            ? ["Quiz", "Version", "Submitted by", "Submitted", "Status", "Decision"]
-            : ["Quiz", "Version", "Submitted", "Status", ""]
-        }
-        emptyTitle={organizer && status === "PENDING" ? "Nothing to review" : "No submissions"}
-        emptyText={
-          organizer
-            ? "When a member sends a published quiz for approval, it shows up here."
-            : "Send a published quiz for approval from the table above."
-        }
+        headers={["Quiz", "Version", "Submitted by", "Submitted", "Status", "Decision"]}
+        emptyTitle={status === "PENDING" ? "Nothing to review" : "No submissions"}
+        emptyText="When a member sends a quiz for approval, it shows up here."
         pagination={resource.data.pagination}
         onPageChange={setPage}
         controls={
@@ -689,7 +782,7 @@ function SubmissionsTable({ classInfo, organizer, onChange }) {
           const actions =
             item.status !== "PENDING" ? (
               "—"
-            ) : organizer ? (
+            ) : (
               <span className="cl-approval">
                 <button
                   type="button"
@@ -697,7 +790,7 @@ function SubmissionsTable({ classInfo, organizer, onChange }) {
                   title={
                     item.is_current_version
                       ? undefined
-                      : "A newer version was published; only rejection is possible."
+                      : "A newer version of this quiz exists; only rejection is possible."
                   }
                   onClick={() => void decide(item, "APPROVED")}
                 >
@@ -712,46 +805,24 @@ function SubmissionsTable({ classInfo, organizer, onChange }) {
                   Reject
                 </button>
               </span>
-            ) : (
-              <button
-                type="button"
-                className="cl-secondary"
-                disabled={action.busy}
-                onClick={() => void withdraw(item)}
-              >
-                Withdraw
-              </button>
             );
 
           return {
             key: item.submission_id,
             text: `${item.quiz_title} ${item.submitter_name}`,
-            cells: organizer
-              ? [
-                  <Link
-                    to={`/app/classes/${classInfo.id}/submissions/${item.submission_id}`}
-                    title="See exactly the version that was submitted"
-                  >
-                    {item.quiz_title}
-                  </Link>,
-                  version,
-                  item.submitter_name,
-                  formatDate(item.submitted_at),
-                  statusCell,
-                  actions,
-                ]
-              : [
-                  <Link
-                    to={`/app/classes/${classInfo.id}/submissions/${item.submission_id}`}
-                    title="See exactly the version that was submitted"
-                  >
-                    {item.quiz_title}
-                  </Link>,
-                  version,
-                  formatDate(item.submitted_at),
-                  statusCell,
-                  actions,
-                ],
+            cells: [
+              <Link
+                to={`/app/classes/${classInfo.id}/submissions/${item.submission_id}`}
+                title="See exactly the version that was submitted"
+              >
+                {item.quiz_title}
+              </Link>,
+              version,
+              item.submitter_name,
+              formatDate(item.submitted_at),
+              statusCell,
+              actions,
+            ],
           };
         })}
       />
@@ -759,62 +830,144 @@ function SubmissionsTable({ classInfo, organizer, onChange }) {
   );
 }
 
-function ClassQuizzesTable({ classInfo }) {
-  const [page, setPage] = useState(1);
+// The same rows, grouped by quiz: when it was last presented, how often,
+// and how the class did across those presentations.
+function ClassQuizzesTable({ classInfo, controls }) {
+  const memory = `class:${classInfo.id}:by-quiz`;
+  const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const resource = useClassQuizzes(classInfo.id, page);
   const pending = reportResource(resource);
 
   if (pending) return pending;
 
+  const best = Math.max(
+    0,
+    ...resource.data.items.map((quiz) => quiz.average_score ?? 0),
+  );
+
   return (
     <ReportTable
       caption="Presented quizzes"
+      rememberAs={memory}
       noun="quiz"
-      headers={[
-        "Quiz",
-        "Last presented",
-        "Presentations",
-        "Participations",
-        "Average",
-        "Report",
-      ]}
+      tableClass="cl-rows"
+      columnClasses={["", "", "cl-num", "", "cl-go-cell"]}
+      headers={["Last", "Quiz", "Players", "Avg score", ""]}
       emptyTitle="No presented quizzes yet"
       emptyText="Quizzes appear here after a session in this class completes."
+      controls={controls}
       pagination={resource.data.pagination}
       onPageChange={setPage}
-      rows={resource.data.items.map((quiz) => ({
-        key: quiz.quiz_id,
-        text: quiz.title,
-        cells: [
-          quiz.title,
-          formatDate(quiz.presented_at),
-          formatScore(quiz.session_count),
-          formatScore(quiz.participant_count),
-          formatScore(quiz.average_score),
-          <Link
-            to={`/app/classes/${classInfo.id}/quizzes/${quiz.quiz_id}/report`}
-          >
-            Report →
-          </Link>,
-        ],
-      }))}
+      rows={resource.data.items.map((quiz) => {
+        const report = `/app/classes/${classInfo.id}/quizzes/${quiz.quiz_id}/report`;
+        return {
+          key: quiz.quiz_id,
+          text: quiz.title,
+          leadClass: "cl-date",
+          cells: [
+            <DateBlock value={quiz.presented_at} />,
+            <span className="cl-quiz-cell">
+              <Link className="cl-quiz-name" to={report}>
+                {quiz.title}
+              </Link>
+              <small>
+                Presented {quiz.session_count}{" "}
+                {quiz.session_count === 1 ? "time" : "times"}
+              </small>
+            </span>,
+            <Fraction value={quiz.participant_count} />,
+            <ScoreMeter
+              value={quiz.average_score}
+              max={best}
+              label={`Average ${formatScore(quiz.average_score)} points`}
+            />,
+            <GoLink to={report} label={`Report for ${quiz.title}`} />,
+          ],
+        };
+      })}
     />
   );
 }
 
-const ADMIN_SECTIONS = [
-  "Presentations",
-  "Approvals",
-  "Quizzes",
-  "Students",
-  "Members",
-  "Settings",
-];
-const USER_SECTIONS = ["My quizzes", "Present", "Participate"];
+// Organizer view: completed presentations, listed one per session or
+// grouped by quiz.
+function ClassHistory({ classInfo, studentCount, view, onViewChange }) {
+  const controls = (
+    <div className="cl-toggle" role="group" aria-label="Group presentations">
+      {Object.entries(HISTORY_VIEWS).map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={view === key}
+          onClick={() => onViewChange(key)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  return view === "quizzes" ? (
+    <ClassQuizzesTable classInfo={classInfo} controls={controls} />
+  ) : (
+    <PresentationsTable
+      classInfo={classInfo}
+      studentCount={studentCount}
+      controls={controls}
+    />
+  );
+}
+
+// The session-code strip under the tabs (made-dashboard-main.html): six
+// digits from the host's screen, then straight into the game.
+function JoinPanel() {
+  const api = useApi();
+  const action = useAction();
+  const navigate = useNavigate();
+  const [code, setCode] = useState("");
+
+  async function join(event) {
+    event.preventDefault();
+    if (!/^\d{6}$/.test(code)) return;
+    const joined = await action.run(() =>
+      api("/sessions/join", {
+        method: "POST",
+        body: JSON.stringify({ join_code: code }),
+      }),
+    );
+    if (joined) navigate(`/app/play/${joined.session.session_id}`);
+  }
+
+  return (
+    <div className="cl-join-panel" id="cl-join-panel">
+      <form onSubmit={join}>
+        <label htmlFor="cl-join-code">Session code</label>
+        <input
+          id="cl-join-code"
+          autoFocus
+          required
+          inputMode="numeric"
+          autoComplete="off"
+          pattern="[0-9]{6}"
+          maxLength={6}
+          placeholder="000000"
+          value={code}
+          disabled={action.busy}
+          onChange={(event) =>
+            setCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+          }
+        />
+        <button type="submit" disabled={action.busy || code.length !== 6}>
+          {action.busy ? "Joining…" : "Go →"}
+        </button>
+      </form>
+      <RequestError error={action.error} />
+    </div>
+  );
+}
 
 function ClassWorkspace({ classInfo, onChange }) {
-  const account = useAccount();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const showAdminLayout = classInfo.canManage === true;
   const api = useApi();
   const navigate = useNavigate();
@@ -826,40 +979,124 @@ function ClassWorkspace({ classInfo, onChange }) {
   const studentCount =
     dashboard.status === "ready" ? dashboard.data.student_count : null;
 
-  const [view, setView] = useState(() => {
-    if (searchParams.get("view") === "user") {
-      return "user";
-    }
+  // Where the page opens: a ?view= / ?section= link wins, otherwise the
+  // view and tabs you last had open in this class, otherwise the defaults.
+  const memory = `class:${classInfo.id}`;
+  const urlView = searchParams.get("view");
+  const urlSection = searchParams.get("section");
+  const urlTargetsUser = !showAdminLayout || urlView === "user";
 
-    return showAdminLayout ? "admin" : "user";
-  });
+  const [view, setView] = useRemembered(
+    `${memory}:view`,
+    showAdminLayout ? "admin" : "user",
+    {
+      override: !showAdminLayout
+        ? "user"
+        : urlView === "user" || urlView === "admin"
+          ? urlView
+          : urlSection
+            ? "admin"
+            : null,
+      isValid: (value) =>
+        value === "user" || (value === "admin" && showAdminLayout),
+    },
+  );
 
-  const [section, setSection] = useState(() => {
-    const requested = searchParams.get("section");
-    const userView = !showAdminLayout || searchParams.get("view") === "user";
-    if (userView && USER_SECTIONS.includes(requested)) {
-      return requested;
-    }
-    if (!userView && ADMIN_SECTIONS.includes(requested)) {
-      return requested;
-    }
+  // Also maps the old Quizzes, Students and Settings tab names.
+  const adminStart = urlSection ? resolveAdminSection(urlSection) : null;
+  const [adminSection, setAdminSection] = useRemembered(
+    `${memory}:admin-section`,
+    "Students",
+    {
+      override: urlTargetsUser ? null : adminStart?.section,
+      isValid: (value) => ADMIN_SECTIONS.includes(value),
+    },
+  );
+  const [userSection, setUserSection] = useRemembered(
+    `${memory}:user-section`,
+    "Present",
+    {
+      override:
+        urlTargetsUser && urlSection ? resolveUserSection(urlSection) : null,
+      isValid: (value) => USER_SECTIONS.includes(value),
+    },
+  );
+  const [historyView, setHistoryView] = useRemembered(
+    `${memory}:history-view`,
+    "sessions",
+    {
+      override:
+        !urlTargetsUser && urlSection === "Quizzes" ? "quizzes" : null,
+      isValid: (value) => value in HISTORY_VIEWS,
+    },
+  );
+  const [addOpen, setAddOpen] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [nameDraft, setNameDraft] = useState(classInfo.name);
+  const manage = useAction();
 
-    return showAdminLayout ? "Presentations" : "My quizzes";
-  });
+  async function saveName(event) {
+    event.preventDefault();
+    const name = nameDraft.trim();
+    if (!name) return;
+    if (name === classInfo.name) {
+      setEditing(false);
+      return;
+    }
+    const saved = await manage.run(async () => {
+      await api(`/classes/${classInfo.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      return true;
+    });
+    if (saved) onChange();
+  }
+
+  async function archiveClass() {
+    const confirmed = await confirmer.confirm({
+      label: "Archive class",
+      title: `Archive ${classInfo.name}?`,
+      message:
+        "The class code stops working and no new sessions can start. " +
+        "Reports stay available. There is no restore action yet.",
+      confirmLabel: "Archive class",
+    });
+    if (!confirmed) return;
+
+    const archived = await manage.run(async () => {
+      await api(`/classes/${classInfo.id}/archive`, { method: "POST" });
+      return true;
+    });
+    if (archived) onChange();
+  }
 
   const adminView = showAdminLayout && view === "admin";
 
   const sections = adminView ? ADMIN_SECTIONS : USER_SECTIONS;
+  const activeSection = adminView ? adminSection : userSection;
+  const setSection = adminView ? setAdminSection : setUserSection;
+
+  // Keep the address in step with the open view and tab, so Back and
+  // reload come back to the same place.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (showAdminLayout) next.set("view", view);
+    else next.delete("view");
+    next.set("section", activeSection);
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [view, activeSection, showAdminLayout, searchParams, setSearchParams]);
   const pendingApprovals =
     dashboard.status === "ready" ? dashboard.data.pending_submission_count : 0;
 
-  const activeSection = sections.includes(section) ? section : sections[0];
 
   function changeView(nextView) {
     setView(nextView);
     // Counts may be stale after time in the other view.
     dashboard.reload();
-    setSection(nextView === "admin" ? "Presentations" : "Present");
   }
 
   async function copyCode() {
@@ -886,7 +1123,10 @@ function ClassWorkspace({ classInfo, onChange }) {
   }
 
   return (
-    <section className="cl-page" aria-labelledby="class-heading">
+    <section
+      className={`cl-page${adminView ? "" : " is-user-view"}`}
+      aria-labelledby="class-heading"
+    >
       <ConfirmDialog confirmer={confirmer} />
 
       <div className="cl-classbar">
@@ -917,9 +1157,129 @@ function ClassWorkspace({ classInfo, onChange }) {
             )}
           </p>
 
-          <h1 id="class-heading">{classInfo.name}</h1>
+          {editing ? (
+            // Same place, font and size as the heading, so nothing around
+            // it moves. Enter saves, Escape cancels.
+            <form className="cl-title-row cl-rename" onSubmit={saveName}>
+              <label className="cl-rename-field">
+                <span className="cl-sr">Class name</span>
+                <textarea
+                  rows={1}
+                  value={nameDraft}
+                  maxLength={100}
+                  required
+                  autoFocus
+                  disabled={manage.busy}
+                  onFocus={(event) => {
+                    const end = event.target.value.length;
+                    event.target.setSelectionRange(end, end);
+                  }}
+                  onChange={(event) =>
+                    setNameDraft(event.target.value.replace(/\n/g, " "))
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      event.currentTarget.form.requestSubmit();
+                    }
+                    if (event.key === "Escape") {
+                      setNameDraft(classInfo.name);
+                      setEditing(false);
+                    }
+                  }}
+                />
+              </label>
+              <span className="cl-rename-actions">
+                <button
+                  type="submit"
+                  className="cl-edit-name is-save"
+                  disabled={manage.busy || !nameDraft.trim()}
+                >
+                  ✓ Save
+                </button>
+                <button
+                  type="button"
+                  className="cl-edit-name"
+                  disabled={manage.busy}
+                  onClick={() => {
+                    setNameDraft(classInfo.name);
+                    setEditing(false);
+                  }}
+                >
+                  Cancel
+                </button>
+              </span>
+            </form>
+          ) : (
+            <div className="cl-title-row">
+              <h1 id="class-heading">{classInfo.name}</h1>
+              {adminView && !classInfo.archived && (
+                <button
+                  type="button"
+                  className="cl-edit-name"
+                  aria-label={`Edit class name ${classInfo.name}`}
+                  title="Edit class name"
+                  onClick={() => setEditing(true)}
+                >
+                  ✎ Edit
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
+        {adminView && (
+          <div className="cl-actions">
+            <button
+              type="button"
+              className="cl-secondary"
+              aria-haspopup="dialog"
+              disabled={classInfo.archived}
+              onClick={() => setAddOpen(true)}
+            >
+              + Add member
+            </button>
+
+            <button
+              type="button"
+              disabled={csv.busy}
+              onClick={() =>
+                void csv.download(
+                  `/classes/${classInfo.id}/grades/export.csv`,
+                  "class-grades.csv",
+                )
+              }
+            >
+              {csv.busy ? "Preparing…" : "Export grades"}
+            </button>
+
+            {!classInfo.archived && (
+              <button
+                type="button"
+                className="cl-secondary cl-danger"
+                disabled={manage.busy}
+                onClick={() => void archiveClass()}
+              >
+                Archive
+              </button>
+            )}
+          </div>
+        )}
+
+        {!adminView && classInfo.membershipStatus === "ACTIVE" && (
+          <div className="cl-actions">
+            <button
+              type="button"
+              className="cl-secondary cl-danger"
+              disabled={leave.busy}
+              onClick={() => void leaveClass()}
+            >
+              Leave class
+            </button>
+          </div>
+        )}
+
+        {/* Last in the bar, so it stays in the same spot in both views. */}
         {showAdminLayout && (
           <div
             className="cl-view-switch"
@@ -945,36 +1305,14 @@ function ClassWorkspace({ classInfo, onChange }) {
             </button>
           </div>
         )}
-
-        {showAdminLayout && (
-          <div className="cl-actions">
-            {adminView && (
-              <>
-                <button
-                  type="button"
-                  disabled={classInfo.archived}
-                  onClick={() => setSection("Members")}
-                >
-                  + Invite member
-                </button>
-
-                <button
-                  type="button"
-                  disabled={csv.busy}
-                  onClick={() =>
-                    void csv.download(
-                      `/classes/${classInfo.id}/grades/export.csv`,
-                      "class-grades.csv",
-                    )
-                  }
-                >
-                  {csv.busy ? "Preparing…" : "Export grades"}
-                </button>
-              </>
-            )}
-          </div>
-        )}
       </div>
+
+      {adminView && addOpen && (
+        <AddMemberDialog
+          classInfo={classInfo}
+          onClose={() => setAddOpen(false)}
+        />
+      )}
 
       <ClassLiveButton classId={classInfo.id} />
 
@@ -982,14 +1320,7 @@ function ClassWorkspace({ classInfo, onChange }) {
         <p className="cl-section-note">This class is archived.</p>
       )}
 
-      <RequestError error={csv.error || leave.error} />
-
-      {adminView &&
-        (dashboard.status === "ready" ? (
-          <ClassSummary dashboard={dashboard} />
-        ) : (
-          <ResourceMessage resource={dashboard} />
-        ))}
+      <RequestError error={csv.error || leave.error || manage.error} />
 
       <div className="cl-section-tabs">
         <div role="group" aria-label="Class sections">
@@ -997,6 +1328,7 @@ function ClassWorkspace({ classInfo, onChange }) {
             <button
               key={label}
               type="button"
+              data-section={label}
               aria-pressed={activeSection === label}
               onClick={() => setSection(label)}
             >
@@ -1011,63 +1343,59 @@ function ClassWorkspace({ classInfo, onChange }) {
           ))}
         </div>
 
+        {/* As in made-dashboard-main.html: a "+" cell for a new quiz and
+            a JOIN cell that opens the session-code strip. */}
         {!adminView && (
           <div className="cl-actions">
-            {classInfo.membershipStatus === "ACTIVE" && (
+            {classInfo.membershipStatus === "ACTIVE" && !classInfo.archived && (
               <Link
-                className="cl-button"
+                className="cl-plus"
                 to={`/app/quizzes/new?class=${classInfo.id}`}
+                aria-label="New quiz"
+                title="New quiz"
               >
-                + New quiz
+                +
               </Link>
             )}
 
-            {classInfo.membershipStatus === "ACTIVE" && (
-              <Link
-                className="cl-button cl-secondary"
-                to={`/app/classes/${classInfo.id}/students/${account.account_id}/report`}
-              >
-                My class report
-              </Link>
-            )}
-
-            {classInfo.membershipStatus === "ACTIVE" && (
-              <button
-                type="button"
-                className="cl-secondary"
-                disabled={leave.busy}
-                onClick={() => void leaveClass()}
-              >
-                Leave class
-              </button>
-            )}
+            <button
+              type="button"
+              className="cl-join"
+              aria-expanded={joinOpen}
+              aria-controls="cl-join-panel"
+              onClick={() => setJoinOpen((open) => !open)}
+            >
+              Join
+            </button>
           </div>
         )}
       </div>
 
-      {activeSection === "Members" ? (
-        <ClassMembers classInfo={classInfo} onChange={onChange} />
-      ) : activeSection === "Settings" ? (
-        <ClassSettings classInfo={classInfo} onChange={onChange} />
+      {!adminView && joinOpen && <JoinPanel />}
+
+      {activeSection === "Students" ? (
+        <ClassStudents
+          classInfo={classInfo}
+          dashboard={dashboard}
+          onChange={onChange}
+        />
       ) : activeSection === "Approvals" ? (
         <SubmissionsTable
           classInfo={classInfo}
-          organizer
           onChange={dashboard.reload}
         />
-      ) : activeSection === "My quizzes" ? (
-        <MyQuizzesTable
+      ) : activeSection === "Present" ? (
+        <PresentTable
           classInfo={classInfo}
           onApprovalChange={dashboard.reload}
         />
-      ) : activeSection === "Present" ? (
-        <PresentTable classInfo={classInfo} />
       ) : activeSection === "Presentations" ? (
-        <PresentationsTable classInfo={classInfo} studentCount={studentCount} />
-      ) : activeSection === "Quizzes" ? (
-        <ClassQuizzesTable classInfo={classInfo} />
-      ) : activeSection === "Students" ? (
-        <StudentsTable classInfo={classInfo} />
+        <ClassHistory
+          classInfo={classInfo}
+          studentCount={studentCount}
+          view={historyView}
+          onViewChange={setHistoryView}
+        />
       ) : (
         <ParticipateTable classInfo={classInfo} />
       )}

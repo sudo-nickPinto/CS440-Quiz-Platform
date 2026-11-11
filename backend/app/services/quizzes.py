@@ -568,6 +568,11 @@ def list_class_quizzes(
                 approval_submission_id=(
                     submission.submission_id if submission else None
                 ),
+                # Only whoever sent a request may withdraw it.
+                approval_sent_by_me=bool(
+                    submission
+                    and submission.submitted_by_id == account.account_id
+                ),
             )
         )
 

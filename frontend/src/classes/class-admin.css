@@ -1,0 +1,1345 @@
+/* Class page pieces taken from the mockups: the Students tab and its
+   opened-row panel and the "+ Add member" pop-up (class-admin-main.html),
+   and status-block rows for quiz lists (made-dashboard-main.html). Loaded
+   after quizburg-polish.css. */
+
+/* ---------- Class header: rename, archive ---------- */
+.qp .cl-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.qp .cl-page button.cl-edit-name {
+  min-height: 0;
+  padding: 3px 9px;
+  border: var(--b-thin);
+  box-shadow: 2px 2px 0 var(--ink);
+  background: var(--paper);
+  color: var(--navy);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-page button.cl-edit-name:hover {
+  background: var(--sky-soft);
+}
+
+/* Editing the class name keeps the heading's place, font and size: the
+   text just gets an orange underline, and Save / Cancel take the Edit
+   button's spot. */
+.qp .cl-page form.cl-rename {
+  margin: 0;
+}
+
+.qp .cl-rename-field {
+  flex: 1 1 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.qp .cl-page .cl-rename textarea {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  border-bottom: 3px solid var(--orange-deep);
+  /* The underline must not make the line taller than the heading. */
+  margin-bottom: -3px;
+  box-shadow: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(22px, 2.5vw, 30px);
+  line-height: 1.2;
+  resize: none;
+  field-sizing: content;
+}
+
+.qp .cl-page .cl-rename textarea:focus-visible {
+  outline: none;
+  border-bottom-color: var(--orange-deep);
+}
+
+.qp .cl-rename-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.qp .cl-page button.cl-edit-name.is-save {
+  background: var(--orange-deep);
+  color: var(--paper);
+}
+
+.qp .cl-page button.cl-edit-name.is-save:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.qp .cl-page button.cl-danger:hover:not(:disabled) {
+  background: var(--apricot);
+}
+
+/* ---------- Students tab ---------- */
+.qp .cl-mini-stats {
+  display: flex;
+  margin: 0;
+  border: var(--b);
+  background: var(--sky-soft);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.qp .cl-mini-stats > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 3px 12px;
+}
+
+.qp .cl-mini-stats > div + div {
+  border-left: var(--b-thin);
+}
+
+.qp .cl-mini-stats dt {
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-mini-stats dd {
+  margin: 0;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.qp .cl-stu-table th small {
+  margin-left: 6px;
+  color: var(--apricot);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.qp .cl-table .cl-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.qp .cl-table .cl-big {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 20px;
+}
+
+.qp .cl-table .cl-big small {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.qp .cl-stu-row {
+  cursor: pointer;
+}
+
+.qp .cl-stu-row > td {
+  height: 72px;
+}
+
+.qp .cl-stu-row:hover,
+.qp .cl-stu-row[data-open="true"] {
+  background: var(--sand);
+}
+
+.qp .cl-stu-row:hover .cl-stu-name {
+  text-decoration: underline;
+  text-decoration-color: var(--orange-deep);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
+
+.qp .cl-table td.cl-stu-lead {
+  width: 84px;
+  padding: 0;
+  border-right: var(--b-thin);
+  background: var(--orange-deep);
+  color: var(--paper);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 22px;
+  text-align: center;
+}
+
+.qp .cl-table td.cl-stu-lead.is-none {
+  background: var(--sand);
+  color: var(--ink);
+}
+
+.qp .cl-table td.cl-stu-lead.is-org {
+  background: var(--navy);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-stu-who {
+  min-width: 180px;
+}
+
+.qp .cl-stu-name {
+  display: block;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.qp .cl-stu-strip {
+  display: flex;
+  gap: 5px;
+}
+
+.qp .cl-mk {
+  display: grid;
+  place-items: center;
+  min-width: 46px;
+  height: 32px;
+  padding: 0 5px;
+  border: var(--b-thin);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.qp .cl-mk.hi {
+  background: var(--sky-soft);
+  color: var(--navy);
+}
+
+.qp .cl-mk.lo {
+  background: var(--apricot);
+  color: var(--ink);
+}
+
+.qp .cl-mk.miss {
+  background: var(--sand);
+  color: var(--ink);
+}
+
+.qp .cl-stu-tog-cell {
+  width: 84px;
+  text-align: center;
+}
+
+.qp .cl-page button.cl-stu-tog {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  min-height: 40px;
+  height: 40px;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.qp .cl-page button.cl-stu-tog::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-right: 3px solid currentColor;
+  border-bottom: 3px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.25s ease;
+}
+
+.qp .cl-page button.cl-stu-tog:hover {
+  background: var(--sky-soft);
+}
+
+.qp .cl-page button.cl-stu-tog[aria-expanded="true"] {
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: none;
+  transform: translate(3px, 3px);
+}
+
+.qp .cl-page button.cl-stu-tog[aria-expanded="true"]::before {
+  transform: translateY(2px) rotate(-135deg);
+}
+
+.qp .cl-table .cl-stu-xp > td {
+  padding: 14px 24px 26px 104px;
+  border-bottom: var(--b);
+  background: var(--sand);
+}
+
+/* Opened student: "NAME · EVERY PRESENTATION" panel */
+.qp .cl-panel {
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.qp .cl-panel-top {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 9px 14px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-panel-top > span + span {
+  color: var(--apricot);
+}
+
+.qp .cl-panel-note {
+  padding: 18px 14px;
+  font-weight: 700;
+}
+
+.qp .cl-gl {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.qp .cl-gl th {
+  padding: 10px 12px;
+  border-bottom: var(--b-thin);
+  background: var(--paper);
+  color: var(--gray);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.qp .cl-gl th.cl-num {
+  text-align: right;
+}
+
+.qp .cl-gl td {
+  height: 52px;
+  padding: 8px 12px;
+  border-bottom: var(--b-thin);
+  font-weight: 700;
+}
+
+.qp .cl-gl tr:last-child td {
+  border-bottom: none;
+}
+
+.qp .cl-gl td.cl-mk {
+  display: table-cell;
+  width: 52px;
+  border: none;
+  border-right: var(--b-thin);
+  border-bottom: var(--b-thin);
+  text-align: center;
+}
+
+.qp .cl-gl .cl-gl-date {
+  color: var(--gray);
+  white-space: nowrap;
+}
+
+.qp .cl-gl .is-missed td:not(.cl-mk) {
+  color: var(--gray);
+}
+
+.qp .cl-gl-go {
+  text-align: right;
+}
+
+.qp .cl-table .cl-lnk {
+  display: inline-block;
+  padding: 6px 10px;
+  border: var(--b-thin);
+  background: var(--paper);
+  box-shadow: 2px 2px 0 var(--ink);
+  color: var(--navy);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.qp .cl-table .cl-lnk:hover {
+  background: var(--sky-soft);
+}
+
+.qp .cl-panel-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: var(--b);
+  background: var(--paper);
+}
+
+.qp .cl-panel-foot .cl-button.cl-secondary {
+  margin-right: auto;
+  color: var(--navy);
+  white-space: nowrap;
+}
+
+/* ---------- Status blocks on quiz rows ---------- */
+.qp .cl-table td.cl-status {
+  width: 140px;
+  padding: 0 8px;
+  border-right: var(--b-thin);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.qp .cl-table td.cl-status.is-draft {
+  background: var(--sky-soft);
+  color: var(--navy);
+}
+
+.qp .cl-table td.cl-status.is-published,
+.qp .cl-table td.cl-status.is-approved {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.qp .cl-table td.cl-status.is-archived {
+  background: var(--sand);
+  color: var(--ink);
+}
+
+.qp .cl-table tr:has(> td.cl-status) > td {
+  height: 72px;
+}
+
+.qp .cl-table a.cl-quiz-name,
+.qp .cl-quiz-name {
+  color: var(--ink);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.25;
+  white-space: normal;
+  text-decoration: none;
+}
+
+.qp .cl-table a.cl-quiz-name:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--orange-deep);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
+
+.qp .cl-quiz-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.qp .cl-quiz-cell small {
+  font-weight: 700;
+}
+
+/* ---------- "+ Add member" pop-up ---------- */
+.qp .cl-dlg {
+  width: min(580px, calc(100vw - 24px));
+  max-width: none;
+  max-height: min(680px, calc(100vh - 40px));
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 8px 8px 0 var(--ink);
+}
+
+.qp .cl-dlg[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.qp .cl-dlg::backdrop {
+  background: rgb(34 34 34 / 45%);
+}
+
+.qp .cl-dlg-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-left: 16px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-dlg-top b {
+  color: var(--apricot);
+}
+
+.qp .cl-page .cl-dlg button.cl-dlg-x {
+  width: 48px;
+  min-height: 44px;
+  border: none;
+  border-left: 2px solid var(--paper);
+  box-shadow: none;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.qp .cl-page .cl-dlg button.cl-dlg-x:hover {
+  background: var(--orange-deep);
+}
+
+.qp .cl-dlg-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 18px 16px;
+  border-bottom: var(--b);
+  background: var(--sky-soft);
+}
+
+.qp .cl-page .cl-dlg-head h2 {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 24px;
+  font-weight: 400;
+}
+
+.qp .cl-dlg-head p {
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.qp .cl-dlg-head .cl-dlg-error {
+  color: var(--orange-deep);
+}
+
+.qp .cl-dlg-row {
+  display: flex;
+  gap: 12px;
+}
+
+.qp .cl-dlg-row .cl-search {
+  flex: 1;
+}
+
+.qp .cl-dlg-row input {
+  width: 100%;
+}
+
+.qp .cl-page button.cl-add-one {
+  padding: 7px 16px;
+  background: var(--orange-deep);
+  color: var(--paper);
+  white-space: nowrap;
+}
+
+.qp .cl-page button.cl-add-one:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.qp .cl-dlg-sub {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 18px;
+  border-bottom: var(--b-thin);
+  background: var(--sand);
+  color: var(--gray);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-people {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+}
+
+.qp .cl-person {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-bottom: var(--b-thin);
+}
+
+.qp .cl-person:last-child {
+  border-bottom: none;
+}
+
+.qp .cl-pav {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: var(--b-thin);
+  background: var(--apricot);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.qp .cl-pname {
+  display: block;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.qp .cl-pmail {
+  display: block;
+  color: var(--gray);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.qp .cl-dlg-empty {
+  padding: 34px 18px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.qp .cl-dlg-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: var(--b);
+  background: var(--paper);
+}
+
+.qp .cl-dlg-foot span {
+  color: var(--gray);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.qp .cl-dlg-foot b {
+  color: var(--ink);
+}
+
+@media (max-width: 760px) {
+  .qp .cl-table .cl-stu-xp > td {
+    padding: 12px;
+  }
+
+  .qp .cl-mini-stats {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .qp .cl-mini-stats > div {
+    flex: 1;
+  }
+}
+
+/* Shared rules top-align table cells and space forms; these blocks need
+   centered cells and a flush pop-up header. */
+.qp .cl-page .cl-stu-table td,
+.qp .cl-page .cl-gl td,
+.qp .cl-page .cl-table tr:has(> td.cl-status) > td {
+  vertical-align: middle;
+}
+
+.qp .cl-page .cl-dlg-head {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .qp .cl-stu-table .cl-stu-recent {
+    display: none;
+  }
+}
+
+.qp .cl-students {
+  min-width: 0;
+}
+
+.qp .cl-students .cl-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+@media (max-width: 760px) {
+  .qp .cl-stu-table .cl-stu-att {
+    display: none;
+  }
+
+  .qp .cl-table td.cl-stu-lead,
+  .qp .cl-stu-tog-cell {
+    width: 56px;
+  }
+
+  .qp .cl-stu-who {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* ---------- Presentations rows (class-admin-main.html) ---------- */
+.qp .cl-page .cl-rows tbody tr > td {
+  height: 84px;
+  vertical-align: middle;
+}
+
+.qp .cl-rows tbody tr:hover {
+  background: var(--sand);
+}
+
+.qp .cl-rows tbody tr:hover .cl-quiz-name {
+  text-decoration: underline;
+  text-decoration-color: var(--orange-deep);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
+
+.qp .cl-table td.cl-date {
+  width: 96px;
+  padding: 0;
+  border-right: var(--b-thin);
+  background: var(--apricot);
+  text-align: center;
+}
+
+.qp .cl-date-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  line-height: 1;
+}
+
+.qp .cl-page .cl-date-block small {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-date-block b {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 26px;
+  font-weight: 400;
+}
+
+.qp .cl-fraction {
+  white-space: nowrap;
+}
+
+.qp .cl-fraction b {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 21px;
+  font-weight: 400;
+}
+
+.qp .cl-page .cl-table .cl-fraction small {
+  display: inline;
+  margin-left: 2px;
+  color: var(--gray);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.qp .cl-meter-cell {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 200px;
+}
+
+.qp .cl-meter {
+  flex: 1;
+  max-width: 140px;
+  height: 16px;
+  border: var(--b-thin);
+  background: var(--paper);
+}
+
+.qp .cl-meter i {
+  display: block;
+  height: 100%;
+  background: var(--navy);
+}
+
+.qp .cl-meter-num {
+  min-width: 70px;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 20px;
+  font-weight: 400;
+  text-align: right;
+}
+
+.qp .cl-top-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.qp .cl-top-cell b {
+  font-size: 16px;
+}
+
+.qp .cl-page .cl-top-cell small {
+  color: var(--gray);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qp .cl-table th.cl-go-cell,
+.qp .cl-table td.cl-go-cell {
+  width: 84px;
+  text-align: center;
+}
+
+.qp .cl-page .cl-table a.cl-go {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 40px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.qp .cl-rows tbody tr:hover a.cl-go,
+.qp .cl-page .cl-table a.cl-go:hover {
+  background: var(--sky-soft);
+}
+
+.qp .cl-page .cl-table a.cl-go:active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+@media (max-width: 760px) {
+  .qp .cl-rows .cl-top-col {
+    display: none;
+  }
+
+  .qp .cl-meter-cell {
+    min-width: 0;
+  }
+
+  .qp .cl-meter {
+    display: none;
+  }
+}
+
+/* Toolbar boxes (search, sort, stats, count) share one height and line up
+   on the same top and bottom edge. */
+.qp .cl-page .cl-toolbar {
+  align-items: center;
+}
+
+.qp .cl-page .cl-toolbar > label {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+
+.qp .cl-page .cl-toolbar > label > input,
+.qp .cl-page .cl-toolbar > label > select {
+  box-sizing: border-box;
+  height: 46px;
+  min-height: 46px;
+  margin: 0;
+}
+
+.qp .cl-page .cl-toolbar > label.cl-search > input {
+  width: 100%;
+}
+
+.qp .cl-page .cl-toolbar > .cl-mini-stats,
+.qp .cl-page .cl-toolbar > .cl-count {
+  box-sizing: border-box;
+  height: 46px;
+  min-height: 46px;
+  margin: 0;
+}
+
+/* ---------- Member view rows (made-dashboard-main.html) ---------- */
+.qp .cl-page .cl-member-rows tbody tr > td {
+  height: 72px;
+}
+
+.qp .cl-member-rows .cl-quiz-cell .cl-meta {
+  display: none;
+}
+
+.qp .cl-page .cl-table .cl-dim {
+  color: var(--gray);
+  font-weight: 700;
+}
+
+/* Participate: orange "#2 of 31" block, sand when absent. */
+.qp .cl-table td.cl-rank-lead {
+  width: 140px;
+  padding: 0;
+  border-right: var(--b-thin);
+  background: var(--orange-deep);
+  color: var(--paper);
+  text-align: center;
+}
+
+.qp .cl-table td.cl-rank-lead.is-none {
+  background: var(--sand);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-rank-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.qp .cl-rank-block b {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 22px;
+  font-weight: 400;
+}
+
+.qp .cl-page .cl-table .cl-rank-block small {
+  color: inherit;
+  font-size: 13px;
+}
+
+.qp .cl-points {
+  white-space: nowrap;
+}
+
+.qp .cl-points b {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 22px;
+  font-weight: 400;
+}
+
+.qp .cl-page .cl-table .cl-points small {
+  display: inline;
+  margin-left: 6px;
+  color: var(--gray);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Present: approval state over the Send button; owner tags. */
+.qp .cl-approval-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.qp .cl-page .cl-table .cl-approval-note {
+  color: var(--gray);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* One approval button: Send (orange) → Withdraw (outlined) → Approved
+   (solid blue, not clickable). */
+.qp .cl-page .cl-table button.cl-send {
+  min-width: 172px;
+  padding: 6px 12px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.qp .cl-page .cl-table button.cl-send.is-withdraw {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.qp .cl-page .cl-table button.cl-send.is-withdraw:hover:not(:disabled) {
+  background: var(--apricot);
+}
+
+.qp .cl-page .cl-table button.cl-send.is-approved:disabled {
+  background: var(--navy);
+  color: var(--paper);
+  box-shadow: none;
+  cursor: default;
+  opacity: 1;
+}
+
+.qp .cl-page .cl-table button.cl-send:disabled:not(.is-approved) {
+  background: var(--sand);
+  color: var(--gray);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.qp .cl-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 2px solid var(--ink);
+  background: var(--orange-deep);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qp .cl-tag.is-me {
+  background: var(--sand);
+  color: var(--ink);
+}
+
+/* ⋯ menu */
+.qp .cl-kebab-wrap {
+  display: grid;
+  place-items: center;
+}
+
+.qp .cl-page .cl-table button.cl-kebab {
+  width: 50px;
+  height: 38px;
+  padding: 0;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.qp .cl-page .cl-table button.cl-kebab:hover,
+.qp .cl-page .cl-table button.cl-kebab[aria-expanded="true"] {
+  background: var(--sky-soft);
+}
+
+.qp .cl-page .cl-table button.cl-kebab:active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+.qp .cl-menu {
+  z-index: 40;
+  min-width: 220px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 6px 6px 0 var(--ink);
+  text-align: left;
+}
+
+.qp .cl-page .cl-menu > a,
+.qp .cl-page .cl-menu > button,
+.qp .cl-page .cl-menu > small {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 11px 14px;
+  border: none;
+  border-bottom: var(--b-thin);
+  border-radius: 0;
+  background: var(--paper);
+  box-shadow: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transform: none;
+}
+
+.qp .cl-page .cl-menu > :last-child {
+  border-bottom: none;
+}
+
+.qp .cl-page .cl-menu > a:hover,
+.qp .cl-page .cl-menu > button:hover:not(:disabled) {
+  background: var(--sky-soft);
+}
+
+.qp .cl-page .cl-menu > button.is-danger {
+  color: #9b1c1c;
+}
+
+.qp .cl-page .cl-menu > button.is-danger:hover:not(:disabled) {
+  background: var(--apricot);
+}
+
+.qp .cl-page .cl-menu > a:focus-visible,
+.qp .cl-page .cl-menu > button:focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: -3px;
+}
+
+@media (max-width: 1100px) {
+  .qp .cl-member-rows .cl-wide {
+    display: none;
+  }
+
+  .qp .cl-member-rows .cl-quiz-cell .cl-meta {
+    display: block;
+  }
+}
+
+@media (max-width: 640px) {
+  .qp .cl-table td.cl-rank-lead,
+  .qp .cl-member-rows td.cl-status {
+    width: 84px;
+  }
+
+  .qp .cl-approval-cell .cl-approval-note {
+    display: none;
+  }
+}
+
+.qp .cl-page .cl-phone-only,
+.qp .cl-page .cl-menu > button.cl-phone-only {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .qp .cl-member-rows .cl-mid {
+    display: none;
+  }
+
+  .qp .cl-page .cl-member-rows .cl-phone-only {
+    display: inline;
+  }
+
+  .qp .cl-page .cl-menu > button.cl-phone-only {
+    display: block;
+  }
+
+  .qp .cl-member-rows th.cl-go-cell,
+  .qp .cl-member-rows td.cl-go-cell {
+    width: 64px;
+    padding-left: 6px;
+    padding-right: 10px;
+  }
+}
+
+/* ---------- User view: "+" and JOIN cells, join strip (made-dashboard-main.html) ---------- */
+.qp .cl-section-tabs > .cl-actions > a.cl-plus {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  padding: 0;
+  background: var(--sky-soft);
+  color: var(--navy);
+  font-size: 34px;
+  text-decoration: none;
+}
+
+.qp .cl-section-tabs > .cl-actions > a.cl-plus:hover {
+  background: var(--sand);
+}
+
+.qp .cl-section-tabs > .cl-actions > a.cl-plus:active,
+.qp .cl-section-tabs > .cl-actions > button.cl-join:active {
+  transform: translate(2px, 2px);
+}
+
+.qp .cl-section-tabs > .cl-actions > button.cl-join {
+  padding: 20px 36px;
+  border-left: var(--b);
+  background: var(--navy);
+  color: var(--paper);
+  letter-spacing: 0.5px;
+}
+
+.qp .cl-join-panel {
+  padding: 14px 16px;
+  border-bottom: var(--b);
+  background: var(--sky-soft);
+}
+
+.qp .cl-join-panel form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.qp .cl-join-panel label {
+  padding: 6px 10px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-page .cl-join-panel input {
+  width: 180px;
+  min-height: 0;
+  padding: 8px 12px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 4px;
+}
+
+.qp .cl-page .cl-join-panel button {
+  padding: 8px 18px;
+  border: var(--b);
+  background: var(--orange-deep);
+  color: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-weight: 700;
+}
+
+.qp .cl-page .cl-join-panel button:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.qp .cl-page .cl-join-panel button:disabled {
+  opacity: 0.6;
+}
+
+@media (max-width: 640px) {
+  .qp .cl-section-tabs > .cl-actions > a.cl-plus {
+    width: 56px;
+    font-size: 26px;
+  }
+
+  .qp .cl-section-tabs > .cl-actions > button.cl-join {
+    padding: 14px 18px;
+  }
+}
+
+/* ---------- Classes list title bar: + New class · Join quiz · Join class ---------- */
+/* Any number of buttons after the heading, each its own full-height cell. */
+.qp .cl-titlebar {
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
+}
+
+/* Join quiz is the "play" action, so it takes the app's play color: deep
+   orange, as on Present, Go → and rank blocks. The 3px ink dividers keep
+   it from touching the navy Join class or the sky New class. */
+.qp .cl-titlebar .cl-join-quiz {
+  background: var(--orange-deep);
+  color: var(--paper);
+}
+
+.qp .cl-titlebar .cl-join-quiz:hover {
+  background: var(--orange);
+}
+
+.qp .cl-titlebar .cl-join-quiz[aria-expanded="true"] {
+  background: var(--ink);
+}
+
+.qp .cl-titlebar button:active {
+  transform: translate(2px, 2px);
+}
+
+/* Phones: the heading takes its own row and the buttons share the next. */
+@media (max-width: 640px) {
+  .qp .cl-titlebar {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .qp .cl-titlebar h1 {
+    flex: 1 0 100%;
+    border-bottom: var(--b);
+  }
+
+  .qp .cl-titlebar button {
+    flex: 1 1 0;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .qp .cl-titlebar button:first-of-type {
+    border-left: 0;
+  }
+}
+
+/* ---------- Selected tab colors, logo order: blue on the left, orange on
+   the right (QUIZ | BURG). ---------- */
+/* Member view: Present navy, Participate orange. */
+.qp .cl-section-tabs > [role="group"] button[data-section="Present"][aria-pressed="true"] {
+  background: var(--navy);
+}
+
+.qp .cl-section-tabs > [role="group"] button[data-section="Participate"][aria-pressed="true"] {
+  background: var(--orange-deep);
+}
+
+/* The JOIN cell is orange, ending the row in orange like the logo. */
+.qp .cl-section-tabs > .cl-actions > button.cl-join {
+  background: var(--orange-deep);
+}
+
+.qp .cl-section-tabs > .cl-actions > button.cl-join:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.qp .cl-section-tabs > .cl-actions > button.cl-join[aria-expanded="true"] {
+  background: var(--ink);
+}
+
+/* So the orange JOIN doesn't sit right above another orange block, the
+   member view's count chip is navy. */
+.qp .cl-page.is-user-view .cl-toolbar > .cl-count {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+/* Admin view: Students navy, Presentations orange, Approvals black. */
+.qp .cl-section-tabs > [role="group"] button[data-section="Students"][aria-pressed="true"] {
+  background: var(--navy);
+}
+
+.qp .cl-section-tabs > [role="group"] button[data-section="Presentations"][aria-pressed="true"] {
+  background: var(--orange-deep);
+}
+
+.qp .cl-section-tabs > [role="group"] button[data-section="Approvals"][aria-pressed="true"] {
+  background: var(--ink);
+}

@@ -1,5 +1,6 @@
 import { useAccount } from "../authenticated-demo/account";
-import { useResource } from "../authenticated-demo/rest";
+import { useEffect, useState } from "react";
+import { useApi, useResource } from "../authenticated-demo/rest";
 import {
   approvedQuizzesPath,
   myQuizzesPath,
@@ -140,12 +141,58 @@ export function useClassSessions(classId, page = 1) {
   );
 }
 
-// Organizer-only; best average first, so row order is the class rank.
-export function useClassStudents(classId, page = 1) {
-  return useClassReport(
-    classId,
-    `students?page=${page}&page_size=${REPORT_PAGE_SIZE}&sort=average_score&order=desc`,
-  );
+// Every student's scores, keyed by account id, for the Students tab. The
+// students report is paged (at most 100 a page), so read every page.
+export function useClassStudentStats(classId) {
+  const api = useApi();
+  const [revision, setRevision] = useState(0);
+  const key = `${classId}:${revision}`;
+  const [result, setResult] = useState({ key: null, data: null, error: null });
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function load() {
+      try {
+        const byId = new Map();
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const data = await api(
+            `/classes/${classId}/students?page=${page}&page_size=100&sort=name&order=asc`,
+            { signal: controller.signal },
+          );
+          if (!data || !Array.isArray(data.items)) {
+            throw new Error("The student scores could not be read.");
+          }
+          for (const student of data.items) {
+            byId.set(Number(student.account_id), student);
+          }
+          totalPages = data.pagination?.total_pages ?? 1;
+          page += 1;
+        } while (page <= totalPages);
+
+        if (!controller.signal.aborted) {
+          setResult({ key, data: byId, error: null });
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setResult({ key, data: null, error });
+        }
+      }
+    }
+
+    void load();
+    return () => controller.abort();
+  }, [api, classId, key]);
+
+  const current = result.key === key;
+  return {
+    data: current ? result.data : null,
+    error: current ? result.error : null,
+    loading: !current,
+    reload: () => setRevision((value) => value + 1),
+  };
 }
 
 export function useClassQuizzes(classId, page = 1) {

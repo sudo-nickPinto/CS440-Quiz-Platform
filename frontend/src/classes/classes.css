@@ -759,12 +759,23 @@
   flex: 1 1 150px;
 }
 
+/* Keyboard focus, as in the mockups: a tight deep-orange outline on
+   buttons and links. Fields show focus on their own border (see below). */
 .qp .cl-page button:focus-visible,
-.qp .cl-page input:focus-visible,
-.qp .cl-page select:focus-visible,
 .qp .cl-page a:focus-visible {
-  outline: 3px solid var(--navy);
-  outline-offset: 4px;
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 2px;
+}
+
+/* Text fields and selects: no ring around the box (it showed on every
+   click); the box's own border turns deep orange instead. App-wide. */
+.qp input:focus-visible,
+.qp select:focus-visible,
+.qp textarea:focus-visible,
+.qp .cl-page input:focus-visible,
+.qp .cl-page select:focus-visible {
+  outline: none;
+  border-color: var(--orange-deep);
 }
 
 @media (max-width: 640px) {
@@ -916,14 +927,6 @@
   font-size: 14px;
 }
 
-.qp .cl-subheading {
-  margin: 28px 0 0;
-  padding: 12px 14px 0;
-  font-family: "Archivo Black", sans-serif;
-  font-size: 18px;
-  text-transform: uppercase;
-}
-
 /* V3 Task 6: read-only preview of a submitted quiz version */
 .qp .cl-preview-actions {
   padding: 16px 20px 0;
@@ -961,4 +964,26 @@
 .qp .cl-preview-meta {
   margin: 0;
   font-size: 13px;
+}
+
+/* Class page tabs cleanup: by-session / by-quiz toggle */
+.qp .cl-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.qp .cl-toggle button {
+  padding: 6px 12px;
+  box-shadow: none;
+  background: var(--paper);
+  font-size: 14px;
+}
+
+.qp .cl-toggle button + button {
+  border-left: 0;
+}
+
+.qp .cl-toggle button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
 }
