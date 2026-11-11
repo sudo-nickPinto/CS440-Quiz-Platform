@@ -113,7 +113,7 @@ function SubmissionBody({ data, organizer, action, archived, onDecide }) {
             title={
               submission.is_current_version
                 ? undefined
-                : "A newer version was published; only rejection is possible."
+                : "A newer version of this quiz exists; only rejection is possible."
             }
             onClick={() => onDecide("APPROVED")}
           >

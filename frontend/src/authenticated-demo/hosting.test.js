@@ -69,7 +69,7 @@ describe("hostingState", () => {
 describe("showsHostControl", () => {
   const blocked = (reason) => ({ can_host: false, reason, message: "Why" });
 
-  it("shows the control on a draft so 'Publish first' can appear", () => {
+  it("shows the control on a draft so 'Needs approval' can appear", () => {
     const draft = { status: "DRAFT", author_id: 1, hosting: blocked("not_published") };
     expect(showsHostControl(draft, 1)).toBe(true);
   });
@@ -90,10 +90,10 @@ describe("showsHostControl", () => {
     expect(showsHostControl(quiz, 1)).toBe(false);
   });
 
-  it("shows 'Publish changes first' on an edited approved quiz", () => {
+  it("shows 'Edited — needs approval again' on an edited approved quiz", () => {
     const quiz = { status: "DRAFT", author_id: 1, hosting: blocked("unpublished_changes") };
     expect(showsHostControl(quiz, 1)).toBe(true);
-    expect(hostingState({ ...quiz, class_id: 3 }).label).toBe("Publish changes first");
+    expect(hostingState({ ...quiz, class_id: 3 }).label).toBe("Edited — needs approval again");
   });
 
   it("hides it on archived quizzes", () => {

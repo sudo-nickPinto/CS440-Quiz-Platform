@@ -13,13 +13,14 @@ import ClassLiveButton from "./ClassLiveButton";
 import {
   ADMIN_SECTIONS,
   approvalLabel,
-  canSubmitForApproval,
+  approvalButton,
   copyText,
   HISTORY_VIEWS,
   MY_QUIZ_SORTS,
   presentStatus,
   resolveAdminSection,
   resolveUserSection,
+  sendForApproval,
   SUBMISSION_FILTERS,
   SUBMISSION_SORTS,
   USER_SECTIONS,
@@ -314,6 +315,13 @@ function ParticipateTable({ classInfo }) {
   const pending = reportResource(resource);
   if (pending) return pending;
 
+  // Members don't get class-wide scores, so the bar compares each score with
+  // the session's top score when it's shown, otherwise with your best here.
+  const best = Math.max(
+    0,
+    ...resource.data.items.map((session) => session.my_score ?? 0),
+  );
+
   return (
     <ReportTable
       caption="Sessions"
@@ -366,10 +374,11 @@ function ParticipateTable({ classInfo }) {
               </small>
             </span>,
             played ? (
-              <span className="cl-points">
-                <b>{formatScore(session.my_score)}</b>
-                <small>pts</small>
-              </span>
+              <ScoreMeter
+                value={session.my_score}
+                max={session.top_score ?? best}
+                label={`Your score ${formatScore(session.my_score)} points`}
+              />
             ) : (
               <span className="cl-dim">—</span>
             ),
@@ -476,8 +485,8 @@ const PRESENT_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-num cl-wide", "cl-wide
 
 // Member view: the caller's own quizzes in this class (owned or shared with
 // them), styled after the Present tab in made-dashboard-main.html. The lead
-// block says Draft or Approved; the Approval column sends a published
-// version for approval; the ⋯ menu edits, hosts, withdraws or archives.
+// block says Draft or Approved; one Approval button walks Send for approval
+// → Withdraw request → ✓ Approved; the ⋯ menu edits, hosts or archives.
 function PresentTable({ classInfo, onApprovalChange }) {
   const api = useApi();
   const account = useAccount();
@@ -502,14 +511,7 @@ function PresentTable({ classInfo, onApprovalChange }) {
   }
 
   async function submitForApproval(quiz) {
-    refresh(
-      await action.run(() =>
-        api(`/classes/${classInfo.id}/quiz-submissions`, {
-          method: "POST",
-          body: JSON.stringify({ quiz_version_id: quiz.published_version_id }),
-        }),
-      ),
-    );
+    refresh(await action.run(() => sendForApproval(api, classInfo.id, quiz)));
   }
 
   async function withdraw(quiz) {
@@ -540,19 +542,6 @@ function PresentTable({ classInfo, onApprovalChange }) {
         return true;
       }),
     );
-  }
-
-  function approvalText(quiz) {
-    if (quiz.status === "ARCHIVED") return "—";
-    if (!quiz.published_version_id) return "Not published yet";
-    return approvalLabel(quiz.approval_status);
-  }
-
-  function sendTitle(quiz) {
-    if (quiz.approval_status === "APPROVED") return "Already approved";
-    if (quiz.approval_status === "PENDING") return "Waiting for an organizer";
-    if (!quiz.published_version_id) return "Publish the quiz first";
-    return undefined;
   }
 
   return (
@@ -594,8 +583,14 @@ function PresentTable({ classInfo, onApprovalChange }) {
             !classInfo.archived &&
             showsHostControl(quiz, account?.account_id) &&
             hostingState(quiz, classInfo.id).canHost;
-          const canWithdraw =
-            quiz.approval_status === "PENDING" && quiz.approval_sent_by_me;
+          const button = approvalButton(quiz);
+          // Send and Withdraw need an active membership in a live class.
+          const clickable =
+            button && !button.disabled && canSubmit && !action.busy;
+          const press = () =>
+            void (button.kind === "withdraw"
+              ? withdraw(quiz)
+              : submitForApproval(quiz));
 
           return {
             key: quiz.quiz_id,
@@ -618,25 +613,25 @@ function PresentTable({ classInfo, onApprovalChange }) {
                   {owner ? "" : ` · shared by ${quiz.author_name}`}
                 </small>
               </span>,
-              <span className="cl-approval-cell">
-                <small className={`cl-approval-state is-${status.key}`}>
-                  {approvalText(quiz)}
-                </small>
-                {canSubmit && !archived && (
+              button ? (
+                <span className="cl-approval-cell">
                   <button
                     type="button"
-                    className="cl-send"
-                    disabled={action.busy || !canSubmitForApproval(quiz)}
-                    title={sendTitle(quiz)}
-                    onClick={() => void submitForApproval(quiz)}
+                    className={`cl-send is-${button.kind}`}
+                    disabled={!clickable}
+                    aria-disabled={button.kind === "approved" || undefined}
+                    title={button.title}
+                    onClick={press}
                   >
-                    {quiz.approval_status === "REJECTED" ||
-                    quiz.approval_status === "WITHDRAWN"
-                      ? "Send again"
-                      : "Send for approval"}
+                    {button.label}
                   </button>
-                )}
-              </span>,
+                  {button.note && (
+                    <small className="cl-approval-note">{button.note}</small>
+                  )}
+                </span>
+              ) : (
+                <span className="cl-dim">—</span>
+              ),
               owner ? (
                 <span className="cl-tag is-me">Me</span>
               ) : (
@@ -670,25 +665,15 @@ function PresentTable({ classInfo, onApprovalChange }) {
                   />
                 )}
                 {/* The Approval column is hidden on phones. */}
-                {canSubmit && !archived && canSubmitForApproval(quiz) && (
+                {clickable && (
                   <button
                     type="button"
                     role="menuitem"
                     className="cl-phone-only"
-                    disabled={action.busy}
-                    onClick={() => void submitForApproval(quiz)}
+                    onClick={press}
                   >
-                    ⇪ Send for approval
-                  </button>
-                )}
-                {canWithdraw && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={action.busy}
-                    onClick={() => void withdraw(quiz)}
-                  >
-                    ↩ Withdraw request
+                    {button.kind === "withdraw" ? "↩ " : "⇪ "}
+                    {button.label}
                   </button>
                 )}
                 {owner && !archived && (
@@ -758,7 +743,7 @@ function SubmissionsTable({ classInfo, onChange }) {
         noun="submission"
         headers={["Quiz", "Version", "Submitted by", "Submitted", "Status", "Decision"]}
         emptyTitle={status === "PENDING" ? "Nothing to review" : "No submissions"}
-        emptyText="When a member sends a published quiz for approval, it shows up here."
+        emptyText="When a member sends a quiz for approval, it shows up here."
         pagination={resource.data.pagination}
         onPageChange={setPage}
         controls={
@@ -805,7 +790,7 @@ function SubmissionsTable({ classInfo, onChange }) {
                   title={
                     item.is_current_version
                       ? undefined
-                      : "A newer version was published; only rejection is possible."
+                      : "A newer version of this quiz exists; only rejection is possible."
                   }
                   onClick={() => void decide(item, "APPROVED")}
                 >
