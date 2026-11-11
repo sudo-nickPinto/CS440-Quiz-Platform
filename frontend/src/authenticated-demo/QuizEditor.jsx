@@ -8,6 +8,7 @@ import {
 } from "react-router";
 import { useAccount } from "./account";
 import HostQuizButton from "./HostQuizButton";
+import { showsHostControl } from "./hosting";
 import QuizCollaborators from "./QuizCollaborators";
 
 import { blankEditor, LETTERS, newQuestion } from "./model";
@@ -1350,7 +1351,7 @@ export function QuizViewer() {
             </button>
           )}
 
-          {published && mine && (
+          {showsHostControl(quiz, account.account_id) && (
             <div className="qv-host">
               <HostQuizButton
                 quiz={quiz}

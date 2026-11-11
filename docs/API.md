@@ -296,7 +296,7 @@ Starts a `LOBBY` session in the class with a fresh 6-digit `join_code`. There ar
 Rules, checked in this order:
 1. The caller is an active member of the class, and the class isn't archived.
 2. The quiz belongs to this class.
-3. The caller is the quiz owner or an active organizer of the class. Being a collaborator isn't enough, and faculty status gives no extra access.
+3. The caller is the quiz owner or an active organizer of the class. Organizer powers need faculty status too, the same rule as every other organizer action, so an old non-faculty organizer can only host their own quizzes. Being a collaborator isn't enough, and faculty status alone (without being an organizer of this class) gives no extra access.
 4. The quiz isn't archived and has a published version.
 5. That newest published version is approved for the class (Task 4). Pending, rejected, withdrawn and stale (a newer version was published) versions can't be hosted.
 
@@ -335,6 +335,8 @@ When hosting is refused for one of rules 1–5, the error also says exactly why,
 | `approval_outdated` | An older version was approved, but not the newest one | `quiz_version_not_approved` |
 
 When hosting is allowed, `hosting` is `{"can_host": true, "reason": null, "message": null}`.
+
+The status is loaded in a fixed number of queries for the whole list, so long quiz lists don't make extra database calls.
 
 ### `POST /sessions/join` → `201 SessionJoinResponse`
 Any active account. Body: `{"join_code": "123456"}` (6 digits; surrounding spaces are trimmed). Works in `LOBBY` or `ACTIVE`; a late joiner starts from the next question. The host is notified over the WebSocket after the commit.

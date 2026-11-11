@@ -4,6 +4,7 @@ import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router";
 
 import { useAccount } from "./account";
 import HostQuizButton from "./HostQuizButton";
+import { showsHostControl } from "./hosting";
 import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 import ParticipantHistory from "./ParticipantHistory";
@@ -307,8 +308,7 @@ export default function PreviewDashboard() {
                               <span aria-hidden="true">✎</span> Edit
                             </Link>
 
-                            {quiz.status === "PUBLISHED" &&
-                              quiz.author_id === account.account_id && (
+                            {showsHostControl(quiz, account.account_id) && (
                                 <div
                                   className="ui-host-item"
                                   role="group"

@@ -7,8 +7,16 @@ hosting is refused, the error carries the same reason and message.
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import event, select
 
-from app.models import Class, QuizSubmission, QuizVersion, SubmissionStatus
+from app.models import (
+    Class,
+    ClassMembership,
+    ClassRole,
+    QuizSubmission,
+    QuizVersion,
+    SubmissionStatus,
+)
 from tests.test_class_sessions import (
     QUIZ_PAYLOAD,
     class_quiz,
@@ -201,3 +209,91 @@ def test_quiz_lists_include_hosting_status(class_setup) -> None:
     in_class = {item["quiz_id"]: item["hosting"] for item in page["items"]}
     assert in_class[approved["quiz_id"]]["can_host"] is True
     assert in_class[pending["quiz_id"]]["reason"] == "not_submitted"
+
+
+def test_non_faculty_organizer_matches_create_session(class_setup) -> None:
+    """Old class data can have organizers who aren't faculty. They don't get
+    organizer powers (ClassAccess.is_organizer), so the Host button must
+    not offer them someone else's quiz either."""
+    client, accounts, class_id = class_setup
+    quiz = class_quiz(client, class_id)
+    with client.app.state.database.session_factory() as db:
+        membership = db.scalar(
+            select(ClassMembership).where(
+                ClassMembership.class_id == class_id,
+                ClassMembership.account_id == accounts["member"].account_id,
+            )
+        )
+        membership.role = ClassRole.ORGANIZER
+        db.commit()
+    use_account(client, accounts["member"])
+
+    assert_blocked(
+        client, quiz["quiz_id"], class_id, "not_host", "session_host_denied"
+    )
+
+
+def count_queries(client, request):
+    engine = client.app.state.database.engine
+    statements = []
+
+    def record(*_args):
+        statements.append(1)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        response = request()
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+    assert response.status_code == 200
+    return len(statements)
+
+
+def test_quiz_lists_use_the_same_number_of_queries_for_any_length(
+    class_setup,
+) -> None:
+    """Hosting status is batch-loaded, so longer lists don't add queries."""
+    client, accounts, class_id = class_setup
+    class_quiz(client, class_id)
+
+    def lists():
+        return (
+            count_queries(client, lambda: client.get("/quizzes")),
+            count_queries(client, lambda: client.get(f"/classes/{class_id}/quizzes")),
+        )
+
+    small = lists()
+
+    # One quiz in every state: approved, not submitted, pending, rejected,
+    # withdrawn, outdated approval, draft and archived.
+    for _ in range(2):
+        class_quiz(client, class_id, approve=False)
+    for status in (
+        SubmissionStatus.PENDING,
+        SubmissionStatus.REJECTED,
+        SubmissionStatus.WITHDRAWN,
+    ):
+        quiz = class_quiz(client, class_id, approve=False)
+        add_submission(
+            client,
+            class_id,
+            quiz["version"]["quiz_version_id"],
+            accounts["author"].account_id,
+            status,
+        )
+    outdated = class_quiz(client, class_id)
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            QuizVersion(
+                quiz_id=outdated["quiz_id"],
+                version_number=outdated["version"]["version_number"] + 1,
+                title="Edited",
+                published_at=now(),
+            )
+        )
+        db.commit()
+    assert client.post(f"/classes/{class_id}/quizzes", json=QUIZ_PAYLOAD).status_code == 201
+    archived = class_quiz(client, class_id)
+    assert client.patch(f"/quizzes/{archived['quiz_id']}/archive").status_code == 200
+
+    assert lists() == small

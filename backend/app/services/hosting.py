@@ -1,26 +1,30 @@
 """Can this person host this quiz right now, and if not, why?
 
-Starting a session (create_session) and the quiz responses that drive the
-Host button both use these checks, so the button and the server always agree.
-The approval check itself is still Task 4's require_approved_quiz_version.
+Starting a session (create_session) and the `hosting` field on quiz responses
+(which drives the Host button) both use these checks, so the button and the
+server always agree.
 
 The order matches create_session: class archived, host permission, quiz
 archived, published, approved. Membership is checked by the caller, because
 people outside the class can't see the quiz at all.
+
+The checks are batched: a list of quizzes costs a fixed number of queries no
+matter how long it is.
 """
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.auth import CurrentAccount
 from app.errors import APIError
-from app.models import Quiz, QuizStatus, QuizVersion
-from app.models.classes import ClassRole, MembershipStatus
+from app.models import Class, Quiz, QuizStatus, QuizVersion
+from app.models.classes import ClassMembership
 from app.models.quiz_submission import QuizSubmission, SubmissionStatus
 from app.schemas.quiz import QuizHosting
-from app.services.class_authorization import get_class, get_class_membership
-from app.services.quiz_submissions import require_approved_quiz_version
+from app.services.class_authorization import ClassAccess
 
 
 @dataclass(frozen=True)
@@ -122,134 +126,203 @@ class HostingCheck:
     version: QuizVersion | None
 
 
-def latest_published_version(db: Session, quiz_id: int) -> QuizVersion | None:
-    return db.scalar(
-        select(QuizVersion)
+def _class_states(
+    db: Session,
+    account: CurrentAccount,
+    class_ids: set[int],
+) -> dict[int, tuple[bool, bool]]:
+    """(archived, is_organizer) per class, in two queries.
+
+    is_organizer uses ClassAccess, the same rule create_session uses: an
+    ACTIVE ORGANIZER membership *and* faculty status.
+    """
+    if not class_ids:
+        return {}
+    classes = {
+        class_.class_id: class_
+        for class_ in db.scalars(select(Class).where(Class.class_id.in_(class_ids)))
+    }
+    memberships = {
+        membership.class_id: membership
+        for membership in db.scalars(
+            select(ClassMembership).where(
+                ClassMembership.class_id.in_(class_ids),
+                ClassMembership.account_id == account.account_id,
+            )
+        )
+    }
+    states = {}
+    for class_id, class_ in classes.items():
+        membership = memberships.get(class_id)
+        is_organizer = (
+            membership is not None
+            and ClassAccess(class_, membership, is_faculty=account.is_admin).is_organizer
+        )
+        states[class_id] = (class_.archived_at is not None, is_organizer)
+    return states
+
+
+def _latest_published_versions(
+    db: Session, quiz_ids: set[int]
+) -> dict[int, QuizVersion]:
+    """The newest published version of each quiz, in one query."""
+    if not quiz_ids:
+        return {}
+    newest = (
+        select(
+            QuizVersion.quiz_id.label("quiz_id"),
+            func.max(QuizVersion.version_number).label("version_number"),
+        )
         .where(
-            QuizVersion.quiz_id == quiz_id,
+            QuizVersion.quiz_id.in_(quiz_ids),
             QuizVersion.published_at.is_not(None),
         )
-        .order_by(QuizVersion.version_number.desc())
-        .limit(1)
+        .group_by(QuizVersion.quiz_id)
+        .subquery()
     )
-
-
-def _approval_problem(
-    db: Session, class_id: int, quiz: Quiz, version: QuizVersion
-) -> HostingProblem:
-    """Explain why the newest published version isn't approved."""
-    latest = db.scalar(
-        select(QuizSubmission.status)
-        .where(
-            QuizSubmission.class_id == class_id,
-            QuizSubmission.quiz_version_id == version.quiz_version_id,
+    versions = db.scalars(
+        select(QuizVersion).join(
+            newest,
+            (QuizVersion.quiz_id == newest.c.quiz_id)
+            & (QuizVersion.version_number == newest.c.version_number),
         )
+    )
+    return {version.quiz_id: version for version in versions}
+
+
+def _approval_problems(
+    db: Session,
+    candidates: Sequence[tuple[Quiz, QuizVersion]],
+) -> dict[int, HostingProblem | None]:
+    """Approval state of each quiz's newest published version, in two queries.
+
+    A version is approved when the quiz's class has an APPROVED submission
+    for it. That is the same rule as Task 4's approved-quiz listing: the quiz
+    belongs to the class, isn't archived, and no newer version was published
+    (all already true here, because this is the newest published version of
+    a non-archived quiz).
+    """
+    if not candidates:
+        return {}
+    version_ids = {version.quiz_version_id for _, version in candidates}
+    submissions: dict[tuple[int, int], list[QuizSubmission]] = {}
+    for submission in db.scalars(
+        select(QuizSubmission)
+        .where(QuizSubmission.quiz_version_id.in_(version_ids))
         .order_by(
             QuizSubmission.submitted_at.desc(),
             QuizSubmission.submission_id.desc(),
         )
-        .limit(1)
-    )
-    if latest == SubmissionStatus.PENDING:
-        return PROBLEMS["pending_approval"]
-    if latest == SubmissionStatus.REJECTED:
-        return PROBLEMS["rejected"]
-    if latest == SubmissionStatus.WITHDRAWN:
-        return PROBLEMS["withdrawn"]
+    ):
+        key = (submission.class_id, submission.quiz_version_id)
+        submissions.setdefault(key, []).append(submission)
 
-    older_approved = db.scalar(
-        select(QuizSubmission.submission_id)
+    approved_versions: dict[tuple[int, int], int] = {}
+    for quiz_id, class_id, version_number in db.execute(
+        select(QuizVersion.quiz_id, QuizSubmission.class_id, QuizVersion.version_number)
         .join(
-            QuizVersion,
-            QuizVersion.quiz_version_id == QuizSubmission.quiz_version_id,
+            QuizSubmission,
+            QuizSubmission.quiz_version_id == QuizVersion.quiz_version_id,
         )
         .where(
-            QuizSubmission.class_id == class_id,
+            QuizVersion.quiz_id.in_({quiz.quiz_id for quiz, _ in candidates}),
             QuizSubmission.status == SubmissionStatus.APPROVED,
-            QuizVersion.quiz_id == quiz.quiz_id,
-            QuizVersion.version_number < version.version_number,
         )
-        .limit(1)
-    )
-    if older_approved is not None:
-        return PROBLEMS["approval_outdated"]
-    return PROBLEMS["not_submitted"]
+    ):
+        key = (quiz_id, class_id)
+        approved_versions[key] = min(
+            approved_versions.get(key, version_number), version_number
+        )
+
+    problems: dict[int, HostingProblem | None] = {}
+    for quiz, version in candidates:
+        history = submissions.get((quiz.class_id, version.quiz_version_id), [])
+        if any(item.status == SubmissionStatus.APPROVED for item in history):
+            problems[quiz.quiz_id] = None
+        elif history and history[0].status == SubmissionStatus.PENDING:
+            problems[quiz.quiz_id] = PROBLEMS["pending_approval"]
+        elif history and history[0].status == SubmissionStatus.REJECTED:
+            problems[quiz.quiz_id] = PROBLEMS["rejected"]
+        elif history and history[0].status == SubmissionStatus.WITHDRAWN:
+            problems[quiz.quiz_id] = PROBLEMS["withdrawn"]
+        elif (
+            approved_versions.get((quiz.quiz_id, quiz.class_id), version.version_number)
+            < version.version_number
+        ):
+            problems[quiz.quiz_id] = PROBLEMS["approval_outdated"]
+        else:
+            problems[quiz.quiz_id] = PROBLEMS["not_submitted"]
+    return problems
 
 
-def check_hosting(
+def check_hosting_many(
     db: Session,
-    quiz: Quiz,
-    account_id: int,
-    *,
-    is_organizer: bool,
-    class_archived: bool,
-) -> HostingCheck:
-    """Run every hosting rule for a quiz the caller can already see."""
-    if quiz.class_id is None:
-        return HostingCheck(PROBLEMS["not_in_class"], None)
-    if class_archived:
-        return HostingCheck(PROBLEMS["class_archived"], None)
-    if quiz.author_id != account_id and not is_organizer:
-        return HostingCheck(PROBLEMS["not_host"], None)
-    if quiz.status == QuizStatus.ARCHIVED:
-        return HostingCheck(PROBLEMS["quiz_archived"], None)
+    account: CurrentAccount,
+    quizzes: Iterable[Quiz],
+) -> dict[int, HostingCheck]:
+    """Run every hosting rule for quizzes the caller can already see.
 
-    version = latest_published_version(db, quiz.quiz_id)
-    if version is None:
-        return HostingCheck(PROBLEMS["not_published"], None)
+    Uses at most five queries however many quizzes are passed in.
+    """
+    quizzes = list(quizzes)
+    states = _class_states(
+        db, account, {quiz.class_id for quiz in quizzes if quiz.class_id is not None}
+    )
 
-    try:
-        require_approved_quiz_version(db, quiz.class_id, version.quiz_version_id)
-    except APIError as exc:
-        if exc.code == "class_archived":
-            return HostingCheck(PROBLEMS["class_archived"], None)
-        if exc.code != "quiz_version_not_approved":
-            raise
-        return HostingCheck(_approval_problem(db, quiz.class_id, quiz, version), None)
-    return HostingCheck(None, version)
+    checks: dict[int, HostingCheck] = {}
+    remaining: list[Quiz] = []
+    for quiz in quizzes:
+        if quiz.class_id is None or quiz.class_id not in states:
+            checks[quiz.quiz_id] = HostingCheck(PROBLEMS["not_in_class"], None)
+            continue
+        archived, is_organizer = states[quiz.class_id]
+        if archived:
+            problem = PROBLEMS["class_archived"]
+        elif quiz.author_id != account.account_id and not is_organizer:
+            problem = PROBLEMS["not_host"]
+        elif quiz.status == QuizStatus.ARCHIVED:
+            problem = PROBLEMS["quiz_archived"]
+        else:
+            remaining.append(quiz)
+            continue
+        checks[quiz.quiz_id] = HostingCheck(problem, None)
+
+    versions = _latest_published_versions(db, {quiz.quiz_id for quiz in remaining})
+    candidates = []
+    for quiz in remaining:
+        version = versions.get(quiz.quiz_id)
+        if version is None:
+            checks[quiz.quiz_id] = HostingCheck(PROBLEMS["not_published"], None)
+        else:
+            candidates.append((quiz, version))
+
+    approvals = _approval_problems(db, candidates)
+    for quiz, version in candidates:
+        problem = approvals[quiz.quiz_id]
+        checks[quiz.quiz_id] = HostingCheck(problem, None if problem else version)
+    return checks
 
 
-def to_quiz_hosting(problem: HostingProblem | None) -> QuizHosting:
-    if problem is None:
+def check_hosting(db: Session, account: CurrentAccount, quiz: Quiz) -> HostingCheck:
+    return check_hosting_many(db, account, [quiz])[quiz.quiz_id]
+
+
+def to_quiz_hosting(check: HostingCheck) -> QuizHosting:
+    if check.problem is None:
         return QuizHosting(can_host=True)
     return QuizHosting(
-        can_host=False, reason=problem.reason, message=problem.message
+        can_host=False, reason=check.problem.reason, message=check.problem.message
     )
 
 
-class HostingLookup:
-    """Works out a caller's hosting status for many quizzes.
+def quiz_hosting_many(
+    db: Session, account: CurrentAccount, quizzes: Iterable[Quiz]
+) -> dict[int, QuizHosting]:
+    return {
+        quiz_id: to_quiz_hosting(check)
+        for quiz_id, check in check_hosting_many(db, account, quizzes).items()
+    }
 
-    It remembers each class's archived flag and the caller's role, so a list
-    of quizzes doesn't look them up again for every row.
-    """
 
-    def __init__(self, db: Session, account_id: int) -> None:
-        self.db = db
-        self.account_id = account_id
-        self._classes: dict[int, tuple[bool, bool]] = {}
-
-    def _class_state(self, class_id: int) -> tuple[bool, bool]:
-        if class_id not in self._classes:
-            archived = get_class(self.db, class_id).archived_at is not None
-            membership = get_class_membership(self.db, class_id, self.account_id)
-            is_organizer = (
-                membership is not None
-                and membership.status == MembershipStatus.ACTIVE
-                and membership.role == ClassRole.ORGANIZER
-            )
-            self._classes[class_id] = (archived, is_organizer)
-        return self._classes[class_id]
-
-    def __call__(self, quiz: Quiz) -> QuizHosting:
-        if quiz.class_id is None:
-            return to_quiz_hosting(PROBLEMS["not_in_class"])
-        archived, is_organizer = self._class_state(quiz.class_id)
-        check = check_hosting(
-            self.db,
-            quiz,
-            self.account_id,
-            is_organizer=is_organizer,
-            class_archived=archived,
-        )
-        return to_quiz_hosting(check.problem)
+def quiz_hosting(db: Session, account: CurrentAccount, quiz: Quiz) -> QuizHosting:
+    return to_quiz_hosting(check_hosting(db, account, quiz))

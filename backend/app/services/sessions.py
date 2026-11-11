@@ -24,6 +24,7 @@ from app.schemas.session import (
 from app.services.class_access import may_play, require_session_class_member
 from app.services.class_authorization import require_class_member
 from app.services.hosting import PROBLEMS, check_hosting
+from app.services.quiz_submissions import require_approved_quiz_version
 
 JOIN_CODE_ALPHABET = "0123456789"
 JOIN_CODE_LENGTH = 6
@@ -125,16 +126,13 @@ def create_session(
     # The same checks drive the Host button (QuizResponse.hosting), so the
     # button and this endpoint never disagree. Pending, rejected, withdrawn
     # and stale versions stop here, through Task 4's approval check.
-    check = check_hosting(
-        db,
-        quiz,
-        account.account_id,
-        is_organizer=access.is_organizer,
-        class_archived=False,
-    )
+    check = check_hosting(db, account, quiz)
     if check.problem is not None:
         raise check.problem.error()
-    version = check.version
+    # Task 4's own check has the final say on approval.
+    version = require_approved_quiz_version(
+        db, class_id, check.version.quiz_version_id
+    )
 
     for _ in range(JOIN_CODE_ATTEMPTS):
         join_code = _generate_join_code()

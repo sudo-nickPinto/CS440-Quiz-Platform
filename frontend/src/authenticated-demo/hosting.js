@@ -35,3 +35,15 @@ export function hostingState(quiz, classId = quiz.class_id) {
     message: hosting.message || "This quiz can't be hosted right now.",
   };
 }
+
+// Whether a page should show the Host control (a button, or the reason it
+// can't be hosted yet) for this quiz. It shows for the quiz owner and class
+// organizers, including on drafts, so "Publish first" can appear. Archived
+// quizzes and people who could never host it (collaborators, members) see
+// nothing.
+export function showsHostControl(quiz, accountId) {
+  if (quiz.status === "ARCHIVED") return false;
+  if (quiz.hosting) return quiz.hosting.reason !== "not_host";
+  // Older responses without `hosting`: the previous rule.
+  return quiz.status === "PUBLISHED" && quiz.author_id === accountId;
+}

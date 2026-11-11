@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { HOSTING_LABELS, hostingState } from "./hosting";
+import { HOSTING_LABELS, hostingState, showsHostControl } from "./hosting";
 
 describe("hostingState", () => {
   it("allows hosting when the server says the quiz can be hosted", () => {
@@ -62,5 +62,35 @@ describe("hostingState", () => {
 
   it("uses a class id passed in for lists that don't include one", () => {
     expect(hostingState({ quiz_id: 1 }, 7)).toEqual({ canHost: true });
+  });
+});
+
+describe("showsHostControl", () => {
+  const blocked = (reason) => ({ can_host: false, reason, message: "Why" });
+
+  it("shows the control on a draft so 'Publish first' can appear", () => {
+    const draft = { status: "DRAFT", author_id: 1, hosting: blocked("not_published") };
+    expect(showsHostControl(draft, 1)).toBe(true);
+  });
+
+  it("shows the control to an organizer on someone else's quiz", () => {
+    const quiz = { status: "PUBLISHED", author_id: 2, hosting: { can_host: true } };
+    expect(showsHostControl(quiz, 1)).toBe(true);
+  });
+
+  it("hides it from people who could never host the quiz", () => {
+    const quiz = { status: "PUBLISHED", author_id: 2, hosting: blocked("not_host") };
+    expect(showsHostControl(quiz, 1)).toBe(false);
+  });
+
+  it("hides it on archived quizzes", () => {
+    const quiz = { status: "ARCHIVED", author_id: 1, hosting: blocked("quiz_archived") };
+    expect(showsHostControl(quiz, 1)).toBe(false);
+  });
+
+  it("keeps the old rule for responses without hosting", () => {
+    expect(showsHostControl({ status: "PUBLISHED", author_id: 1 }, 1)).toBe(true);
+    expect(showsHostControl({ status: "DRAFT", author_id: 1 }, 1)).toBe(false);
+    expect(showsHostControl({ status: "PUBLISHED", author_id: 2 }, 1)).toBe(false);
   });
 });
