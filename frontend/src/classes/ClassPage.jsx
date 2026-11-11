@@ -1123,7 +1123,10 @@ function ClassWorkspace({ classInfo, onChange }) {
   }
 
   return (
-    <section className="cl-page" aria-labelledby="class-heading">
+    <section
+      className={`cl-page${adminView ? "" : " is-user-view"}`}
+      aria-labelledby="class-heading"
+    >
       <ConfirmDialog confirmer={confirmer} />
 
       <div className="cl-classbar">
