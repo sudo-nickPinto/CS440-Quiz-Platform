@@ -313,6 +313,29 @@ Rules, checked in this order:
 
 The old `POST /quizzes/{quiz_id}/sessions` route is gone.
 
+When hosting is refused for one of rules 1–5, the error also says exactly why, in `error.details.reason`, and the `message` says what to do next. The error codes above stay the same.
+
+**Knowing before you click.** Quiz responses (`GET /quizzes`, `GET /quizzes/{id}`, `GET /classes/{id}/quizzes`, `GET /classes/{id}/quizzes/{quiz_id}`, and the create, update and publish responses) include a `hosting` object for the caller. It comes from the same checks as this endpoint, so the Host button and the server always agree:
+
+```json
+"hosting": { "can_host": false, "reason": "pending_approval", "message": "This quiz is waiting for a class organizer to approve it." }
+```
+
+| `reason` | Meaning | Error code when you try anyway |
+|---|---|---|
+| `not_in_class` | Old quiz with no class | `quiz_not_hostable` |
+| `class_archived` | The class is archived | `class_archived` |
+| `not_host` | Caller isn't the quiz owner or a class organizer | `session_host_denied` |
+| `quiz_archived` | The quiz is archived | `quiz_not_hostable` |
+| `not_published` | Still a draft | `quiz_not_hostable` |
+| `not_submitted` | Published but never submitted for approval | `quiz_version_not_approved` |
+| `pending_approval` | Waiting for an organizer | `quiz_version_not_approved` |
+| `rejected` | An organizer rejected this version | `quiz_version_not_approved` |
+| `withdrawn` | The submission was withdrawn | `quiz_version_not_approved` |
+| `approval_outdated` | An older version was approved, but not the newest one | `quiz_version_not_approved` |
+
+When hosting is allowed, `hosting` is `{"can_host": true, "reason": null, "message": null}`.
+
 ### `POST /sessions/join` → `201 SessionJoinResponse`
 Any active account. Body: `{"join_code": "123456"}` (6 digits; surrounding spaces are trimmed). Works in `LOBBY` or `ACTIVE`; a late joiner starts from the next question. The host is notified over the WebSocket after the commit.
 

@@ -39,6 +39,7 @@ from app.schemas.quiz import (
     QuizVersionResponse,
 )
 from app.services.class_authorization import get_class, get_class_membership
+from app.services.hosting import HostingLookup
 
 
 def _quiz_query(quiz_id: int):
@@ -171,11 +172,13 @@ def _to_response(
     account: CurrentAccount,
     quiz: Quiz,
 ) -> QuizResponse:
-    return _to_response_with_version(
+    response = _to_response_with_version(
         quiz,
         _latest_editor_version(quiz),
         can_edit=_can_edit(db, account, quiz),
     )
+    response.hosting = HostingLookup(db, account.account_id)(quiz)
+    return response
 
 
 def _to_response_with_version(
@@ -288,7 +291,7 @@ def _same_question_content(left: Question, right: Question) -> bool:
     )
 
 
-def _to_list_item(quiz: Quiz) -> QuizListItem:
+def _to_list_item(quiz: Quiz, hosting: HostingLookup) -> QuizListItem:
     version = _latest_editor_version(quiz)
     return QuizListItem(
         quiz_id=quiz.quiz_id,
@@ -299,6 +302,7 @@ def _to_list_item(quiz: Quiz) -> QuizListItem:
         description=version.description,
         question_count=len(version.questions),
         created_at=quiz.created_at,
+        hosting=hosting(quiz),
     )
 
 
@@ -397,7 +401,8 @@ def list_quizzes(
         .options(selectinload(Quiz.versions).selectinload(QuizVersion.questions))
         .order_by(Quiz.created_at.desc(), Quiz.quiz_id.desc())
     )
-    return [_to_list_item(quiz) for quiz in db.scalars(statement).all()]
+    hosting = HostingLookup(db, account.account_id)
+    return [_to_list_item(quiz, hosting) for quiz in db.scalars(statement).all()]
 
 
 def get_quiz(
@@ -446,12 +451,13 @@ def list_class_quizzes(
         .offset((page - 1) * page_size)
     ).all()
 
+    hosting = HostingLookup(db, account.account_id)
     items = []
     for quiz, author_name in rows:
         version = _latest_editor_version(quiz)
         items.append(
             ClassQuizListItem(
-                **_to_list_item(quiz).model_dump(),
+                **_to_list_item(quiz, hosting).model_dump(),
                 author_name=author_name,
                 version_number=version.version_number,
                 updated_at=quiz.updated_at,
@@ -1011,6 +1017,7 @@ def update_class_quiz(
             updated_at=now,
             can_edit=True,
             version=QuizVersionResponse.model_validate(draft),
+            hosting=HostingLookup(db, account.account_id)(quiz),
         )
         db.commit()
         return response
@@ -1114,6 +1121,7 @@ def publish_class_quiz(
             updated_at=now,
             can_edit=True,
             version=QuizVersionResponse.model_validate(draft),
+            hosting=HostingLookup(db, account.account_id)(quiz),
         )
         db.commit()
         return response
