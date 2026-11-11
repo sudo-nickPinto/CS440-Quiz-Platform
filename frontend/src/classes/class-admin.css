@@ -27,22 +27,57 @@
   background: var(--sky-soft);
 }
 
-.qp .cl-rename {
+/* Editing the class name keeps the heading's place, font and size: the
+   text just gets an orange underline, and Save / Cancel take the Edit
+   button's spot. */
+.qp .cl-page form.cl-rename {
+  margin: 0;
+}
+
+.qp .cl-rename-field {
+  flex: 1 1 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.qp .cl-page .cl-rename textarea {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  border-bottom: 3px solid var(--orange-deep);
+  /* The underline must not make the line taller than the heading. */
+  margin-bottom: -3px;
+  box-shadow: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(22px, 2.5vw, 30px);
+  line-height: 1.2;
+  resize: none;
+  field-sizing: content;
+}
+
+.qp .cl-page .cl-rename textarea:focus-visible {
+  outline: none;
+  border-bottom-color: var(--orange-deep);
+}
+
+.qp .cl-rename-actions {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
   gap: 10px;
 }
 
-.qp .cl-rename label {
-  flex: 1 1 260px;
+.qp .cl-page button.cl-edit-name.is-save {
+  background: var(--orange-deep);
+  color: var(--paper);
 }
 
-.qp .cl-rename input {
-  width: 100%;
-  box-shadow: 3px 3px 0 var(--ink);
-  font-family: "Archivo Black", sans-serif;
-  font-size: 20px;
+.qp .cl-page button.cl-edit-name.is-save:hover:not(:disabled) {
+  background: var(--orange);
 }
 
 .qp .cl-page button.cl-danger:hover:not(:disabled) {

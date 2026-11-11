@@ -910,18 +910,30 @@ function ClassWorkspace({ classInfo, onChange }) {
           </p>
 
           {editing ? (
-            <form className="cl-rename" onSubmit={saveName}>
-              <label>
+            // Same place, font and size as the heading, so nothing around
+            // it moves. Enter saves, Escape cancels.
+            <form className="cl-title-row cl-rename" onSubmit={saveName}>
+              <label className="cl-rename-field">
                 <span className="cl-sr">Class name</span>
-                <input
-                  type="text"
+                <textarea
+                  rows={1}
                   value={nameDraft}
                   maxLength={100}
                   required
                   autoFocus
                   disabled={manage.busy}
-                  onChange={(event) => setNameDraft(event.target.value)}
+                  onFocus={(event) => {
+                    const end = event.target.value.length;
+                    event.target.setSelectionRange(end, end);
+                  }}
+                  onChange={(event) =>
+                    setNameDraft(event.target.value.replace(/\n/g, " "))
+                  }
                   onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      event.currentTarget.form.requestSubmit();
+                    }
                     if (event.key === "Escape") {
                       setNameDraft(classInfo.name);
                       setEditing(false);
@@ -929,20 +941,26 @@ function ClassWorkspace({ classInfo, onChange }) {
                   }}
                 />
               </label>
-              <button type="submit" disabled={manage.busy || !nameDraft.trim()}>
-                Save
-              </button>
-              <button
-                type="button"
-                className="cl-secondary"
-                disabled={manage.busy}
-                onClick={() => {
-                  setNameDraft(classInfo.name);
-                  setEditing(false);
-                }}
-              >
-                Cancel
-              </button>
+              <span className="cl-rename-actions">
+                <button
+                  type="submit"
+                  className="cl-edit-name is-save"
+                  disabled={manage.busy || !nameDraft.trim()}
+                >
+                  ✓ Save
+                </button>
+                <button
+                  type="button"
+                  className="cl-edit-name"
+                  disabled={manage.busy}
+                  onClick={() => {
+                    setNameDraft(classInfo.name);
+                    setEditing(false);
+                  }}
+                >
+                  Cancel
+                </button>
+              </span>
             </form>
           ) : (
             <div className="cl-title-row">

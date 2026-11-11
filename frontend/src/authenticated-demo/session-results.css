@@ -194,6 +194,10 @@
   align-items: center;
   gap: 16px;
   min-height: 82px;
+  /* No top/bottom padding (preview.css pads every summary 8px), so the
+     rank and Q blocks fill the row from border to border. */
+  padding-top: 0;
+  padding-bottom: 0;
   padding-right: 16px;
   cursor: pointer;
   list-style: none;
