@@ -552,3 +552,27 @@ def test_title_sort_uses_the_title_people_see(classes) -> None:
 
     assert titles(body) == ["Alpha", "Mike"]
     assert body["pagination"]["total_items"] == 2
+
+
+def test_approved_list_can_view_matches_the_quiz_page(queue) -> None:
+    """Every member sees approved cards, but only people who can open the
+    quiz page get can_view, so the card never links to a 404."""
+    client, identities, data, quizzes = queue
+    act_as(client, identities["prof"])
+    decide(client, data["main"], quizzes["amy"][1], "APPROVED")
+    quiz_id = quizzes["amy"][0]["quiz_id"]
+    path = f"/classes/{data['main']}/dashboard/approved-quizzes"
+
+    def view(name):
+        act_as(client, identities[name])
+        (item,) = client.get(path).json()["items"]
+        opened = client.get(f"/quizzes/{quiz_id}").status_code
+        return item["can_view"], opened
+
+    assert view("amy") == (True, 200)
+    assert view("prof") == (True, 200)
+    assert view("zoe") == (False, 404)
+
+    act_as(client, identities["amy"])
+    share(client, data["main"], quiz_id, "zoe")
+    assert view("zoe") == (True, 200)

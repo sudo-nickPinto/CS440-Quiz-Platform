@@ -16,7 +16,14 @@ from sqlalchemy.orm import Session, aliased, selectinload
 from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models.account import Account
-from app.models.quiz import Question, Quiz, QuizStatus, QuizVersion
+from app.models.classes import ClassRole
+from app.models.quiz import (
+    Question,
+    Quiz,
+    QuizCollaborator,
+    QuizStatus,
+    QuizVersion,
+)
 from app.models.quiz_submission import QuizSubmission, SubmissionStatus
 from app.schemas.class_dashboard import (
     ApprovedQuizSort,
@@ -211,7 +218,7 @@ def list_class_approved_quizzes(
     sort: ApprovedQuizSort,
     order: SortOrder,
 ) -> ClassApprovedQuizPage:
-    require_class_member(db, account, class_id)
+    access = require_class_member(db, account, class_id)
     author = aliased(Account)
     approver = aliased(Account)
     statement = (
@@ -237,6 +244,20 @@ def list_class_approved_quizzes(
 
     counts = _question_counts(db, {row.QuizVersion.quiz_version_id for row in rows})
     hosting = quiz_hosting_many(db, account, [row.Quiz for row in rows])
+    page_quiz_ids = {row.Quiz.quiz_id for row in rows}
+    collaborating = (
+        set(
+            db.scalars(
+                select(QuizCollaborator.quiz_id).where(
+                    QuizCollaborator.account_id == account.account_id,
+                    QuizCollaborator.revoked_at.is_(None),
+                    QuizCollaborator.quiz_id.in_(page_quiz_ids),
+                )
+            )
+        )
+        if page_quiz_ids
+        else set()
+    )
     items = [
         ClassApprovedQuiz(
             quiz_id=row.Quiz.quiz_id,
@@ -250,6 +271,12 @@ def list_class_approved_quizzes(
             approved_by_name=row.approved_by_name,
             can_host=hosting[row.Quiz.quiz_id].can_host,
             hosting=hosting[row.Quiz.quiz_id],
+            # Same rule as GET /quizzes/{id}, so the link never 404s.
+            can_view=(
+                access.membership.role == ClassRole.ORGANIZER
+                or row.Quiz.author_id == account.account_id
+                or row.Quiz.quiz_id in collaborating
+            ),
         )
         for row in rows
     ]

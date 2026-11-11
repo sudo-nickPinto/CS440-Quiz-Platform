@@ -418,10 +418,10 @@ function PresentTable({ classInfo }) {
     <>
       <div className="cl-toolbar">
         <label className="cl-search">
-          <span className="cl-sr">Search approved quizzes</span>
+          <span className="cl-sr">Search this page of approved quizzes</span>
           <input
             type="search"
-            placeholder="Search approved quizzes…"
+            placeholder="Search this page of approved quizzes…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -456,7 +456,8 @@ function PresentTable({ classInfo }) {
             <QuizCard
               key={quiz.quiz_id}
               title={quiz.title}
-              to={"/app/quizzes/" + quiz.quiz_id}
+              // Only people who can open the quiz page get the link.
+              to={quiz.can_view ? "/app/quizzes/" + quiz.quiz_id : null}
               state={{ classId: classInfo.id }}
               status="Approved"
               headline={

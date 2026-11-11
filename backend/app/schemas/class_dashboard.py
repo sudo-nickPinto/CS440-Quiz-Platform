@@ -79,6 +79,10 @@ class ClassApprovedQuiz(BaseModel):
     # organizer can host, and not while the quiz has unapproved changes.
     can_host: bool
     hosting: QuizHosting
+    # Whether the caller may open the quiz page (/quizzes/{id}): the owner,
+    # an organizer, or an active collaborator. Other members see the card
+    # only.
+    can_view: bool
 
 
 class ClassQuizSummary(BaseModel):

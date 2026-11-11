@@ -9,11 +9,14 @@ export default function QuizCard({ title, to, state, status, archived = false, h
         <strong className="qc-headline">{headline}</strong>
       </div>
       <div className="qc-body">
-        <h2><Link to={to} state={state}>{title}</Link></h2>
+        {/* No `to` means the viewer can't open the quiz page: plain title. */}
+        <h2>{to ? <Link to={to} state={state}>{title}</Link> : title}</h2>
         <div className="qc-meta">{children}</div>
       </div>
       <div className="qc-footer">
-        <Link to={to} state={state}>{linkLabel} <span aria-hidden="true">→</span></Link>
+        {to && (
+          <Link to={to} state={state}>{linkLabel} <span aria-hidden="true">→</span></Link>
+        )}
         {actions}
       </div>
     </article>
