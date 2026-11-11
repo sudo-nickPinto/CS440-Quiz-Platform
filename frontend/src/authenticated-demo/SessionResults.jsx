@@ -8,6 +8,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { useResource } from "./rest";
+import { classPagePath } from "../classes/classPaths";
 import RequestError from "./RequestError";
 import { useFileDownload } from "./useFileDownload";
 import "./session-results.css";
@@ -56,12 +57,9 @@ function Stat({ label, value }) {
 
 function Title({ report, host, children, backTo, backLabel }) {
   const destination =
-    backTo ||
-    (host
-      ? `/app/quizzes/${report.quiz_id}/reports`
-      : "/app/dashboard/participate");
+    backTo || "/app/classes";
 
-  const label = backLabel || (host ? "Hosting history" : "Participate");
+  const label = backLabel || "Classes";
 
   return (
     <header className="rr-title">
@@ -671,12 +669,12 @@ export function ParticipantResults({ report, backTo, backLabel }) {
       <nav className="rr-crumbs" aria-label="Breadcrumb">
         <Link
           className="rr-crumb-back"
-          to={backTo || "/app/dashboard/participate"}
+          to={backTo || "/app/classes"}
         >
-          ← {backLabel || "Participate"}
+          ← {backLabel || "Classes"}
         </Link>
         <div className="rr-trail">
-          <span>Dashboard /</span>
+          <span>Classes /</span>
           <span>Results /</span>
           <b>{report.quiz_title}</b>
         </div>
@@ -822,6 +820,14 @@ export default function SessionResults() {
     /^[1-9][0-9]*$/.test(sessionId || "") &&
     Number.isSafeInteger(Number(sessionId));
 
+  // The report doesn't say which class the session was in; the session
+  // itself does. "Back" always goes to that class.
+  const session = useResource(valid ? "/sessions/" + sessionId : null);
+  const classId = session.data?.class_id;
+  const back = classId
+    ? { backTo: classPagePath(classId), backLabel: "Class" }
+    : {};
+
   const resource = useResource(
     valid
       ? "/sessions/" +
@@ -845,7 +851,7 @@ export default function SessionResults() {
     return (
       <section className="qp-content">
         <RequestError error={resource.error} retry={resource.reload} />
-        <Link to="/app/dashboard/participate">Return to dashboard</Link>
+        <Link to="/app/classes">Back to classes</Link>
       </section>
     );
   }
@@ -868,7 +874,7 @@ export default function SessionResults() {
   if (report.status === "CANCELLED") {
     return (
       <div className="rr">
-        <Title report={report} host={host} />
+        <Title report={report} host={host} {...back} />
         <p className="rr-padding">
           This session was cancelled. No quiz results were recorded.
         </p>
@@ -877,8 +883,8 @@ export default function SessionResults() {
   }
 
   return host ? (
-    <HostResults report={report} />
+    <HostResults report={report} {...back} />
   ) : (
-    <ParticipantResults report={report} />
+    <ParticipantResults report={report} {...back} />
   );
 }
