@@ -48,6 +48,43 @@
 .qp .qc-body h2 a:hover { text-decoration: underline; }
 .qp .qc-meta { display: grid; gap: 8px; font-size: 14px; overflow-wrap: anywhere; }
 .qp .qc-meta p { margin: 0; }
+.qp .qc-meta .cl-tag { width: fit-content; }
+.qp .qc-approval {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding-top: 4px;
+}
+.qp .qc-approval .cl-approval-note {
+  color: var(--gray);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.qp .qc-approval button.cl-send {
+  min-width: 172px;
+  padding: 6px 12px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.qp .qc-approval button.cl-send.is-withdraw {
+  background: var(--paper);
+  color: var(--ink);
+}
+.qp .qc-approval button.cl-send.is-approved:disabled {
+  background: var(--navy);
+  color: var(--paper);
+  box-shadow: none;
+  cursor: default;
+  opacity: 1;
+}
+.qp .qc-approval button.cl-send:disabled:not(.is-approved) {
+  background: var(--sand);
+  color: var(--gray);
+  box-shadow: none;
+  cursor: not-allowed;
+}
 .qp .qc-footer {
   display: flex;
   align-items: center;
@@ -62,12 +99,35 @@
 .qp .qc-footer .ui-row-menu,
 .qp .qc-footer .ui-row-menu[open] { position: relative; margin: 0; flex: 0 0 auto; }
 .qp .qc-footer .ui-row-options { top: calc(100% + 8px); right: 0; left: auto; min-width: 0; width: min(260px, 72vw); }
-.qp .qc-card a:focus-visible, .qp .qc-card summary:focus-visible {
+.qp .qc-footer .cl-kebab-wrap { display: grid; place-items: center; }
+.qp .qc-footer button.cl-kebab {
+  width: 50px;
+  height: 38px;
+  padding: 0;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-size: 20px;
+  line-height: 1;
+}
+.qp .qc-footer button.cl-kebab:hover,
+.qp .qc-footer button.cl-kebab[aria-expanded="true"] {
+  background: var(--sky-soft);
+}
+.qp .qc-footer button.cl-kebab:active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+.qp .qc-card a:focus-visible,
+.qp .qc-card button:focus-visible,
+.qp .qc-card summary:focus-visible {
   outline: 3px solid var(--orange-deep);
   outline-offset: 2px;
 }
 .qp .qc-progress { height: 10px; border: var(--b-thin); background: var(--sand); }
 .qp .qc-progress > span { display: block; height: 100%; background: var(--navy); }
+.qp .qc-empty { margin: 24px; }
 @media (max-width: 600px) {
   .qp .qc-grid { gap: 18px; padding: 16px; }
 }

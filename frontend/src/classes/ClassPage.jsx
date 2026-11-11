@@ -3,6 +3,7 @@ import { useRemembered } from "../authenticated-demo/remember";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 import HostQuizButton from "../authenticated-demo/HostQuizButton";
+import QuizCard from "../authenticated-demo/QuizCard";
 import { hostingState, showsHostControl } from "../authenticated-demo/hosting";
 import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import RequestError from "../authenticated-demo/RequestError";
@@ -195,6 +196,102 @@ function ReportTable({
   );
 }
 
+// Searchable, paginated cards for quiz-browsing views. Dense grade and
+// approval reports remain tables, while quizzes and personal history use the
+// responsive card treatment introduced in PR #99.
+function CardCollection({
+  caption,
+  noun,
+  items,
+  pagination,
+  onPageChange,
+  emptyTitle,
+  emptyText,
+  controls = null,
+  rememberAs,
+  getText,
+  renderCard,
+}) {
+  const [query, setQuery] = useRemembered(`${rememberAs}:query`, "");
+  const needle = query.trim().toLowerCase();
+  const visible = items.filter((item) =>
+    getText(item).toLowerCase().includes(needle),
+  );
+  const totalItems = pagination?.total_items ?? items.length;
+  const page = pagination?.page ?? 1;
+  const totalPages = pagination?.total_pages ?? (totalItems ? 1 : 0);
+  const pageSize = pagination?.page_size ?? Math.max(items.length, 1);
+  const firstItem = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastItem = Math.min(firstItem + items.length - 1, totalItems);
+  const nounLabel = totalItems === 1 ? noun : `${noun}s`;
+  const pastEnd = Boolean(onPageChange) && page > Math.max(totalPages, 1);
+
+  useEffect(() => {
+    if (pastEnd) onPageChange(Math.max(totalPages, 1));
+  }, [pastEnd, totalPages, onPageChange]);
+
+  return (
+    <>
+      <div className="cl-toolbar">
+        <label className="cl-search">
+          <span className="cl-sr">
+            Search this page of {caption.toLowerCase()}
+          </span>
+          <input
+            type="search"
+            placeholder={`Search this page of ${caption.toLowerCase()}…`}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+
+        {controls}
+
+        <span className="cl-count" aria-live="polite">
+          {needle
+            ? `${visible.length} of ${items.length} ${nounLabel} on this page`
+            : totalItems === 0
+              ? `0 ${nounLabel}`
+              : `${firstItem}–${lastItem} of ${totalItems} ${nounLabel}`}
+        </span>
+      </div>
+
+      {visible.length ? (
+        <div className="qc-grid" aria-label={caption}>
+          {visible.map(renderCard)}
+        </div>
+      ) : (
+        <div className="cl-state qc-empty" role="status">
+          <h2>{needle ? "No matches" : emptyTitle}</h2>
+          <p>{needle ? "Try another search." : emptyText}</p>
+        </div>
+      )}
+
+      {onPageChange && totalPages > 1 && (
+        <nav className="cl-pagination" aria-label={`${caption} pages`}>
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+          >
+            ← Previous
+          </button>
+          <span>
+            Page {page} of {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+          >
+            Next →
+          </button>
+        </nav>
+      )}
+    </>
+  );
+}
+
 const MONTH = new Intl.DateTimeFormat(undefined, { month: "short" });
 
 // The apricot date block that leads each presentation row.
@@ -304,10 +401,7 @@ function PresentationsTable({ classInfo, studentCount, controls }) {
   );
 }
 
-const PARTICIPATE_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-wide", "cl-go-cell"];
-
-// Member view: the sessions the caller was part of, styled after the
-// Participate tab in made-dashboard-main.html.
+// Member view: completed and missed sessions shown as responsive quiz cards.
 function ParticipateTable({ classInfo }) {
   const memory = `class:${classInfo.id}:participate`;
   const [page, setPage] = useRemembered(`${memory}:page`, 1);
@@ -323,13 +417,10 @@ function ParticipateTable({ classInfo }) {
   );
 
   return (
-    <ReportTable
+    <CardCollection
       caption="Sessions"
       rememberAs={memory}
       noun="session"
-      tableClass="cl-rows cl-member-rows"
-      columnClasses={PARTICIPATE_COLUMNS}
-      headers={["Rank", "Quiz", "Score", "Host", "Date", ""]}
       emptyTitle="No sessions yet"
       emptyText={
         "When an organizer hosts a quiz here, a Live button appears at " +
@@ -337,62 +428,50 @@ function ParticipateTable({ classInfo }) {
       }
       pagination={resource.data.pagination}
       onPageChange={setPage}
-      rows={resource.data.items.map((session) => {
+      items={resource.data.items}
+      getText={(session) => `${session.quiz_title} ${session.host_name}`}
+      renderCard={(session) => {
         const played = session.my_score != null;
         const report =
           classInfo.canManage || played
             ? `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`
             : null;
-        return {
-          key: session.session_id,
-          text: `${session.quiz_title} ${session.host_name}`,
-          leadClass: `cl-rank-lead${played ? "" : " is-none"}`,
-          cells: [
-            played ? (
-              <span className="cl-rank-block">
-                <b>#{session.my_rank}</b>
-                <small>of {formatScore(session.participant_count)}</small>
+        const maxScore = session.top_score ?? best;
+        const percentage =
+          played && maxScore > 0
+            ? Math.min(100, Math.max(0, (session.my_score / maxScore) * 100))
+            : 0;
+
+        return (
+          <QuizCard
+            key={session.session_id}
+            title={session.quiz_title}
+            to={report}
+            status={played ? "Completed" : "Absent"}
+            headline={
+              played
+                ? `Rank #${session.my_rank} of ${formatScore(session.participant_count)}`
+                : "Did not participate"
+            }
+            linkLabel={classInfo.canManage ? "Session report" : "My results"}
+          >
+            <p>Hosted by {session.host_name}</p>
+            <p>{formatDate(session.started_at)}</p>
+            <p>
+              <strong>
+                {played
+                  ? `${formatScore(session.my_score)} points`
+                  : "No score recorded"}
+              </strong>
+            </p>
+            {played && (
+              <span className="qc-progress" aria-hidden="true">
+                <span style={{ width: `${percentage}%` }} />
               </span>
-            ) : (
-              "Absent"
-            ),
-            <span className="cl-quiz-cell">
-              {report ? (
-                <Link className="cl-quiz-name" to={report}>
-                  {session.quiz_title}
-                </Link>
-              ) : (
-                <strong className="cl-quiz-name">{session.quiz_title}</strong>
-              )}
-              <small className="cl-meta">
-                {played && (
-                  <span className="cl-phone-only">
-                    {formatScore(session.my_score)} pts ·{" "}
-                  </span>
-                )}
-                Hosted by {session.host_name} · {formatDate(session.started_at)}
-              </small>
-            </span>,
-            played ? (
-              <ScoreMeter
-                value={session.my_score}
-                max={session.top_score ?? best}
-                label={`Your score ${formatScore(session.my_score)} points`}
-              />
-            ) : (
-              <span className="cl-dim">—</span>
-            ),
-            session.host_name,
-            <span className="cl-dim">{formatDate(session.started_at)}</span>,
-            report ? (
-              <GoLink
-                to={report}
-                label={`${classInfo.canManage ? "Session report" : "My results"} for ${session.quiz_title}`}
-              />
-            ) : null,
-          ],
-        };
-      })}
+            )}
+          </QuizCard>
+        );
+      }}
     />
   );
 }
@@ -481,12 +560,9 @@ function RowMenu({ label, children }) {
   );
 }
 
-const PRESENT_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-num cl-wide", "cl-wide", "cl-go-cell"];
-
 // Member view: the caller's own quizzes in this class (owned or shared with
-// them), styled after the Present tab in made-dashboard-main.html. The lead
-// block says Draft or Approved; one Approval button walks Send for approval
-// → Withdraw request → ✓ Approved; the ⋯ menu edits, hosts or archives.
+// them). Cards retain the approval workflow and the ⋯ menu edits, hosts, or
+// archives without losing the responsive treatment from PR #99.
 function PresentTable({ classInfo, onApprovalChange }) {
   const api = useApi();
   const account = useAccount();
@@ -548,13 +624,10 @@ function PresentTable({ classInfo, onApprovalChange }) {
     <>
       <ConfirmDialog confirmer={confirmer} />
       <RequestError error={action.error} />
-      <ReportTable
+      <CardCollection
         caption="My quizzes"
         rememberAs={memory}
         noun="quiz"
-        tableClass="cl-rows cl-member-rows"
-        columnClasses={PRESENT_COLUMNS}
-        headers={["Status", "Quiz", "Approval", "Owner", "Qs", "Edited", ""]}
         emptyTitle="No quizzes yet"
         emptyText={
           canSubmit
@@ -574,7 +647,9 @@ function PresentTable({ classInfo, onApprovalChange }) {
             }}
           />
         }
-        rows={resource.data.items.map((quiz) => {
+        items={resource.data.items}
+        getText={(quiz) => `${quiz.title} ${quiz.author_name}`}
+        renderCard={(quiz) => {
           const status = presentStatus(quiz);
           const owner = quiz.my_access === "OWNER";
           const archived = quiz.status === "ARCHIVED";
@@ -592,29 +667,68 @@ function PresentTable({ classInfo, onApprovalChange }) {
               ? withdraw(quiz)
               : submitForApproval(quiz));
 
-          return {
-            key: quiz.quiz_id,
-            text: `${quiz.title} ${quiz.author_name}`,
-            leadClass: `cl-status is-${status.key}`,
-            cells: [
-              status.label,
-              <span className="cl-quiz-cell">
-                <Link
-                  className="cl-quiz-name"
-                  to={`/app/quizzes/${quiz.quiz_id}`}
-                  state={{ classId: classInfo.id }}
-                >
-                  {quiz.title}
-                </Link>
-                <small className="cl-meta">
-                  {quiz.question_count}{" "}
-                  {quiz.question_count === 1 ? "question" : "questions"} · edited{" "}
-                  {formatDate(quiz.updated_at)}
-                  {owner ? "" : ` · shared by ${quiz.author_name}`}
-                </small>
-              </span>,
-              button ? (
-                <span className="cl-approval-cell">
+          return (
+            <QuizCard
+              key={quiz.quiz_id}
+              title={quiz.title}
+              to={`/app/quizzes/${quiz.quiz_id}`}
+              state={{ classId: classInfo.id }}
+              status={status.label}
+              archived={archived}
+              headline={`${quiz.question_count} ${
+                quiz.question_count === 1 ? "question" : "questions"
+              }`}
+              linkLabel="Open quiz"
+              actions={
+                <RowMenu label={`Actions for ${quiz.title}`}>
+                  {quiz.my_access && !archived && (
+                    <Link
+                      role="menuitem"
+                      to={`/app/quizzes/${quiz.quiz_id}/edit`}
+                      state={{ classId: classInfo.id }}
+                    >
+                      ✎ Edit
+                    </Link>
+                  )}
+                  <Link
+                    role="menuitem"
+                    to={`/app/quizzes/${quiz.quiz_id}`}
+                    state={{ classId: classInfo.id }}
+                  >
+                    ◉ Open
+                  </Link>
+                  {hostable && (
+                    <HostQuizButton
+                      quiz={quiz}
+                      classId={classInfo.id}
+                      action={action}
+                      label="▶ Host live"
+                    />
+                  )}
+                  {owner && !archived && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="is-danger"
+                      disabled={action.busy}
+                      onClick={() => void archive(quiz)}
+                    >
+                      Archive
+                    </button>
+                  )}
+                </RowMenu>
+              }
+            >
+              <p>
+                {owner ? (
+                  <span className="cl-tag is-me">Owned by me</span>
+                ) : (
+                  <span className="cl-tag">Shared by {quiz.author_name}</span>
+                )}
+              </p>
+              <p>Edited {formatDate(quiz.updated_at)}</p>
+              {button && (
+                <div className="qc-approval">
                   <button
                     type="button"
                     className={`cl-send is-${button.kind}`}
@@ -628,69 +742,11 @@ function PresentTable({ classInfo, onApprovalChange }) {
                   {button.note && (
                     <small className="cl-approval-note">{button.note}</small>
                   )}
-                </span>
-              ) : (
-                <span className="cl-dim">—</span>
-              ),
-              owner ? (
-                <span className="cl-tag is-me">Me</span>
-              ) : (
-                <span className="cl-tag">Shared · {quiz.author_name}</span>
-              ),
-              <span className="cl-dim">{formatScore(quiz.question_count)}</span>,
-              <span className="cl-dim">{formatDate(quiz.updated_at)}</span>,
-              <RowMenu label={`Actions for ${quiz.title}`}>
-                {quiz.my_access && !archived && (
-                  <Link
-                    role="menuitem"
-                    to={`/app/quizzes/${quiz.quiz_id}/edit`}
-                    state={{ classId: classInfo.id }}
-                  >
-                    ✎ Edit
-                  </Link>
-                )}
-                <Link
-                  role="menuitem"
-                  to={`/app/quizzes/${quiz.quiz_id}`}
-                  state={{ classId: classInfo.id }}
-                >
-                  ◉ Open
-                </Link>
-                {hostable && (
-                  <HostQuizButton
-                    quiz={quiz}
-                    classId={classInfo.id}
-                    action={action}
-                    label="▶ Host live"
-                  />
-                )}
-                {/* The Approval column is hidden on phones. */}
-                {clickable && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="cl-phone-only"
-                    onClick={press}
-                  >
-                    {button.kind === "withdraw" ? "↩ " : "⇪ "}
-                    {button.label}
-                  </button>
-                )}
-                {owner && !archived && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="is-danger"
-                    disabled={action.busy}
-                    onClick={() => void archive(quiz)}
-                  >
-                    Archive
-                  </button>
-                )}
-              </RowMenu>,
-            ],
-          };
-        })}
+                </div>
+              )}
+            </QuizCard>
+          );
+        }}
       />
     </>
   );
@@ -830,8 +886,8 @@ function SubmissionsTable({ classInfo, onChange }) {
   );
 }
 
-// The same rows, grouped by quiz: when it was last presented, how often,
-// and how the class did across those presentations.
+// The same history grouped into browsable quiz cards: when each quiz was last
+// presented, how often, and how the class did across those presentations.
 function ClassQuizzesTable({ classInfo, controls }) {
   const memory = `class:${classInfo.id}:by-quiz`;
   const [page, setPage] = useRemembered(`${memory}:page`, 1);
@@ -846,45 +902,47 @@ function ClassQuizzesTable({ classInfo, controls }) {
   );
 
   return (
-    <ReportTable
+    <CardCollection
       caption="Presented quizzes"
       rememberAs={memory}
       noun="quiz"
-      tableClass="cl-rows"
-      columnClasses={["", "", "cl-num", "", "cl-go-cell"]}
-      headers={["Last", "Quiz", "Players", "Avg score", ""]}
       emptyTitle="No presented quizzes yet"
       emptyText="Quizzes appear here after a session in this class completes."
       controls={controls}
       pagination={resource.data.pagination}
       onPageChange={setPage}
-      rows={resource.data.items.map((quiz) => {
+      items={resource.data.items}
+      getText={(quiz) => quiz.title}
+      renderCard={(quiz) => {
         const report = `/app/classes/${classInfo.id}/quizzes/${quiz.quiz_id}/report`;
-        return {
-          key: quiz.quiz_id,
-          text: quiz.title,
-          leadClass: "cl-date",
-          cells: [
-            <DateBlock value={quiz.presented_at} />,
-            <span className="cl-quiz-cell">
-              <Link className="cl-quiz-name" to={report}>
-                {quiz.title}
-              </Link>
-              <small>
-                Presented {quiz.session_count}{" "}
-                {quiz.session_count === 1 ? "time" : "times"}
-              </small>
-            </span>,
-            <Fraction value={quiz.participant_count} />,
-            <ScoreMeter
-              value={quiz.average_score}
-              max={best}
-              label={`Average ${formatScore(quiz.average_score)} points`}
-            />,
-            <GoLink to={report} label={`Report for ${quiz.title}`} />,
-          ],
-        };
-      })}
+        const percentage =
+          quiz.average_score != null && best > 0
+            ? Math.min(100, Math.max(0, (quiz.average_score / best) * 100))
+            : 0;
+        return (
+          <QuizCard
+            key={quiz.quiz_id}
+            title={quiz.title}
+            to={report}
+            status="Presented"
+            headline={`${quiz.session_count} ${
+              quiz.session_count === 1 ? "presentation" : "presentations"
+            }`}
+            linkLabel="View report"
+          >
+            <p>Last presented {formatDate(quiz.presented_at)}</p>
+            <p>{formatScore(quiz.participant_count)} total participations</p>
+            <p>
+              <strong>
+                Average score: {formatScore(quiz.average_score)} points
+              </strong>
+            </p>
+            <span className="qc-progress" aria-hidden="true">
+              <span style={{ width: `${percentage}%` }} />
+            </span>
+          </QuizCard>
+        );
+      }}
     />
   );
 }
