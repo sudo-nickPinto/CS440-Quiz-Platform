@@ -7,7 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
+from app.models.quiz_submission import SubmissionStatus
 from app.schemas.class_dashboard import (
+    ApprovedQuizSort,
+    ClassApprovedQuizPage,
+    ClassSubmissionPage,
+    ClassSubmissionPreview,
+    SubmissionSort,
     ClassDashboardResponse,
     ClassQuizPage,
     ClassSessionPage,
@@ -16,6 +22,11 @@ from app.schemas.class_dashboard import (
     SessionSort,
     SortOrder,
     StudentSort,
+)
+from app.services.class_approvals import (
+    list_class_approved_quizzes,
+    get_class_submission_preview,
+    list_class_submissions,
 )
 from app.services.class_dashboard import (
     export_class_grades,
@@ -82,6 +93,60 @@ def class_students_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> ClassStudentPage:
     return list_class_students(
+        db, account, class_id, page=page, page_size=page_size, sort=sort, order=order
+    )
+
+
+# Dashboard views of the Task 4 approval queue: paged, sorted, and with
+# names and version details filled in. /quiz-submissions and
+# /approved-quizzes remain the endpoints that change or check approvals.
+@router.get("/dashboard/submissions", response_model=ClassSubmissionPage)
+def class_submissions_route(
+    class_id: int,
+    page: Page = 1,
+    page_size: PageSize = 25,
+    sort: SubmissionSort = SubmissionSort.SUBMITTED_AT,
+    order: SortOrder = SortOrder.DESC,
+    status: SubmissionStatus | None = None,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> ClassSubmissionPage:
+    return list_class_submissions(
+        db,
+        account,
+        class_id,
+        page=page,
+        page_size=page_size,
+        sort=sort,
+        order=order,
+        status=status,
+    )
+
+
+@router.get(
+    "/dashboard/submissions/{submission_id}/preview",
+    response_model=ClassSubmissionPreview,
+)
+def class_submission_preview_route(
+    class_id: int,
+    submission_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> ClassSubmissionPreview:
+    return get_class_submission_preview(db, account, class_id, submission_id)
+
+
+@router.get("/dashboard/approved-quizzes", response_model=ClassApprovedQuizPage)
+def class_approved_quizzes_route(
+    class_id: int,
+    page: Page = 1,
+    page_size: PageSize = 25,
+    sort: ApprovedQuizSort = ApprovedQuizSort.APPROVED_AT,
+    order: SortOrder = SortOrder.DESC,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> ClassApprovedQuizPage:
+    return list_class_approved_quizzes(
         db, account, class_id, page=page, page_size=page_size, sort=sort, order=order
     )
 

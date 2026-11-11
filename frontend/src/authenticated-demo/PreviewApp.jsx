@@ -11,6 +11,7 @@ import Avatar from "../avatars/Avatar";
 import ClassesPage from "../classes/ClassesPage";
 import ClassPage from "../classes/ClassPage";
 import JoinClassPage from "../classes/JoinClassPage";
+import SubmissionPreviewPage from "../classes/SubmissionPreview";
 import QuizBurgLogo from "../classes/QuizBurgLogo";
 import {
   ClassSessionReportPage,
@@ -128,6 +129,11 @@ export default function PreviewApp({ onSignOut }) {
             <Route
               path="classes/:classId/quizzes/:quizId/report"
               element={<ClassQuizReportPage key={pathname} />}
+            />
+
+            <Route
+              path="classes/:classId/submissions/:submissionId"
+              element={<SubmissionPreviewPage key={pathname} />}
             />
 
             <Route

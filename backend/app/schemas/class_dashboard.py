@@ -4,11 +4,9 @@ from enum import Enum
 from pydantic import BaseModel
 
 from app.models.classes import ClassRole
-
-
-class SortOrder(str, Enum):
-    ASC = "asc"
-    DESC = "desc"
+from app.models.quiz_submission import SubmissionStatus
+from app.schemas.pagination import PageInfo, SortOrder
+from app.schemas.quiz import ClassQuizListItem, QuizHosting, QuizVersionResponse
 
 
 class QuizSort(str, Enum):
@@ -29,11 +27,62 @@ class StudentSort(str, Enum):
     SESSION_COUNT = "session_count"
 
 
-class PageInfo(BaseModel):
-    page: int
-    page_size: int
-    total_items: int
-    total_pages: int
+class SubmissionSort(str, Enum):
+    SUBMITTED_AT = "submitted_at"
+    TITLE = "title"
+    SUBMITTER = "submitter"
+
+
+class ApprovedQuizSort(str, Enum):
+    APPROVED_AT = "approved_at"
+    TITLE = "title"
+
+
+class ClassSubmissionSummary(BaseModel):
+    submission_id: int
+    quiz_id: int
+    quiz_version_id: int
+    version_number: int
+    quiz_title: str
+    question_count: int
+    submitted_by_id: int
+    submitter_name: str
+    status: SubmissionStatus
+    submitted_at: datetime
+    decided_at: datetime | None
+    decided_by_name: str | None
+    # False once a newer version of the quiz is published; a stale pending
+    # submission can only be rejected or withdrawn.
+    is_current_version: bool
+
+
+class ClassSubmissionPreview(BaseModel):
+    """Exactly the version that was submitted, never the quiz's newer draft,
+    so an organizer reviews what they approve."""
+
+    submission: ClassSubmissionSummary
+    version: QuizVersionResponse
+
+
+class ClassApprovedQuiz(BaseModel):
+    quiz_id: int
+    quiz_version_id: int
+    version_number: int
+    title: str
+    question_count: int
+    author_id: int
+    author_name: str
+    approved_at: datetime
+    approved_by_name: str
+    # From the same checks as starting a session (services/hosting.py), so
+    # the Host button and the server agree. Only the owner or an active
+    # organizer can host, and not while the quiz has unapproved changes.
+    can_host: bool
+    hosting: QuizHosting
+    # Whether the caller may open the quiz page (/quizzes/{id}): the owner,
+    # an organizer, or an active collaborator. Other members see the card
+    # only.
+    can_view: bool
 
 
 class ClassQuizSummary(BaseModel):
@@ -95,11 +144,22 @@ class ClassStudentPage(BaseModel):
     pagination: PageInfo
 
 
+class ClassSubmissionPage(BaseModel):
+    class_id: int
+    items: list[ClassSubmissionSummary]
+    pagination: PageInfo
+
+
+class ClassApprovedQuizPage(BaseModel):
+    class_id: int
+    items: list[ClassApprovedQuiz]
+    pagination: PageInfo
+
+
 class ClassDashboardResponse(BaseModel):
     class_id: int
     class_name: str
     current_user_role: ClassRole | None
-    is_global_admin: bool
     is_archived: bool
     active_member_count: int
     student_count: int
@@ -111,3 +171,9 @@ class ClassDashboardResponse(BaseModel):
     completed_sessions: list[ClassSessionSummary]
     presented_quizzes: list[ClassQuizSummary]
     students: list[ClassStudentSummary] | None
+    # Quizzes in this class the caller owns or edits as a collaborator.
+    my_quizzes: list[ClassQuizListItem]
+    my_quiz_count: int
+    # Organizers: every pending submission in the class. Members: their own.
+    pending_submission_count: int
+    approved_quiz_count: int

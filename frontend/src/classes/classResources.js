@@ -1,5 +1,10 @@
 import { useAccount } from "../authenticated-demo/account";
 import { useResource } from "../authenticated-demo/rest";
+import {
+  approvedQuizzesPath,
+  myQuizzesPath,
+  submissionsPath,
+} from "./classHelpers";
 
 function normalizeClass(record, account) {
   if (
@@ -108,8 +113,8 @@ export function useClassResource(classId) {
 
 export const REPORT_PAGE_SIZE = 25;
 
-function useClassReport(classId, path) {
-  const result = useResource(`/classes/${classId}/${path}`);
+function useClassReport(classId, path, pollMs = 0) {
+  const result = useResource(`/classes/${classId}/${path}`, pollMs);
 
   return resourceState(result, (data) => {
     if (!data || typeof data !== "object") {
@@ -120,8 +125,12 @@ function useClassReport(classId, path) {
   });
 }
 
+// Polled so counts such as the pending-approval badge pick up changes
+// other people make (a student sending a quiz for approval).
+export const DASHBOARD_POLL_MS = 30000;
+
 export function useClassDashboard(classId) {
-  return useClassReport(classId, "dashboard");
+  return useClassReport(classId, "dashboard", DASHBOARD_POLL_MS);
 }
 
 export function useClassSessions(classId, page = 1) {
@@ -143,5 +152,47 @@ export function useClassQuizzes(classId, page = 1) {
   return useClassReport(
     classId,
     `presented-quizzes?page=${page}&page_size=${REPORT_PAGE_SIZE}&sort=presented_at&order=desc`,
+  );
+}
+
+// Quizzes in this class the caller owns or collaborates on.
+export function useMyClassQuizzes(classId, page = 1, sortKey = "recent") {
+  const result = useResource(myQuizzesPath(classId, page, sortKey, REPORT_PAGE_SIZE));
+
+  return resourceState(result, (data) => {
+    if (!data || !Array.isArray(data.items)) {
+      throw new Error("Your quizzes could not be read.");
+    }
+
+    return data;
+  });
+}
+
+function usePagedReport(path, what) {
+  const result = useResource(path);
+
+  return resourceState(result, (data) => {
+    if (!data || !Array.isArray(data.items)) {
+      throw new Error(`${what} could not be read.`);
+    }
+
+    return data;
+  });
+}
+
+// Organizers get every submission in the class; members only their own.
+export function useClassSubmissions(classId, page = 1, sortKey = "newest", status = "") {
+  return usePagedReport(
+    submissionsPath(classId, page, sortKey, status, REPORT_PAGE_SIZE),
+    "Quiz submissions",
+  );
+}
+
+// Approved quizzes any active member can see; can_host marks the ones the
+// caller may start.
+export function useApprovedQuizzes(classId, page = 1, sortKey = "recent") {
+  return usePagedReport(
+    approvedQuizzesPath(classId, page, sortKey),
+    "Approved quizzes",
   );
 }

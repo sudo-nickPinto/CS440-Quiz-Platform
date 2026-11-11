@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 from math import ceil
 
-from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy import and_, case, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
@@ -21,10 +21,13 @@ from app.models.quiz import (
     QuizVersion,
     QuizVisibility,
 )
-from app.schemas.class_dashboard import PageInfo
+from app.models.quiz_submission import QuizSubmission
+from app.schemas.pagination import PageInfo, SortOrder
 from app.schemas.quiz import (
     ClassQuizListItem,
     ClassQuizListPage,
+    ClassQuizSort,
+    QuizAccess,
     QuizCollaboratorCreate,
     QuizCollaboratorResponse,
     QuizCreate,
@@ -415,6 +418,25 @@ def get_quiz(
     return _to_response(db, account, _load_readable_quiz(db, account, quiz_id))
 
 
+def _latest_submissions(
+    db: Session, class_id: int, version_ids: list[int]
+) -> dict[int, QuizSubmission]:
+    """The newest submission of each version to this class."""
+    if not version_ids:
+        return {}
+    newest: dict[int, QuizSubmission] = {}
+    for submission in db.scalars(
+        select(QuizSubmission)
+        .where(
+            QuizSubmission.class_id == class_id,
+            QuizSubmission.quiz_version_id.in_(version_ids),
+        )
+        .order_by(QuizSubmission.submitted_at, QuizSubmission.submission_id)
+    ):
+        newest[submission.quiz_version_id] = submission
+    return newest
+
+
 def list_class_quizzes(
     db: Session,
     account: CurrentAccount,
@@ -422,49 +444,133 @@ def list_class_quizzes(
     *,
     page: int,
     page_size: int,
+    sort: ClassQuizSort = ClassQuizSort.CREATED_AT,
+    order: SortOrder = SortOrder.DESC,
+    mine: bool = False,
 ) -> ClassQuizListPage:
-    """A class's quizzes, newest first.
+    """A page of a class's quizzes.
 
-    Organizers see every quiz in the class; members see the ones they own.
+    Organizers see every quiz in the class; members see the ones they own
+    or collaborate on. ``mine`` narrows an organizer's list the same way.
     """
     membership = _require_active_membership(db, account, class_id)
+    collaborating = select(QuizCollaborator.quiz_id).where(
+        QuizCollaborator.account_id == account.account_id,
+        QuizCollaborator.revoked_at.is_(None),
+    )
     condition = Quiz.class_id == class_id
-    if membership.role != ClassRole.ORGANIZER:
-        collaborator_access = exists(
-            select(1).where(
-                QuizCollaborator.quiz_id == Quiz.quiz_id,
-                QuizCollaborator.account_id == account.account_id,
-                QuizCollaborator.revoked_at.is_(None),
-            )
-        )
+    if mine or membership.role != ClassRole.ORGANIZER:
         condition = and_(
             condition,
-            or_(Quiz.author_id == account.account_id, collaborator_access),
+            or_(
+                Quiz.author_id == account.account_id,
+                Quiz.quiz_id.in_(collaborating),
+            ),
         )
 
-    total = db.scalar(select(func.count(Quiz.quiz_id)).where(condition)) or 0
-    rows = db.execute(
-        select(Quiz, Account.display_name)
-        .join(Account, Account.account_id == Quiz.author_id)
+    total = db.scalar(select(func.count(Quiz.quiz_id)).where(condition))
+
+    # Titles live on the version people edit: the newest draft, else the
+    # newest published version (_latest_editor_version). Find it in SQL so
+    # the database can sort, count and page.
+    editor_number = (
+        select(
+            QuizVersion.quiz_id,
+            func.coalesce(
+                func.max(
+                    case(
+                        (QuizVersion.published_at.is_(None), QuizVersion.version_number)
+                    )
+                ),
+                func.max(QuizVersion.version_number),
+            ).label("version_number"),
+        )
+        .group_by(QuizVersion.quiz_id)
+        .subquery()
+    )
+    editor_version = aliased(QuizVersion)
+    column = {
+        ClassQuizSort.UPDATED_AT: Quiz.updated_at,
+        ClassQuizSort.CREATED_AT: Quiz.created_at,
+        ClassQuizSort.TITLE: func.lower(editor_version.title),
+    }[sort]
+    # The id breaks ties so equal timestamps or titles still page stably.
+    ordering = (
+        (column.desc(), Quiz.quiz_id.desc())
+        if order == SortOrder.DESC
+        else (column.asc(), Quiz.quiz_id.asc())
+    )
+    page_ids = db.scalars(
+        select(Quiz.quiz_id)
+        .join(editor_number, editor_number.c.quiz_id == Quiz.quiz_id)
+        .join(
+            editor_version,
+            and_(
+                editor_version.quiz_id == Quiz.quiz_id,
+                editor_version.version_number == editor_number.c.version_number,
+            ),
+        )
         .where(condition)
-        .options(selectinload(Quiz.versions).selectinload(QuizVersion.questions))
-        .order_by(Quiz.created_at.desc(), Quiz.quiz_id.desc())
+        .order_by(*ordering)
         .limit(page_size)
         .offset((page - 1) * page_size)
     ).all()
+
+    loaded = {
+        quiz.quiz_id: (quiz, author_name)
+        for quiz, author_name in db.execute(
+            select(Quiz, Account.display_name)
+            .join(Account, Account.account_id == Quiz.author_id)
+            .where(Quiz.quiz_id.in_(page_ids))
+            .options(
+                selectinload(Quiz.versions).selectinload(QuizVersion.questions)
+            )
+        ).all()
+    }
+    rows = [loaded[quiz_id] for quiz_id in page_ids]
+    editing = set(db.scalars(collaborating))
+    newest_published = {
+        quiz.quiz_id: max(published, key=lambda v: v.version_number)
+        for quiz, _ in rows
+        if (published := [v for v in quiz.versions if v.published_at is not None])
+    }
+    approvals = _latest_submissions(
+        db,
+        class_id,
+        [version.quiz_version_id for version in newest_published.values()],
+    )
 
     hosting = quiz_hosting_many(db, account, [quiz for quiz, _ in rows])
     items = []
     for quiz, author_name in rows:
         version = _latest_editor_version(quiz)
+        published = newest_published.get(quiz.quiz_id)
+        submission = (
+            approvals.get(published.quiz_version_id) if published else None
+        )
+        if quiz.author_id == account.account_id:
+            access = QuizAccess.OWNER
+        elif quiz.quiz_id in editing:
+            access = QuizAccess.EDITOR
+        else:
+            access = None
         items.append(
             ClassQuizListItem(
                 **_to_list_item(quiz, hosting[quiz.quiz_id]).model_dump(),
                 author_name=author_name,
                 version_number=version.version_number,
                 updated_at=quiz.updated_at,
+                my_access=access,
+                published_version_id=(
+                    published.quiz_version_id if published else None
+                ),
+                approval_status=submission.status if submission else None,
+                approval_submission_id=(
+                    submission.submission_id if submission else None
+                ),
             )
         )
+
     return ClassQuizListPage(
         class_id=class_id,
         items=items,

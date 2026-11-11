@@ -123,12 +123,12 @@ Errors:
 - `500 quiz_save_failed`.
 
 ### `GET /classes/{class_id}/quizzes` → `200 ClassQuizListPage`
-The class's quizzes, newest first. Organizers get every quiz in the class; members get only their own. It takes `page` and `page_size` (1–100, default 25).
+The class's quizzes. Organizers get every quiz in the class; members get only the ones they own or collaborate on. `mine=true` narrows an organizer's list the same way. It takes `page`, `page_size` (1–100, default 25), `sort=created_at|updated_at|title` (default `created_at`) and `order=asc|desc` (default `desc`). Each item's `my_access` is `OWNER`, `EDITOR` (an active collaborator), or null when an organizer sees someone else's quiz. `published_version_id` is the newest published version (null for a draft-only quiz), and `approval_status` / `approval_submission_id` describe that version's newest submission to this class (`PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`, or null if it was never submitted).
 
 ```json
 {
   "class_id": 4,
-  "items": [{ "quiz_id": 3, "author_id": 7, "author_name": "Amy", "class_id": 4, "status": "PUBLISHED", "title": "…", "description": null, "question_count": 10, "version_number": 2, "created_at": "…", "updated_at": "…" }],
+  "items": [{ "quiz_id": 3, "author_id": 7, "author_name": "Amy", "class_id": 4, "status": "PUBLISHED", "title": "…", "description": null, "question_count": 10, "version_number": 2, "created_at": "…", "updated_at": "…", "my_access": "OWNER" }],
   "pagination": { "page": 1, "page_size": 25, "total_items": 1, "total_pages": 1 }
 }
 ```
@@ -460,7 +460,11 @@ Built from the class's `COMPLETED` sessions only; open sessions never count. Sco
   - `class_average` and `attendance_rate`, which are organizers only and null for members;
   - `active_sessions`;
   - the five most recent `completed_sessions` and `presented_quizzes`;
-  - the first ten `students`, for organizers.
+  - the first ten `students`, for organizers;
+  - `my_quizzes`, the five most recently updated quizzes in this class the caller owns or collaborates on (same items as `GET /classes/{class_id}/quizzes?mine=true`), and `my_quiz_count`, the full total.
+  - `pending_submission_count`: every pending submission in the class for organizers, the caller's own for members; and `approved_quiz_count`, the hostable approved quizzes.
+
+  `is_global_admin` was removed in V3: Admin status never grants access to a class.
 - `GET /classes/{class_id}/sessions`: for any member. It takes `page`, `page_size` (1–100), `sort=started_at|participant_count|average_score` and `order`. Each item has:
   - `session_id, quiz_id, quiz_title, status, host_name, is_host, started_at, ended_at, participant_count`;
   - `average_score` and `top_score`, which are organizers only;
@@ -473,7 +477,11 @@ Built from the class's `COMPLETED` sessions only; open sessions never count. Sco
 
   It takes `sort=name|average_score|session_count`.
 
-All four use the same paging shape: `{ class_id, items, pagination: { page, page_size, total_items, total_pages } }`.
+- `GET /classes/{class_id}/dashboard/submissions`: for any member (V3 Task 6). Organizers see every submission in the class; members see their own. It takes `status=PENDING|APPROVED|REJECTED|WITHDRAWN` (optional), `sort=submitted_at|title|submitter` (default `submitted_at`) and `order` (default `desc`). Each item has `submission_id, quiz_id, quiz_version_id, version_number, quiz_title, question_count, submitted_by_id, submitter_name, status, submitted_at, decided_at, decided_by_name`, and `is_current_version` (false once a newer version is published). Decisions still go through `PATCH`/`DELETE /classes/{class_id}/quiz-submissions/{submission_id}`. Counting, sorting and paging happen in the database.
+- `GET /classes/{class_id}/dashboard/submissions/{submission_id}/preview`: the organizer or the submitter (others get `404 submission_not_found`). Returns `{ submission, version }`: the same summary as above plus the exact submitted `QuizVersion` with its questions and choices (including `is_correct`), never the quiz's newer draft. The Approvals queue links here (`/app/classes/{class_id}/submissions/{submission_id}`) so organizers review what they approve.
+- `GET /classes/{class_id}/dashboard/approved-quizzes`: for any member (V3 Task 6). The same versions as `GET /classes/{class_id}/approved-quizzes`, paged, with `title, question_count, author_name, approved_at, approved_by_name`, and `hosting` plus `can_host`, from the same checks as starting a session (see the `hosting` reasons above), so the owner sees why an approved quiz is blocked, for example `unpublished_changes`, and other members get `not_host`. `can_view` says whether the caller may open `GET /quizzes/{quiz_id}` (owner, organizer, or active collaborator); the Present tab only links the card when it's true. It takes `sort=approved_at|title` and `order`. An archived class returns its list with `can_host` false (`class_archived`) instead of `409`.
+
+All six use the same paging shape: `{ class_id, items, pagination: { page, page_size, total_items, total_pages } }`.
 
 ### Detailed class reports
 For one session, one quiz or one student. Like the lists above, they only count the class's `COMPLETED` sessions and use stored scores. All three are sent with `Cache-Control: no-store`.

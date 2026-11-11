@@ -7,8 +7,6 @@ import {
   useSearchParams,
 } from "react-router";
 import { useAccount } from "./account";
-import HostQuizButton from "./HostQuizButton";
-import { showsHostControl } from "./hosting";
 import QuizCollaborators from "./QuizCollaborators";
 
 import { blankEditor, LETTERS, newQuestion } from "./model";
@@ -1351,13 +1349,16 @@ export function QuizViewer() {
             </button>
           )}
 
-          {showsHostControl(quiz, account.account_id) && (
+          {/* Hosting needs the class to approve this version first, which
+              happens on the class page (V3 Tasks 4–6). */}
+          {published && quiz.class_id && (
             <div className="qv-host">
-              <HostQuizButton
-                quiz={quiz}
-                action={action}
-                label="Host in its class →"
-              />
+              <Link
+                className="qb-btn"
+                to={`/app/classes/${quiz.class_id}?view=user&section=${encodeURIComponent("My quizzes")}`}
+              >
+                Host from its class →
+              </Link>
             </div>
           )}
         </div>

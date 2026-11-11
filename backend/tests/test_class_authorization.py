@@ -166,7 +166,7 @@ def test_active_member_passes_member_check(authorization_context) -> None:
     assert access.membership is not None
     assert access.membership.status == MembershipStatus.ACTIVE
     assert access.membership.role == ClassRole.MEMBER
-    assert access.is_global_admin is False
+    assert not hasattr(access, "is_global_admin")
 
 
 def test_active_organizer_passes_member_and_organizer_checks(
@@ -203,7 +203,7 @@ def test_archived_class_requires_active_membership(authorization_context):
     access = require_class_member(db, accounts["member"], class_id)
     assert access.class_.archived_at is not None
     assert access.membership.status == MembershipStatus.ACTIVE
-    assert access.is_global_admin is False
+    assert not hasattr(access, "is_global_admin")
     assert_api_error(404, "class_not_found", lambda: require_class_member(db, accounts["admin"], class_id))
 
 def test_active_organizer_can_host_class_sessions(authorization_context) -> None:
@@ -214,7 +214,7 @@ def test_active_organizer_can_host_class_sessions(authorization_context) -> None
     assert access.class_.class_id == class_id
     assert access.membership is not None
     assert access.membership.role == ClassRole.ORGANIZER
-    assert access.is_global_admin is False
+    assert not hasattr(access, "is_global_admin")
 
 
 def test_faculty_without_membership_cannot_host_class_sessions(authorization_context):

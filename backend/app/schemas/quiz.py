@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 
 from pydantic import (
     BaseModel,
@@ -14,7 +15,8 @@ from app.models.quiz import (
     QuizStatus,
     QuizVisibility,
 )
-from app.schemas.class_dashboard import PageInfo
+from app.models.quiz_submission import SubmissionStatus
+from app.schemas.pagination import PageInfo
 
 
 class QuizRequestModel(BaseModel):
@@ -199,10 +201,30 @@ class QuizListItem(BaseModel):
     hosting: QuizHosting | None = None
 
 
+class ClassQuizSort(str, Enum):
+    UPDATED_AT = "updated_at"
+    CREATED_AT = "created_at"
+    TITLE = "title"
+
+
+class QuizAccess(str, Enum):
+    OWNER = "OWNER"
+    EDITOR = "EDITOR"
+
+
 class ClassQuizListItem(QuizListItem):
     author_name: str
     version_number: int
     updated_at: datetime
+    # How the caller can work on the quiz; null when an organizer sees a
+    # quiz they neither own nor collaborate on.
+    my_access: QuizAccess | None
+    # The newest published version, and where it stands in this class's
+    # approval queue (null if it was never submitted). Only an APPROVED
+    # newest version can be hosted.
+    published_version_id: int | None = None
+    approval_status: SubmissionStatus | None = None
+    approval_submission_id: int | None = None
 
 
 class ClassQuizListPage(BaseModel):
