@@ -68,6 +68,8 @@ function ReportTable({
   emptyTitle,
   emptyText,
   controls = null,
+  columnClasses = [],
+  tableClass = "",
 }) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
@@ -100,18 +102,24 @@ function ReportTable({
         <span className="cl-count" aria-live="polite">
           {needle
             ? `${visible.length} of ${rows.length} ${nounLabel} on this page`
-            : `${firstItem}–${lastItem} of ${totalItems} ${nounLabel}`}
+            : totalItems === 0
+              ? `0 ${nounLabel}`
+              : `${firstItem}–${lastItem} of ${totalItems} ${nounLabel}`}
         </span>
       </div>
 
       <div className="cl-table-wrap">
-        <table className="cl-table">
+        <table className={`cl-table ${tableClass}`.trim()}>
           <caption className="cl-sr">{caption}</caption>
 
           <thead>
             <tr>
               {headers.map((heading, index) => (
-                <th key={heading || index} scope="col">
+                <th
+                  key={heading || index}
+                  scope="col"
+                  className={columnClasses[index] || undefined}
+                >
                   {heading || <span className="cl-sr">Actions</span>}
                 </th>
               ))}
@@ -134,7 +142,11 @@ function ReportTable({
                   {row.cells.map((cell, index) => (
                     <td
                       key={headers[index] || index}
-                      className={index === 0 ? row.leadClass : undefined}
+                      className={
+                        [index === 0 ? row.leadClass : "", columnClasses[index]]
+                          .filter(Boolean)
+                          .join(" ") || undefined
+                      }
                     >
                       {cell}
                     </td>
@@ -171,48 +183,109 @@ function ReportTable({
   );
 }
 
-// Organizer view: every completed session of the class.
+const MONTH = new Intl.DateTimeFormat(undefined, { month: "short" });
+
+// The apricot date block that leads each presentation row.
+function DateBlock({ value }) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return (
+    <span className="cl-date-block">
+      <small>{MONTH.format(date)}</small>
+      <b>{String(date.getDate()).padStart(2, "0")}</b>
+    </span>
+  );
+}
+
+// A navy bar for an average against the best score, with the number.
+function ScoreMeter({ value, max, label }) {
+  const share =
+    value === null || value === undefined || !max ? 0 : Math.min(value / max, 1);
+  return (
+    <span className="cl-meter-cell">
+      <span className="cl-meter" aria-hidden="true">
+        <i style={{ width: `${Math.round(share * 100)}%` }} />
+      </span>
+      <b className="cl-meter-num" aria-label={label}>
+        {formatScore(value == null ? value : Math.round(value))}
+      </b>
+    </span>
+  );
+}
+
+function Fraction({ value, total }) {
+  return (
+    <span className="cl-fraction">
+      <b>{formatScore(value)}</b>
+      {total ? <small> / {formatScore(total)}</small> : null}
+    </span>
+  );
+}
+
+function GoLink({ to, label }) {
+  return (
+    <Link className="cl-go" to={to} aria-label={label} title={label}>
+      →
+    </Link>
+  );
+}
+
+const PRESENTATION_COLUMNS = ["", "", "cl-num", "", "cl-top-col", "cl-go-cell"];
+
+// Organizer view: every completed session of the class, styled after the
+// Presentations list in class-admin-main.html.
 function PresentationsTable({ classInfo, studentCount, controls }) {
   const [page, setPage] = useState(1);
   const resource = useClassSessions(classInfo.id, page);
   const pending = reportResource(resource);
   if (pending) return pending;
 
+  const { items, pagination } = resource.data;
+  const firstIndex = (pagination.page - 1) * pagination.page_size;
+
   return (
     <ReportTable
       caption="Presentations"
       noun="presentation"
-      headers={[
-        "Date",
-        "Presentation",
-        "Attendance",
-        "Average",
-        "Top score",
-        "Results",
-      ]}
+      tableClass="cl-rows"
+      columnClasses={PRESENTATION_COLUMNS}
+      headers={["Date", "Presentation", "Attended", "Avg score", "Top score", ""]}
       emptyTitle="No presentations yet"
       emptyText="Host a quiz in this class and it shows up here once it ends."
       controls={controls}
-      pagination={resource.data.pagination}
+      pagination={pagination}
       onPageChange={setPage}
-      rows={resource.data.items.map((session) => ({
-        key: session.session_id,
-        text: `${session.quiz_title} ${session.host_name}`,
-        cells: [
-          formatDate(session.started_at),
-          session.quiz_title,
-          studentCount
-            ? `${session.participant_count} / ${studentCount}`
-            : session.participant_count,
-          formatScore(session.average_score),
-          formatScore(session.top_score),
-          <Link
-            to={`/app/classes/${classInfo.id}/sessions/${session.session_id}/report`}
-          >
-            Report →
-          </Link>,
-        ],
-      }))}
+      rows={items.map((session, index) => {
+        const report = `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`;
+        return {
+          key: session.session_id,
+          text: `${session.quiz_title} ${session.host_name}`,
+          leadClass: "cl-date",
+          cells: [
+            <DateBlock value={session.started_at} />,
+            <span className="cl-quiz-cell">
+              <Link className="cl-quiz-name" to={report}>
+                {session.quiz_title}
+              </Link>
+              <small>
+                P{pagination.total_items - firstIndex - index} · hosted by{" "}
+                {session.host_name}
+              </small>
+            </span>,
+            <Fraction value={session.participant_count} total={studentCount} />,
+            <ScoreMeter
+              value={session.average_score}
+              max={session.top_score}
+              label={`Average ${formatScore(session.average_score)} points`}
+            />,
+            <span className="cl-top-cell">
+              <b>{formatScore(session.top_score)}</b>
+              <small>top points</small>
+            </span>,
+            <GoLink to={report} label={`Results for ${session.quiz_title}`} />,
+          ],
+        };
+      })}
     />
   );
 }
@@ -635,6 +708,8 @@ function SubmissionsTable({ classInfo, onChange }) {
   );
 }
 
+// The same rows, grouped by quiz: when it was last presented, how often,
+// and how the class did across those presentations.
 function ClassQuizzesTable({ classInfo, controls }) {
   const [page, setPage] = useState(1);
   const resource = useClassQuizzes(classInfo.id, page);
@@ -642,39 +717,50 @@ function ClassQuizzesTable({ classInfo, controls }) {
 
   if (pending) return pending;
 
+  const best = Math.max(
+    0,
+    ...resource.data.items.map((quiz) => quiz.average_score ?? 0),
+  );
+
   return (
     <ReportTable
       caption="Presented quizzes"
       noun="quiz"
-      headers={[
-        "Quiz",
-        "Last presented",
-        "Presentations",
-        "Participations",
-        "Average",
-        "Report",
-      ]}
+      tableClass="cl-rows"
+      columnClasses={["", "", "cl-num", "", "cl-go-cell"]}
+      headers={["Last", "Quiz", "Players", "Avg score", ""]}
       emptyTitle="No presented quizzes yet"
       emptyText="Quizzes appear here after a session in this class completes."
       controls={controls}
       pagination={resource.data.pagination}
       onPageChange={setPage}
-      rows={resource.data.items.map((quiz) => ({
-        key: quiz.quiz_id,
-        text: quiz.title,
-        cells: [
-          quiz.title,
-          formatDate(quiz.presented_at),
-          formatScore(quiz.session_count),
-          formatScore(quiz.participant_count),
-          formatScore(quiz.average_score),
-          <Link
-            to={`/app/classes/${classInfo.id}/quizzes/${quiz.quiz_id}/report`}
-          >
-            Report →
-          </Link>,
-        ],
-      }))}
+      rows={resource.data.items.map((quiz) => {
+        const report = `/app/classes/${classInfo.id}/quizzes/${quiz.quiz_id}/report`;
+        return {
+          key: quiz.quiz_id,
+          text: quiz.title,
+          leadClass: "cl-date",
+          cells: [
+            <DateBlock value={quiz.presented_at} />,
+            <span className="cl-quiz-cell">
+              <Link className="cl-quiz-name" to={report}>
+                {quiz.title}
+              </Link>
+              <small>
+                Presented {quiz.session_count}{" "}
+                {quiz.session_count === 1 ? "time" : "times"}
+              </small>
+            </span>,
+            <Fraction value={quiz.participant_count} />,
+            <ScoreMeter
+              value={quiz.average_score}
+              max={best}
+              label={`Average ${formatScore(quiz.average_score)} points`}
+            />,
+            <GoLink to={report} label={`Report for ${quiz.title}`} />,
+          ],
+        };
+      })}
     />
   );
 }

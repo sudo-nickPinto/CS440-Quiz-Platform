@@ -15,10 +15,11 @@ import {
 } from "./classHelpers";
 import { useClassSessions, useClassStudentStats } from "./classResources";
 
+// Whole points: averages like 2,192.2 read as 2,192.
 function formatPoints(value) {
   return value === null || value === undefined
     ? "—"
-    : Number(value).toLocaleString();
+    : Math.round(Number(value)).toLocaleString();
 }
 
 function formatRate(value) {
@@ -224,7 +225,7 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
               <th scope="col">Rank</th>
               <th scope="col">Student</th>
               <th scope="col" className="cl-stu-recent">
-                Recent <small>oldest → latest</small>
+                Recent
               </th>
               <th scope="col" className="cl-num">Avg</th>
               <th scope="col" className="cl-num cl-stu-att">Attended</th>
@@ -303,10 +304,10 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
                       {organizer || !member.stats ? (
                         ""
                       ) : (
-                        <>
-                          {member.stats.session_count}
+                        <span className="cl-fraction">
+                          <b>{member.stats.session_count}</b>
                           <small> / {completed}</small>
-                        </>
+                        </span>
                       )}
                     </td>
                     <td className="cl-stu-tog-cell">

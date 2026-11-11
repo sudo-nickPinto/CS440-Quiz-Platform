@@ -76,7 +76,7 @@
 
 .qp :focus-visible {
   outline: 3px solid var(--orange-deep);
-  outline-offset: 4px;
+  outline-offset: 2px;
 }
 
 .qp-header {

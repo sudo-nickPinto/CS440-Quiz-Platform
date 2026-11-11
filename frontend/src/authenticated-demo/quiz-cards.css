@@ -63,8 +63,8 @@
 .qp .qc-footer .ui-row-menu[open] { position: relative; margin: 0; flex: 0 0 auto; }
 .qp .qc-footer .ui-row-options { top: calc(100% + 8px); right: 0; left: auto; min-width: 0; width: min(260px, 72vw); }
 .qp .qc-card a:focus-visible, .qp .qc-card summary:focus-visible {
-  outline: 3px solid var(--navy);
-  outline-offset: 4px;
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 2px;
 }
 .qp .qc-progress { height: 10px; border: var(--b-thin); background: var(--sand); }
 .qp .qc-progress > span { display: block; height: 100%; background: var(--navy); }
