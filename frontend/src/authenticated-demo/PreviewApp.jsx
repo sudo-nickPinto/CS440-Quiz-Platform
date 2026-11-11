@@ -23,7 +23,6 @@ import {
 import { AccountContext } from "./account";
 import { useResource } from "./rest";
 import RequestError from "./RequestError";
-import PreviewDashboard from "./PreviewDashboard";
 import { QuizEditor, QuizViewer } from "./QuizEditor";
 import { QuizHostingHistory } from "./QuizHistory";
 import JoinSessionPage from "./JoinSessionPage";
@@ -189,7 +188,12 @@ export default function PreviewApp({ onSignOut }) {
               element={<ClassStudentReportPage key={pathname} />}
             />
 
-            <Route path="dashboard/:view" element={<PreviewDashboard />} />
+            {/* The global dashboard was folded into the class pages; old links
+                land on the class list. */}
+            <Route
+              path="dashboard/*"
+              element={<Navigate to="/app/classes" replace />}
+            />
 
             <Route path="quizzes/new" element={<QuizEditor />} />
 
@@ -237,7 +241,7 @@ export default function PreviewApp({ onSignOut }) {
 
             <Route
               path="*"
-              element={<Navigate to="/app/dashboard/present" replace />}
+              element={<Navigate to="/app/classes" replace />}
             />
           </Routes>
         </main>

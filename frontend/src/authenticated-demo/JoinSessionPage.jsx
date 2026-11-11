@@ -87,8 +87,8 @@ export default function JoinSessionPage() {
           </p>
         )}
 
-        <Link to="/app/dashboard/participate">
-          ← Back to dashboard
+        <Link to="/app/classes">
+          ← Back to classes
         </Link>
 
         <details className="ui-return">

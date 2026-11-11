@@ -10,6 +10,7 @@ import { useAccount } from './account'
 import { useAction, useApi, useResource } from './rest'
 import RequestError from './RequestError'
 import CopyCodeButton from './CopyCodeButton'
+import { classPagePath } from '../classes/classPaths'
 
 export function ResumeSession({ mode }) {
   const [id, setId] = useState('')
@@ -71,8 +72,8 @@ export function JoinPage() {
 
   return (
     <section className="qp-content">
-      <Link to="/app/dashboard/participate">
-        ← Dashboard
+      <Link to="/app/classes">
+        ← Classes
       </Link>
 
       <h1>Join a session</h1>
@@ -172,10 +173,8 @@ export function SessionPage({ mode }) {
 
   return (
     <section className="qp-content">
-      <Link
-        to={`/app/dashboard/${host ? 'present' : 'participate'}`}
-      >
-        ← Dashboard
+      <Link to={classPagePath(session.data.class_id)}>
+        ← Class
       </Link>
 
       <h1>{session.data.quiz_title}</h1>
@@ -246,7 +245,7 @@ export function SessionPage({ mode }) {
 
       <p>
         Session details refresh every three seconds.
-        Returning to the dashboard does not leave or
+        Returning to the class page does not leave or
         end the session.
       </p>
     </section>

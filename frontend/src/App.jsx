@@ -107,7 +107,7 @@ export default function App() {
             path="*"
             element={
               <Navigate
-                to="/app/dashboard/present"
+                to="/app/classes"
                 replace
               />
             }
