@@ -622,6 +622,11 @@
   color: var(--gray);
 }
 
+.qp .ui-published.ui-draft {
+  background: var(--apricot);
+  color: var(--ink);
+}
+
 .qp .ui-quiz-title {
   padding: 12px 18px;
 }
@@ -1433,6 +1438,138 @@
   outline: none;
 }
 
+.qp .qe-collaboration {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: var(--b);
+  background: var(--paper);
+}
+
+.qp .qe-live-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.qp .qe-live-state > span:last-child,
+.qp .qe-live-message p {
+  display: grid;
+  gap: 2px;
+}
+
+.qp .qe-live-state b,
+.qp .qe-live-message strong {
+  font-size: 13px;
+  letter-spacing: 0.3px;
+}
+
+.qp .qe-live-state small,
+.qp .qe-live-message small {
+  color: var(--gray);
+  font-size: 12px;
+}
+
+.qp .qe-live-dot {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--orange-deep);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.qp .qe-collaboration.is-open .qe-live-dot {
+  background: #54b76b;
+}
+
+.qp .qe-collaboration.is-connecting .qe-live-dot,
+.qp .qe-collaboration.is-reconnecting .qe-live-dot {
+  animation: qb-live-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes qb-live-pulse {
+  to {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+}
+
+.qp .qe-live-message {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 720px;
+  padding: 8px 10px;
+  border: var(--b-thin);
+  background: var(--sky-soft);
+}
+
+.qp .qe-live-message.is-warning {
+  background: var(--apricot);
+}
+
+.qp .qe-live-message.is-success {
+  background: #e4f5e7;
+}
+
+.qp .qe-live-message > span:first-child {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  font-weight: 900;
+}
+
+.qp .qe-live-message p {
+  flex: 1;
+  margin: 0;
+}
+
+.qp .qe-live-message .qb-btn {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.qp .qe-question-save {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.qp .qe-question-save > span {
+  color: var(--ink-muted, #5d5968);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.qp .qe-question-save > span.is-saving,
+.qp .qe-question-save > span.is-pending {
+  color: #725b00;
+}
+
+.qp .qe-question-save > span.is-saved {
+  color: #24733c;
+}
+
+.qp .qe-question-save > span.is-remote {
+  color: #0b4b8a;
+}
+
+.qp .qe-question-save > span.is-error,
+.qp .qe-question-save > span.is-conflict,
+.qp .qe-question-save > span.is-invalid {
+  color: #a3182d;
+}
+
 .qp .qe-top {
   display: flex;
   align-items: center;
@@ -2142,6 +2279,132 @@
   box-shadow: none;
 }
 
+/* Quiz sharing: deliberately uses the same heavy borders and paper cards as
+   the editor so it reads as part of QuizBurg rather than a settings widget. */
+.qp .qv-collaborators {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr);
+  gap: 18px 28px;
+  padding: 22px clamp(16px, 4vw, 40px);
+  border-bottom: var(--b);
+  background: var(--sky-soft);
+}
+
+.qp .qv-collaborators-copy h2 {
+  margin: 4px 0 8px;
+  font: 20px "Archivo Black", sans-serif;
+  text-transform: uppercase;
+}
+
+.qp .qv-collaborators-copy p {
+  max-width: 560px;
+  margin: 0;
+  color: var(--gray);
+  line-height: 1.5;
+}
+
+.qp .qv-collaborator-form label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .qv-collaborator-form > div {
+  display: flex;
+  gap: 10px;
+}
+
+.qp .qv-collaborator-form input {
+  flex: 1;
+  min-width: 0;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.qp .qv-collaborator-form .qb-btn {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.qp .qv-share-message,
+.qp .qv-collaborator-list,
+.qp .qv-collaborators > .ui-error {
+  grid-column: 2;
+}
+
+.qp .qv-share-message {
+  margin: -8px 0 0;
+  padding: 8px 10px;
+  border: var(--b-thin);
+  background: #e4f5e7;
+  font-weight: 700;
+}
+
+.qp .qv-collaborator-list {
+  display: grid;
+  gap: 8px;
+}
+
+.qp .qv-collaborator-list > p {
+  margin: 0;
+}
+
+.qp .qv-collaborator-list article {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: var(--b-thin);
+  background: var(--paper);
+}
+
+.qp .qv-collaborator-avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 2px solid var(--ink);
+  background: var(--apricot);
+  font: 16px "Archivo Black", sans-serif;
+}
+
+.qp .qv-collaborator-list article > div {
+  display: grid;
+  min-width: 0;
+}
+
+.qp .qv-collaborator-list article > div span {
+  color: var(--gray);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.qp .qv-collaborator-role {
+  padding: 4px 8px;
+  border: var(--b-thin);
+  background: var(--sand);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .qv-remove-collaborator {
+  color: var(--red, #a91f2f);
+}
+
+.qp .qv-collaborator-empty {
+  padding: 12px;
+  border: 2px dashed var(--gray);
+  background: color-mix(in srgb, var(--paper) 78%, transparent);
+  color: var(--gray);
+}
+
 .qp .qv-gap {
   height: 28px;
 }
@@ -2220,6 +2483,29 @@
 
   .qp .qv-explanation {
     padding: 10px 12px 12px;
+  }
+
+  .qp .qv-collaborators {
+    grid-template-columns: 1fr;
+  }
+
+  .qp .qv-share-message,
+  .qp .qv-collaborator-list,
+  .qp .qv-collaborators > .ui-error {
+    grid-column: 1;
+  }
+
+  .qp .qv-collaborator-form > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .qp .qv-collaborator-list article {
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+  }
+
+  .qp .qv-collaborator-role {
+    display: none;
   }
 }
 

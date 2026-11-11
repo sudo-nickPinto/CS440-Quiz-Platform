@@ -51,8 +51,7 @@ export default function PreviewDashboard() {
   const quizzes = (resource.data || [])
     .filter(
       (quiz) =>
-        quiz.author_id === account.account_id &&
-        ["PUBLISHED", "ARCHIVED"].includes(quiz.status) &&
+        ["DRAFT", "PUBLISHED", "ARCHIVED"].includes(quiz.status) &&
         quiz.title.toLowerCase().includes(query.trim().toLowerCase()),
     )
     .sort((a, b) => {
@@ -185,7 +184,7 @@ export default function PreviewDashboard() {
           <input
             type="search"
             className="ui-search"
-            aria-label="Search your published and archived quizzes"
+            aria-label="Search your quizzes"
             placeholder="Search your quizzes…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -280,57 +279,71 @@ export default function PreviewDashboard() {
                     key={quiz.quiz_id}
                     title={quiz.title}
                     to={"/app/quizzes/" + quiz.quiz_id}
-                    status={quiz.status === "ARCHIVED" ? "Archived" : "Published"}
+                    status={
+                      quiz.status === "ARCHIVED"
+                        ? "Archived"
+                        : quiz.status === "DRAFT"
+                          ? "Draft"
+                          : "Published"
+                    }
                     archived={quiz.status === "ARCHIVED"}
-                    headline={quiz.question_count + " " + plural(quiz.question_count, "question")}
+                    headline={
+                      quiz.question_count +
+                      " " +
+                      plural(quiz.question_count, "question")
+                    }
                     actions={
-                    quiz.status === "PUBLISHED" ? (
-                      <details className="ui-row-menu">
-                        <summary aria-label={`Actions for ${quiz.title}`}>
-                          ⋯
-                        </summary>
+                      quiz.status !== "ARCHIVED" ? (
+                        <details className="ui-row-menu">
+                          <summary aria-label={`Actions for ${quiz.title}`}>
+                            ⋯
+                          </summary>
 
-                        <div className="ui-row-options" role="menu">
-                          {quiz.author_id === account.account_id && (
+                          <div className="ui-row-options" role="menu">
                             <Link
                               role="menuitem"
                               to={`/app/quizzes/${quiz.quiz_id}/edit`}
                             >
                               <span aria-hidden="true">✎</span> Edit
                             </Link>
-                          )}
 
-                          {quiz.author_id === account.account_id && (
-                            <div
-                              className="ui-host-item"
-                              role="group"
-                              aria-label="Host live session"
-                            >
-                              <HostQuizButton
-                                quiz={quiz}
-                                action={action}
-                              />
-                            </div>
-                      )}
+                            {quiz.status === "PUBLISHED" &&
+                              quiz.author_id === account.account_id && (
+                                <div
+                                  className="ui-host-item"
+                                  role="group"
+                                  aria-label="Host live session"
+                                >
+                                  <HostQuizButton
+                                    quiz={quiz}
+                                    action={action}
+                                  />
+                                </div>
+                              )}
 
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="ui-danger"
-                        disabled={action.busy}
-                        onClick={() => void archive(quiz)}
-                      >
-                        <span aria-hidden="true">▣</span> Archive
-                      </button>
-                    </div>
-                  </details>
-                ) : (
-                  <span className="ui-row-menu" aria-hidden="true" />
-                )}
-              >
-                <p>Created {displayDate(quiz.created_at)}</p>
-              </QuizCard>
-            ))}
+                            {quiz.author_id === account.account_id && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="ui-danger"
+                                disabled={action.busy}
+                                onClick={() => void archive(quiz)}
+                              >
+                                <span aria-hidden="true">▣</span> Archive
+                              </button>
+                            )}
+                          </div>
+                        </details>
+                      ) : null
+                    }
+                  >
+                    <p>
+                      Created {displayDate(quiz.created_at)}
+                      {quiz.author_id !== account.account_id &&
+                        " · Shared with you"}
+                    </p>
+                  </QuizCard>
+                ))}
               </div>
             )}
           </>

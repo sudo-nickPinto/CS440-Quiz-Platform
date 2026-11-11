@@ -1,6 +1,10 @@
-export function canEditQuiz(quiz, accountId) {
+export function canEditQuiz(quiz) {
   return (
-    quiz.author_id === accountId &&
+    quiz.can_edit === true &&
     (quiz.status === "DRAFT" || quiz.status === "PUBLISHED")
   );
+}
+
+export function quizEditorKey(quiz) {
+  return `${quiz.quiz_id}:${quiz.version.quiz_version_id}:${quiz.revision}`;
 }
