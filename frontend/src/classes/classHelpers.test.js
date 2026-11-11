@@ -3,9 +3,10 @@ import {
   ADMIN_SECTIONS,
   approvalLabel,
   approvedQuizzesPath,
-  canSubmitForApproval,
+  approvalButton,
   classPagePath,
   presentStatus,
+  sendForApproval,
   resolveUserSection,
   myQuizzesPath,
   quizAccessLabel,
@@ -82,23 +83,6 @@ describe("approval queue helpers", () => {
     expect(approvalLabel(null)).toBe("Not submitted");
     expect(approvalLabel("PENDING")).toBe("Waiting for approval");
     expect(approvalLabel("APPROVED")).toBe("Approved");
-  });
-
-  it("only offers approval for a published version that isn't queued", () => {
-    const quiz = {
-      status: "PUBLISHED",
-      my_access: "OWNER",
-      published_version_id: 7,
-      approval_status: null,
-    };
-    expect(canSubmitForApproval(quiz)).toBe(true);
-    expect(canSubmitForApproval({ ...quiz, approval_status: "REJECTED" })).toBe(true);
-    expect(canSubmitForApproval({ ...quiz, approval_status: "WITHDRAWN" })).toBe(true);
-    expect(canSubmitForApproval({ ...quiz, approval_status: "PENDING" })).toBe(false);
-    expect(canSubmitForApproval({ ...quiz, approval_status: "APPROVED" })).toBe(false);
-    expect(canSubmitForApproval({ ...quiz, status: "DRAFT" })).toBe(false);
-    expect(canSubmitForApproval({ ...quiz, my_access: null })).toBe(false);
-    expect(canSubmitForApproval({ ...quiz, published_version_id: null })).toBe(false);
   });
 });
 
@@ -216,10 +200,77 @@ describe("resolveUserSection", () => {
 });
 
 describe("presentStatus", () => {
-  it("shows Approved only for an approved newest version", () => {
+  it("shows Approved only while the approved version is the current one", () => {
     expect(presentStatus({ status: "PUBLISHED", approval_status: "APPROVED" }).label).toBe("Approved");
+    expect(presentStatus({ status: "DRAFT", approval_status: "APPROVED" }).label).toBe("Draft");
     expect(presentStatus({ status: "PUBLISHED", approval_status: "PENDING" }).label).toBe("Draft");
     expect(presentStatus({ status: "DRAFT", approval_status: null }).label).toBe("Draft");
     expect(presentStatus({ status: "ARCHIVED", approval_status: "APPROVED" }).label).toBe("Archived");
+  });
+});
+
+describe("approvalButton", () => {
+  const quiz = (extra) => ({
+    status: "DRAFT",
+    my_access: "OWNER",
+    published_version_id: null,
+    approval_status: null,
+    approval_sent_by_me: false,
+    ...extra,
+  });
+
+  it("walks send → withdraw → approved", () => {
+    expect(approvalButton(quiz()).kind).toBe("send");
+    expect(approvalButton(quiz()).disabled).toBe(false);
+    const waiting = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "PENDING", approval_sent_by_me: true });
+    expect(approvalButton(waiting)).toMatchObject({ kind: "withdraw", disabled: false });
+    const approved = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "APPROVED" });
+    expect(approvalButton(approved)).toMatchObject({ kind: "approved", disabled: true, label: "✓ Approved" });
+  });
+
+  it("lets only the sender withdraw", () => {
+    const other = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "PENDING", my_access: "EDITOR" });
+    expect(approvalButton(other)).toMatchObject({ kind: "waiting", disabled: true });
+  });
+
+  it("asks again after edits or a rejection", () => {
+    const edited = quiz({ published_version_id: 3, approval_status: "APPROVED" });
+    expect(approvalButton(edited)).toMatchObject({ kind: "send", note: "Edited since approval" });
+    const rejected = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "REJECTED" });
+    expect(approvalButton(rejected)).toMatchObject({ kind: "send", label: "Send again", note: "Rejected" });
+  });
+
+  it("keeps co-editors from sending unpublished edits", () => {
+    expect(approvalButton(quiz({ my_access: "EDITOR" }))).toMatchObject({ kind: "send", disabled: true });
+    expect(approvalButton(quiz({ my_access: "EDITOR", status: "PUBLISHED", published_version_id: 3 })).disabled).toBe(false);
+  });
+
+  it("has nothing for archived quizzes", () => {
+    expect(approvalButton(quiz({ status: "ARCHIVED" }))).toBeNull();
+  });
+});
+
+describe("sendForApproval", () => {
+  it("submits the published version directly", async () => {
+    const calls = [];
+    const api = async (url, init) => { calls.push([url, init?.body]); return {}; };
+    await sendForApproval(api, 4, { quiz_id: 9, status: "PUBLISHED", published_version_id: 12 });
+    expect(calls).toEqual([["/classes/4/quiz-submissions", JSON.stringify({ quiz_version_id: 12 })]]);
+  });
+
+  it("publishes a draft first, then submits the new version", async () => {
+    const calls = [];
+    const api = async (url, init) => {
+      calls.push(url);
+      if (url === "/quizzes/9") return { revision: 5 };
+      if (url.endsWith("/publish")) {
+        expect(init.body).toBe(JSON.stringify({ expected_revision: 5 }));
+        return { version: { quiz_version_id: 13 } };
+      }
+      expect(init.body).toBe(JSON.stringify({ quiz_version_id: 13 }));
+      return {};
+    };
+    await sendForApproval(api, 4, { quiz_id: 9, status: "DRAFT", published_version_id: 12 });
+    expect(calls).toEqual(["/quizzes/9", "/classes/4/quizzes/9/publish", "/classes/4/quiz-submissions"]);
   });
 });

@@ -100,20 +100,6 @@ export function approvalLabel(status) {
   );
 }
 
-// A quiz from "My quizzes" can be sent for approval once it has a published
-// version that isn't already pending or approved. Rejected and withdrawn
-// versions may be sent again.
-export function canSubmitForApproval(quiz) {
-  return (
-    quiz.status === "PUBLISHED" &&
-    quiz.my_access !== null &&
-    quiz.my_access !== undefined &&
-    Number.isSafeInteger(quiz.published_version_id) &&
-    quiz.approval_status !== "PENDING" &&
-    quiz.approval_status !== "APPROVED"
-  );
-}
-
 // Admin view tabs, left to right. "Students" is the roster (students with
 // their scores, plus co-organizers); "Presentations" shows class history by
 // session or by quiz. Members are added from the header's "+ Add member".
@@ -141,14 +127,78 @@ export function resolveUserSection(requested) {
   return USER_SECTIONS.includes(requested) ? requested : "Present";
 }
 
-// The lead block on a Present row: an approved newest version, an archived
-// quiz, or otherwise a draft (including published-but-not-approved).
+// The lead block on a Present row. Members only see Draft or Approved:
+// publishing (freezing a version) happens inside "Send for approval". A quiz
+// edited after approval is a Draft again until the new version is approved.
 export function presentStatus(quiz) {
   if (quiz.status === "ARCHIVED") return { key: "archived", label: "Archived" };
-  if (quiz.approval_status === "APPROVED") {
+  if (quiz.status === "PUBLISHED" && quiz.approval_status === "APPROVED") {
     return { key: "approved", label: "Approved" };
   }
   return { key: "draft", label: "Draft" };
+}
+
+// The one approval button on a Present row and the short note under it.
+//   send      Send for approval / Send again (orange)
+//   withdraw  Withdraw request (while waiting, for whoever sent it)
+//   waiting   Waiting for approval (sent by a co-editor; not clickable)
+//   approved  ✓ Approved (blue; not clickable)
+// A draft on top of the published version has to be published first, and
+// only the owner can publish, so co-editors can't send it.
+export function approvalButton(quiz) {
+  if (quiz.status === "ARCHIVED" || !quiz.my_access) return null;
+  const edited = quiz.status === "DRAFT" && Boolean(quiz.published_version_id);
+  const status = quiz.approval_status;
+
+  if (status === "APPROVED" && quiz.status === "PUBLISHED") {
+    return { kind: "approved", label: "✓ Approved", disabled: true, note: null };
+  }
+  if (status === "PENDING") {
+    const note = edited ? "Edited since request" : null;
+    return quiz.approval_sent_by_me
+      ? { kind: "withdraw", label: "Withdraw request", disabled: false, note }
+      : { kind: "waiting", label: "Waiting for approval", disabled: true, note };
+  }
+
+  const needsPublish = quiz.status === "DRAFT";
+  const ownerOnly = needsPublish && quiz.my_access !== "OWNER";
+  const note =
+    status === "APPROVED"
+      ? "Edited since approval"
+      : status === "REJECTED"
+        ? "Rejected"
+        : status === "WITHDRAWN"
+          ? "Withdrawn"
+          : null;
+  return {
+    kind: "send",
+    label: status === "REJECTED" ? "Send again" : "Send for approval",
+    disabled: ownerOnly,
+    title: ownerOnly ? "Only the quiz owner can send a new version" : undefined,
+    note,
+  };
+}
+
+// Sends the quiz's current content for approval. If there are edits since
+// the last frozen version, publish them first (owner only), then submit
+// that version.
+export async function sendForApproval(api, classId, quiz) {
+  let versionId = quiz.status === "PUBLISHED" ? quiz.published_version_id : null;
+  if (!versionId) {
+    const current = await api(`/quizzes/${quiz.quiz_id}`);
+    const published = await api(
+      `/classes/${classId}/quizzes/${quiz.quiz_id}/publish`,
+      {
+        method: "POST",
+        body: JSON.stringify({ expected_revision: current.revision }),
+      },
+    );
+    versionId = published.version.quiz_version_id;
+  }
+  return api(`/classes/${classId}/quiz-submissions`, {
+    method: "POST",
+    body: JSON.stringify({ quiz_version_id: versionId }),
+  });
 }
 
 // Class rank by average points, best first. Students who never played have

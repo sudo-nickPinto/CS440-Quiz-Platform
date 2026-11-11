@@ -274,7 +274,7 @@ export function QuizEditor({
         aggregateStaleRef.current = true;
         setRemoteNotice({
           tone: "info",
-          text: "The quiz was published by its owner.",
+          text: "The owner sent this version for approval.",
           detail: "Reload when you are ready. Your unsaved work has not been replaced.",
           reload: true,
         });
@@ -1154,8 +1154,8 @@ export function QuizEditor({
                   </h2>
                   <p>
                     {editing
-                      ? "This saves a draft. Publish it from the quiz page when it is ready to host."
-                      : "It's saved as a draft in this class. A draft can't be hosted until it's published."}
+                      ? "This saves a draft. If the quiz was approved, it needs approval again: send it from the class page."
+                      : "It's saved as a draft in this class. Send it for approval from the class page before hosting."}
                   </p>
                 </div>
 
@@ -1225,7 +1225,6 @@ export function QuizEditor({
 export function QuizViewer() {
   const { quizId } = useParams();
   const account = useAccount();
-  const api = useApi();
   const action = useAction();
   const validId = /^[1-9][0-9]*$/.test(quizId);
 
@@ -1250,7 +1249,9 @@ export function QuizViewer() {
 
   const quiz = resource.data;
   const mine = quiz.author_id === account.account_id;
-  const published = quiz.status === "PUBLISHED";
+  // Members see Draft or Approved; "publish" happens inside Send for
+  // approval on the class page.
+  const approved = quiz.hosting?.can_host === true;
   const questions = [...quiz.version.questions].sort(
     (a, b) => a.question_order - b.question_order,
   );
@@ -1258,19 +1259,6 @@ export function QuizViewer() {
     (sum, question) => sum + Number(question.time_limit_seconds || 0),
     0,
   );
-
-  async function publishQuiz() {
-    const publishedQuiz = await action.run(() =>
-      api(
-        `/classes/${quiz.class_id}/quizzes/${quiz.quiz_id}/publish`,
-        {
-          method: "POST",
-          body: JSON.stringify({ expected_revision: quiz.revision }),
-        },
-      ),
-    );
-    if (publishedQuiz) resource.reload();
-  }
 
   return (
     <section className="qv" aria-labelledby="quiz-title">
@@ -1295,12 +1283,12 @@ export function QuizViewer() {
         </div>
 
         <div className="qe-state">
-          <span className={"qe-pill" + (published ? " is-saved" : "")}>
-            {published
-              ? "Published"
-              : quiz.status === "DRAFT"
-                ? "Draft"
-                : "Archived"}{" "}
+          <span className={"qe-pill" + (approved ? " is-saved" : "")}>
+            {quiz.status === "ARCHIVED"
+              ? "Archived"
+              : approved
+                ? "Approved"
+                : "Draft"}{" "}
             · v
             {quiz.version.version_number}
           </span>
@@ -1333,26 +1321,14 @@ export function QuizViewer() {
             </Link>
           )}
 
-          {!published && mine && quiz.status === "DRAFT" && (
-            <button
-              type="button"
-              className="qb-btn"
-              disabled={action.busy}
-              onClick={() => void publishQuiz()}
-            >
-              {action.busy ? "Publishing…" : "Publish quiz"}
-            </button>
-          )}
-
-          {/* Hosting needs the class to approve this version first, which
-              happens on the class page (V3 Tasks 4–6). */}
-          {published && quiz.class_id && (
+          {/* Approval and hosting both happen on the class page. */}
+          {quiz.class_id && quiz.status !== "ARCHIVED" && (mine || quiz.can_edit) && (
             <div className="qv-host">
               <Link
                 className="qb-btn"
-                to={`/app/classes/${quiz.class_id}?view=user&section=${"Present"}`}
+                to={`/app/classes/${quiz.class_id}?view=user&section=Present`}
               >
-                Host from its class →
+                {approved ? "Host from its class →" : "Send for approval →"}
               </Link>
             </div>
           )}

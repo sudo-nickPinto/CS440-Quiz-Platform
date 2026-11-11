@@ -970,7 +970,7 @@
   gap: 6px;
 }
 
-.qp .cl-page .cl-table .cl-approval-state {
+.qp .cl-page .cl-table .cl-approval-note {
   color: var(--gray);
   font-size: 12px;
   font-weight: 700;
@@ -978,17 +978,33 @@
   text-transform: uppercase;
 }
 
-.qp .cl-page .cl-table .cl-approval-state.is-approved {
-  color: var(--navy);
-}
-
+/* One approval button: Send (orange) → Withdraw (outlined) → Approved
+   (solid blue, not clickable). */
 .qp .cl-page .cl-table button.cl-send {
-  padding: 5px 12px;
+  min-width: 172px;
+  padding: 6px 12px;
   font-size: 14px;
   white-space: nowrap;
 }
 
-.qp .cl-page .cl-table button.cl-send:disabled {
+.qp .cl-page .cl-table button.cl-send.is-withdraw {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.qp .cl-page .cl-table button.cl-send.is-withdraw:hover:not(:disabled) {
+  background: var(--apricot);
+}
+
+.qp .cl-page .cl-table button.cl-send.is-approved:disabled {
+  background: var(--navy);
+  color: var(--paper);
+  box-shadow: none;
+  cursor: default;
+  opacity: 1;
+}
+
+.qp .cl-page .cl-table button.cl-send:disabled:not(.is-approved) {
   background: var(--sand);
   color: var(--gray);
   box-shadow: none;
@@ -1110,7 +1126,7 @@
     width: 84px;
   }
 
-  .qp .cl-approval-cell .cl-approval-state {
+  .qp .cl-approval-cell .cl-approval-note {
     display: none;
   }
 }
