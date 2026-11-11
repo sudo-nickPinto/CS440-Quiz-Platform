@@ -1015,6 +1015,45 @@ function ClassWorkspace({ classInfo, onChange }) {
           )}
         </div>
 
+        {adminView && (
+          <div className="cl-actions">
+            <button
+              type="button"
+              className="cl-secondary"
+              aria-haspopup="dialog"
+              disabled={classInfo.archived}
+              onClick={() => setAddOpen(true)}
+            >
+              + Add member
+            </button>
+
+            <button
+              type="button"
+              disabled={csv.busy}
+              onClick={() =>
+                void csv.download(
+                  `/classes/${classInfo.id}/grades/export.csv`,
+                  "class-grades.csv",
+                )
+              }
+            >
+              {csv.busy ? "Preparing…" : "Export grades"}
+            </button>
+
+            {!classInfo.archived && (
+              <button
+                type="button"
+                className="cl-secondary cl-danger"
+                disabled={manage.busy}
+                onClick={() => void archiveClass()}
+              >
+                Archive
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Last in the bar, so it stays in the same spot in both views. */}
         {showAdminLayout && (
           <div
             className="cl-view-switch"
@@ -1038,48 +1077,6 @@ function ClassWorkspace({ classInfo, onChange }) {
             >
               User
             </button>
-          </div>
-        )}
-
-        {showAdminLayout && (
-          <div className="cl-actions">
-            {adminView && (
-              <>
-                <button
-                  type="button"
-                  className="cl-secondary"
-                  aria-haspopup="dialog"
-                  disabled={classInfo.archived}
-                  onClick={() => setAddOpen(true)}
-                >
-                  + Add member
-                </button>
-
-                <button
-                  type="button"
-                  disabled={csv.busy}
-                  onClick={() =>
-                    void csv.download(
-                      `/classes/${classInfo.id}/grades/export.csv`,
-                      "class-grades.csv",
-                    )
-                  }
-                >
-                  {csv.busy ? "Preparing…" : "Export grades"}
-                </button>
-
-                {!classInfo.archived && (
-                  <button
-                    type="button"
-                    className="cl-secondary cl-danger"
-                    disabled={manage.busy}
-                    onClick={() => void archiveClass()}
-                  >
-                    Archive
-                  </button>
-                )}
-              </>
-            )}
           </div>
         )}
       </div>
