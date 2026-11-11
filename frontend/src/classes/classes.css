@@ -977,11 +977,6 @@
   color: var(--paper);
 }
 
-.qp .cl-dialog-heading > span {
-  font-family: "Archivo Black", sans-serif;
-  overflow-wrap: anywhere;
-}
-
 /* Archive in the My quizzes row (moved from the old dashboard menu). */
 .qp button.cl-danger-text {
   padding: 4px 10px;

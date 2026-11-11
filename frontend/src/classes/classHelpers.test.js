@@ -10,7 +10,10 @@ import {
   quizStatusLabel,
   submissionPreviewPath,
   membersWithStats,
+  initials,
   resolveAdminSection,
+  scoreMark,
+  studentRanks,
   submissionsPath,
 } from "./classHelpers";
 
@@ -105,7 +108,6 @@ describe("resolveAdminSection", () => {
     expect(resolveAdminSection(null)).toEqual({
       section: "Students",
       historyView: "sessions",
-      settingsOpen: false,
     });
     expect(resolveAdminSection("Nope").section).toBe("Students");
   });
@@ -116,7 +118,7 @@ describe("resolveAdminSection", () => {
       historyView: "quizzes",
     });
     expect(resolveAdminSection("Members").section).toBe("Students");
-    expect(resolveAdminSection("Settings").settingsOpen).toBe(true);
+    expect(resolveAdminSection("Settings").section).toBe("Students");
   });
 });
 
@@ -161,5 +163,43 @@ describe("classPagePath", () => {
     expect(classPagePath(null)).toBe("/app/classes");
     expect(classPagePath(undefined)).toBe("/app/classes");
     expect(classPagePath("x")).toBe("/app/classes");
+  });
+});
+
+describe("studentRanks", () => {
+  const row = (id, average, role = "MEMBER") => ({
+    account_id: id,
+    role,
+    stats: average === undefined ? null : { average_score: average },
+  });
+
+  it("ranks students by average, sharing ties, skipping unplayed and organizers", () => {
+    const ranks = studentRanks([
+      row(1, 500),
+      row(2, 900),
+      row(3, 500),
+      row(4, null),
+      row(5, undefined, "ORGANIZER"),
+      row(6, 100),
+    ]);
+    expect(Object.fromEntries(ranks)).toEqual({ 2: 1, 1: 2, 3: 2, 6: 4 });
+  });
+});
+
+describe("scoreMark", () => {
+  it("marks absences, and scores against the presentation average", () => {
+    expect(scoreMark(null, 500)).toBe("miss");
+    expect(scoreMark(500, 500)).toBe("hi");
+    expect(scoreMark(499, 500)).toBe("lo");
+    expect(scoreMark(10, null)).toBe("hi");
+  });
+});
+
+describe("initials", () => {
+  it("takes two initials from a name or an email", () => {
+    expect(initials("Ruby Castillo")).toBe("RC");
+    expect(initials("ana")).toBe("AN");
+    expect(initials("jo.smith@x.edu")).toBe("JS");
+    expect(initials("")).toBe("?");
   });
 });

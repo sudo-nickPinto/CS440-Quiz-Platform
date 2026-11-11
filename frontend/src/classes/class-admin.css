@@ -1,0 +1,668 @@
+/* Class page pieces taken from the mockups: the Students tab and its
+   opened-row panel and the "+ Add member" pop-up (class-admin-main.html),
+   and status-block rows for quiz lists (made-dashboard-main.html). Loaded
+   after quizburg-polish.css. */
+
+/* ---------- Class header: rename, archive ---------- */
+.qp .cl-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.qp .cl-page button.cl-edit-name {
+  min-height: 0;
+  padding: 3px 9px;
+  border: var(--b-thin);
+  box-shadow: 2px 2px 0 var(--ink);
+  background: var(--paper);
+  color: var(--navy);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-page button.cl-edit-name:hover {
+  background: var(--sky-soft);
+}
+
+.qp .cl-rename {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.qp .cl-rename label {
+  flex: 1 1 260px;
+}
+
+.qp .cl-rename input {
+  width: 100%;
+  box-shadow: 3px 3px 0 var(--ink);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 20px;
+}
+
+.qp .cl-page button.cl-danger:hover:not(:disabled) {
+  background: var(--apricot);
+}
+
+/* ---------- Students tab ---------- */
+.qp .cl-mini-stats {
+  display: flex;
+  margin: 0;
+  border: var(--b);
+  background: var(--sky-soft);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.qp .cl-mini-stats > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 3px 12px;
+}
+
+.qp .cl-mini-stats > div + div {
+  border-left: var(--b-thin);
+}
+
+.qp .cl-mini-stats dt {
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-mini-stats dd {
+  margin: 0;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.qp .cl-stu-table th small {
+  margin-left: 6px;
+  color: var(--apricot);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.qp .cl-table .cl-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.qp .cl-table .cl-big {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 20px;
+}
+
+.qp .cl-table .cl-big small {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.qp .cl-stu-row {
+  cursor: pointer;
+}
+
+.qp .cl-stu-row > td {
+  height: 72px;
+}
+
+.qp .cl-stu-row:hover,
+.qp .cl-stu-row[data-open="true"] {
+  background: var(--sand);
+}
+
+.qp .cl-stu-row:hover .cl-stu-name {
+  text-decoration: underline;
+  text-decoration-color: var(--orange-deep);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
+
+.qp .cl-table td.cl-stu-lead {
+  width: 84px;
+  padding: 0;
+  border-right: var(--b-thin);
+  background: var(--orange-deep);
+  color: var(--paper);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 22px;
+  text-align: center;
+}
+
+.qp .cl-table td.cl-stu-lead.is-none {
+  background: var(--sand);
+  color: var(--ink);
+}
+
+.qp .cl-table td.cl-stu-lead.is-org {
+  background: var(--navy);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-stu-who {
+  min-width: 180px;
+}
+
+.qp .cl-stu-name {
+  display: block;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.qp .cl-stu-strip {
+  display: flex;
+  gap: 5px;
+}
+
+.qp .cl-mk {
+  display: grid;
+  place-items: center;
+  min-width: 46px;
+  height: 32px;
+  padding: 0 5px;
+  border: var(--b-thin);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.qp .cl-mk.hi {
+  background: var(--sky-soft);
+  color: var(--navy);
+}
+
+.qp .cl-mk.lo {
+  background: var(--apricot);
+  color: var(--ink);
+}
+
+.qp .cl-mk.miss {
+  background: var(--sand);
+  color: var(--ink);
+}
+
+.qp .cl-stu-tog-cell {
+  width: 84px;
+  text-align: center;
+}
+
+.qp .cl-page button.cl-stu-tog {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  min-height: 40px;
+  height: 40px;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.qp .cl-page button.cl-stu-tog::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-right: 3px solid currentColor;
+  border-bottom: 3px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.25s ease;
+}
+
+.qp .cl-page button.cl-stu-tog:hover {
+  background: var(--sky-soft);
+}
+
+.qp .cl-page button.cl-stu-tog[aria-expanded="true"] {
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: none;
+  transform: translate(3px, 3px);
+}
+
+.qp .cl-page button.cl-stu-tog[aria-expanded="true"]::before {
+  transform: translateY(2px) rotate(-135deg);
+}
+
+.qp .cl-table .cl-stu-xp > td {
+  padding: 14px 24px 26px 104px;
+  border-bottom: var(--b);
+  background: var(--sand);
+}
+
+/* Opened student: "NAME · EVERY PRESENTATION" panel */
+.qp .cl-panel {
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.qp .cl-panel-top {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 9px 14px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-panel-top > span + span {
+  color: var(--apricot);
+}
+
+.qp .cl-panel-note {
+  padding: 18px 14px;
+  font-weight: 700;
+}
+
+.qp .cl-gl {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.qp .cl-gl th {
+  padding: 10px 12px;
+  border-bottom: var(--b-thin);
+  background: var(--paper);
+  color: var(--gray);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.qp .cl-gl th.cl-num {
+  text-align: right;
+}
+
+.qp .cl-gl td {
+  height: 52px;
+  padding: 8px 12px;
+  border-bottom: var(--b-thin);
+  font-weight: 700;
+}
+
+.qp .cl-gl tr:last-child td {
+  border-bottom: none;
+}
+
+.qp .cl-gl td.cl-mk {
+  display: table-cell;
+  width: 52px;
+  border: none;
+  border-right: var(--b-thin);
+  border-bottom: var(--b-thin);
+  text-align: center;
+}
+
+.qp .cl-gl .cl-gl-date {
+  color: var(--gray);
+  white-space: nowrap;
+}
+
+.qp .cl-gl .is-missed td:not(.cl-mk) {
+  color: var(--gray);
+}
+
+.qp .cl-gl-go {
+  text-align: right;
+}
+
+.qp .cl-table .cl-lnk {
+  display: inline-block;
+  padding: 6px 10px;
+  border: var(--b-thin);
+  background: var(--paper);
+  box-shadow: 2px 2px 0 var(--ink);
+  color: var(--navy);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.qp .cl-table .cl-lnk:hover {
+  background: var(--sky-soft);
+}
+
+.qp .cl-panel-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: var(--b);
+  background: var(--paper);
+}
+
+.qp .cl-panel-foot .cl-button.cl-secondary {
+  margin-right: auto;
+  color: var(--navy);
+  white-space: nowrap;
+}
+
+/* ---------- Status blocks on quiz rows ---------- */
+.qp .cl-table td.cl-status {
+  width: 140px;
+  padding: 0 8px;
+  border-right: var(--b-thin);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.qp .cl-table td.cl-status.is-draft {
+  background: var(--sky-soft);
+  color: var(--navy);
+}
+
+.qp .cl-table td.cl-status.is-published,
+.qp .cl-table td.cl-status.is-approved {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.qp .cl-table td.cl-status.is-archived {
+  background: var(--sand);
+  color: var(--ink);
+}
+
+.qp .cl-table tr:has(> td.cl-status) > td {
+  height: 72px;
+}
+
+.qp .cl-table a.cl-quiz-name,
+.qp .cl-quiz-name {
+  color: var(--ink);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.25;
+  white-space: normal;
+  text-decoration: none;
+}
+
+.qp .cl-table a.cl-quiz-name:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--orange-deep);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
+
+.qp .cl-quiz-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.qp .cl-quiz-cell small {
+  font-weight: 700;
+}
+
+/* ---------- "+ Add member" pop-up ---------- */
+.qp .cl-dlg {
+  width: min(580px, calc(100vw - 24px));
+  max-width: none;
+  max-height: min(680px, calc(100vh - 40px));
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 8px 8px 0 var(--ink);
+}
+
+.qp .cl-dlg[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.qp .cl-dlg::backdrop {
+  background: rgb(34 34 34 / 45%);
+}
+
+.qp .cl-dlg-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-left: 16px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-dlg-top b {
+  color: var(--apricot);
+}
+
+.qp .cl-page .cl-dlg button.cl-dlg-x {
+  width: 48px;
+  min-height: 44px;
+  border: none;
+  border-left: 2px solid var(--paper);
+  box-shadow: none;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.qp .cl-page .cl-dlg button.cl-dlg-x:hover {
+  background: var(--orange-deep);
+}
+
+.qp .cl-dlg-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 18px 16px;
+  border-bottom: var(--b);
+  background: var(--sky-soft);
+}
+
+.qp .cl-page .cl-dlg-head h2 {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 24px;
+  font-weight: 400;
+}
+
+.qp .cl-dlg-head p {
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.qp .cl-dlg-head .cl-dlg-error {
+  color: var(--orange-deep);
+}
+
+.qp .cl-dlg-row {
+  display: flex;
+  gap: 12px;
+}
+
+.qp .cl-dlg-row .cl-search {
+  flex: 1;
+}
+
+.qp .cl-dlg-row input {
+  width: 100%;
+}
+
+.qp .cl-page button.cl-add-one {
+  padding: 7px 16px;
+  background: var(--orange-deep);
+  color: var(--paper);
+  white-space: nowrap;
+}
+
+.qp .cl-page button.cl-add-one:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.qp .cl-dlg-sub {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 18px;
+  border-bottom: var(--b-thin);
+  background: var(--sand);
+  color: var(--gray);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-people {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+}
+
+.qp .cl-person {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-bottom: var(--b-thin);
+}
+
+.qp .cl-person:last-child {
+  border-bottom: none;
+}
+
+.qp .cl-pav {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: var(--b-thin);
+  background: var(--apricot);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.qp .cl-pname {
+  display: block;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.qp .cl-pmail {
+  display: block;
+  color: var(--gray);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.qp .cl-dlg-empty {
+  padding: 34px 18px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.qp .cl-dlg-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: var(--b);
+  background: var(--paper);
+}
+
+.qp .cl-dlg-foot span {
+  color: var(--gray);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.qp .cl-dlg-foot b {
+  color: var(--ink);
+}
+
+@media (max-width: 760px) {
+  .qp .cl-table .cl-stu-xp > td {
+    padding: 12px;
+  }
+
+  .qp .cl-mini-stats {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .qp .cl-mini-stats > div {
+    flex: 1;
+  }
+}
+
+/* Shared rules top-align table cells and space forms; these blocks need
+   centered cells and a flush pop-up header. */
+.qp .cl-page .cl-stu-table td,
+.qp .cl-page .cl-gl td,
+.qp .cl-page .cl-table tr:has(> td.cl-status) > td {
+  vertical-align: middle;
+}
+
+.qp .cl-page .cl-dlg-head {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .qp .cl-stu-table .cl-stu-recent {
+    display: none;
+  }
+}
+
+.qp .cl-students {
+  min-width: 0;
+}
+
+.qp .cl-students .cl-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+@media (max-width: 760px) {
+  .qp .cl-stu-table .cl-stu-att {
+    display: none;
+  }
+
+  .qp .cl-table td.cl-stu-lead,
+  .qp .cl-stu-tog-cell {
+    width: 56px;
+  }
+
+  .qp .cl-stu-who {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}

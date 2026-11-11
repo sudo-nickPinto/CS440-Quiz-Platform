@@ -115,29 +115,56 @@ export function canSubmitForApproval(quiz) {
 }
 
 // Admin view tabs, left to right. "Students" is the roster (students with
-// their scores, plus co-organizers and invites); "Presentations" shows class
-// history by session or by quiz. Settings is a dialog opened from the class
-// header, not a tab.
+// their scores, plus co-organizers); "Presentations" shows class history by
+// session or by quiz. Members are added from the header's "+ Add member".
 export const ADMIN_SECTIONS = ["Students", "Presentations", "Approvals"];
 export const HISTORY_VIEWS = { sessions: "By session", quizzes: "By quiz" };
 
 // Maps a ?section= value onto the admin tabs, including the names of the
-// tabs that were merged or renamed (Quizzes, Members, Settings).
+// tabs that were merged or removed (Quizzes, Members, Settings).
 export function resolveAdminSection(requested) {
   if (requested === "Quizzes") {
-    return { section: "Presentations", historyView: "quizzes", settingsOpen: false };
-  }
-  if (requested === "Members") {
-    return { section: "Students", historyView: "sessions", settingsOpen: false };
-  }
-  if (requested === "Settings") {
-    return { section: "Students", historyView: "sessions", settingsOpen: true };
+    return { section: "Presentations", historyView: "quizzes" };
   }
   return {
     section: ADMIN_SECTIONS.includes(requested) ? requested : "Students",
     historyView: "sessions",
-    settingsOpen: false,
   };
+}
+
+// Class rank by average points, best first. Students who never played have
+// no rank; equal averages share one ("1, 1, 3").
+export function studentRanks(rows) {
+  const ranked = rows
+    .filter((row) => row.role !== "ORGANIZER" && row.stats?.average_score != null)
+    .sort((a, b) => b.stats.average_score - a.stats.average_score);
+  const ranks = new Map();
+  ranked.forEach((row, index) => {
+    const previous = ranked[index - 1];
+    const rank =
+      previous && previous.stats.average_score === row.stats.average_score
+        ? ranks.get(Number(previous.account_id))
+        : index + 1;
+    ranks.set(Number(row.account_id), rank);
+  });
+  return ranks;
+}
+
+// Colors a score chip: "miss" when absent, "hi" at or above that
+// presentation's class average, otherwise "lo".
+export function scoreMark(score, average) {
+  if (score === null || score === undefined) return "miss";
+  if (average === null || average === undefined) return "hi";
+  return score >= average ? "hi" : "lo";
+}
+
+export function initials(name) {
+  const words = String(name ?? "")
+    .replace(/@.*/, "")
+    .split(/[\s._-]+/)
+    .filter(Boolean);
+  return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? "?").slice(0, 2))
+    .toUpperCase();
 }
 
 // Sort choices for the merged Members table (sorted in the browser).
