@@ -1248,3 +1248,54 @@
     padding: 14px 18px;
   }
 }
+
+/* ---------- Classes list title bar: + New class · Join quiz · Join class ---------- */
+/* Any number of buttons after the heading, each its own full-height cell. */
+.qp .cl-titlebar {
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
+}
+
+/* Join quiz is the "play" action, so it takes the app's play color: deep
+   orange, as on Present, Go → and rank blocks. The 3px ink dividers keep
+   it from touching the navy Join class or the sky New class. */
+.qp .cl-titlebar .cl-join-quiz {
+  background: var(--orange-deep);
+  color: var(--paper);
+}
+
+.qp .cl-titlebar .cl-join-quiz:hover {
+  background: var(--orange);
+}
+
+.qp .cl-titlebar .cl-join-quiz[aria-expanded="true"] {
+  background: var(--ink);
+}
+
+.qp .cl-titlebar button:active {
+  transform: translate(2px, 2px);
+}
+
+/* Phones: the heading takes its own row and the buttons share the next. */
+@media (max-width: 640px) {
+  .qp .cl-titlebar {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .qp .cl-titlebar h1 {
+    flex: 1 0 100%;
+    border-bottom: var(--b);
+  }
+
+  .qp .cl-titlebar button {
+    flex: 1 1 0;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .qp .cl-titlebar button:first-of-type {
+    border-left: 0;
+  }
+}
