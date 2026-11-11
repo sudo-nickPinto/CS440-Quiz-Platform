@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router";
+import { classPagePath } from "../classes/classPaths";
 
 import { useResource } from "./rest";
 import { quizToEditor } from "./quizPayload";
@@ -54,8 +55,8 @@ export default function EditQuizPage() {
       <section className="qp-content">
         <h1>Editing unavailable</h1>
         <p>Archived quizzes cannot be edited.</p>
-        <Link to="/app/dashboard/present">
-          Back to dashboard
+        <Link to={classPagePath(quiz.class_id)}>
+          Back to class
         </Link>
       </section>
     );
