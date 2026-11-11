@@ -976,8 +976,3 @@
   background: var(--ink);
   color: var(--paper);
 }
-
-.qp .cl-dialog-heading > span {
-  font-family: "Archivo Black", sans-serif;
-  overflow-wrap: anywhere;
-}

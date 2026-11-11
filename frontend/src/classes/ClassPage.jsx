@@ -1,5 +1,4 @@
-import QuizCard from "../authenticated-demo/QuizCard";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 import HostQuizButton from "../authenticated-demo/HostQuizButton";
@@ -24,7 +23,7 @@ import {
   SUBMISSION_SORTS,
 } from "./classHelpers";
 import { EmptyMessage, ResourceMessage } from "./ClassUI";
-import { ClassMembers, ClassSettings } from "./ClassManagement";
+import { AddMemberDialog, ClassStudents } from "./ClassManagement";
 import {
   useApprovedQuizzes,
   useClassDashboard,
@@ -49,12 +48,6 @@ function formatScore(value) {
   return value === null || value === undefined
     ? "—"
     : Number(value).toLocaleString();
-}
-
-function formatRate(value) {
-  return value === null || value === undefined
-    ? "—"
-    : `${Math.round(value * 100)}%`;
 }
 
 function reportResource(resource) {
@@ -117,9 +110,9 @@ function ReportTable({
 
           <thead>
             <tr>
-              {headers.map((heading) => (
-                <th key={heading} scope="col">
-                  {heading}
+              {headers.map((heading, index) => (
+                <th key={heading || index} scope="col">
+                  {heading || <span className="cl-sr">Actions</span>}
                 </th>
               ))}
             </tr>
@@ -139,7 +132,12 @@ function ReportTable({
               visible.map((row) => (
                 <tr key={row.key}>
                   {row.cells.map((cell, index) => (
-                    <td key={headers[index]}>{cell}</td>
+                    <td
+                      key={headers[index] || index}
+                      className={index === 0 ? row.leadClass : undefined}
+                    >
+                      {cell}
+                    </td>
                   ))}
                 </tr>
               ))
@@ -262,27 +260,6 @@ function ParticipateTable({ classInfo }) {
   );
 }
 
-function ClassSummary({ dashboard }) {
-  const data = dashboard.status === "ready" ? dashboard.data : null;
-  const stats = [
-    ["Students", data?.student_count],
-    ["Presentations", data?.completed_session_count],
-    ["Class average", data && formatScore(data.class_average)],
-    ["Attendance", data && formatRate(data.attendance_rate)],
-  ];
-
-  return (
-    <section className="cl-summary" aria-label="Class summary">
-      {stats.map(([label, value]) => (
-        <div className="cl-stat" key={label}>
-          <span>{label}</span>
-          <strong>{value ?? "—"}</strong>
-        </div>
-      ))}
-    </section>
-  );
-}
-
 function SortSelect({ label, value, choices, onChange }) {
   return (
     <label className="cl-sort">
@@ -298,40 +275,12 @@ function SortSelect({ label, value, choices, onChange }) {
   );
 }
 
-function Pager({ caption, pagination, onPageChange }) {
-  if (!pagination || pagination.total_pages <= 1) return null;
-  const { page, total_pages: totalPages } = pagination;
-
-  return (
-    <nav className="cl-pagination" aria-label={`${caption} pages`}>
-      <button
-        type="button"
-        disabled={page <= 1}
-        onClick={() => onPageChange(page - 1)}
-      >
-        ← Previous
-      </button>
-      <span>
-        Page {page} of {totalPages}
-      </span>
-      <button
-        type="button"
-        disabled={page >= totalPages}
-        onClick={() => onPageChange(page + 1)}
-      >
-        Next →
-      </button>
-    </nav>
-  );
-}
-
 // Approved quizzes in this class. Every active member sees them; the quiz
 // owner or an organizer can host (Task 5 checks the same on the server).
 function PresentTable({ classInfo }) {
   const action = useAction();
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState("recent");
-  const [query, setQuery] = useState("");
   const resource = useApprovedQuizzes(classInfo.id, page, sortKey);
 
   if (classInfo.archived) {
@@ -345,90 +294,65 @@ function PresentTable({ classInfo }) {
   const pending = reportResource(resource);
   if (pending) return pending;
 
-  const needle = query.trim().toLowerCase();
-  const quizzes = resource.data.items.filter((quiz) =>
-    `${quiz.title} ${quiz.author_name}`.toLowerCase().includes(needle),
-  );
-  const total = resource.data.pagination.total_items;
-
   return (
     <>
-      <div className="cl-toolbar">
-        <label className="cl-search">
-          <span className="cl-sr">Search this page of approved quizzes</span>
-          <input
-            type="search"
-            placeholder="Search this page of approved quizzes…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-
-        <SortSelect
-          label="Sort approved quizzes"
-          value={sortKey}
-          choices={APPROVED_SORTS}
-          onChange={(key) => {
-            setSortKey(key);
-            setPage(1);
-          }}
-        />
-
-        <span className="cl-count" aria-live="polite">
-          {total} approved {total === 1 ? "quiz" : "quizzes"}
-        </span>
-      </div>
-
       <RequestError error={action.error} />
-
-      {quizzes.length === 0 ? (
-        <EmptyMessage title={needle ? "No matches" : "No approved quizzes yet"}>
-          {needle
-            ? "No approved quiz matches your search."
-            : "Publish a quiz, then send it for approval from My quizzes. Once an organizer approves it, it can be hosted here."}
-        </EmptyMessage>
-      ) : (
-        <div className="qc-grid" aria-label="Approved quizzes">
-          {quizzes.map((quiz) => (
-            <QuizCard
-              key={quiz.quiz_id}
-              title={quiz.title}
-              // Only people who can open the quiz page get the link.
-              to={quiz.can_view ? "/app/quizzes/" + quiz.quiz_id : null}
-              state={{ classId: classInfo.id }}
-              status="Approved"
-              headline={
-                quiz.question_count +
-                (quiz.question_count === 1 ? " question" : " questions")
-              }
-              actions={
-                // Owners and organizers see the Host button, or why it's
-                // blocked (e.g. "Publish changes first"). Everyone else
-                // just learns who can host.
-                quiz.hosting?.reason === "not_host" ? (
-                  <small>Hosted by its owner or an organizer</small>
-                ) : (
-                  <HostQuizButton
-                    quiz={quiz}
-                    classId={classInfo.id}
-                    action={action}
-                    label="Host in this class"
-                  />
-                )
-              }
-            >
-              <p>
-                By {quiz.author_name} · approved {formatDate(quiz.approved_at)}
-              </p>
-            </QuizCard>
-          ))}
-        </div>
-      )}
-
-      <Pager
+      <ReportTable
         caption="Approved quizzes"
+        noun="quiz"
+        headers={["Status", "Quiz", "Qs", "Approved", ""]}
+        emptyTitle="No approved quizzes yet"
+        emptyText="Publish a quiz, then send it for approval from My quizzes. Once an organizer approves it, it can be hosted here."
         pagination={resource.data.pagination}
         onPageChange={setPage}
+        controls={
+          <SortSelect
+            label="Sort approved quizzes"
+            value={sortKey}
+            choices={APPROVED_SORTS}
+            onChange={(key) => {
+              setSortKey(key);
+              setPage(1);
+            }}
+          />
+        }
+        rows={resource.data.items.map((quiz) => ({
+          key: quiz.quiz_id,
+          text: `${quiz.title} ${quiz.author_name}`,
+          leadClass: "cl-status is-approved",
+          cells: [
+            "Approved",
+            <span className="cl-quiz-cell">
+              {/* Only people who can open the quiz page get the link. */}
+              {quiz.can_view ? (
+                <Link
+                  className="cl-quiz-name"
+                  to={`/app/quizzes/${quiz.quiz_id}`}
+                  state={{ classId: classInfo.id }}
+                >
+                  {quiz.title}
+                </Link>
+              ) : (
+                <strong className="cl-quiz-name">{quiz.title}</strong>
+              )}
+              <small>By {quiz.author_name}</small>
+            </span>,
+            formatScore(quiz.question_count),
+            formatDate(quiz.approved_at),
+            // Owners and organizers see the Host button, or why it's blocked
+            // (e.g. "Publish changes first"). Everyone else learns who can.
+            quiz.hosting?.reason === "not_host" ? (
+              <small>Hosted by its owner or an organizer</small>
+            ) : (
+              <HostQuizButton
+                quiz={quiz}
+                classId={classInfo.id}
+                action={action}
+                label="Host"
+              />
+            ),
+          ],
+        }))}
       />
     </>
   );
@@ -480,7 +404,7 @@ function MyQuizzesTable({ classInfo, onApprovalChange }) {
     <ReportTable
       caption="My quizzes"
       noun="quiz"
-      headers={["Quiz", "Access", "Status", "Approval", "Questions", "Last edited"]}
+      headers={["Status", "Quiz", "Access", "Approval", "Qs", "Edited"]}
       emptyTitle="No quizzes yet"
       emptyText={
         classInfo.membershipStatus === "ACTIVE" && !classInfo.archived
@@ -503,8 +427,11 @@ function MyQuizzesTable({ classInfo, onApprovalChange }) {
       rows={resource.data.items.map((quiz) => ({
         key: quiz.quiz_id,
         text: `${quiz.title} ${quiz.author_name}`,
+        leadClass: `cl-status is-${String(quiz.status).toLowerCase()}`,
         cells: [
+          quizStatusLabel(quiz.status),
           <Link
+            className="cl-quiz-name"
             to={`/app/quizzes/${quiz.quiz_id}`}
             state={{ classId: classInfo.id }}
           >
@@ -513,7 +440,6 @@ function MyQuizzesTable({ classInfo, onApprovalChange }) {
           quiz.my_access === "EDITOR"
             ? `Editor · shared by ${quiz.author_name}`
             : quizAccessLabel(quiz.my_access),
-          quizStatusLabel(quiz.status),
           <span className="cl-approval">
             {quiz.status === "PUBLISHED" ? approvalLabel(quiz.approval_status) : "—"}
             {canSubmit && canSubmitForApproval(quiz) && (
@@ -747,50 +673,11 @@ function ClassHistory({ classInfo, studentCount, view, onViewChange }) {
   );
 }
 
-// Class settings in a modal opened from the class header.
-function SettingsDialog({ classInfo, onChange, onClose }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (dialog && !dialog.open) dialog.showModal();
-  }, []);
-
-  return (
-    <dialog
-      ref={ref}
-      className="cl-dialog"
-      aria-labelledby="settings-heading"
-      onCancel={(event) => {
-        // Escape in a nested confirmation reaches here too; ignore it.
-        if (event.target !== ref.current) return;
-        event.preventDefault();
-        onClose();
-      }}
-      onClick={(event) => {
-        // A click on the backdrop lands on the <dialog> itself.
-        if (event.target === ref.current) onClose();
-      }}
-    >
-      <div className="cl-dialog-heading">
-        <span>{classInfo.name}</span>
-        <button type="button" className="cl-secondary" onClick={onClose}>
-          Close
-        </button>
-      </div>
-
-      <div className="cl-dialog-body">
-        <ClassSettings classInfo={classInfo} onChange={onChange} />
-      </div>
-    </dialog>
-  );
-}
-
 const USER_SECTIONS = ["My quizzes", "Present", "Participate"];
 
 function ClassWorkspace({ classInfo, onChange }) {
   const account = useAccount();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const showAdminLayout = classInfo.canManage === true;
   const api = useApi();
   const navigate = useNavigate();
@@ -825,18 +712,45 @@ function ClassWorkspace({ classInfo, onChange }) {
     return adminStart.section;
   });
   const [historyView, setHistoryView] = useState(adminStart.historyView);
-  const [settingsOpen, setSettingsOpen] = useState(
-    !startsInUserView && adminStart.settingsOpen,
-  );
+  const [addOpen, setAddOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [nameDraft, setNameDraft] = useState(classInfo.name);
+  const manage = useAction();
 
-  function closeSettings() {
-    setSettingsOpen(false);
-    // Don't reopen it when the page reloads the class after a change.
-    if (searchParams.get("section") === "Settings") {
-      const next = new URLSearchParams(searchParams);
-      next.delete("section");
-      setSearchParams(next, { replace: true });
+  async function saveName(event) {
+    event.preventDefault();
+    const name = nameDraft.trim();
+    if (!name) return;
+    if (name === classInfo.name) {
+      setEditing(false);
+      return;
     }
+    const saved = await manage.run(async () => {
+      await api(`/classes/${classInfo.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      return true;
+    });
+    if (saved) onChange();
+  }
+
+  async function archiveClass() {
+    const confirmed = await confirmer.confirm({
+      label: "Archive class",
+      title: `Archive ${classInfo.name}?`,
+      message:
+        "The class code stops working and no new sessions can start. " +
+        "Reports stay available. There is no restore action yet.",
+      confirmLabel: "Archive class",
+    });
+    if (!confirmed) return;
+
+    const archived = await manage.run(async () => {
+      await api(`/classes/${classInfo.id}/archive`, { method: "POST" });
+      return true;
+    });
+    if (archived) onChange();
   }
 
   const adminView = showAdminLayout && view === "admin";
@@ -909,7 +823,57 @@ function ClassWorkspace({ classInfo, onChange }) {
             )}
           </p>
 
-          <h1 id="class-heading">{classInfo.name}</h1>
+          {editing ? (
+            <form className="cl-rename" onSubmit={saveName}>
+              <label>
+                <span className="cl-sr">Class name</span>
+                <input
+                  type="text"
+                  value={nameDraft}
+                  maxLength={100}
+                  required
+                  autoFocus
+                  disabled={manage.busy}
+                  onChange={(event) => setNameDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setNameDraft(classInfo.name);
+                      setEditing(false);
+                    }
+                  }}
+                />
+              </label>
+              <button type="submit" disabled={manage.busy || !nameDraft.trim()}>
+                Save
+              </button>
+              <button
+                type="button"
+                className="cl-secondary"
+                disabled={manage.busy}
+                onClick={() => {
+                  setNameDraft(classInfo.name);
+                  setEditing(false);
+                }}
+              >
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <div className="cl-title-row">
+              <h1 id="class-heading">{classInfo.name}</h1>
+              {adminView && !classInfo.archived && (
+                <button
+                  type="button"
+                  className="cl-edit-name"
+                  aria-label={`Edit class name ${classInfo.name}`}
+                  title="Edit class name"
+                  onClick={() => setEditing(true)}
+                >
+                  ✎ Edit
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {showAdminLayout && (
@@ -944,10 +908,12 @@ function ClassWorkspace({ classInfo, onChange }) {
               <>
                 <button
                   type="button"
+                  className="cl-secondary"
+                  aria-haspopup="dialog"
                   disabled={classInfo.archived}
-                  onClick={() => setSection("Students")}
+                  onClick={() => setAddOpen(true)}
                 >
-                  + Invite member
+                  + Add member
                 </button>
 
                 <button
@@ -963,25 +929,26 @@ function ClassWorkspace({ classInfo, onChange }) {
                   {csv.busy ? "Preparing…" : "Export grades"}
                 </button>
 
-                <button
-                  type="button"
-                  className="cl-secondary"
-                  aria-haspopup="dialog"
-                  onClick={() => setSettingsOpen(true)}
-                >
-                  Settings
-                </button>
+                {!classInfo.archived && (
+                  <button
+                    type="button"
+                    className="cl-secondary cl-danger"
+                    disabled={manage.busy}
+                    onClick={() => void archiveClass()}
+                  >
+                    Archive
+                  </button>
+                )}
               </>
             )}
           </div>
         )}
       </div>
 
-      {adminView && settingsOpen && (
-        <SettingsDialog
+      {adminView && addOpen && (
+        <AddMemberDialog
           classInfo={classInfo}
-          onChange={onChange}
-          onClose={closeSettings}
+          onClose={() => setAddOpen(false)}
         />
       )}
 
@@ -991,14 +958,7 @@ function ClassWorkspace({ classInfo, onChange }) {
         <p className="cl-section-note">This class is archived.</p>
       )}
 
-      <RequestError error={csv.error || leave.error} />
-
-      {adminView &&
-        (dashboard.status === "ready" ? (
-          <ClassSummary dashboard={dashboard} />
-        ) : (
-          <ResourceMessage resource={dashboard} />
-        ))}
+      <RequestError error={csv.error || leave.error || manage.error} />
 
       <div className="cl-section-tabs">
         <div role="group" aria-label="Class sections">
@@ -1055,7 +1015,11 @@ function ClassWorkspace({ classInfo, onChange }) {
       </div>
 
       {activeSection === "Students" ? (
-        <ClassMembers classInfo={classInfo} onChange={onChange} />
+        <ClassStudents
+          classInfo={classInfo}
+          dashboard={dashboard}
+          onChange={onChange}
+        />
       ) : activeSection === "Approvals" ? (
         <SubmissionsTable
           classInfo={classInfo}

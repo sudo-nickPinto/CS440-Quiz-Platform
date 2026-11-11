@@ -35,6 +35,9 @@ import SessionResults from "./SessionResults";
 import "./taha-ui.css";
 import "../classes/classes.css";
 import "./quizburg-polish.css";
+// After the polish sheet: the class page's Students tab, status rows and
+// Add member pop-up (class-admin-main.html / made-dashboard-main.html).
+import "../classes/class-admin.css";
 import "./dismissPopovers.js";
 
 export default function PreviewApp({ onSignOut }) {
