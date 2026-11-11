@@ -852,6 +852,8 @@ function ClassWorkspace({ classInfo, onChange }) {
 
   function changeView(nextView) {
     setView(nextView);
+    // Counts may be stale after time in the other view.
+    dashboard.reload();
     setSection(nextView === "admin" ? "Presentations" : "Present");
   }
 

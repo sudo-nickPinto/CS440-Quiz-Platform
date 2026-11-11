@@ -113,8 +113,8 @@ export function useClassResource(classId) {
 
 export const REPORT_PAGE_SIZE = 25;
 
-function useClassReport(classId, path) {
-  const result = useResource(`/classes/${classId}/${path}`);
+function useClassReport(classId, path, pollMs = 0) {
+  const result = useResource(`/classes/${classId}/${path}`, pollMs);
 
   return resourceState(result, (data) => {
     if (!data || typeof data !== "object") {
@@ -125,8 +125,12 @@ function useClassReport(classId, path) {
   });
 }
 
+// Polled so counts such as the pending-approval badge pick up changes
+// other people make (a student sending a quiz for approval).
+export const DASHBOARD_POLL_MS = 30000;
+
 export function useClassDashboard(classId) {
-  return useClassReport(classId, "dashboard");
+  return useClassReport(classId, "dashboard", DASHBOARD_POLL_MS);
 }
 
 export function useClassSessions(classId, page = 1) {
