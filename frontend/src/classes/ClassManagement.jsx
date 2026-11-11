@@ -3,6 +3,7 @@ import { useAccount } from "../authenticated-demo/account";
 
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
+import CopyCodeButton from "../authenticated-demo/CopyCodeButton";
 import { useConfirm } from "../authenticated-demo/useConfirm";
 import { ResourceMessage } from "./ClassUI";
 
@@ -452,13 +453,21 @@ export function ClassSettings({ classInfo, onChange }) {
 
       <div className="cl-settings-block">
         <h3>Class code</h3>
-        <p className="cl-code-value">{classInfo.code || "No class code"}</p>
+        <p className="cl-code-value">
+          {classInfo.code || "No class code"}{" "}
+          <CopyCodeButton code={classInfo.code} label="class code" />
+        </p>
         {classInfo.code && classInfo.joiningOpen ? (
           <p>
             Members join from <strong>Classes → Join class</strong> with this code,
             or by opening{" "}
             <code>{`${window.location.origin}/app/join/class/${classInfo.code}`}</code>
-            .
+            .{" "}
+            <CopyCodeButton
+              code={`${window.location.origin}/app/join/class/${classInfo.code}`}
+              label="join link"
+              className="ui-copy-code-small"
+            />
           </p>
         ) : (
           <p>
