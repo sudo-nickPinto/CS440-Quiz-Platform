@@ -119,11 +119,6 @@ function HostLobby({ state, title, actions }) {
             <div className="lv-join-code">
               <small>Join code</small>
               {code || "Loading…"}
-              <CopyCodeButton
-                code={state.session.join_code}
-                label="join code"
-                className="lv-join-copy"
-              />
             </div>
 
             <div className="lv-count">
