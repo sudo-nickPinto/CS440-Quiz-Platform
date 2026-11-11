@@ -961,4 +961,29 @@
 .qp .cl-preview-meta {
   margin: 0;
   font-size: 13px;
+/* Class page tabs cleanup: by-session / by-quiz toggle */
+.qp .cl-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.qp .cl-toggle button {
+  padding: 6px 12px;
+  box-shadow: none;
+  background: var(--paper);
+  font-size: 14px;
+}
+
+.qp .cl-toggle button + button {
+  border-left: 0;
+}
+
+.qp .cl-toggle button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.qp .cl-dialog-heading > span {
+  font-family: "Archivo Black", sans-serif;
+  overflow-wrap: anywhere;
 }

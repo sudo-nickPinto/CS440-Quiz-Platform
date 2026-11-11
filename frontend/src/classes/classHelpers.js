@@ -113,3 +113,61 @@ export function canSubmitForApproval(quiz) {
     quiz.approval_status !== "APPROVED"
   );
 }
+
+// Admin view tabs. "Presentations" shows class history by session or by quiz;
+// "Members" is the roster with each student's scores. Settings is a dialog
+// opened from the class header, not a tab.
+export const ADMIN_SECTIONS = ["Presentations", "Approvals", "Members"];
+export const HISTORY_VIEWS = { sessions: "By session", quizzes: "By quiz" };
+
+// Maps a ?section= value onto the admin tabs, including the names of the
+// tabs that were merged away (Quizzes, Students, Settings).
+export function resolveAdminSection(requested) {
+  if (requested === "Quizzes") {
+    return { section: "Presentations", historyView: "quizzes", settingsOpen: false };
+  }
+  if (requested === "Students") {
+    return { section: "Members", historyView: "sessions", settingsOpen: false };
+  }
+  if (requested === "Settings") {
+    return { section: "Presentations", historyView: "sessions", settingsOpen: true };
+  }
+  return {
+    section: ADMIN_SECTIONS.includes(requested) ? requested : "Presentations",
+    historyView: "sessions",
+    settingsOpen: false,
+  };
+}
+
+// Sort choices for the merged Members table (sorted in the browser).
+export const MEMBER_SORTS = {
+  name: "Name A–Z",
+  average: "Best average",
+  role: "Organizers first",
+};
+
+function memberName(member) {
+  return (member.display_name || member.email || "").toLowerCase();
+}
+
+// Joins the member list with the organizer-only student scores. Organizers
+// have no scores, so their `stats` is null.
+export function membersWithStats(members, statsById, sortKey = "name") {
+  const rows = members.map((member) => ({
+    ...member,
+    stats: statsById?.get(Number(member.account_id)) ?? null,
+  }));
+  const byName = (a, b) =>
+    memberName(a).localeCompare(memberName(b)) ||
+    Number(a.account_id) - Number(b.account_id);
+  const average = (row) => row.stats?.average_score ?? -1;
+  const organizerFirst = (row) => (row.role === "ORGANIZER" ? 0 : 1);
+
+  const compare = {
+    name: byName,
+    average: (a, b) => average(b) - average(a) || byName(a, b),
+    role: (a, b) => organizerFirst(a) - organizerFirst(b) || byName(a, b),
+  }[sortKey] ?? byName;
+
+  return rows.sort(compare);
+}

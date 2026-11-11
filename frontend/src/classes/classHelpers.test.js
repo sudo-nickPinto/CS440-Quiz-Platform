@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADMIN_SECTIONS,
   approvalLabel,
   approvedQuizzesPath,
   canSubmitForApproval,
@@ -7,6 +8,8 @@ import {
   quizAccessLabel,
   quizStatusLabel,
   submissionPreviewPath,
+  membersWithStats,
+  resolveAdminSection,
   submissionsPath,
 } from "./classHelpers";
 
@@ -90,5 +93,62 @@ describe("approval queue helpers", () => {
     expect(canSubmitForApproval({ ...quiz, status: "DRAFT" })).toBe(false);
     expect(canSubmitForApproval({ ...quiz, my_access: null })).toBe(false);
     expect(canSubmitForApproval({ ...quiz, published_version_id: null })).toBe(false);
+  });
+});
+
+describe("resolveAdminSection", () => {
+  it("keeps the current tabs and defaults to Presentations", () => {
+    for (const section of ADMIN_SECTIONS) {
+      expect(resolveAdminSection(section).section).toBe(section);
+    }
+    expect(resolveAdminSection(null)).toEqual({
+      section: "Presentations",
+      historyView: "sessions",
+      settingsOpen: false,
+    });
+    expect(resolveAdminSection("Nope").section).toBe("Presentations");
+  });
+
+  it("maps the merged tabs onto their new homes", () => {
+    expect(resolveAdminSection("Quizzes")).toMatchObject({
+      section: "Presentations",
+      historyView: "quizzes",
+    });
+    expect(resolveAdminSection("Students").section).toBe("Members");
+    expect(resolveAdminSection("Settings").settingsOpen).toBe(true);
+  });
+});
+
+describe("membersWithStats", () => {
+  const members = [
+    { account_id: 1, display_name: "Prof", email: "p@x", role: "ORGANIZER" },
+    { account_id: 2, display_name: "bea", email: "b@x", role: "MEMBER" },
+    { account_id: 3, display_name: "Al", email: "a@x", role: "MEMBER" },
+    { account_id: 4, display_name: "", email: "cy@x", role: "MEMBER" },
+  ];
+  const stats = new Map([
+    [2, { account_id: 2, average_score: 900 }],
+    [3, { account_id: 3, average_score: 400 }],
+    [4, { account_id: 4, average_score: null }],
+  ]);
+  const ids = (rows) => rows.map((row) => row.account_id);
+
+  it("lists each member once with their scores; organizers have none", () => {
+    const rows = membersWithStats(members, stats);
+    expect(ids(rows)).toEqual([3, 2, 4, 1]);
+    expect(rows.find((row) => row.account_id === 1).stats).toBeNull();
+    expect(rows.find((row) => row.account_id === 2).stats.average_score).toBe(900);
+  });
+
+  it("sorts by best average with unscored members last", () => {
+    expect(ids(membersWithStats(members, stats, "average"))).toEqual([2, 3, 4, 1]);
+  });
+
+  it("sorts organizers first", () => {
+    expect(ids(membersWithStats(members, stats, "role"))).toEqual([1, 3, 2, 4]);
+  });
+
+  it("still lists members when scores are unavailable", () => {
+    expect(ids(membersWithStats(members, null))).toEqual([3, 2, 4, 1]);
   });
 });

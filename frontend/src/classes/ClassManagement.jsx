@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
@@ -6,7 +7,23 @@ import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import CopyCodeButton from "../authenticated-demo/CopyCodeButton";
 import { useConfirm } from "../authenticated-demo/useConfirm";
 import { ResourceMessage } from "./ClassUI";
+import { MEMBER_SORTS, membersWithStats } from "./classHelpers";
+import { useClassStudentStats } from "./classResources";
 
+function formatAverage(value) {
+  return value === null || value === undefined
+    ? "—"
+    : Number(value).toLocaleString();
+}
+
+function formatAttendance(value) {
+  return value === null || value === undefined
+    ? "—"
+    : `${Math.round(value * 100)}%`;
+}
+
+// Everyone in the class once each, with their role and, for students, their
+// scores. A student's name opens their class report.
 export function ClassMembers({ classInfo, onChange }) {
   const account = useAccount();
   const api = useApi();
@@ -15,13 +32,16 @@ export function ClassMembers({ classInfo, onChange }) {
 
   const resource = useResource(`/classes/${classInfo.id}/members`);
   const invitesResource = useResource(`/classes/${classInfo.id}/invites`);
+  const stats = useClassStudentStats(classInfo.id);
 
   const [email, setEmail] = useState("");
   const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState("name");
 
   function refreshLists() {
     resource.reload();
     invitesResource.reload();
+    stats.reload();
   }
 
   function refreshAfterMemberChange(member) {
@@ -31,16 +51,24 @@ export function ClassMembers({ classInfo, onChange }) {
     } else {
       // Keep the workspace and its selected Members tab mounted.
       resource.reload();
+      stats.reload();
     }
   }
 
   const members = Array.isArray(resource.data) ? resource.data : [];
 
-  const visible = members.filter((member) =>
+  const visible = membersWithStats(members, stats.data, sortKey).filter((member) =>
     `${member.display_name ?? ""} ${member.email}`
       .toLowerCase()
       .includes(query.trim().toLowerCase()),
   );
+
+  // Organizers aren't scored; "…" while the scores are still loading.
+  function scoreCell(member, field, format) {
+    if (member.role === "ORGANIZER") return "—";
+    if (stats.loading) return "…";
+    return format(member.stats?.[field]);
+  }
 
   async function inviteMember(event) {
     event.preventDefault();
@@ -265,7 +293,23 @@ export function ClassMembers({ classInfo, onChange }) {
           />
         </label>
 
-        <span className="cl-count">{visible.length} members</span>
+        <label className="cl-sort">
+          <span className="cl-sr">Sort members</span>
+          <select
+            value={sortKey}
+            onChange={(event) => setSortKey(event.target.value)}
+          >
+            {Object.entries(MEMBER_SORTS).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <span className="cl-count">
+          {visible.length} {visible.length === 1 ? "member" : "members"}
+        </span>
 
         <button
           type="button"
@@ -276,6 +320,15 @@ export function ClassMembers({ classInfo, onChange }) {
         </button>
       </div>
 
+      {stats.error && (
+        <p className="cl-feedback cl-error" role="alert">
+          Scores could not be loaded: {stats.error.message}{" "}
+          <button type="button" onClick={stats.reload}>
+            Retry scores
+          </button>
+        </p>
+      )}
+
       <div className="cl-table-wrap">
         <table className="cl-table cl-members-table">
           <caption className="cl-sr">Active class members</caption>
@@ -285,6 +338,8 @@ export function ClassMembers({ classInfo, onChange }) {
               <th scope="col">Name</th>
               <th scope="col">Email</th>
               <th scope="col">Role</th>
+              <th scope="col">Average</th>
+              <th scope="col">Attendance</th>
               <th scope="col">Actions</th>
             </tr>
           </thead>
@@ -292,9 +347,24 @@ export function ClassMembers({ classInfo, onChange }) {
           <tbody>
             {visible.map((member) => (
               <tr key={member.account_id}>
-                <td>{member.display_name || member.email}</td>
+                <td>
+                  {member.role === "MEMBER" ? (
+                    <Link
+                      to={`/app/classes/${classInfo.id}/students/${member.account_id}/report`}
+                      title="Open this student's class report"
+                    >
+                      {member.display_name || member.email}
+                    </Link>
+                  ) : (
+                    member.display_name || member.email
+                  )}
+                </td>
                 <td>{member.email}</td>
                 <td>{member.role === "ORGANIZER" ? "Organizer" : "Member"}</td>
+                <td>{scoreCell(member, "average_score", formatAverage)}</td>
+                <td>
+                  {scoreCell(member, "attendance_rate", formatAttendance)}
+                </td>
                 <td>
                   <div className="cl-actions">
                     <button
@@ -321,7 +391,7 @@ export function ClassMembers({ classInfo, onChange }) {
 
             {visible.length === 0 && (
               <tr>
-                <td colSpan={4}>No matching members.</td>
+                <td colSpan={6}>No matching members.</td>
               </tr>
             )}
           </tbody>

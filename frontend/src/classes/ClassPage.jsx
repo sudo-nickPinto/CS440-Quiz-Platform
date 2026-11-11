@@ -1,5 +1,5 @@
 import QuizCard from "../authenticated-demo/QuizCard";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 import HostQuizButton from "../authenticated-demo/HostQuizButton";
@@ -10,13 +10,16 @@ import { useFileDownload } from "../authenticated-demo/useFileDownload";
 import { useAction, useApi } from "../authenticated-demo/rest";
 import ClassLiveButton from "./ClassLiveButton";
 import {
+  ADMIN_SECTIONS,
   APPROVED_SORTS,
   approvalLabel,
   canSubmitForApproval,
   copyText,
+  HISTORY_VIEWS,
   MY_QUIZ_SORTS,
   quizAccessLabel,
   quizStatusLabel,
+  resolveAdminSection,
   SUBMISSION_FILTERS,
   SUBMISSION_SORTS,
 } from "./classHelpers";
@@ -29,7 +32,6 @@ import {
   useClassSubmissions,
   useClassResource,
   useClassSessions,
-  useClassStudents,
   useMyClassQuizzes,
 } from "./classResources";
 
@@ -172,7 +174,7 @@ function ReportTable({
 }
 
 // Organizer view: every completed session of the class.
-function PresentationsTable({ classInfo, studentCount }) {
+function PresentationsTable({ classInfo, studentCount, controls }) {
   const [page, setPage] = useState(1);
   const resource = useClassSessions(classInfo.id, page);
   const pending = reportResource(resource);
@@ -192,6 +194,7 @@ function PresentationsTable({ classInfo, studentCount }) {
       ]}
       emptyTitle="No presentations yet"
       emptyText="Host a quiz in this class and it shows up here once it ends."
+      controls={controls}
       pagination={resource.data.pagination}
       onPageChange={setPage}
       rows={resource.data.items.map((session) => ({
@@ -210,72 +213,6 @@ function PresentationsTable({ classInfo, studentCount }) {
           >
             Report →
           </Link>,
-        ],
-      }))}
-    />
-  );
-}
-
-function StudentsTable({ classInfo }) {
-  const [page, setPage] = useState(1);
-  const resource = useClassStudents(classInfo.id, page);
-  const pending = reportResource(resource);
-  if (pending) return pending;
-
-  return (
-    <ReportTable
-      caption="Students"
-      noun="student"
-      headers={[
-        "Rank",
-        "Student",
-        "Recent scores",
-        "Average",
-        "Attendance",
-        "Total",
-      ]}
-      emptyTitle="No students yet"
-      emptyText="Share the class code or invite members to get started."
-      pagination={resource.data.pagination}
-      onPageChange={setPage}
-      rows={resource.data.items.map((student, index) => ({
-        key: student.account_id,
-        text: `${student.display_name} ${student.email}`,
-        cells: [
-          student.average_score === null
-            ? "—"
-            : (resource.data.pagination.page - 1) *
-                resource.data.pagination.page_size +
-              index +
-              1,
-          <>
-            <Link
-              to={`/app/classes/${classInfo.id}/students/${student.account_id}/report`}
-            >
-              <strong>{student.display_name}</strong>
-            </Link>
-            <br />
-            <small>{student.email}</small>
-          </>,
-          student.recent_scores.length ? (
-            <span
-              className="cl-recent"
-              aria-label={`Most recent first: ${student.recent_scores
-                .map((score) => (score === null ? "absent" : score))
-                .join(", ")}`}
-            >
-              {student.recent_scores.map((score, scoreIndex) => (
-                <span key={scoreIndex} data-absent={score === null}>
-                  {score === null ? "–" : formatScore(score)}
-                </span>
-              ))}
-            </span>
-          ) : (
-            "—"
-          ),
-          formatScore(student.average_score),
-          formatRate(student.attendance_rate),
-          formatScore(student.total_points),
         ],
       }))}
     />
@@ -759,7 +696,7 @@ function SubmissionsTable({ classInfo, organizer, onChange }) {
   );
 }
 
-function ClassQuizzesTable({ classInfo }) {
+function ClassQuizzesTable({ classInfo, controls }) {
   const [page, setPage] = useState(1);
   const resource = useClassQuizzes(classInfo.id, page);
   const pending = reportResource(resource);
@@ -780,6 +717,7 @@ function ClassQuizzesTable({ classInfo }) {
       ]}
       emptyTitle="No presented quizzes yet"
       emptyText="Quizzes appear here after a session in this class completes."
+      controls={controls}
       pagination={resource.data.pagination}
       onPageChange={setPage}
       rows={resource.data.items.map((quiz) => ({
@@ -802,19 +740,79 @@ function ClassQuizzesTable({ classInfo }) {
   );
 }
 
-const ADMIN_SECTIONS = [
-  "Presentations",
-  "Approvals",
-  "Quizzes",
-  "Students",
-  "Members",
-  "Settings",
-];
+// Organizer view: completed presentations, listed one per session or
+// grouped by quiz.
+function ClassHistory({ classInfo, studentCount, view, onViewChange }) {
+  const controls = (
+    <div className="cl-toggle" role="group" aria-label="Group presentations">
+      {Object.entries(HISTORY_VIEWS).map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={view === key}
+          onClick={() => onViewChange(key)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  return view === "quizzes" ? (
+    <ClassQuizzesTable classInfo={classInfo} controls={controls} />
+  ) : (
+    <PresentationsTable
+      classInfo={classInfo}
+      studentCount={studentCount}
+      controls={controls}
+    />
+  );
+}
+
+// Class settings in a modal opened from the class header.
+function SettingsDialog({ classInfo, onChange, onClose }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  }, []);
+
+  return (
+    <dialog
+      ref={ref}
+      className="cl-dialog"
+      aria-labelledby="settings-heading"
+      onCancel={(event) => {
+        // Escape in a nested confirmation reaches here too; ignore it.
+        if (event.target !== ref.current) return;
+        event.preventDefault();
+        onClose();
+      }}
+      onClick={(event) => {
+        // A click on the backdrop lands on the <dialog> itself.
+        if (event.target === ref.current) onClose();
+      }}
+    >
+      <div className="cl-dialog-heading">
+        <span>{classInfo.name}</span>
+        <button type="button" className="cl-secondary" onClick={onClose}>
+          Close
+        </button>
+      </div>
+
+      <div className="cl-dialog-body">
+        <ClassSettings classInfo={classInfo} onChange={onChange} />
+      </div>
+    </dialog>
+  );
+}
+
 const USER_SECTIONS = ["My quizzes", "Present", "Participate"];
 
 function ClassWorkspace({ classInfo, onChange }) {
   const account = useAccount();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const showAdminLayout = classInfo.canManage === true;
   const api = useApi();
   const navigate = useNavigate();
@@ -834,18 +832,34 @@ function ClassWorkspace({ classInfo, onChange }) {
     return showAdminLayout ? "admin" : "user";
   });
 
-  const [section, setSection] = useState(() => {
-    const requested = searchParams.get("section");
-    const userView = !showAdminLayout || searchParams.get("view") === "user";
-    if (userView && USER_SECTIONS.includes(requested)) {
-      return requested;
-    }
-    if (!userView && ADMIN_SECTIONS.includes(requested)) {
-      return requested;
-    }
+  const requestedSection = searchParams.get("section");
+  const startsInUserView =
+    !showAdminLayout || searchParams.get("view") === "user";
+  // Also maps the old Quizzes, Students and Settings tab names.
+  const adminStart = resolveAdminSection(requestedSection);
 
-    return showAdminLayout ? "Presentations" : "My quizzes";
+  const [section, setSection] = useState(() => {
+    if (startsInUserView) {
+      return USER_SECTIONS.includes(requestedSection)
+        ? requestedSection
+        : "My quizzes";
+    }
+    return adminStart.section;
   });
+  const [historyView, setHistoryView] = useState(adminStart.historyView);
+  const [settingsOpen, setSettingsOpen] = useState(
+    !startsInUserView && adminStart.settingsOpen,
+  );
+
+  function closeSettings() {
+    setSettingsOpen(false);
+    // Don't reopen it when the page reloads the class after a change.
+    if (searchParams.get("section") === "Settings") {
+      const next = new URLSearchParams(searchParams);
+      next.delete("section");
+      setSearchParams(next, { replace: true });
+    }
+  }
 
   const adminView = showAdminLayout && view === "admin";
 
@@ -970,11 +984,28 @@ function ClassWorkspace({ classInfo, onChange }) {
                 >
                   {csv.busy ? "Preparing…" : "Export grades"}
                 </button>
+
+                <button
+                  type="button"
+                  className="cl-secondary"
+                  aria-haspopup="dialog"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  Settings
+                </button>
               </>
             )}
           </div>
         )}
       </div>
+
+      {adminView && settingsOpen && (
+        <SettingsDialog
+          classInfo={classInfo}
+          onChange={onChange}
+          onClose={closeSettings}
+        />
+      )}
 
       <ClassLiveButton classId={classInfo.id} />
 
@@ -1047,8 +1078,6 @@ function ClassWorkspace({ classInfo, onChange }) {
 
       {activeSection === "Members" ? (
         <ClassMembers classInfo={classInfo} onChange={onChange} />
-      ) : activeSection === "Settings" ? (
-        <ClassSettings classInfo={classInfo} onChange={onChange} />
       ) : activeSection === "Approvals" ? (
         <SubmissionsTable
           classInfo={classInfo}
@@ -1063,11 +1092,12 @@ function ClassWorkspace({ classInfo, onChange }) {
       ) : activeSection === "Present" ? (
         <PresentTable classInfo={classInfo} />
       ) : activeSection === "Presentations" ? (
-        <PresentationsTable classInfo={classInfo} studentCount={studentCount} />
-      ) : activeSection === "Quizzes" ? (
-        <ClassQuizzesTable classInfo={classInfo} />
-      ) : activeSection === "Students" ? (
-        <StudentsTable classInfo={classInfo} />
+        <ClassHistory
+          classInfo={classInfo}
+          studentCount={studentCount}
+          view={historyView}
+          onViewChange={setHistoryView}
+        />
       ) : (
         <ParticipateTable classInfo={classInfo} />
       )}
