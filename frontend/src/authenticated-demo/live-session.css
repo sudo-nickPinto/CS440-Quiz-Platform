@@ -96,8 +96,8 @@
 
 .qp .live-session button:focus-visible,
 .qp .live-session a:focus-visible {
-  outline: 3px solid #043371;
-  outline-offset: 4px;
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 2px;
 }
 
 .qp .live-choice-review {

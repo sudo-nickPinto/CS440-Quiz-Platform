@@ -759,12 +759,23 @@
   flex: 1 1 150px;
 }
 
+/* Keyboard focus, as in the mockups: a tight deep-orange outline on
+   buttons and links. Fields show focus on their own border (see below). */
 .qp .cl-page button:focus-visible,
-.qp .cl-page input:focus-visible,
-.qp .cl-page select:focus-visible,
 .qp .cl-page a:focus-visible {
-  outline: 3px solid var(--navy);
-  outline-offset: 4px;
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 2px;
+}
+
+/* Text fields and selects: no ring around the box (it showed on every
+   click); the box's own border turns deep orange instead. App-wide. */
+.qp input:focus-visible,
+.qp select:focus-visible,
+.qp textarea:focus-visible,
+.qp .cl-page input:focus-visible,
+.qp .cl-page select:focus-visible {
+  outline: none;
+  border-color: var(--orange-deep);
 }
 
 @media (max-width: 640px) {
