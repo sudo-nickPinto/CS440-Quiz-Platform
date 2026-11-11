@@ -9,6 +9,7 @@ import { useConfirm } from "./useConfirm";
 import { HostFinal, ParticipantFinal } from "./LiveFinal";
 import Avatar from "../avatars/Avatar";
 import QuizStartCountdown from "./QuizStartCountdown";
+import CopyCodeButton from "./CopyCodeButton";
 
 const CONNECTION_ERRORS = {
   unauthorized: "Your login needs to be renewed.",
@@ -118,6 +119,11 @@ function HostLobby({ state, title, actions }) {
             <div className="lv-join-code">
               <small>Join code</small>
               {code || "Loading…"}
+              <CopyCodeButton
+                code={state.session.join_code}
+                label="join code"
+                className="lv-join-copy"
+              />
             </div>
 
             <div className="lv-count">
@@ -755,7 +761,13 @@ function ConnectedSession({ sessionId }) {
           <span className="lv-bar-label">
             {host && code && phase !== "left" ? (
               <>
-                Code <b>{code}</b> · {where}
+                Code <b>{code}</b>{" "}
+                <CopyCodeButton
+                  code={state.session.join_code}
+                  label="join code"
+                  className="ui-copy-code-small"
+                />{" "}
+                · {where}
               </>
             ) : (
               where
