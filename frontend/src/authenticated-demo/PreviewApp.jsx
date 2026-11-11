@@ -18,6 +18,7 @@ import {
   ClassStudentReportPage,
 } from "../classes/ClassReports";
 
+import AppNav from "./AppNav";
 import { AccountContext } from "./account";
 import { useResource } from "./rest";
 import RequestError from "./RequestError";
@@ -80,6 +81,8 @@ export default function PreviewApp({ onSignOut }) {
           >
             <QuizBurgLogo />
           </Link>
+
+          <AppNav pathname={pathname} />
 
           <div className="ui-user">
             <span className="ui-user-name">{me.display_name}</span>

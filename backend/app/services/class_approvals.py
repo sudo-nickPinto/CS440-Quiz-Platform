@@ -24,6 +24,7 @@ from app.schemas.class_dashboard import (
 )
 from app.schemas.pagination import PageInfo, SortOrder
 from app.services.class_authorization import ClassAccess, require_class_member
+from app.services.hosting import quiz_hosting_many
 from app.services.quiz_submissions import (
     _approved_versions_statement as approved_versions_statement,
 )
@@ -168,8 +169,7 @@ def list_class_approved_quizzes(
     sort: ApprovedQuizSort,
     order: SortOrder,
 ) -> ClassApprovedQuizPage:
-    access = require_class_member(db, account, class_id)
-    archived = access.class_.archived_at is not None
+    require_class_member(db, account, class_id)
     author = aliased(Account)
     approver = aliased(Account)
     rows = db.execute(
@@ -183,6 +183,7 @@ def list_class_approved_quizzes(
     ).all()
 
     counts = _question_counts(db, {row.QuizVersion.quiz_version_id for row in rows})
+    hosting = quiz_hosting_many(db, account, [row.Quiz for row in rows])
     items = [
         ClassApprovedQuiz(
             quiz_id=row.Quiz.quiz_id,
@@ -194,8 +195,8 @@ def list_class_approved_quizzes(
             author_name=row.author_name,
             approved_at=row.QuizSubmission.decided_at,
             approved_by_name=row.approved_by_name,
-            can_host=not archived
-            and (row.Quiz.author_id == account.account_id or access.is_organizer),
+            can_host=hosting[row.Quiz.quiz_id].can_host,
+            hosting=hosting[row.Quiz.quiz_id],
         )
         for row in rows
     ]

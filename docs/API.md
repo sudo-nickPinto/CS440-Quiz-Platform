@@ -296,8 +296,8 @@ Starts a `LOBBY` session in the class with a fresh 6-digit `join_code`. There ar
 Rules, checked in this order:
 1. The caller is an active member of the class, and the class isn't archived.
 2. The quiz belongs to this class.
-3. The caller is the quiz owner or an active organizer of the class. Being a collaborator isn't enough, and faculty status gives no extra access.
-4. The quiz isn't archived and has a published version.
+3. The caller is the quiz owner or an active organizer of the class. Organizer powers need faculty status too, the same rule as every other organizer action, so an old non-faculty organizer can only host their own quizzes. Being a collaborator isn't enough, and faculty status alone (without being an organizer of this class) gives no extra access.
+4. The quiz isn't archived, has a published version, and has no unpublished draft on top of it (an edited quiz must be published and approved again).
 5. That newest published version is approved for the class (Task 4). Pending, rejected, withdrawn and stale (a newer version was published) versions can't be hosted.
 
 | Status | Code | When |
@@ -312,6 +312,32 @@ Rules, checked in this order:
 | 503 | `join_code_unavailable` | No free join code after several tries; retry |
 
 The old `POST /quizzes/{quiz_id}/sessions` route is gone.
+
+When hosting is refused for one of rules 1–5, the error also says exactly why, in `error.details.reason`, and the `message` says what to do next. The error codes above stay the same.
+
+**Knowing before you click.** Quiz responses (`GET /quizzes`, `GET /quizzes/{id}`, `GET /classes/{id}/quizzes`, `GET /classes/{id}/quizzes/{quiz_id}`, and the create, update and publish responses) include a `hosting` object for the caller. It comes from the same checks as this endpoint, so the Host button and the server always agree:
+
+```json
+"hosting": { "can_host": false, "reason": "pending_approval", "message": "This quiz is waiting for a class organizer to approve it." }
+```
+
+| `reason` | Meaning | Error code when you try anyway |
+|---|---|---|
+| `not_in_class` | Old quiz with no class | `quiz_not_hostable` |
+| `class_archived` | The class is archived | `class_archived` |
+| `not_host` | Caller isn't the quiz owner or a class organizer | `session_host_denied` |
+| `quiz_archived` | The quiz is archived | `quiz_not_hostable` |
+| `not_published` | Still a draft | `quiz_not_hostable` |
+| `unpublished_changes` | Edited after publishing. The page shows the new draft, so the older published version isn't hosted silently; publish and get the new version approved | `quiz_not_hostable` |
+| `not_submitted` | Published but never submitted for approval | `quiz_version_not_approved` |
+| `pending_approval` | Waiting for an organizer | `quiz_version_not_approved` |
+| `rejected` | An organizer rejected this version | `quiz_version_not_approved` |
+| `withdrawn` | The submission was withdrawn | `quiz_version_not_approved` |
+| `approval_outdated` | An older version was approved, but not the newest one | `quiz_version_not_approved` |
+
+When hosting is allowed, `hosting` is `{"can_host": true, "reason": null, "message": null}`.
+
+The status is loaded in a fixed number of queries for the whole list, so long quiz lists don't make extra database calls.
 
 ### `POST /sessions/join` → `201 SessionJoinResponse`
 Any active account. Body: `{"join_code": "123456"}` (6 digits; surrounding spaces are trimmed). Works in `LOBBY` or `ACTIVE`; a late joiner starts from the next question. The host is notified over the WebSocket after the commit.
@@ -452,7 +478,7 @@ Built from the class's `COMPLETED` sessions only; open sessions never count. Sco
   It takes `sort=name|average_score|session_count`.
 
 - `GET /classes/{class_id}/dashboard/submissions`: for any member (V3 Task 6). Organizers see every submission in the class; members see their own. It takes `status=PENDING|APPROVED|REJECTED|WITHDRAWN` (optional), `sort=submitted_at|title|submitter` (default `submitted_at`) and `order` (default `desc`). Each item has `submission_id, quiz_id, quiz_version_id, version_number, quiz_title, question_count, submitted_by_id, submitter_name, status, submitted_at, decided_at, decided_by_name`, and `is_current_version` (false once a newer version is published). Decisions still go through `PATCH`/`DELETE /classes/{class_id}/quiz-submissions/{submission_id}`.
-- `GET /classes/{class_id}/dashboard/approved-quizzes`: for any member (V3 Task 6). The same versions as `GET /classes/{class_id}/approved-quizzes`, paged, with `title, question_count, author_name, approved_at, approved_by_name`, and `can_host` (the caller owns the quiz or is an active faculty organizer, and the class isn't archived). It takes `sort=approved_at|title` and `order`. An archived class returns its list with `can_host` false instead of `409`.
+- `GET /classes/{class_id}/dashboard/approved-quizzes`: for any member (V3 Task 6). The same versions as `GET /classes/{class_id}/approved-quizzes`, paged, with `title, question_count, author_name, approved_at, approved_by_name`, and `hosting` plus `can_host`, from the same checks as starting a session (see the `hosting` reasons above), so the owner sees why an approved quiz is blocked, for example `unpublished_changes`, and other members get `not_host`. It takes `sort=approved_at|title` and `order`. An archived class returns its list with `can_host` false (`class_archived`) instead of `409`.
 
 All six use the same paging shape: `{ class_id, items, pagination: { page, page_size, total_items, total_pages } }`.
 

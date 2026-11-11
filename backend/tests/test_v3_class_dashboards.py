@@ -452,3 +452,36 @@ def test_archived_class_lists_approved_quizzes_without_hosting(queue) -> None:
     assert [(item["title"], item["can_host"]) for item in body["items"]] == [
         ("Amy's quiz", False)
     ]
+
+
+def test_approved_list_hosting_matches_start_session_checks(queue) -> None:
+    """An approved quiz with unpublished edits stays listed but can't be
+    hosted, and the list says why, same as starting a session would."""
+    client, identities, data, quizzes = queue
+    act_as(client, identities["prof"])
+    decide(client, data["main"], quizzes["amy"][1], "APPROVED")
+    amys = quizzes["amy"][0]
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            QuizVersion(
+                quiz_id=amys["quiz_id"],
+                version_number=amys["version"]["version_number"] + 1,
+                title="Unpublished draft",
+                published_at=None,
+            )
+        )
+        db.commit()
+    path = f"/classes/{data['main']}/dashboard/approved-quizzes"
+
+    def hosting(name):
+        act_as(client, identities[name])
+        (item,) = client.get(path).json()["items"]
+        return item["can_host"], item["hosting"]["reason"]
+
+    assert hosting("amy") == (False, "unpublished_changes")
+    assert hosting("zoe") == (False, "not_host")
+
+    act_as(client, identities["amy"])
+    started = client.post(f"/classes/{data['main']}/quizzes/{amys['quiz_id']}/sessions")
+    assert started.status_code == 409
+    assert started.json()["error"]["details"]["reason"] == "unpublished_changes"

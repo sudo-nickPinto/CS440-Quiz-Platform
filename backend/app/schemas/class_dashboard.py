@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.models.classes import ClassRole
 from app.models.quiz_submission import SubmissionStatus
 from app.schemas.pagination import PageInfo, SortOrder
-from app.schemas.quiz import ClassQuizListItem
+from app.schemas.quiz import ClassQuizListItem, QuizHosting
 
 
 class QuizSort(str, Enum):
@@ -66,8 +66,11 @@ class ClassApprovedQuiz(BaseModel):
     author_name: str
     approved_at: datetime
     approved_by_name: str
-    # The quiz owner or an active faculty organizer may host it.
+    # From the same checks as starting a session (services/hosting.py), so
+    # the Host button and the server agree. Only the owner or an active
+    # organizer can host, and not while the quiz has unapproved changes.
     can_host: bool
+    hosting: QuizHosting
 
 
 class ClassQuizSummary(BaseModel):

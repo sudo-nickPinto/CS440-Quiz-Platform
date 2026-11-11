@@ -464,14 +464,18 @@ function PresentTable({ classInfo }) {
                 (quiz.question_count === 1 ? " question" : " questions")
               }
               actions={
-                quiz.can_host ? (
+                // Owners and organizers see the Host button, or why it's
+                // blocked (e.g. "Publish changes first"). Everyone else
+                // just learns who can host.
+                quiz.hosting?.reason === "not_host" ? (
+                  <small>Hosted by its owner or an organizer</small>
+                ) : (
                   <HostQuizButton
-                    quiz={{ ...quiz, class_id: classInfo.id }}
+                    quiz={quiz}
+                    classId={classInfo.id}
                     action={action}
                     label="Host in this class"
                   />
-                ) : (
-                  <small>Hosted by its owner or an organizer</small>
                 )
               }
             >

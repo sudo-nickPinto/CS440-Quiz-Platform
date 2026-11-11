@@ -163,6 +163,18 @@ class QuizVersionResponse(BaseModel):
     questions: list[QuestionResponse]
 
 
+class QuizHosting(BaseModel):
+    """Whether the caller can host the quiz right now, and if not, why.
+
+    reason is a short code (for example "pending_approval") and message is a
+    sentence to show next to the Host button.
+    """
+
+    can_host: bool
+    reason: str | None = None
+    message: str | None = None
+
+
 class QuizResponse(BaseModel):
     quiz_id: int
     author_id: int
@@ -174,6 +186,7 @@ class QuizResponse(BaseModel):
     updated_at: datetime
     can_edit: bool
     version: QuizVersionResponse
+    hosting: QuizHosting | None = None
 
 
 class QuizListItem(BaseModel):
@@ -185,6 +198,7 @@ class QuizListItem(BaseModel):
     description: str | None
     question_count: int
     created_at: datetime
+    hosting: QuizHosting | None = None
 
 
 class ClassQuizSort(str, Enum):
