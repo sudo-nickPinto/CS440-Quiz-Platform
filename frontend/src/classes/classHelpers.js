@@ -132,6 +132,25 @@ export function resolveAdminSection(requested) {
   };
 }
 
+// Member (User view) tabs. "Present" is the caller's own quizzes with their
+// approval state; "Participate" is the sessions they played. Old links to
+// "My quizzes" land on Present.
+export const USER_SECTIONS = ["Present", "Participate"];
+
+export function resolveUserSection(requested) {
+  return USER_SECTIONS.includes(requested) ? requested : "Present";
+}
+
+// The lead block on a Present row: an approved newest version, an archived
+// quiz, or otherwise a draft (including published-but-not-approved).
+export function presentStatus(quiz) {
+  if (quiz.status === "ARCHIVED") return { key: "archived", label: "Archived" };
+  if (quiz.approval_status === "APPROVED") {
+    return { key: "approved", label: "Approved" };
+  }
+  return { key: "draft", label: "Draft" };
+}
+
 // Class rank by average points, best first. Students who never played have
 // no rank; equal averages share one ("1, 1, 3").
 export function studentRanks(rows) {

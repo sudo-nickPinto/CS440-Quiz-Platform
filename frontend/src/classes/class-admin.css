@@ -889,3 +889,254 @@
   min-height: 46px;
   margin: 0;
 }
+
+/* ---------- Member view rows (made-dashboard-main.html) ---------- */
+.qp .cl-page .cl-member-rows tbody tr > td {
+  height: 72px;
+}
+
+.qp .cl-member-rows .cl-quiz-cell .cl-meta {
+  display: none;
+}
+
+.qp .cl-page .cl-table .cl-dim {
+  color: var(--gray);
+  font-weight: 700;
+}
+
+/* Participate: orange "#2 of 31" block, sand when absent. */
+.qp .cl-table td.cl-rank-lead {
+  width: 140px;
+  padding: 0;
+  border-right: var(--b-thin);
+  background: var(--orange-deep);
+  color: var(--paper);
+  text-align: center;
+}
+
+.qp .cl-table td.cl-rank-lead.is-none {
+  background: var(--sand);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-rank-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.qp .cl-rank-block b {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 22px;
+  font-weight: 400;
+}
+
+.qp .cl-page .cl-table .cl-rank-block small {
+  color: inherit;
+  font-size: 13px;
+}
+
+.qp .cl-points {
+  white-space: nowrap;
+}
+
+.qp .cl-points b {
+  font-family: "Archivo Black", sans-serif;
+  font-size: 22px;
+  font-weight: 400;
+}
+
+.qp .cl-page .cl-table .cl-points small {
+  display: inline;
+  margin-left: 6px;
+  color: var(--gray);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Present: approval state over the Send button; owner tags. */
+.qp .cl-approval-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.qp .cl-page .cl-table .cl-approval-state {
+  color: var(--gray);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.qp .cl-page .cl-table .cl-approval-state.is-approved {
+  color: var(--navy);
+}
+
+.qp .cl-page .cl-table button.cl-send {
+  padding: 5px 12px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.qp .cl-page .cl-table button.cl-send:disabled {
+  background: var(--sand);
+  color: var(--gray);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.qp .cl-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 2px solid var(--ink);
+  background: var(--orange-deep);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qp .cl-tag.is-me {
+  background: var(--sand);
+  color: var(--ink);
+}
+
+/* ⋯ menu */
+.qp .cl-kebab-wrap {
+  display: grid;
+  place-items: center;
+}
+
+.qp .cl-page .cl-table button.cl-kebab {
+  width: 50px;
+  height: 38px;
+  padding: 0;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.qp .cl-page .cl-table button.cl-kebab:hover,
+.qp .cl-page .cl-table button.cl-kebab[aria-expanded="true"] {
+  background: var(--sky-soft);
+}
+
+.qp .cl-page .cl-table button.cl-kebab:active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+.qp .cl-menu {
+  z-index: 40;
+  min-width: 220px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 6px 6px 0 var(--ink);
+  text-align: left;
+}
+
+.qp .cl-page .cl-menu > a,
+.qp .cl-page .cl-menu > button,
+.qp .cl-page .cl-menu > small {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 11px 14px;
+  border: none;
+  border-bottom: var(--b-thin);
+  border-radius: 0;
+  background: var(--paper);
+  box-shadow: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transform: none;
+}
+
+.qp .cl-page .cl-menu > :last-child {
+  border-bottom: none;
+}
+
+.qp .cl-page .cl-menu > a:hover,
+.qp .cl-page .cl-menu > button:hover:not(:disabled) {
+  background: var(--sky-soft);
+}
+
+.qp .cl-page .cl-menu > button.is-danger {
+  color: #9b1c1c;
+}
+
+.qp .cl-page .cl-menu > button.is-danger:hover:not(:disabled) {
+  background: var(--apricot);
+}
+
+.qp .cl-page .cl-menu > a:focus-visible,
+.qp .cl-page .cl-menu > button:focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: -3px;
+}
+
+@media (max-width: 1100px) {
+  .qp .cl-member-rows .cl-wide {
+    display: none;
+  }
+
+  .qp .cl-member-rows .cl-quiz-cell .cl-meta {
+    display: block;
+  }
+}
+
+@media (max-width: 640px) {
+  .qp .cl-table td.cl-rank-lead,
+  .qp .cl-member-rows td.cl-status {
+    width: 84px;
+  }
+
+  .qp .cl-approval-cell .cl-approval-state {
+    display: none;
+  }
+}
+
+.qp .cl-page .cl-phone-only,
+.qp .cl-page .cl-menu > button.cl-phone-only {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .qp .cl-member-rows .cl-mid {
+    display: none;
+  }
+
+  .qp .cl-page .cl-member-rows .cl-phone-only {
+    display: inline;
+  }
+
+  .qp .cl-page .cl-menu > button.cl-phone-only {
+    display: block;
+  }
+
+  .qp .cl-member-rows th.cl-go-cell,
+  .qp .cl-member-rows td.cl-go-cell {
+    width: 64px;
+    padding-left: 6px;
+    padding-right: 10px;
+  }
+}

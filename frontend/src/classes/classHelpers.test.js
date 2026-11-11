@@ -4,6 +4,8 @@ import {
   approvalLabel,
   approvedQuizzesPath,
   canSubmitForApproval,
+  presentStatus,
+  resolveUserSection,
   myQuizzesPath,
   quizAccessLabel,
   quizStatusLabel,
@@ -190,5 +192,23 @@ describe("initials", () => {
     expect(initials("ana")).toBe("AN");
     expect(initials("jo.smith@x.edu")).toBe("JS");
     expect(initials("")).toBe("?");
+  });
+});
+
+describe("resolveUserSection", () => {
+  it("keeps Present and Participate and sends old names to Present", () => {
+    expect(resolveUserSection("Participate")).toBe("Participate");
+    expect(resolveUserSection("Present")).toBe("Present");
+    expect(resolveUserSection("My quizzes")).toBe("Present");
+    expect(resolveUserSection(null)).toBe("Present");
+  });
+});
+
+describe("presentStatus", () => {
+  it("shows Approved only for an approved newest version", () => {
+    expect(presentStatus({ status: "PUBLISHED", approval_status: "APPROVED" }).label).toBe("Approved");
+    expect(presentStatus({ status: "PUBLISHED", approval_status: "PENDING" }).label).toBe("Draft");
+    expect(presentStatus({ status: "DRAFT", approval_status: null }).label).toBe("Draft");
+    expect(presentStatus({ status: "ARCHIVED", approval_status: "APPROVED" }).label).toBe("Archived");
   });
 });
