@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 from math import ceil
 
-from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy import and_, case, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
@@ -468,14 +468,66 @@ def list_class_quizzes(
             ),
         )
 
-    # Titles live on the latest version, so sort in Python. A class has
-    # tens of quizzes, not thousands.
-    rows = db.execute(
-        select(Quiz, Account.display_name)
-        .join(Account, Account.account_id == Quiz.author_id)
+    total = db.scalar(select(func.count(Quiz.quiz_id)).where(condition))
+
+    # Titles live on the version people edit: the newest draft, else the
+    # newest published version (_latest_editor_version). Find it in SQL so
+    # the database can sort, count and page.
+    editor_number = (
+        select(
+            QuizVersion.quiz_id,
+            func.coalesce(
+                func.max(
+                    case(
+                        (QuizVersion.published_at.is_(None), QuizVersion.version_number)
+                    )
+                ),
+                func.max(QuizVersion.version_number),
+            ).label("version_number"),
+        )
+        .group_by(QuizVersion.quiz_id)
+        .subquery()
+    )
+    editor_version = aliased(QuizVersion)
+    column = {
+        ClassQuizSort.UPDATED_AT: Quiz.updated_at,
+        ClassQuizSort.CREATED_AT: Quiz.created_at,
+        ClassQuizSort.TITLE: func.lower(editor_version.title),
+    }[sort]
+    # The id breaks ties so equal timestamps or titles still page stably.
+    ordering = (
+        (column.desc(), Quiz.quiz_id.desc())
+        if order == SortOrder.DESC
+        else (column.asc(), Quiz.quiz_id.asc())
+    )
+    page_ids = db.scalars(
+        select(Quiz.quiz_id)
+        .join(editor_number, editor_number.c.quiz_id == Quiz.quiz_id)
+        .join(
+            editor_version,
+            and_(
+                editor_version.quiz_id == Quiz.quiz_id,
+                editor_version.version_number == editor_number.c.version_number,
+            ),
+        )
         .where(condition)
-        .options(selectinload(Quiz.versions).selectinload(QuizVersion.questions))
+        .order_by(*ordering)
+        .limit(page_size)
+        .offset((page - 1) * page_size)
     ).all()
+
+    loaded = {
+        quiz.quiz_id: (quiz, author_name)
+        for quiz, author_name in db.execute(
+            select(Quiz, Account.display_name)
+            .join(Account, Account.account_id == Quiz.author_id)
+            .where(Quiz.quiz_id.in_(page_ids))
+            .options(
+                selectinload(Quiz.versions).selectinload(QuizVersion.questions)
+            )
+        ).all()
+    }
+    rows = [loaded[quiz_id] for quiz_id in page_ids]
     editing = set(db.scalars(collaborating))
     newest_published = {
         quiz.quiz_id: max(published, key=lambda v: v.version_number)
@@ -519,21 +571,9 @@ def list_class_quizzes(
             )
         )
 
-    keys = {
-        ClassQuizSort.UPDATED_AT: lambda item: item.updated_at,
-        ClassQuizSort.CREATED_AT: lambda item: item.created_at,
-        ClassQuizSort.TITLE: lambda item: item.title.lower(),
-    }
-    reverse = order == SortOrder.DESC
-    # Id breaks ties so equal timestamps or titles still page stably.
-    items.sort(key=lambda item: item.quiz_id, reverse=reverse)
-    items.sort(key=keys[sort], reverse=reverse)
-
-    total = len(items)
-    start = (page - 1) * page_size
     return ClassQuizListPage(
         class_id=class_id,
-        items=items[start : start + page_size],
+        items=items,
         pagination=PageInfo(
             page=page,
             page_size=page_size,

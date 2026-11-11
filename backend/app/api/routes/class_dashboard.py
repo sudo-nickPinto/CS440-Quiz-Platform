@@ -12,6 +12,7 @@ from app.schemas.class_dashboard import (
     ApprovedQuizSort,
     ClassApprovedQuizPage,
     ClassSubmissionPage,
+    ClassSubmissionPreview,
     SubmissionSort,
     ClassDashboardResponse,
     ClassQuizPage,
@@ -24,6 +25,7 @@ from app.schemas.class_dashboard import (
 )
 from app.services.class_approvals import (
     list_class_approved_quizzes,
+    get_class_submission_preview,
     list_class_submissions,
 )
 from app.services.class_dashboard import (
@@ -119,6 +121,19 @@ def class_submissions_route(
         order=order,
         status=status,
     )
+
+
+@router.get(
+    "/dashboard/submissions/{submission_id}/preview",
+    response_model=ClassSubmissionPreview,
+)
+def class_submission_preview_route(
+    class_id: int,
+    submission_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> ClassSubmissionPreview:
+    return get_class_submission_preview(db, account, class_id, submission_id)
 
 
 @router.get("/dashboard/approved-quizzes", response_model=ClassApprovedQuizPage)

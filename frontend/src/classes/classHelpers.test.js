@@ -6,6 +6,7 @@ import {
   myQuizzesPath,
   quizAccessLabel,
   quizStatusLabel,
+  submissionPreviewPath,
   submissionsPath,
 } from "./classHelpers";
 
@@ -41,6 +42,14 @@ describe("labels", () => {
 });
 
 describe("approval queue helpers", () => {
+  it("builds the submitted-version preview path, or null for a bad address", () => {
+    expect(submissionPreviewPath(4, 9)).toBe(
+      "/classes/4/dashboard/submissions/9/preview",
+    );
+    expect(submissionPreviewPath("4", "x")).toBeNull();
+    expect(submissionPreviewPath(undefined, 9)).toBeNull();
+  });
+
   it("builds submission paths with a sort and an optional status", () => {
     expect(submissionsPath(4, 2, "oldest", "PENDING", 10)).toBe(
       "/classes/4/dashboard/submissions?page=2&page_size=10" +

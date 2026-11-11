@@ -923,3 +923,42 @@
   font-size: 18px;
   text-transform: uppercase;
 }
+
+/* V3 Task 6: read-only preview of a submitted quiz version */
+.qp .cl-preview-actions {
+  padding: 16px 20px 0;
+}
+
+.qp .cl-preview-questions {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 20px 20px 24px 44px;
+}
+
+.qp .cl-preview-questions ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qp .cl-preview-questions ul li {
+  padding: 8px 12px;
+  border: var(--b-thin);
+}
+
+.qp .cl-preview-questions ul li.is-correct {
+  background: var(--sky-soft);
+}
+
+.qp .cl-preview-q {
+  margin: 0;
+  font-weight: 700;
+}
+
+.qp .cl-preview-meta {
+  margin: 0;
+  font-size: 13px;
+}

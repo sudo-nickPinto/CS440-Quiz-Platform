@@ -485,3 +485,70 @@ def test_approved_list_hosting_matches_start_session_checks(queue) -> None:
     started = client.post(f"/classes/{data['main']}/quizzes/{amys['quiz_id']}/sessions")
     assert started.status_code == 409
     assert started.json()["error"]["details"]["reason"] == "unpublished_changes"
+
+
+def test_submission_preview_shows_the_submitted_version_not_a_newer_draft(
+    queue,
+) -> None:
+    client, identities, data, quizzes = queue
+    amys, amy_sub = quizzes["amy"]
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            QuizVersion(
+                quiz_id=amys["quiz_id"],
+                version_number=amys["version"]["version_number"] + 1,
+                title="Amy's unsubmitted draft",
+                published_at=None,
+            )
+        )
+        db.commit()
+    path = (
+        f"/classes/{data['main']}/dashboard/submissions/"
+        f"{amy_sub['submission_id']}/preview"
+    )
+
+    for name in ("prof", "amy"):
+        act_as(client, identities[name])
+        response = client.get(path)
+        assert response.status_code == 200, response.json()
+        body = response.json()
+        assert body["submission"]["submission_id"] == amy_sub["submission_id"]
+        assert body["version"]["quiz_version_id"] == amys["version"]["quiz_version_id"]
+        assert body["version"]["title"] == "Amy's quiz"
+        assert body["version"]["questions"]
+        assert body["version"]["questions"][0]["choices"]
+
+
+def test_submission_preview_is_hidden_from_other_members_and_classes(queue) -> None:
+    client, identities, data, quizzes = queue
+    _, amy_sub = quizzes["amy"]
+    path = "/classes/{}/dashboard/submissions/" + str(amy_sub["submission_id"]) + "/preview"
+
+    act_as(client, identities["zoe"])
+    assert client.get(path.format(data["main"])).status_code == 404
+    act_as(client, identities["amy"])
+    assert client.get(path.format(data["other"])).status_code == 404
+
+
+def test_title_sort_uses_the_title_people_see(classes) -> None:
+    """A published quiz with a renamed draft sorts by the draft's title, the
+    one the list shows, even though the database does the sorting."""
+    client, _, data = classes
+    renamed = create(client, data["main"], "Zulu")
+    publish_quiz(client, renamed["quiz_id"])
+    create(client, data["main"], "Mike")
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            QuizVersion(
+                quiz_id=renamed["quiz_id"],
+                version_number=renamed["version"]["version_number"] + 1,
+                title="Alpha",
+                published_at=None,
+            )
+        )
+        db.commit()
+
+    body = client.get(f"/classes/{data['main']}/quizzes?sort=title&order=asc").json()
+
+    assert titles(body) == ["Alpha", "Mike"]
+    assert body["pagination"]["total_items"] == 2

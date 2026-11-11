@@ -728,8 +728,8 @@ function SubmissionsTable({ classInfo, organizer, onChange }) {
             cells: organizer
               ? [
                   <Link
-                    to={`/app/quizzes/${item.quiz_id}`}
-                    state={{ classId: classInfo.id }}
+                    to={`/app/classes/${classInfo.id}/submissions/${item.submission_id}`}
+                    title="See exactly the version that was submitted"
                   >
                     {item.quiz_title}
                   </Link>,
@@ -741,8 +741,8 @@ function SubmissionsTable({ classInfo, organizer, onChange }) {
                 ]
               : [
                   <Link
-                    to={`/app/quizzes/${item.quiz_id}`}
-                    state={{ classId: classInfo.id }}
+                    to={`/app/classes/${classInfo.id}/submissions/${item.submission_id}`}
+                    title="See exactly the version that was submitted"
                   >
                     {item.quiz_title}
                   </Link>,

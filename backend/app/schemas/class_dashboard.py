@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.models.classes import ClassRole
 from app.models.quiz_submission import SubmissionStatus
 from app.schemas.pagination import PageInfo, SortOrder
-from app.schemas.quiz import ClassQuizListItem, QuizHosting
+from app.schemas.quiz import ClassQuizListItem, QuizHosting, QuizVersionResponse
 
 
 class QuizSort(str, Enum):
@@ -54,6 +54,14 @@ class ClassSubmissionSummary(BaseModel):
     # False once a newer version of the quiz is published; a stale pending
     # submission can only be rejected or withdrawn.
     is_current_version: bool
+
+
+class ClassSubmissionPreview(BaseModel):
+    """Exactly the version that was submitted, never the quiz's newer draft,
+    so an organizer reviews what they approve."""
+
+    submission: ClassSubmissionSummary
+    version: QuizVersionResponse
 
 
 class ClassApprovedQuiz(BaseModel):

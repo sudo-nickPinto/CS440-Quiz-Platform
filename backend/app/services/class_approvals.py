@@ -3,14 +3,18 @@
 Organizers see every submission in the class with who sent it and which
 version; members see only their own. Approved quizzes are visible to every
 active member, and each one says whether the caller may host it.
+
+Counting, sorting and paging happen in the database, since the dashboard
+polls these counts.
 """
 
 from math import ceil
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.auth import CurrentAccount
+from app.errors import APIError
 from app.models.account import Account
 from app.models.quiz import Question, Quiz, QuizStatus, QuizVersion
 from app.models.quiz_submission import QuizSubmission, SubmissionStatus
@@ -19,10 +23,12 @@ from app.schemas.class_dashboard import (
     ClassApprovedQuiz,
     ClassApprovedQuizPage,
     ClassSubmissionPage,
+    ClassSubmissionPreview,
     ClassSubmissionSummary,
     SubmissionSort,
 )
 from app.schemas.pagination import PageInfo, SortOrder
+from app.schemas.quiz import QuizVersionResponse
 from app.services.class_authorization import ClassAccess, require_class_member
 from app.services.hosting import quiz_hosting_many
 from app.services.quiz_submissions import (
@@ -39,9 +45,17 @@ def _page_info(page: int, page_size: int, total: int) -> PageInfo:
     )
 
 
-def _page(items: list, page: int, page_size: int) -> list:
-    start = (page - 1) * page_size
-    return items[start : start + page_size]
+def _count(db: Session, statement) -> int:
+    return db.scalar(
+        select(func.count()).select_from(statement.order_by(None).subquery())
+    )
+
+
+def _ordered(column, tiebreak, order: SortOrder):
+    # The id breaks ties so equal timestamps or titles still page stably.
+    if order == SortOrder.DESC:
+        return column.desc(), tiebreak.desc()
+    return column.asc(), tiebreak.asc()
 
 
 def _question_counts(db: Session, version_ids: set[int]) -> dict[int, int]:
@@ -69,25 +83,27 @@ def _newest_published(db: Session, quiz_ids: set[int]) -> dict[int, int]:
     return {quiz_id: int(number) for quiz_id, number in rows}
 
 
+_submitter = aliased(Account)
+_decider = aliased(Account)
+
+
 def _visible_submissions(
     access: ClassAccess, account: CurrentAccount, class_id: int
 ):
-    submitter = aliased(Account)
-    decider = aliased(Account)
     statement = (
         select(
             QuizSubmission,
             QuizVersion,
-            submitter.display_name.label("submitter_name"),
-            decider.display_name.label("decided_by_name"),
+            _submitter.display_name.label("submitter_name"),
+            _decider.display_name.label("decided_by_name"),
         )
         .join(
             QuizVersion,
             QuizVersion.quiz_version_id == QuizSubmission.quiz_version_id,
         )
         .join(Quiz, Quiz.quiz_id == QuizVersion.quiz_id)
-        .join(submitter, submitter.account_id == QuizSubmission.submitted_by_id)
-        .outerjoin(decider, decider.account_id == QuizSubmission.decided_by_id)
+        .join(_submitter, _submitter.account_id == QuizSubmission.submitted_by_id)
+        .outerjoin(_decider, _decider.account_id == QuizSubmission.decided_by_id)
         .where(QuizSubmission.class_id == class_id, Quiz.class_id == class_id)
     )
     if not access.is_organizer:
@@ -95,6 +111,31 @@ def _visible_submissions(
             QuizSubmission.submitted_by_id == account.account_id
         )
     return statement
+
+
+def _summaries(db: Session, rows) -> list[ClassSubmissionSummary]:
+    counts = _question_counts(db, {row.QuizVersion.quiz_version_id for row in rows})
+    newest = _newest_published(db, {row.QuizVersion.quiz_id for row in rows})
+    return [
+        ClassSubmissionSummary(
+            submission_id=row.QuizSubmission.submission_id,
+            quiz_id=row.QuizVersion.quiz_id,
+            quiz_version_id=row.QuizVersion.quiz_version_id,
+            version_number=row.QuizVersion.version_number,
+            quiz_title=row.QuizVersion.title,
+            question_count=counts.get(row.QuizVersion.quiz_version_id, 0),
+            submitted_by_id=row.QuizSubmission.submitted_by_id,
+            submitter_name=row.submitter_name,
+            status=row.QuizSubmission.status,
+            submitted_at=row.QuizSubmission.submitted_at,
+            decided_at=row.QuizSubmission.decided_at,
+            decided_by_name=row.decided_by_name,
+            is_current_version=(
+                newest.get(row.QuizVersion.quiz_id) == row.QuizVersion.version_number
+            ),
+        )
+        for row in rows
+    ]
 
 
 def _hostable_approved(class_id: int):
@@ -118,44 +159,45 @@ def list_class_submissions(
     statement = _visible_submissions(access, account, class_id)
     if status is not None:
         statement = statement.where(QuizSubmission.status == status)
-    rows = db.execute(statement).all()
+    total = _count(db, statement)
 
-    counts = _question_counts(db, {row.QuizVersion.quiz_version_id for row in rows})
-    newest = _newest_published(db, {row.QuizVersion.quiz_id for row in rows})
-    items = [
-        ClassSubmissionSummary(
-            submission_id=row.QuizSubmission.submission_id,
-            quiz_id=row.QuizVersion.quiz_id,
-            quiz_version_id=row.QuizVersion.quiz_version_id,
-            version_number=row.QuizVersion.version_number,
-            quiz_title=row.QuizVersion.title,
-            question_count=counts.get(row.QuizVersion.quiz_version_id, 0),
-            submitted_by_id=row.QuizSubmission.submitted_by_id,
-            submitter_name=row.submitter_name,
-            status=row.QuizSubmission.status,
-            submitted_at=row.QuizSubmission.submitted_at,
-            decided_at=row.QuizSubmission.decided_at,
-            decided_by_name=row.decided_by_name,
-            is_current_version=(
-                newest.get(row.QuizVersion.quiz_id) == row.QuizVersion.version_number
-            ),
-        )
-        for row in rows
-    ]
-
-    keys = {
-        SubmissionSort.SUBMITTED_AT: lambda item: item.submitted_at,
-        SubmissionSort.TITLE: lambda item: item.quiz_title.lower(),
-        SubmissionSort.SUBMITTER: lambda item: item.submitter_name.lower(),
-    }
-    reverse = order == SortOrder.DESC
-    # Id breaks ties so equal timestamps or titles still page stably.
-    items.sort(key=lambda item: item.submission_id, reverse=reverse)
-    items.sort(key=keys[sort], reverse=reverse)
+    column = {
+        SubmissionSort.SUBMITTED_AT: QuizSubmission.submitted_at,
+        SubmissionSort.TITLE: func.lower(QuizVersion.title),
+        SubmissionSort.SUBMITTER: func.lower(_submitter.display_name),
+    }[sort]
+    rows = db.execute(
+        statement.order_by(*_ordered(column, QuizSubmission.submission_id, order))
+        .limit(page_size)
+        .offset((page - 1) * page_size)
+    ).all()
     return ClassSubmissionPage(
         class_id=class_id,
-        items=_page(items, page, page_size),
-        pagination=_page_info(page, page_size, len(items)),
+        items=_summaries(db, rows),
+        pagination=_page_info(page, page_size, total),
+    )
+
+
+def get_class_submission_preview(
+    db: Session, account: CurrentAccount, class_id: int, submission_id: int
+) -> ClassSubmissionPreview:
+    """The submitted version itself, for organizers and the submitter."""
+    access = require_class_member(db, account, class_id)
+    row = db.execute(
+        _visible_submissions(access, account, class_id).where(
+            QuizSubmission.submission_id == submission_id
+        )
+    ).first()
+    if row is None:
+        raise APIError(404, "submission_not_found", "Submission not found.")
+    version = db.scalars(
+        select(QuizVersion)
+        .where(QuizVersion.quiz_version_id == row.QuizVersion.quiz_version_id)
+        .options(selectinload(QuizVersion.questions).selectinload(Question.choices))
+    ).one()
+    return ClassSubmissionPreview(
+        submission=_summaries(db, [row])[0],
+        version=QuizVersionResponse.model_validate(version),
     )
 
 
@@ -172,7 +214,7 @@ def list_class_approved_quizzes(
     require_class_member(db, account, class_id)
     author = aliased(Account)
     approver = aliased(Account)
-    rows = db.execute(
+    statement = (
         _hostable_approved(class_id)
         .add_columns(
             author.display_name.label("author_name"),
@@ -180,6 +222,17 @@ def list_class_approved_quizzes(
         )
         .join(author, author.account_id == Quiz.author_id)
         .join(approver, approver.account_id == QuizSubmission.decided_by_id)
+    )
+    total = _count(db, statement)
+
+    column = {
+        ApprovedQuizSort.APPROVED_AT: QuizSubmission.decided_at,
+        ApprovedQuizSort.TITLE: func.lower(QuizVersion.title),
+    }[sort]
+    rows = db.execute(
+        statement.order_by(*_ordered(column, Quiz.quiz_id, order))
+        .limit(page_size)
+        .offset((page - 1) * page_size)
     ).all()
 
     counts = _question_counts(db, {row.QuizVersion.quiz_version_id for row in rows})
@@ -200,18 +253,10 @@ def list_class_approved_quizzes(
         )
         for row in rows
     ]
-
-    keys = {
-        ApprovedQuizSort.APPROVED_AT: lambda item: item.approved_at,
-        ApprovedQuizSort.TITLE: lambda item: item.title.lower(),
-    }
-    reverse = order == SortOrder.DESC
-    items.sort(key=lambda item: item.quiz_id, reverse=reverse)
-    items.sort(key=keys[sort], reverse=reverse)
     return ClassApprovedQuizPage(
         class_id=class_id,
-        items=_page(items, page, page_size),
-        pagination=_page_info(page, page_size, len(items)),
+        items=items,
+        pagination=_page_info(page, page_size, total),
     )
 
 
@@ -219,10 +264,10 @@ def approval_counts(
     db: Session, account: CurrentAccount, access: ClassAccess, class_id: int
 ) -> tuple[int, int]:
     """(pending submissions the caller can see, hostable approved quizzes)."""
-    pending = db.execute(
+    pending = _count(
+        db,
         _visible_submissions(access, account, class_id).where(
             QuizSubmission.status == SubmissionStatus.PENDING
-        )
-    ).all()
-    approved = db.execute(_hostable_approved(class_id)).all()
-    return len(pending), len(approved)
+        ),
+    )
+    return pending, _count(db, _hostable_approved(class_id))

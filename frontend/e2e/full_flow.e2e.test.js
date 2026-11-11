@@ -407,6 +407,10 @@ describe('full flow: one class from sign-in to grade export', () => {
       [submission.submission_id, 'PENDING'],
     ])
     expect((await rest('prof', 'GET', `${base}/dashboard`)).pending_submission_count).toBe(1)
+    // The organizer reviews exactly the submitted version.
+    const preview = await rest('prof', 'GET', `${base}/dashboard/submissions/${submission.submission_id}/preview`)
+    expect(preview.version.quiz_version_id).toBe(submission.quiz_version_id)
+    expect(preview.version.questions.length).toBeGreaterThan(0)
 
     await rest('prof', 'PATCH', `${base}/quiz-submissions/${submission.submission_id}`, { status: 'APPROVED' })
     const hostable = async (person) =>

@@ -53,6 +53,13 @@ export const SUBMISSION_FILTERS = {
   "": "All",
 };
 
+// The exact submitted version (V3 Task 6), or null for a bad address.
+export function submissionPreviewPath(classId, submissionId) {
+  const valid = (value) => /^[1-9]\d*$/.test(String(value ?? ""));
+  if (!valid(classId) || !valid(submissionId)) return null;
+  return `/classes/${classId}/dashboard/submissions/${submissionId}/preview`;
+}
+
 export function submissionsPath(
   classId,
   page = 1,
