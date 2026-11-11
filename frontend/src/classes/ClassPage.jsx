@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useRemembered } from "../authenticated-demo/remember";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 import HostQuizButton from "../authenticated-demo/HostQuizButton";
@@ -70,8 +71,12 @@ function ReportTable({
   controls = null,
   columnClasses = [],
   tableClass = "",
+  rememberAs = null,
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRemembered(
+    rememberAs && `${rememberAs}:query`,
+    "",
+  );
   const needle = query.trim().toLowerCase();
   const visible = rows.filter((row) => row.text.toLowerCase().includes(needle));
   const totalItems = pagination?.total_items ?? rows.length;
@@ -81,6 +86,12 @@ function ReportTable({
   const firstItem = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastItem = Math.min(firstItem + rows.length - 1, totalItems);
   const nounLabel = totalItems === 1 ? noun : `${noun}s`;
+
+  // A remembered page can be past the end once rows are removed.
+  const pastEnd = Boolean(onPageChange) && page > Math.max(totalPages, 1);
+  useEffect(() => {
+    if (pastEnd) onPageChange(Math.max(totalPages, 1));
+  }, [pastEnd, totalPages, onPageChange]);
 
   return (
     <>
@@ -235,7 +246,8 @@ const PRESENTATION_COLUMNS = ["", "", "cl-num", "", "cl-top-col", "cl-go-cell"];
 // Organizer view: every completed session of the class, styled after the
 // Presentations list in class-admin-main.html.
 function PresentationsTable({ classInfo, studentCount, controls }) {
-  const [page, setPage] = useState(1);
+  const memory = `class:${classInfo.id}:presentations`;
+  const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const resource = useClassSessions(classInfo.id, page);
   const pending = reportResource(resource);
   if (pending) return pending;
@@ -246,6 +258,7 @@ function PresentationsTable({ classInfo, studentCount, controls }) {
   return (
     <ReportTable
       caption="Presentations"
+      rememberAs={memory}
       noun="presentation"
       tableClass="cl-rows"
       columnClasses={PRESENTATION_COLUMNS}
@@ -295,7 +308,8 @@ const PARTICIPATE_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-wide", "cl-go-cell
 // Member view: the sessions the caller was part of, styled after the
 // Participate tab in made-dashboard-main.html.
 function ParticipateTable({ classInfo }) {
-  const [page, setPage] = useState(1);
+  const memory = `class:${classInfo.id}:participate`;
+  const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const resource = useClassSessions(classInfo.id, page);
   const pending = reportResource(resource);
   if (pending) return pending;
@@ -303,6 +317,7 @@ function ParticipateTable({ classInfo }) {
   return (
     <ReportTable
       caption="Sessions"
+      rememberAs={memory}
       noun="session"
       tableClass="cl-rows cl-member-rows"
       columnClasses={PARTICIPATE_COLUMNS}
@@ -468,8 +483,11 @@ function PresentTable({ classInfo, onApprovalChange }) {
   const account = useAccount();
   const action = useAction();
   const confirmer = useConfirm();
-  const [page, setPage] = useState(1);
-  const [sortKey, setSortKey] = useState("recent");
+  const memory = `class:${classInfo.id}:present`;
+  const [page, setPage] = useRemembered(`${memory}:page`, 1);
+  const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "recent", {
+    isValid: (key) => key in MY_QUIZ_SORTS,
+  });
   const resource = useMyClassQuizzes(classInfo.id, page, sortKey);
   const pending = reportResource(resource);
   const canSubmit =
@@ -543,6 +561,7 @@ function PresentTable({ classInfo, onApprovalChange }) {
       <RequestError error={action.error} />
       <ReportTable
         caption="My quizzes"
+        rememberAs={memory}
         noun="quiz"
         tableClass="cl-rows cl-member-rows"
         columnClasses={PRESENT_COLUMNS}
@@ -697,9 +716,14 @@ function PresentTable({ classInfo, onApprovalChange }) {
 function SubmissionsTable({ classInfo, onChange }) {
   const api = useApi();
   const action = useAction();
-  const [page, setPage] = useState(1);
-  const [sortKey, setSortKey] = useState("oldest");
-  const [status, setStatus] = useState("PENDING");
+  const memory = `class:${classInfo.id}:approvals`;
+  const [page, setPage] = useRemembered(`${memory}:page`, 1);
+  const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "oldest", {
+    isValid: (key) => key in SUBMISSION_SORTS,
+  });
+  const [status, setStatus] = useRemembered(`${memory}:status`, "PENDING", {
+    isValid: (key) => key in SUBMISSION_FILTERS,
+  });
   const resource = useClassSubmissions(classInfo.id, page, sortKey, status);
   const pending = reportResource(resource);
 
@@ -730,6 +754,7 @@ function SubmissionsTable({ classInfo, onChange }) {
       <RequestError error={action.error} />
       <ReportTable
         caption="Approvals"
+        rememberAs={memory}
         noun="submission"
         headers={["Quiz", "Version", "Submitted by", "Submitted", "Status", "Decision"]}
         emptyTitle={status === "PENDING" ? "Nothing to review" : "No submissions"}
@@ -823,7 +848,8 @@ function SubmissionsTable({ classInfo, onChange }) {
 // The same rows, grouped by quiz: when it was last presented, how often,
 // and how the class did across those presentations.
 function ClassQuizzesTable({ classInfo, controls }) {
-  const [page, setPage] = useState(1);
+  const memory = `class:${classInfo.id}:by-quiz`;
+  const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const resource = useClassQuizzes(classInfo.id, page);
   const pending = reportResource(resource);
 
@@ -837,6 +863,7 @@ function ClassQuizzesTable({ classInfo, controls }) {
   return (
     <ReportTable
       caption="Presented quizzes"
+      rememberAs={memory}
       noun="quiz"
       tableClass="cl-rows"
       columnClasses={["", "", "cl-num", "", "cl-go-cell"]}
@@ -907,7 +934,7 @@ function ClassHistory({ classInfo, studentCount, view, onViewChange }) {
 }
 
 function ClassWorkspace({ classInfo, onChange }) {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const showAdminLayout = classInfo.canManage === true;
   const api = useApi();
   const navigate = useNavigate();
@@ -919,27 +946,57 @@ function ClassWorkspace({ classInfo, onChange }) {
   const studentCount =
     dashboard.status === "ready" ? dashboard.data.student_count : null;
 
-  const [view, setView] = useState(() => {
-    if (searchParams.get("view") === "user") {
-      return "user";
-    }
+  // Where the page opens: a ?view= / ?section= link wins, otherwise the
+  // view and tabs you last had open in this class, otherwise the defaults.
+  const memory = `class:${classInfo.id}`;
+  const urlView = searchParams.get("view");
+  const urlSection = searchParams.get("section");
+  const urlTargetsUser = !showAdminLayout || urlView === "user";
 
-    return showAdminLayout ? "admin" : "user";
-  });
+  const [view, setView] = useRemembered(
+    `${memory}:view`,
+    showAdminLayout ? "admin" : "user",
+    {
+      override: !showAdminLayout
+        ? "user"
+        : urlView === "user" || urlView === "admin"
+          ? urlView
+          : urlSection
+            ? "admin"
+            : null,
+      isValid: (value) =>
+        value === "user" || (value === "admin" && showAdminLayout),
+    },
+  );
 
-  const requestedSection = searchParams.get("section");
-  const startsInUserView =
-    !showAdminLayout || searchParams.get("view") === "user";
   // Also maps the old Quizzes, Students and Settings tab names.
-  const adminStart = resolveAdminSection(requestedSection);
-
-  const [section, setSection] = useState(() => {
-    if (startsInUserView) {
-      return resolveUserSection(requestedSection);
-    }
-    return adminStart.section;
-  });
-  const [historyView, setHistoryView] = useState(adminStart.historyView);
+  const adminStart = urlSection ? resolveAdminSection(urlSection) : null;
+  const [adminSection, setAdminSection] = useRemembered(
+    `${memory}:admin-section`,
+    "Students",
+    {
+      override: urlTargetsUser ? null : adminStart?.section,
+      isValid: (value) => ADMIN_SECTIONS.includes(value),
+    },
+  );
+  const [userSection, setUserSection] = useRemembered(
+    `${memory}:user-section`,
+    "Present",
+    {
+      override:
+        urlTargetsUser && urlSection ? resolveUserSection(urlSection) : null,
+      isValid: (value) => USER_SECTIONS.includes(value),
+    },
+  );
+  const [historyView, setHistoryView] = useRemembered(
+    `${memory}:history-view`,
+    "sessions",
+    {
+      override:
+        !urlTargetsUser && urlSection === "Quizzes" ? "quizzes" : null,
+      isValid: (value) => value in HISTORY_VIEWS,
+    },
+  );
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(classInfo.name);
@@ -984,16 +1041,28 @@ function ClassWorkspace({ classInfo, onChange }) {
   const adminView = showAdminLayout && view === "admin";
 
   const sections = adminView ? ADMIN_SECTIONS : USER_SECTIONS;
+  const activeSection = adminView ? adminSection : userSection;
+  const setSection = adminView ? setAdminSection : setUserSection;
+
+  // Keep the address in step with the open view and tab, so Back and
+  // reload come back to the same place.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (showAdminLayout) next.set("view", view);
+    else next.delete("view");
+    next.set("section", activeSection);
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [view, activeSection, showAdminLayout, searchParams, setSearchParams]);
   const pendingApprovals =
     dashboard.status === "ready" ? dashboard.data.pending_submission_count : 0;
 
-  const activeSection = sections.includes(section) ? section : sections[0];
 
   function changeView(nextView) {
     setView(nextView);
     // Counts may be stale after time in the other view.
     dashboard.reload();
-    setSection(nextView === "admin" ? "Students" : "Present");
   }
 
   async function copyCode() {

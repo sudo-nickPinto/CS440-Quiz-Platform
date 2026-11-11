@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { readRemembered, writeRemembered } from "./remember";
 import {
   Link,
   Navigate,
@@ -404,7 +405,10 @@ export function HostResults({
   const [query, setQuery] = useState("");
   const file = useFileDownload();
 
-  const questionsTab = params.get("tab") === "questions";
+  // ?tab= wins; otherwise the tab last open on this report.
+  const tabMemory = `results:${exportPath}:tab`;
+  const questionsTab =
+    (params.get("tab") ?? readRemembered(tabMemory)) === "questions";
   const players = report.players;
 
   const average = (field) =>
@@ -419,6 +423,7 @@ export function HostResults({
   const filteredQuestions = report.questions.filter((q) => matches(q.text));
 
   function changeTab(tab) {
+    writeRemembered(tabMemory, tab);
     setQuery("");
     setParams({ tab });
   }

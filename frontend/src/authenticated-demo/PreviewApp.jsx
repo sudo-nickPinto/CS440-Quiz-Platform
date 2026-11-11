@@ -5,6 +5,7 @@ import {
   Route,
   Routes,
   useLocation,
+  useNavigationType,
   useNavigate,
 } from "react-router";
 import Avatar from "../avatars/Avatar";
@@ -38,20 +39,67 @@ import "./quizburg-polish.css";
 // Add member pop-up (class-admin-main.html / made-dashboard-main.html).
 import "../classes/class-admin.css";
 import "./dismissPopovers.js";
+import { restoreScroll, savedScroll, saveScroll } from "./remember";
+
+// The app restores scroll itself (see below); the browser's own restore
+// fights it while pages are still loading.
+if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
+  window.history.scrollRestoration = "manual";
+}
 
 export default function PreviewApp({ onSignOut }) {
   const account = useResource("/me");
   // PATCH /me returns the updated account; use it so the header updates
   // without reloading /me (which would blank the app while it loads).
   const [savedAccount, setSavedAccount] = useState(null);
-  const { pathname } = useLocation();
+  const { pathname, key: locationKey } = useLocation();
+  const navigationType = useNavigationType();
   const navigate = useNavigate();
   const main = useRef(null);
 
+  // New pages start at the top; Back/Forward returns to where you were.
+  // The target is read once per history entry, before anything on the
+  // still-loading page can overwrite it.
+  const scrollTarget = useRef({ key: null, y: 0 });
   useEffect(() => {
-    main.current?.focus();
+    main.current?.focus({ preventScroll: true });
+    if (navigationType === "POP") {
+      if (scrollTarget.current.key !== locationKey) {
+        scrollTarget.current = { key: locationKey, y: savedScroll(locationKey) };
+      }
+      return restoreScroll(scrollTarget.current.y);
+    }
     window.scrollTo(0, 0);
+    return undefined;
+    // Only a new page (path) moves the scroll, not ?query changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, account.data]);
+
+  // Keep this history entry's scroll position up to date. A ?query change
+  // on the same page (say a tab switch) starts a new entry at the current
+  // spot.
+  const lastPath = useRef(pathname);
+  useEffect(() => {
+    if (lastPath.current === pathname) saveScroll(locationKey);
+    lastPath.current = pathname;
+    let frame = 0;
+    // While a link swaps pages the browser can report the old entry being
+    // clamped to the top; only record scrolls made on this entry.
+    const current = () => (window.history.state?.key ?? "default") === locationKey;
+    const onScroll = () => {
+      if (!current()) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (current()) saveScroll(locationKey);
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", onScroll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationKey]);
 
   if (account.loading) {
     return <p role="status">Loading your account…</p>;
