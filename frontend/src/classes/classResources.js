@@ -141,7 +141,7 @@ export function useClassSessions(classId, page = 1) {
   );
 }
 
-// Every student's scores, keyed by account id, for the Members tab. The
+// Every student's scores, keyed by account id, for the Students tab. The
 // students report is paged (at most 100 a page), so read every page.
 export function useClassStudentStats(classId) {
   const api = useApi();

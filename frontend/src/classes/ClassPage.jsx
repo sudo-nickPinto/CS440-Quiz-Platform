@@ -851,7 +851,7 @@ function ClassWorkspace({ classInfo, onChange }) {
     setView(nextView);
     // Counts may be stale after time in the other view.
     dashboard.reload();
-    setSection(nextView === "admin" ? "Presentations" : "Present");
+    setSection(nextView === "admin" ? "Students" : "Present");
   }
 
   async function copyCode() {
@@ -945,7 +945,7 @@ function ClassWorkspace({ classInfo, onChange }) {
                 <button
                   type="button"
                   disabled={classInfo.archived}
-                  onClick={() => setSection("Members")}
+                  onClick={() => setSection("Students")}
                 >
                   + Invite member
                 </button>
@@ -1054,7 +1054,7 @@ function ClassWorkspace({ classInfo, onChange }) {
         )}
       </div>
 
-      {activeSection === "Members" ? (
+      {activeSection === "Students" ? (
         <ClassMembers classInfo={classInfo} onChange={onChange} />
       ) : activeSection === "Approvals" ? (
         <SubmissionsTable

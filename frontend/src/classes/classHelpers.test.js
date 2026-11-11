@@ -97,16 +97,16 @@ describe("approval queue helpers", () => {
 });
 
 describe("resolveAdminSection", () => {
-  it("keeps the current tabs and defaults to Presentations", () => {
+  it("keeps the current tabs and defaults to Students", () => {
     for (const section of ADMIN_SECTIONS) {
       expect(resolveAdminSection(section).section).toBe(section);
     }
     expect(resolveAdminSection(null)).toEqual({
-      section: "Presentations",
+      section: "Students",
       historyView: "sessions",
       settingsOpen: false,
     });
-    expect(resolveAdminSection("Nope").section).toBe("Presentations");
+    expect(resolveAdminSection("Nope").section).toBe("Students");
   });
 
   it("maps the merged tabs onto their new homes", () => {
@@ -114,7 +114,7 @@ describe("resolveAdminSection", () => {
       section: "Presentations",
       historyView: "quizzes",
     });
-    expect(resolveAdminSection("Students").section).toBe("Members");
+    expect(resolveAdminSection("Members").section).toBe("Students");
     expect(resolveAdminSection("Settings").settingsOpen).toBe(true);
   });
 });

@@ -114,26 +114,27 @@ export function canSubmitForApproval(quiz) {
   );
 }
 
-// Admin view tabs. "Presentations" shows class history by session or by quiz;
-// "Members" is the roster with each student's scores. Settings is a dialog
-// opened from the class header, not a tab.
-export const ADMIN_SECTIONS = ["Presentations", "Approvals", "Members"];
+// Admin view tabs, left to right. "Students" is the roster (students with
+// their scores, plus co-organizers and invites); "Presentations" shows class
+// history by session or by quiz. Settings is a dialog opened from the class
+// header, not a tab.
+export const ADMIN_SECTIONS = ["Students", "Presentations", "Approvals"];
 export const HISTORY_VIEWS = { sessions: "By session", quizzes: "By quiz" };
 
 // Maps a ?section= value onto the admin tabs, including the names of the
-// tabs that were merged away (Quizzes, Students, Settings).
+// tabs that were merged or renamed (Quizzes, Members, Settings).
 export function resolveAdminSection(requested) {
   if (requested === "Quizzes") {
     return { section: "Presentations", historyView: "quizzes", settingsOpen: false };
   }
-  if (requested === "Students") {
-    return { section: "Members", historyView: "sessions", settingsOpen: false };
+  if (requested === "Members") {
+    return { section: "Students", historyView: "sessions", settingsOpen: false };
   }
   if (requested === "Settings") {
-    return { section: "Presentations", historyView: "sessions", settingsOpen: true };
+    return { section: "Students", historyView: "sessions", settingsOpen: true };
   }
   return {
-    section: ADMIN_SECTIONS.includes(requested) ? requested : "Presentations",
+    section: ADMIN_SECTIONS.includes(requested) ? requested : "Students",
     historyView: "sessions",
     settingsOpen: false,
   };

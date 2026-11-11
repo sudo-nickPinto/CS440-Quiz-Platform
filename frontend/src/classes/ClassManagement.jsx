@@ -49,7 +49,7 @@ export function ClassMembers({ classInfo, onChange }) {
       // Recheck access when the signed-in user's own membership changes.
       onChange();
     } else {
-      // Keep the workspace and its selected Members tab mounted.
+      // Keep the workspace and its selected Students tab mounted.
       resource.reload();
       stats.reload();
     }
