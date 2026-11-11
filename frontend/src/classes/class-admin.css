@@ -1311,19 +1311,8 @@
   background: var(--orange-deep);
 }
 
-/* The JOIN cell joins a live quiz, like the orange Join quiz on the
-   Classes page, so it is orange too and ends the row in orange. */
-.qp .cl-section-tabs > .cl-actions > button.cl-join {
-  background: var(--orange-deep);
-}
-
-.qp .cl-section-tabs > .cl-actions > button.cl-join:hover:not(:disabled) {
-  background: var(--orange);
-}
-
-.qp .cl-section-tabs > .cl-actions > button.cl-join[aria-expanded="true"] {
-  background: var(--ink);
-}
+/* The JOIN cell stays navy (Taha's call): the one exception to the
+   blue-left, orange-right order. */
 
 /* Admin view: Students navy, Presentations orange, Approvals black. */
 .qp .cl-section-tabs > [role="group"] button[data-section="Students"][aria-pressed="true"] {
