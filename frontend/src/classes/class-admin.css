@@ -1299,3 +1299,41 @@
     border-left: 0;
   }
 }
+
+/* ---------- Selected tab colors, logo order: blue on the left, orange on
+   the right (QUIZ | BURG). ---------- */
+/* Member view: Present navy, Participate orange. */
+.qp .cl-section-tabs > [role="group"] button[data-section="Present"][aria-pressed="true"] {
+  background: var(--navy);
+}
+
+.qp .cl-section-tabs > [role="group"] button[data-section="Participate"][aria-pressed="true"] {
+  background: var(--orange-deep);
+}
+
+/* The JOIN cell joins a live quiz, like the orange Join quiz on the
+   Classes page, so it is orange too and ends the row in orange. */
+.qp .cl-section-tabs > .cl-actions > button.cl-join {
+  background: var(--orange-deep);
+}
+
+.qp .cl-section-tabs > .cl-actions > button.cl-join:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.qp .cl-section-tabs > .cl-actions > button.cl-join[aria-expanded="true"] {
+  background: var(--ink);
+}
+
+/* Admin view: Students navy, Presentations orange, Approvals black. */
+.qp .cl-section-tabs > [role="group"] button[data-section="Students"][aria-pressed="true"] {
+  background: var(--navy);
+}
+
+.qp .cl-section-tabs > [role="group"] button[data-section="Presentations"][aria-pressed="true"] {
+  background: var(--orange-deep);
+}
+
+.qp .cl-section-tabs > [role="group"] button[data-section="Approvals"][aria-pressed="true"] {
+  background: var(--ink);
+}

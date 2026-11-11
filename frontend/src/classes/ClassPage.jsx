@@ -1325,6 +1325,7 @@ function ClassWorkspace({ classInfo, onChange }) {
             <button
               key={label}
               type="button"
+              data-section={label}
               aria-pressed={activeSection === label}
               onClick={() => setSection(label)}
             >
