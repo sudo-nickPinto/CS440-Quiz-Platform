@@ -9,6 +9,7 @@ import {
 import { useAccount } from './account'
 import { useAction, useApi, useResource } from './rest'
 import RequestError from './RequestError'
+import CopyCodeButton from './CopyCodeButton'
 
 export function ResumeSession({ mode }) {
   const [id, setId] = useState('')
@@ -194,7 +195,8 @@ export function SessionPage({ mode }) {
       {host ? (
         <>
           <h2>
-            Join code: {session.data.join_code}
+            Join code: {session.data.join_code}{' '}
+            <CopyCodeButton code={session.data.join_code} label="join code" />
           </h2>
 
           <h2>Participants</h2>

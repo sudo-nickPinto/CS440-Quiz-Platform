@@ -11,7 +11,6 @@ from app.models import (
     LiveSession,
     LiveSessionStatus,
     Quiz,
-    QuizStatus,
     Question,
     QuizVersion,
     SessionParticipant,
@@ -24,6 +23,7 @@ from app.schemas.session import (
 )
 from app.services.class_access import may_play, require_session_class_member
 from app.services.class_authorization import require_class_member
+from app.services.hosting import PROBLEMS, check_hosting
 from app.services.quiz_submissions import require_approved_quiz_version
 
 JOIN_CODE_ALPHABET = "0123456789"
@@ -117,41 +117,22 @@ def create_session(
     # People outside the class get the same 404 as a missing class.
     access = require_class_member(db, account, class_id)
     if access.class_.archived_at is not None:
-        raise APIError(
-            409,
-            "class_archived",
-            "An archived class cannot start new sessions.",
-        )
+        raise PROBLEMS["class_archived"].error()
 
     quiz = db.get(Quiz, quiz_id)
     if quiz is None or quiz.class_id != class_id:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
-    if quiz.author_id != account.account_id and not access.is_organizer:
-        raise APIError(
-            403,
-            "session_host_denied",
-            "Only the quiz owner or a class organizer can host this quiz.",
-        )
-    if quiz.status == QuizStatus.ARCHIVED:
-        raise APIError(409, "quiz_not_hostable", "An archived quiz cannot be hosted.")
 
-    version = db.scalar(
-        select(QuizVersion)
-        .where(
-            QuizVersion.quiz_id == quiz_id,
-            QuizVersion.published_at.is_not(None),
-        )
-        .order_by(QuizVersion.version_number.desc())
-        .limit(1)
+    # The same checks drive the Host button (QuizResponse.hosting), so the
+    # button and this endpoint never disagree. Pending, rejected, withdrawn
+    # and stale versions stop here, through Task 4's approval check.
+    check = check_hosting(db, account, quiz)
+    if check.problem is not None:
+        raise check.problem.error()
+    # Task 4's own check has the final say on approval.
+    version = require_approved_quiz_version(
+        db, class_id, check.version.quiz_version_id
     )
-    if version is None:
-        raise APIError(
-            409,
-            "quiz_not_hostable",
-            "The quiz does not have a published version.",
-        )
-    # Pending, rejected, withdrawn and stale versions stop here.
-    require_approved_quiz_version(db, class_id, version.quiz_version_id)
 
     for _ in range(JOIN_CODE_ATTEMPTS):
         join_code = _generate_join_code()

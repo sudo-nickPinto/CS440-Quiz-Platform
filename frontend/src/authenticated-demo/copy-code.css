@@ -1,0 +1,44 @@
+.ui-copy-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 2px solid currentColor;
+  border-radius: 8px;
+  background: #fff;
+  color: #1d2b53;
+  font: 700 14px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.5px;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.ui-copy-code:hover {
+  background: #eef3ff;
+}
+
+.ui-copy-code:focus-visible {
+  outline: 3px solid #ff8a00;
+  outline-offset: 2px;
+}
+
+.ui-copy-code-small {
+  padding: 2px 8px;
+  border-width: 1px;
+  font-size: 12px;
+}
+
+.ui-copy-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Under the big join code in the host's waiting room. */
+.ui-copy-code.lv-join-copy {
+  display: flex;
+  margin: 4px auto 2px;
+}
