@@ -94,7 +94,7 @@ export function ClassCard({ item }) {
 
       <div className="cl-card-footer">
         <Link to={href}>
-          {managesClass ? "Admin view" : "Dashboard"}
+          {managesClass ? "Admin view" : "Open class"}
           <span aria-hidden="true"> →</span>
         </Link>
 

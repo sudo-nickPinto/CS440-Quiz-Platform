@@ -4,7 +4,8 @@ import { useNavigate } from "react-router";
 
 import { useAction, useApi } from "../authenticated-demo/rest";
 import { useClassesResource } from "./classResources";
-import { ClassCard, EmptyMessage, ResourceMessage } from "./ClassUI";
+import { ClassCard, ResourceMessage } from "./ClassUI";
+import { MyDrafts } from "./MyDrafts";
 import { useAccount } from "../authenticated-demo/account";
 
 export default function ClassesPage() {
@@ -263,7 +264,9 @@ export default function ClassesPage() {
               type="text"
               value={sessionCode}
               onChange={(event) =>
-                setSessionCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                setSessionCode(
+                  event.target.value.replace(/\D/g, "").slice(0, 6),
+                )
               }
               placeholder="000000"
               inputMode="numeric"
@@ -332,6 +335,8 @@ export default function ClassesPage() {
         </section>
       )}
 
+      {ready && classes.length > 0 && <MyDrafts classes={classes} />}
+
       <div className="cl-toolbar">
         <label className="cl-search">
           <span className="cl-sr">Search classes</span>
@@ -388,13 +393,38 @@ export default function ClassesPage() {
       {!ready ? (
         <ResourceMessage resource={resource} />
       ) : classes.length === 0 ? (
-        <EmptyMessage title="No classes yet">
-          Create a class or accept an invitation to get started.
-        </EmptyMessage>
+        <div className="cl-state">
+          <h2>No classes yet</h2>
+          <p>
+            {canCreateClass
+              ? "Create a class for your students, or join one with a class code."
+              : "Join a class with the code your instructor gave you. Your quizzes and drafts live inside your classes."}
+          </p>
+          <div className="cl-actions">
+            {canCreateClass && (
+              <button type="button" onClick={() => setPanel("create")}>
+                + New class
+              </button>
+            )}
+            <button type="button" onClick={() => setPanel("join")}>
+              Join class
+            </button>
+          </div>
+        </div>
       ) : visible.length === 0 ? (
-        <EmptyMessage title="No matching classes">
-          Try another search or change the class filter.
-        </EmptyMessage>
+        <div className="cl-state">
+          <h2>No matching classes</h2>
+          <p>Try another search or change the class filter.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setFilter("all");
+            }}
+          >
+            Clear search and filter
+          </button>
+        </div>
       ) : (
         <div className="cl-grid">
           {visible.map((item) => (

@@ -27,6 +27,7 @@ import {
   USER_SECTIONS,
 } from "./classHelpers";
 import { ResourceMessage } from "./ClassUI";
+import "./my-drafts.css";
 import { AddMemberDialog, ClassStudents } from "./ClassManagement";
 import {
   useClassDashboard,
@@ -207,6 +208,7 @@ function CardCollection({
   onPageChange,
   emptyTitle,
   emptyText,
+  emptyAction = null,
   controls = null,
   rememberAs,
   getText,
@@ -264,6 +266,13 @@ function CardCollection({
         <div className="cl-state qc-empty" role="status">
           <h2>{needle ? "No matches" : emptyTitle}</h2>
           <p>{needle ? "Try another search." : emptyText}</p>
+          {needle ? (
+            <button type="button" onClick={() => setQuery("")}>
+              Clear search
+            </button>
+          ) : (
+            emptyAction
+          )}
         </div>
       )}
 
@@ -309,7 +318,9 @@ function DateBlock({ value }) {
 // A navy bar for an average against the best score, with the number.
 function ScoreMeter({ value, max, label }) {
   const share =
-    value === null || value === undefined || !max ? 0 : Math.min(value / max, 1);
+    value === null || value === undefined || !max
+      ? 0
+      : Math.min(value / max, 1);
   return (
     <span className="cl-meter-cell">
       <span className="cl-meter" aria-hidden="true">
@@ -360,7 +371,14 @@ function PresentationsTable({ classInfo, studentCount, controls }) {
       noun="presentation"
       tableClass="cl-rows"
       columnClasses={PRESENTATION_COLUMNS}
-      headers={["Date", "Presentation", "Attended", "Avg score", "Top score", ""]}
+      headers={[
+        "Date",
+        "Presentation",
+        "Attended",
+        "Avg score",
+        "Top score",
+        "",
+      ]}
       emptyTitle="No presentations yet"
       emptyText="Host a quiz in this class and it shows up here once it ends."
       controls={controls}
@@ -631,8 +649,18 @@ function PresentTable({ classInfo, onApprovalChange }) {
         emptyTitle="No quizzes yet"
         emptyText={
           canSubmit
-            ? "Create a quiz with + New quiz, or ask a classmate to share one with you."
+            ? "Start a draft for this class, or ask a classmate to share one with you. Drafts stay private until you send them for approval."
             : "Quizzes you own or that are shared with you in this class appear here."
+        }
+        emptyAction={
+          canSubmit && (
+            <Link
+              className="cl-button"
+              to={`/app/quizzes/new?class=${classInfo.id}`}
+            >
+              + New quiz
+            </Link>
+          )
         }
         pagination={resource.data.pagination}
         onPageChange={setPage}
@@ -797,8 +825,17 @@ function SubmissionsTable({ classInfo, onChange }) {
         caption="Approvals"
         rememberAs={memory}
         noun="submission"
-        headers={["Quiz", "Version", "Submitted by", "Submitted", "Status", "Decision"]}
-        emptyTitle={status === "PENDING" ? "Nothing to review" : "No submissions"}
+        headers={[
+          "Quiz",
+          "Version",
+          "Submitted by",
+          "Submitted",
+          "Status",
+          "Decision",
+        ]}
+        emptyTitle={
+          status === "PENDING" ? "Nothing to review" : "No submissions"
+        }
         emptyText="When a member sends a quiz for approval, it shows up here."
         pagination={resource.data.pagination}
         onPageChange={setPage}
@@ -842,7 +879,11 @@ function SubmissionsTable({ classInfo, onChange }) {
               <span className="cl-approval">
                 <button
                   type="button"
-                  disabled={action.busy || classInfo.archived || !item.is_current_version}
+                  disabled={
+                    action.busy ||
+                    classInfo.archived ||
+                    !item.is_current_version
+                  }
                   title={
                     item.is_current_version
                       ? undefined
@@ -1083,8 +1124,7 @@ function ClassWorkspace({ classInfo, onChange }) {
     `${memory}:history-view`,
     "sessions",
     {
-      override:
-        !urlTargetsUser && urlSection === "Quizzes" ? "quizzes" : null,
+      override: !urlTargetsUser && urlSection === "Quizzes" ? "quizzes" : null,
       isValid: (value) => value in HISTORY_VIEWS,
     },
   );
@@ -1149,7 +1189,6 @@ function ClassWorkspace({ classInfo, onChange }) {
   }, [view, activeSection, showAdminLayout, searchParams, setSearchParams]);
   const pendingApprovals =
     dashboard.status === "ready" ? dashboard.data.pending_submission_count : 0;
-
 
   function changeView(nextView) {
     setView(nextView);
@@ -1429,6 +1468,32 @@ function ClassWorkspace({ classInfo, onChange }) {
         )}
       </div>
 
+      {/* Organizers keep their own quizzes and drafts in the User view;
+          this keeps them one click away from the admin tabs. */}
+      {adminView && classInfo.membershipStatus === "ACTIVE" && (
+        <div className="cl-admin-quizzes">
+          <span>Your own quizzes and drafts are in the User view.</span>
+          <button
+            type="button"
+            className="cl-secondary"
+            onClick={() => {
+              setUserSection("Present");
+              changeView("user");
+            }}
+          >
+            My quizzes
+          </button>
+          {!classInfo.archived && (
+            <Link
+              className="cl-button"
+              to={`/app/quizzes/new?class=${classInfo.id}`}
+            >
+              + New quiz
+            </Link>
+          )}
+        </div>
+      )}
+
       {!adminView && joinOpen && <JoinPanel />}
 
       {activeSection === "Students" ? (
@@ -1438,10 +1503,7 @@ function ClassWorkspace({ classInfo, onChange }) {
           onChange={onChange}
         />
       ) : activeSection === "Approvals" ? (
-        <SubmissionsTable
-          classInfo={classInfo}
-          onChange={dashboard.reload}
-        />
+        <SubmissionsTable classInfo={classInfo} onChange={dashboard.reload} />
       ) : activeSection === "Present" ? (
         <PresentTable
           classInfo={classInfo}
