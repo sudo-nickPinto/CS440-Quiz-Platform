@@ -4,6 +4,7 @@ import {
   approvalLabel,
   approvedQuizzesPath,
   canSubmitForApproval,
+  classPagePath,
   myQuizzesPath,
   quizAccessLabel,
   quizStatusLabel,
@@ -150,5 +151,15 @@ describe("membersWithStats", () => {
 
   it("still lists members when scores are unavailable", () => {
     expect(ids(membersWithStats(members, null))).toEqual([3, 2, 4, 1]);
+  });
+});
+
+describe("classPagePath", () => {
+  it("goes to the class, or the class list when there is none", () => {
+    expect(classPagePath(4)).toBe("/app/classes/4");
+    expect(classPagePath("7")).toBe("/app/classes/7");
+    expect(classPagePath(null)).toBe("/app/classes");
+    expect(classPagePath(undefined)).toBe("/app/classes");
+    expect(classPagePath("x")).toBe("/app/classes");
   });
 });
