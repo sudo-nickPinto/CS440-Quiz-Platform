@@ -953,6 +953,8 @@
 .qp .cl-preview-meta {
   margin: 0;
   font-size: 13px;
+}
+
 /* Class page tabs cleanup: by-session / by-quiz toggle */
 .qp .cl-toggle {
   display: inline-flex;
