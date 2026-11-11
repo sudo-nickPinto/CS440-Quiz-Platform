@@ -167,9 +167,7 @@ export function approvalButton(quiz) {
       ? "Edited since approval"
       : status === "REJECTED"
         ? "Rejected"
-        : status === "WITHDRAWN"
-          ? "Withdrawn"
-          : null;
+        : null;
   return {
     kind: "send",
     label: status === "REJECTED" ? "Send again" : "Send for approval",

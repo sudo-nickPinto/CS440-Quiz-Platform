@@ -238,6 +238,8 @@ describe("approvalButton", () => {
     expect(approvalButton(edited)).toMatchObject({ kind: "send", note: "Edited since approval" });
     const rejected = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "REJECTED" });
     expect(approvalButton(rejected)).toMatchObject({ kind: "send", label: "Send again", note: "Rejected" });
+    const withdrawn = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "WITHDRAWN" });
+    expect(approvalButton(withdrawn)).toMatchObject({ kind: "send", label: "Send for approval", note: null });
   });
 
   it("keeps co-editors from sending unpublished edits", () => {
