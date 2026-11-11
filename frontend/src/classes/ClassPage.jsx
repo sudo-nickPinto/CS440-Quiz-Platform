@@ -725,14 +725,6 @@ function PresentTable({ classInfo, onApprovalChange }) {
                   >
                     ◉ Open
                   </Link>
-                  {hostable && (
-                    <HostQuizButton
-                      quiz={quiz}
-                      classId={classInfo.id}
-                      action={action}
-                      label="▶ Host live"
-                    />
-                  )}
                   {owner && !archived && (
                     <button
                       type="button"
@@ -755,7 +747,21 @@ function PresentTable({ classInfo, onApprovalChange }) {
                 )}
               </p>
               <p>Edited {formatDate(quiz.updated_at)}</p>
-              {button && (
+              {/* Ready to host: the card's one button starts the session.
+                  Otherwise it's the approval button (send / withdraw). */}
+              {hostable ? (
+                <div className="qc-approval">
+                  <span className="qc-host">
+                    <HostQuizButton
+                      quiz={quiz}
+                      classId={classInfo.id}
+                      action={action}
+                      label="▶ Host live"
+                    />
+                  </span>
+                  <small className="cl-approval-note">Approved</small>
+                </div>
+              ) : button && (
                 <div className="qc-approval">
                   <button
                     type="button"

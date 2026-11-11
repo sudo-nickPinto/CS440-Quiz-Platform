@@ -33,6 +33,9 @@ import { useQuizCollaboration } from "./useQuizCollaboration";
 import { classPagePath } from "../classes/classPaths";
 import { NewQuizClassPicker } from "../classes/MyDrafts";
 import HostQuizButton from "./HostQuizButton";
+import { sendQuizForApproval, useQuizFlow } from "./quizFlow";
+import { QuizFlowPanel } from "./QuizFlowPanel";
+import "./quiz-flow.css";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -113,7 +116,6 @@ export function QuizEditor({
   const [initial] = useState(() => initialEditor ?? blankEditor());
   const [editor, setEditor] = useState(initial);
   const [baselineEditor, setBaselineEditor] = useState(initial);
-  const [reviewing, setReviewing] = useState(false);
   const [validation, setValidation] = useState("");
   const [explaining, setExplaining] = useState(() => new Set());
   const [remoteNotice, setRemoteNotice] = useState(null);
@@ -134,6 +136,11 @@ export function QuizEditor({
   const [searchParams] = useSearchParams();
 
   const editing = existingQuiz !== null;
+  // Sending publishes the draft first, and only the owner can publish.
+  const canSendFromEditor =
+    !editing || existingQuiz.author_id === account.account_id;
+  // Which save button was pressed, for its "Saving…" / "Sending…" label.
+  const [savingKind, setSavingKind] = useState(null);
   // New quizzes belong to a class: the class page links here with ?class=ID.
   const classId = searchParams.get("class");
   const validClass = /^[1-9][0-9]*$/.test(classId ?? "");
@@ -370,7 +377,6 @@ export function QuizEditor({
   function edit(next) {
     editorRef.current = next;
     setEditor(next);
-    setReviewing(false);
     setValidation("");
   }
 
@@ -461,16 +467,15 @@ export function QuizEditor({
     }
   }
 
-  function review(event) {
-    event.preventDefault();
-
+  // Checks the quiz can be saved; shows the first problem if not.
+  function validate() {
     try {
-      toQuizCreate(editor);
+      toQuizCreate(editorRef.current);
       setValidation("");
-      setReviewing(true);
+      return true;
     } catch (error) {
       setValidation(error.message);
-      setReviewing(false);
+      return false;
     }
   }
 
@@ -609,9 +614,20 @@ export function QuizEditor({
     }
   }
 
-  async function save() {
-    if (conflict || savingQuestions.current.size > 0) return;
+  // Saves the draft. With send, it then publishes and sends that version for
+  // approval in the same click, so nobody has to go back to the class page.
+  async function save({ send = false } = {}) {
+    if (conflict || savingQuestions.current.size > 0 || savingKind) return;
+    if (!validate()) return;
+    setSavingKind(send ? "send" : "draft");
+    try {
+      await saveAndContinue(send);
+    } finally {
+      setSavingKind(null);
+    }
+  }
 
+  async function saveAndContinue(send) {
     // The final save owns every still-pending local change. Prevent a delayed
     // question autosave from racing the requests below with the same revision.
     for (const timer of autosaveTimers.current.values()) {
@@ -664,11 +680,30 @@ export function QuizEditor({
       });
     });
 
-    if (quiz) {
-      navigate(`/app/quizzes/${quiz.quiz_id}`, {
-        replace: true,
-      });
+    if (!quiz) return;
+
+    const savedId = quiz.quiz_id ?? existingQuiz?.quiz_id;
+    const quizClassId = editing ? existingQuiz.class_id : Number(classId);
+    let notice = { tone: "success", text: "Draft saved." };
+
+    if (send) {
+      // The draft is already saved, so a failure here must not send people
+      // back into the editor (saving again would duplicate a new quiz).
+      try {
+        await sendQuizForApproval(api, quizClassId, savedId);
+        notice = { tone: "success", text: "Saved and sent for approval." };
+      } catch (error) {
+        notice = {
+          tone: "warning",
+          text: `Saved as a draft, but it couldn't be sent for approval: ${error.message}`,
+        };
+      }
     }
+
+    navigate(`/app/quizzes/${savedId}`, {
+      replace: true,
+      state: { classId: quizClassId, notice },
+    });
   }
 
   if (!editing && !validClass) {
@@ -676,7 +711,11 @@ export function QuizEditor({
   }
 
   return (
-    <form className="qe" noValidate onSubmit={review}>
+    <form
+      className="qe"
+      noValidate
+      onSubmit={(event) => event.preventDefault()}
+    >
       <ConfirmDialog confirmer={confirmer} />
 
       <fieldset disabled={action.busy} className="qp-form-fields">
@@ -1144,75 +1183,60 @@ export function QuizEditor({
           )}
         </div>
 
-        <div className={"qe-savebar" + (reviewing ? " is-confirm" : "")}>
+        <div className="qe-savebar">
           <div className="qe-savebar-in">
-            {reviewing ? (
-              <>
-                <div className="qe-confirm-text">
-                  <h2>{editing ? "Save these changes?" : "Save this quiz?"}</h2>
-                  <p>
-                    {editing
-                      ? "This saves a draft. If the quiz was approved, it needs approval again: send it from the class page."
-                      : "It's saved as a draft in this class. Send it for approval from the class page before hosting."}
-                  </p>
-                </div>
-
-                <div className="qe-confirm-actions">
-                  <button
-                    type="button"
-                    className="qb-btn qb-btn-paper"
-                    onClick={() => setReviewing(false)}
-                  >
-                    Keep editing
-                  </button>
-
-                  <button
-                    type="button"
-                    className="qb-btn"
-                    disabled={conflict || questionSaving}
-                    onClick={() => void save()}
-                  >
-                    {questionSaving
-                      ? "Finishing live save…"
-                      : action.busy
-                        ? "Saving…"
-                        : editing
-                          ? "Save changes"
-                          : "Save draft"}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="qe-savebar-msg">
-                  {validation ? (
-                    <>
-                      <span className="qe-bad" role="alert">
-                        {validation}
-                      </span>
-                      {badQuestion && (
-                        <button
-                          type="button"
-                          className="ui-linkbtn"
-                          onClick={() => goToQuestion(badQuestion)}
-                        >
-                          Show me
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <span>{plural(editor.questions.length, "question")}</span>
-                      <span className="qe-dim">{clock(totalTime)} total</span>
-                    </>
+            <p className="qe-savebar-msg">
+              {validation ? (
+                <>
+                  <span className="qe-bad" role="alert">
+                    {validation}
+                  </span>
+                  {badQuestion && (
+                    <button
+                      type="button"
+                      className="ui-linkbtn"
+                      onClick={() => goToQuestion(badQuestion)}
+                    >
+                      Show me
+                    </button>
                   )}
-                </p>
+                </>
+              ) : (
+                <>
+                  <span>{plural(editor.questions.length, "question")}</span>
+                  <span className="qe-dim">{clock(totalTime)} total</span>
+                </>
+              )}
+            </p>
 
-                <button type="submit" className="qb-btn" disabled={conflict}>
-                  Save quiz
+            <div className="qe-save-actions">
+              <button
+                type="button"
+                className={"qb-btn" + (canSendFromEditor ? " qb-btn-paper" : "")}
+                disabled={conflict || questionSaving || Boolean(savingKind)}
+                onClick={() => void save()}
+              >
+                {questionSaving
+                  ? "Finishing live save…"
+                  : savingKind === "draft"
+                    ? "Saving…"
+                    : editing
+                      ? "Save changes"
+                      : "Save draft"}
+              </button>
+
+              {canSendFromEditor && (
+                <button
+                  type="button"
+                  className="qb-btn"
+                  disabled={conflict || questionSaving || Boolean(savingKind)}
+                  title="Saves your quiz and sends it to the class organizers. You can host it once they approve it."
+                  onClick={() => void save({ send: true })}
+                >
+                  {savingKind === "send" ? "Sending…" : "Save and send for approval"}
                 </button>
-              </>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </fieldset>
@@ -1227,9 +1251,22 @@ export function QuizViewer() {
   const validId = /^[1-9][0-9]*$/.test(quizId);
 
   const resource = useResource(validId ? `/quizzes/${quizId}` : null);
+  const flow = useQuizFlow(resource.data ?? null, account.account_id);
 
-  // Opened from a class page: the back link returns there.
-  const fromClass = useLocation().state?.classId ?? null;
+  // Opened from a class page (or straight after saving): the back link
+  // returns to that class. A save notice from the editor shows once.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const fromClass = location.state?.classId ?? null;
+  const [notice, setNotice] = useState(() => location.state?.notice ?? null);
+  useEffect(() => {
+    if (location.state?.notice) {
+      navigate(location.pathname, {
+        replace: true,
+        state: { classId: location.state.classId },
+      });
+    }
+  }, [location, navigate]);
 
   if (!validId) {
     return <p role="alert">Invalid quiz ID.</p>;
@@ -1247,9 +1284,14 @@ export function QuizViewer() {
 
   const quiz = resource.data;
   const mine = quiz.author_id === account.account_id;
-  // Members see Draft or Approved; "publish" happens inside Send for
-  // approval on the class page.
+  // Owners and organizers see the approval track below the strip, with the
+  // next step as its one button. Collaborators and other members keep the
+  // simple Draft / Approved pill and a link to the class page.
   const approved = quiz.hosting?.can_host === true;
+  const stateLabel =
+    quiz.status === "ARCHIVED"
+      ? "Archived"
+      : flow.state?.label ?? (approved ? "Approved" : "Draft");
   const questions = [...quiz.version.questions].sort(
     (a, b) => a.question_order - b.question_order,
   );
@@ -1282,12 +1324,7 @@ export function QuizViewer() {
 
         <div className="qe-state">
           <span className={"qe-pill" + (approved ? " is-saved" : "")}>
-            {quiz.status === "ARCHIVED"
-              ? "Archived"
-              : approved
-                ? "Approved"
-                : "Draft"}{" "}
-            · v{quiz.version.version_number}
+            {stateLabel} · v{quiz.version.version_number}
           </span>
         </div>
       </div>
@@ -1318,9 +1355,12 @@ export function QuizViewer() {
             </Link>
           )}
 
-          {/* Approved and you may host it: start the session right here.
-              Otherwise the approval button lives on the class page. */}
-          {quiz.class_id && quiz.status !== "ARCHIVED" && approved && (
+          {/* Without the approval track (collaborators, other members),
+              keep the previous Host button and class-page link. */}
+          {!flow.visible &&
+            quiz.class_id &&
+            quiz.status !== "ARCHIVED" &&
+            approved && (
             <div className="qv-host">
               <HostQuizButton
                 quiz={quiz}
@@ -1331,7 +1371,8 @@ export function QuizViewer() {
             </div>
           )}
 
-          {quiz.class_id &&
+          {!flow.visible &&
+            quiz.class_id &&
             quiz.status !== "ARCHIVED" &&
             !approved &&
             (mine || quiz.can_edit) && (
@@ -1346,6 +1387,21 @@ export function QuizViewer() {
             )}
         </div>
       </div>
+
+      {notice && (
+        <p className={`qf-notice is-${notice.tone}`} role="status">
+          {notice.text}
+        </p>
+      )}
+
+      <QuizFlowPanel
+        quiz={quiz}
+        flow={flow}
+        onChange={(text) => {
+          setNotice({ tone: "success", text });
+          resource.reload();
+        }}
+      />
 
       {mine && quiz.class_id && quiz.status !== "ARCHIVED" && (
         <QuizCollaborators quiz={quiz} />
