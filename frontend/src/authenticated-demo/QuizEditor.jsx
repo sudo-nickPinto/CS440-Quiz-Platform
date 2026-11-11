@@ -31,6 +31,7 @@ import { useConfirm } from "./useConfirm";
 import { QuestionMenu, TimePicker } from "./EditorParts";
 import { useQuizCollaboration } from "./useQuizCollaboration";
 import { classPagePath } from "../classes/classPaths";
+import HostQuizButton from "./HostQuizButton";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -1321,17 +1322,32 @@ export function QuizViewer() {
             </Link>
           )}
 
-          {/* Approval and hosting both happen on the class page. */}
-          {quiz.class_id && quiz.status !== "ARCHIVED" && (mine || quiz.can_edit) && (
+          {/* Approved and you may host it: start the session right here.
+              Otherwise the approval button lives on the class page. */}
+          {quiz.class_id && quiz.status !== "ARCHIVED" && approved && (
             <div className="qv-host">
-              <Link
-                className="qb-btn"
-                to={`/app/classes/${quiz.class_id}?view=user&section=Present`}
-              >
-                {approved ? "Host from its class →" : "Send for approval →"}
-              </Link>
+              <HostQuizButton
+                quiz={quiz}
+                classId={quiz.class_id}
+                action={action}
+                label="Host live session →"
+              />
             </div>
           )}
+
+          {quiz.class_id &&
+            quiz.status !== "ARCHIVED" &&
+            !approved &&
+            (mine || quiz.can_edit) && (
+              <div className="qv-host">
+                <Link
+                  className="qb-btn"
+                  to={`/app/classes/${quiz.class_id}?view=user&section=Present`}
+                >
+                  Send for approval →
+                </Link>
+              </div>
+            )}
         </div>
       </div>
 
