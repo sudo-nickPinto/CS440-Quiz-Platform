@@ -31,6 +31,7 @@ import { useConfirm } from "./useConfirm";
 import { QuestionMenu, TimePicker } from "./EditorParts";
 import { useQuizCollaboration } from "./useQuizCollaboration";
 import { classPagePath } from "../classes/classPaths";
+import { NewQuizClassPicker } from "../classes/MyDrafts";
 import HostQuizButton from "./HostQuizButton";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -163,7 +164,8 @@ export function QuizEditor({
           setRemoteNotice({
             tone: "warning",
             text: "A collaborator saved this question while you have local changes.",
-            detail: "Your work is still here. Save to check for a conflict, or reload the latest quiz.",
+            detail:
+              "Your work is still here. Save to check for a conflict, or reload the latest quiz.",
             reload: true,
           });
           return;
@@ -257,7 +259,8 @@ export function QuizEditor({
         setRemoteNotice({
           tone: "warning",
           text: "A collaborator changed the quiz structure.",
-          detail: "Reload when you are ready. Your unsaved work has not been replaced.",
+          detail:
+            "Reload when you are ready. Your unsaved work has not been replaced.",
           reload: true,
         });
       } else if (message.type === "quiz_published") {
@@ -276,7 +279,8 @@ export function QuizEditor({
         setRemoteNotice({
           tone: "info",
           text: "The owner sent this version for approval.",
-          detail: "Reload when you are ready. Your unsaved work has not been replaced.",
+          detail:
+            "Reload when you are ready. Your unsaved work has not been replaced.",
           reload: true,
         });
       }
@@ -668,18 +672,7 @@ export function QuizEditor({
   }
 
   if (!editing && !validClass) {
-    return (
-      <section className="qp-content">
-        <h1>Create a quiz</h1>
-        <p>
-          Quizzes now belong to a class. Open one of your classes and choose
-          "+ New quiz" there.
-        </p>
-        <Link className="qp-button" to="/app/classes">
-          Go to my classes
-        </Link>
-      </section>
-    );
+    return <NewQuizClassPicker />;
   }
 
   return (
@@ -690,9 +683,7 @@ export function QuizEditor({
         <div className="qe-bar">
           <Link className="qe-back" to={backTo} onClick={leaveEditor}>
             <span aria-hidden="true">←</span>
-            <span className="qe-back-word">
-              {editing ? "Quiz" : "Class"}
-            </span>
+            <span className="qe-back-word">{editing ? "Quiz" : "Class"}</span>
             <span className="ui-sr">
               {editing ? "Cancel editing" : "Back to class"}
             </span>
@@ -1077,19 +1068,27 @@ export function QuizEditor({
                             className={`is-${questionSaveStatus[question.questionId] ?? "saved"}`}
                             role="status"
                           >
-                            {questionSaveStatus[question.questionId] === "pending"
+                            {questionSaveStatus[question.questionId] ===
+                            "pending"
                               ? "Unsaved changes…"
-                              : questionSaveStatus[question.questionId] === "saving"
+                              : questionSaveStatus[question.questionId] ===
+                                  "saving"
                                 ? "Saving…"
-                                : questionSaveStatus[question.questionId] === "invalid"
+                                : questionSaveStatus[question.questionId] ===
+                                    "invalid"
                                   ? "Complete this question to autosave"
-                                  : questionSaveStatus[question.questionId] === "error"
+                                  : questionSaveStatus[question.questionId] ===
+                                      "error"
                                     ? "Autosave failed"
-                                    : questionSaveStatus[question.questionId] === "conflict"
+                                    : questionSaveStatus[
+                                          question.questionId
+                                        ] === "conflict"
                                       ? "Editing conflict"
-                                      : questionSaveStatus[question.questionId] === "remote"
+                                      : questionSaveStatus[
+                                            question.questionId
+                                          ] === "remote"
                                         ? "↻ Updated by collaborator"
-                                      : "✓ Saved live"}
+                                        : "✓ Saved live"}
                           </span>
                         </div>
                       )}
@@ -1150,9 +1149,7 @@ export function QuizEditor({
             {reviewing ? (
               <>
                 <div className="qe-confirm-text">
-                  <h2>
-                    {editing ? "Save these changes?" : "Save this quiz?"}
-                  </h2>
+                  <h2>{editing ? "Save these changes?" : "Save this quiz?"}</h2>
                   <p>
                     {editing
                       ? "This saves a draft. If the quiz was approved, it needs approval again: send it from the class page."
@@ -1178,10 +1175,10 @@ export function QuizEditor({
                     {questionSaving
                       ? "Finishing live save…"
                       : action.busy
-                      ? "Saving…"
-                      : editing
-                        ? "Save changes"
-                        : "Save draft"}
+                        ? "Saving…"
+                        : editing
+                          ? "Save changes"
+                          : "Save draft"}
                   </button>
                 </div>
               </>
@@ -1290,8 +1287,7 @@ export function QuizViewer() {
               : approved
                 ? "Approved"
                 : "Draft"}{" "}
-            · v
-            {quiz.version.version_number}
+            · v{quiz.version.version_number}
           </span>
         </div>
       </div>
