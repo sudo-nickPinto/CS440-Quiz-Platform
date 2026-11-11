@@ -121,11 +121,13 @@
   border-bottom: 3px solid var(--rr-ink);
 }
 
+/* Same size as the class page's section tabs (Students / Presentations /
+   Approvals): 20px 14px padding, up to 26px text. */
 .qp .rr-tabs button {
-  padding: 16px;
+  padding: 20px 14px;
   border: 0;
   font-family: 'Archivo Black', sans-serif;
-  font-size: clamp(16px, 2vw, 22px);
+  font-size: clamp(16px, 2vw, 26px);
   text-transform: uppercase;
 }
 
@@ -137,7 +139,8 @@
   background: var(--rr-orange);
   color: #ffffff;
   text-decoration: underline;
-  text-underline-offset: 6px;
+  text-decoration-thickness: 4px;
+  text-underline-offset: 7px;
 }
 
 .qp .rr-toolbar {
