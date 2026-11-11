@@ -331,6 +331,194 @@ def seed_completed_sessions(client: TestClient, identities, class_id: int) -> No
         db.commit()
 
 
+def seed_search_history(client: TestClient, identities, class_id: int) -> None:
+    """Put two Week 1 sessions behind newer completed history."""
+    seed_completed_sessions(client, identities, class_id)
+    owner = identities["owner"].account_id
+    with client.app.state.database.session_factory() as db:
+        for day in range(2, 5):
+            quiz = Quiz(author_id=owner)
+            db.add(quiz)
+            db.flush()
+            version = QuizVersion(
+                quiz_id=quiz.quiz_id, version_number=1, title=f"Week {day}"
+            )
+            db.add(version)
+            db.flush()
+            db.add(
+                LiveSession(
+                    quiz_version_id=version.quiz_version_id,
+                    host_id=owner,
+                    class_id=class_id,
+                    join_code=f"30000{day}",
+                    status=LiveSessionStatus.COMPLETED,
+                    started_at=BASE_TIME + timedelta(days=day),
+                    ended_at=BASE_TIME + timedelta(days=day, minutes=10),
+                )
+            )
+        # A matching title in an unfinished session must stay out of history.
+        active_quiz = Quiz(author_id=owner)
+        db.add(active_quiz)
+        db.flush()
+        active_version = QuizVersion(
+            quiz_id=active_quiz.quiz_id,
+            version_number=1,
+            title="Week 1 Live",
+        )
+        db.add(active_version)
+        db.flush()
+        db.add(
+            LiveSession(
+                quiz_version_id=active_version.quiz_version_id,
+                host_id=owner,
+                class_id=class_id,
+                join_code="399999",
+                status=LiveSessionStatus.ACTIVE,
+            )
+        )
+        other_class = Class(
+            name="Other Class",
+            created_by_id=owner,
+            join_code="DASH0002",
+        )
+        db.add(other_class)
+        db.flush()
+        db.add(
+            ClassMembership(
+                class_id=other_class.class_id,
+                account_id=owner,
+                role=ClassRole.ORGANIZER,
+            )
+        )
+        db.add(
+            LiveSession(
+                quiz_version_id=active_version.quiz_version_id,
+                host_id=owner,
+                class_id=other_class.class_id,
+                join_code="399998",
+                status=LiveSessionStatus.COMPLETED,
+                started_at=BASE_TIME + timedelta(days=5),
+                ended_at=BASE_TIME + timedelta(days=5, minutes=10),
+            )
+        )
+        db.commit()
+
+
+def test_session_title_search_finds_older_matches_before_pagination(
+    dashboard_client,
+) -> None:
+    client, identities, class_id = dashboard_client
+    seed_search_history(client, identities, class_id)
+    path = f"/classes/{class_id}/sessions"
+
+    first_unfiltered_page = client.get(path, params={"page_size": 2}).json()
+    assert [item["quiz_title"] for item in first_unfiltered_page["items"]] == [
+        "Week 4",
+        "Week 3",
+    ]
+    assert first_unfiltered_page["pagination"]["total_items"] == 5
+
+    first_match = client.get(
+        path, params={"q": "wEeK 1", "page_size": 1, "page": 1}
+    ).json()
+    second_match = client.get(
+        path, params={"q": "wEeK 1", "page_size": 1, "page": 2}
+    ).json()
+
+    assert first_match["pagination"] == {
+        "page": 1,
+        "page_size": 1,
+        "total_items": 2,
+        "total_pages": 2,
+    }
+    assert second_match["pagination"] == {
+        "page": 2,
+        "page_size": 1,
+        "total_items": 2,
+        "total_pages": 2,
+    }
+    assert [item["quiz_title"] for item in first_match["items"]] == ["Week 1"]
+    assert [item["quiz_title"] for item in second_match["items"]] == ["Week 1"]
+    assert first_match["items"][0]["started_at"] > second_match["items"][0]["started_at"]
+
+
+def test_session_title_search_blank_unmatched_and_sorting(dashboard_client) -> None:
+    client, identities, class_id = dashboard_client
+    seed_search_history(client, identities, class_id)
+    path = f"/classes/{class_id}/sessions"
+
+    original = client.get(path, params={"page_size": 2}).json()
+    for blank in ("", "   "):
+        assert client.get(path, params={"q": blank, "page_size": 2}).json() == original
+
+    unmatched = client.get(path, params={"q": "missing", "page_size": 2}).json()
+    assert unmatched["items"] == []
+    assert unmatched["pagination"] == {
+        "page": 1,
+        "page_size": 2,
+        "total_items": 0,
+        "total_pages": 0,
+    }
+
+    by_attendance = client.get(
+        path,
+        params={"q": "  wEeK 1  ", "sort": "participant_count", "order": "desc"},
+    ).json()
+    assert [item["participant_count"] for item in by_attendance["items"]] == [2, 1]
+    assert by_attendance["pagination"]["total_items"] == 2
+
+    oldest_first = client.get(
+        path, params={"q": "Week 1", "sort": "started_at", "order": "asc"}
+    ).json()
+    assert oldest_first["items"][0]["started_at"] < oldest_first["items"][1]["started_at"]
+
+    by_average = client.get(
+        path, params={"q": "Week 1", "sort": "average_score", "order": "desc"}
+    ).json()
+    assert [item["average_score"] for item in by_average["items"]] == [600.0, 500.0]
+
+
+def test_session_title_search_limits_query_to_200_characters(dashboard_client) -> None:
+    client, identities, class_id = dashboard_client
+    seed_search_history(client, identities, class_id)
+    path = f"/classes/{class_id}/sessions"
+
+    at_limit = client.get(path, params={"q": " " * 194 + "Week 1"})
+    over_limit = client.get(path, params={"q": " " * 195 + "Week 1"})
+
+    assert at_limit.status_code == 200
+    assert at_limit.json()["pagination"]["total_items"] == 2
+    assert over_limit.status_code == 422
+    assert over_limit.json()["error"]["code"] == "request_validation_error"
+
+
+def test_session_title_search_preserves_member_fields_and_outsider_denial(
+    dashboard_client,
+) -> None:
+    client, identities, class_id = dashboard_client
+    seed_search_history(client, identities, class_id)
+    path = f"/classes/{class_id}/sessions"
+
+    act_as(client, identities["zoe"])
+    response = client.get(path, params={"q": "WEEK 1"})
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert len(items) == 2
+    assert set(items[0]) == {
+        "session_id", "quiz_id", "quiz_title", "status", "host_name", "is_host",
+        "started_at", "ended_at", "participant_count", "average_score",
+        "top_score", "my_score", "my_rank",
+    }
+    assert [item["my_score"] for item in items] == [None, 300]
+    assert [item["my_rank"] for item in items] == [None, 2]
+    assert all(item["average_score"] is None and item["top_score"] is None for item in items)
+
+    act_as(client, identities["nonmember"])
+    denied = client.get(path, params={"q": "Week 1"})
+    assert denied.status_code == 404
+    assert denied.json()["error"]["code"] == "class_not_found"
+
+
 def test_sessions_report_attendance_and_scores(dashboard_client) -> None:
     client, identities, class_id = dashboard_client
     seed_completed_sessions(client, identities, class_id)

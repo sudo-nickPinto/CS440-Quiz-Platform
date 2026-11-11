@@ -409,11 +409,17 @@ def list_class_sessions(
     page_size: int,
     sort: SessionSort,
     order: SortOrder,
+    q: str | None = None,
 ) -> ClassSessionPage:
     access = require_class_member(db, account, class_id)
     sessions, _ = _session_summaries(
         db, account, class_id, access, (LiveSessionStatus.COMPLETED,)
     )
+    query = (q or "").strip().casefold()
+    if query:
+        sessions = [
+            session for session in sessions if query in session.quiz_title.casefold()
+        ]
     sessions = _sort_sessions(sessions, sort, order)
     return ClassSessionPage(
         class_id=class_id,

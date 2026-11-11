@@ -74,11 +74,12 @@ def class_sessions_route(
     page_size: PageSize = 25,
     sort: SessionSort = SessionSort.STARTED_AT,
     order: SortOrder = SortOrder.DESC,
+    q: Annotated[str | None, Query(max_length=200)] = None,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> ClassSessionPage:
     return list_class_sessions(
-        db, account, class_id, page=page, page_size=page_size, sort=sort, order=order
+        db, account, class_id, page=page, page_size=page_size, sort=sort, order=order, q=q
     )
 
 
