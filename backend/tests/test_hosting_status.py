@@ -297,3 +297,89 @@ def test_quiz_lists_use_the_same_number_of_queries_for_any_length(
     assert client.patch(f"/quizzes/{archived['quiz_id']}/archive").status_code == 200
 
     assert lists() == small
+
+
+def test_editing_an_approved_quiz_blocks_hosting_until_the_new_version_is_approved(
+    class_setup,
+) -> None:
+    """Approve v1, edit it into draft v2: hosting must not silently fall back
+    to v1, because the page now shows v2. Uses the real API end to end."""
+    client, accounts, class_id = class_setup
+    base = f"/classes/{class_id}"
+
+    def submit_and_approve(version_id: int) -> None:
+        use_account(client, accounts["member"])
+        submitted = client.post(
+            f"{base}/quiz-submissions", json={"quiz_version_id": version_id}
+        )
+        assert submitted.status_code == 201
+        use_account(client, accounts["author"])
+        decided = client.patch(
+            f"{base}/quiz-submissions/{submitted.json()['submission_id']}",
+            json={"status": "APPROVED"},
+        )
+        assert decided.status_code == 200
+        use_account(client, accounts["member"])
+
+    use_account(client, accounts["member"])
+    created = client.post(f"{base}/quizzes", json=QUIZ_PAYLOAD).json()
+    quiz_id = created["quiz_id"]
+    published = client.post(
+        f"{base}/quizzes/{quiz_id}/publish",
+        json={"expected_revision": created["revision"]},
+    )
+    assert published.status_code == 200
+    v1 = published.json()["version"]["quiz_version_id"]
+    submit_and_approve(v1)
+    assert hosting(client, quiz_id)["can_host"] is True
+
+    edited = client.put(
+        f"{base}/quizzes/{quiz_id}",
+        json={
+            **QUIZ_PAYLOAD,
+            "title": "Edited title",
+            "expected_revision": published.json()["revision"],
+        },
+    )
+    assert edited.status_code == 200
+    assert edited.json()["hosting"]["reason"] == "unpublished_changes"
+    assert_blocked(
+        client, quiz_id, class_id, "unpublished_changes", "quiz_not_hostable"
+    )
+
+    republished = client.post(
+        f"{base}/quizzes/{quiz_id}/publish",
+        json={"expected_revision": edited.json()["revision"]},
+    )
+    assert republished.status_code == 200
+    # The publish response itself already reflects the new state.
+    assert republished.json()["hosting"]["reason"] == "approval_outdated"
+    v2 = republished.json()["version"]["quiz_version_id"]
+    assert v2 != v1
+
+    submit_and_approve(v2)
+    session = host(client, quiz_id, class_id)
+    assert session.status_code == 201
+    assert session.json()["quiz_version_id"] == v2
+
+
+def test_draft_version_on_top_blocks_hosting_even_if_status_says_published(
+    class_setup,
+) -> None:
+    """Defense in depth: the versions themselves decide, not just the status."""
+    client, _, class_id = class_setup
+    quiz = class_quiz(client, class_id)
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            QuizVersion(
+                quiz_id=quiz["quiz_id"],
+                version_number=quiz["version"]["version_number"] + 1,
+                title="Unpublished draft",
+                published_at=None,
+            )
+        )
+        db.commit()
+
+    assert_blocked(
+        client, quiz["quiz_id"], class_id, "unpublished_changes", "quiz_not_hostable"
+    )

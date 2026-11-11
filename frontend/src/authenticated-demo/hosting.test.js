@@ -36,6 +36,7 @@ describe("hostingState", () => {
       "not_host",
       "quiz_archived",
       "not_published",
+      "unpublished_changes",
       "not_submitted",
       "pending_approval",
       "rejected",
@@ -81,6 +82,18 @@ describe("showsHostControl", () => {
   it("hides it from people who could never host the quiz", () => {
     const quiz = { status: "PUBLISHED", author_id: 2, hosting: blocked("not_host") };
     expect(showsHostControl(quiz, 1)).toBe(false);
+  });
+
+  it("shows 'Class archived' only to the quiz owner", () => {
+    const quiz = { status: "PUBLISHED", author_id: 2, hosting: blocked("class_archived") };
+    expect(showsHostControl(quiz, 2)).toBe(true);
+    expect(showsHostControl(quiz, 1)).toBe(false);
+  });
+
+  it("shows 'Publish changes first' on an edited approved quiz", () => {
+    const quiz = { status: "DRAFT", author_id: 1, hosting: blocked("unpublished_changes") };
+    expect(showsHostControl(quiz, 1)).toBe(true);
+    expect(hostingState({ ...quiz, class_id: 3 }).label).toBe("Publish changes first");
   });
 
   it("hides it on archived quizzes", () => {

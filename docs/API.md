@@ -297,7 +297,7 @@ Rules, checked in this order:
 1. The caller is an active member of the class, and the class isn't archived.
 2. The quiz belongs to this class.
 3. The caller is the quiz owner or an active organizer of the class. Organizer powers need faculty status too, the same rule as every other organizer action, so an old non-faculty organizer can only host their own quizzes. Being a collaborator isn't enough, and faculty status alone (without being an organizer of this class) gives no extra access.
-4. The quiz isn't archived and has a published version.
+4. The quiz isn't archived, has a published version, and has no unpublished draft on top of it (an edited quiz must be published and approved again).
 5. That newest published version is approved for the class (Task 4). Pending, rejected, withdrawn and stale (a newer version was published) versions can't be hosted.
 
 | Status | Code | When |
@@ -328,6 +328,7 @@ When hosting is refused for one of rules 1–5, the error also says exactly why,
 | `not_host` | Caller isn't the quiz owner or a class organizer | `session_host_denied` |
 | `quiz_archived` | The quiz is archived | `quiz_not_hostable` |
 | `not_published` | Still a draft | `quiz_not_hostable` |
+| `unpublished_changes` | Edited after publishing. The page shows the new draft, so the older published version isn't hosted silently; publish and get the new version approved | `quiz_not_hostable` |
 | `not_submitted` | Published but never submitted for approval | `quiz_version_not_approved` |
 | `pending_approval` | Waiting for an organizer | `quiz_version_not_approved` |
 | `rejected` | An organizer rejected this version | `quiz_version_not_approved` |

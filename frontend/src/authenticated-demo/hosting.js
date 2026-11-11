@@ -6,6 +6,7 @@ export const HOSTING_LABELS = {
   not_host: "Owner or organizer only",
   quiz_archived: "Quiz archived",
   not_published: "Publish first",
+  unpublished_changes: "Publish changes first",
   not_submitted: "Needs approval",
   pending_approval: "Waiting for approval",
   rejected: "Approval rejected",
@@ -43,7 +44,16 @@ export function hostingState(quiz, classId = quiz.class_id) {
 // nothing.
 export function showsHostControl(quiz, accountId) {
   if (quiz.status === "ARCHIVED") return false;
-  if (quiz.hosting) return quiz.hosting.reason !== "not_host";
+  if (quiz.hosting) {
+    const { reason } = quiz.hosting;
+    if (reason === "not_host") return false;
+    // These are checked before "not_host", so they don't tell us whether
+    // the caller could host. Only show them to the owner.
+    if (reason === "class_archived" || reason === "not_in_class") {
+      return quiz.author_id === accountId;
+    }
+    return true;
+  }
   // Older responses without `hosting`: the previous rule.
   return quiz.status === "PUBLISHED" && quiz.author_id === accountId;
 }

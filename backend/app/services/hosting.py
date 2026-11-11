@@ -5,7 +5,7 @@ Starting a session (create_session) and the `hosting` field on quiz responses
 server always agree.
 
 The order matches create_session: class archived, host permission, quiz
-archived, published, approved. Membership is checked by the caller, because
+archived, published (with no unpublished draft on top), approved. Membership is checked by the caller, because
 people outside the class can't see the quiz at all.
 
 The checks are batched: a list of quizzes costs a fixed number of queries no
@@ -15,7 +15,7 @@ matter how long it is.
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount
@@ -80,6 +80,13 @@ PROBLEMS: dict[str, HostingProblem] = dict(
             409,
             "quiz_not_hostable",
             "Publish this quiz before hosting it.",
+        ),
+        _problem(
+            "unpublished_changes",
+            409,
+            "quiz_not_hostable",
+            "This quiz has unpublished changes. Publish them and get the new "
+            "version approved before hosting.",
         ),
         _problem(
             "not_submitted",
@@ -164,30 +171,36 @@ def _class_states(
 
 def _latest_published_versions(
     db: Session, quiz_ids: set[int]
-) -> dict[int, QuizVersion]:
-    """The newest published version of each quiz, in one query."""
+) -> dict[int, tuple[QuizVersion, bool]]:
+    """The newest published version of each quiz, and whether a newer
+    unpublished draft sits on top of it. One query."""
     if not quiz_ids:
         return {}
     newest = (
         select(
             QuizVersion.quiz_id.label("quiz_id"),
-            func.max(QuizVersion.version_number).label("version_number"),
+            func.max(
+                case(
+                    (QuizVersion.published_at.is_not(None), QuizVersion.version_number)
+                )
+            ).label("published_number"),
+            func.max(QuizVersion.version_number).label("newest_number"),
         )
-        .where(
-            QuizVersion.quiz_id.in_(quiz_ids),
-            QuizVersion.published_at.is_not(None),
-        )
+        .where(QuizVersion.quiz_id.in_(quiz_ids))
         .group_by(QuizVersion.quiz_id)
         .subquery()
     )
-    versions = db.scalars(
-        select(QuizVersion).join(
+    rows = db.execute(
+        select(QuizVersion, newest.c.newest_number).join(
             newest,
             (QuizVersion.quiz_id == newest.c.quiz_id)
-            & (QuizVersion.version_number == newest.c.version_number),
+            & (QuizVersion.version_number == newest.c.published_number),
         )
     )
-    return {version.quiz_id: version for version in versions}
+    return {
+        version.quiz_id: (version, newest_number > version.version_number)
+        for version, newest_number in rows
+    }
 
 
 def _approval_problems(
@@ -290,9 +303,16 @@ def check_hosting_many(
     versions = _latest_published_versions(db, {quiz.quiz_id for quiz in remaining})
     candidates = []
     for quiz in remaining:
-        version = versions.get(quiz.quiz_id)
+        version, draft_on_top = versions.get(quiz.quiz_id, (None, False))
         if version is None:
             checks[quiz.quiz_id] = HostingCheck(PROBLEMS["not_published"], None)
+        elif draft_on_top or quiz.status == QuizStatus.DRAFT:
+            # Edited after publishing: an older version is published, but the
+            # owner and the page are on the new draft. Hosting the old version
+            # would silently show different content, so block it.
+            checks[quiz.quiz_id] = HostingCheck(
+                PROBLEMS["unpublished_changes"], None
+            )
         else:
             candidates.append((quiz, version))
 
