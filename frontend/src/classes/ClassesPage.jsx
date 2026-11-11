@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useRemembered } from "../authenticated-demo/remember";
 import { useNavigate } from "react-router";
 
 import { useAction, useApi } from "../authenticated-demo/rest";
@@ -15,9 +16,9 @@ export default function ClassesPage() {
   const [panel, setPanel] = useState(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [sort, setSort] = useState("name");
+  const [query, setQuery] = useRemembered("classes:query", "");
+  const [filter, setFilter] = useRemembered("classes:filter", "all");
+  const [sort, setSort] = useRemembered("classes:sort", "name");
 
   const account = useAccount();
   const canCreateClass = account.is_active === true && account.role === "ADMIN";

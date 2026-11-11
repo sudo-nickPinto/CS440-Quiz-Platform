@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
+import { useRemembered } from "../authenticated-demo/remember";
 import { Link } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 
@@ -56,9 +57,12 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
   // students report lists recent scores newest first, in the same order.
   const sessions = useClassSessions(classInfo.id, 1);
 
-  const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState("average");
-  const [openId, setOpenId] = useState(null);
+  const memory = `class:${classInfo.id}:students`;
+  const [query, setQuery] = useRemembered(`${memory}:query`, "");
+  const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "average", {
+    isValid: (key) => key in MEMBER_SORTS,
+  });
+  const [openId, setOpenId] = useRemembered(`${memory}:open`, null);
 
   const summary = dashboard.status === "ready" ? dashboard.data : null;
   const completed = summary?.completed_session_count ?? 0;
