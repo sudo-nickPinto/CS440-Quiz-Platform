@@ -30,6 +30,7 @@ import ConfirmDialog from "./ConfirmDialog";
 import { useConfirm } from "./useConfirm";
 import { QuestionMenu, TimePicker } from "./EditorParts";
 import { useQuizCollaboration } from "./useQuizCollaboration";
+import { classPagePath } from "../classes/classHelpers";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -285,7 +286,7 @@ export function QuizEditor({
     ? `/app/quizzes/${existingQuiz.quiz_id}`
     : validClass
       ? `/app/classes/${classId}`
-      : "/app/dashboard/present";
+      : "/app/classes";
 
   const ids = editor.questions.map((question) => question.id);
   const current = useCurrentQuestion(ids);
@@ -1276,17 +1277,11 @@ export function QuizViewer() {
       <div className="qe-bar">
         <Link
           className="qe-back"
-          to={
-            fromClass ? `/app/classes/${fromClass}` : "/app/dashboard/present"
-          }
+          to={classPagePath(fromClass ?? quiz.class_id)}
         >
           <span aria-hidden="true">←</span>
-          <span className="qe-back-word">
-            {fromClass ? "Class" : "Dashboard"}
-          </span>
-          <span className="ui-sr">
-            {fromClass ? "Back to class" : "Back to dashboard"}
-          </span>
+          <span className="qe-back-word">Class</span>
+          <span className="ui-sr">Back to class</span>
         </Link>
 
         <div className="qe-titlebox">

@@ -58,9 +58,9 @@ function Title({ report, host, children, backTo, backLabel }) {
     backTo ||
     (host
       ? `/app/quizzes/${report.quiz_id}/reports`
-      : "/app/dashboard/participate");
+      : "/app/classes");
 
-  const label = backLabel || (host ? "Hosting history" : "Participate");
+  const label = backLabel || (host ? "Hosting history" : "Classes");
 
   return (
     <header className="rr-title">
@@ -666,12 +666,12 @@ export function ParticipantResults({ report, backTo, backLabel }) {
       <nav className="rr-crumbs" aria-label="Breadcrumb">
         <Link
           className="rr-crumb-back"
-          to={backTo || "/app/dashboard/participate"}
+          to={backTo || "/app/classes"}
         >
-          ← {backLabel || "Participate"}
+          ← {backLabel || "Classes"}
         </Link>
         <div className="rr-trail">
-          <span>Dashboard /</span>
+          <span>Classes /</span>
           <span>Results /</span>
           <b>{report.quiz_title}</b>
         </div>
@@ -840,7 +840,7 @@ export default function SessionResults() {
     return (
       <section className="qp-content">
         <RequestError error={resource.error} retry={resource.reload} />
-        <Link to="/app/dashboard/participate">Return to dashboard</Link>
+        <Link to="/app/classes">Back to classes</Link>
       </section>
     );
   }

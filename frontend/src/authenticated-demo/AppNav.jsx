@@ -1,22 +1,18 @@
 import { Link } from "react-router";
 
 // The app's main navigation, shown in the header on every page for faculty
-// and students alike, so Dashboard and Classes are always one click away.
+// and students alike. Quizzes, results and sessions all live under a class,
+// so Classes lights up for them too.
 // Each link also lights up on the pages that live under it.
 const LINKS = [
-  {
-    to: "/app/dashboard/present",
-    label: "Dashboard",
-    matches: (path) =>
-      path.startsWith("/app/dashboard") ||
-      path.startsWith("/app/quizzes") ||
-      path.startsWith("/app/results"),
-  },
   {
     to: "/app/classes",
     label: "Classes",
     matches: (path) =>
-      path.startsWith("/app/classes") || path.startsWith("/app/join/class"),
+      path.startsWith("/app/classes") ||
+      path.startsWith("/app/join/class") ||
+      path.startsWith("/app/quizzes") ||
+      path.startsWith("/app/results"),
   },
   {
     to: "/app/join",

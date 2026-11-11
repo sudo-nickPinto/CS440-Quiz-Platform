@@ -33,8 +33,8 @@ export default function ProfilePage({ onSaved }) {
           savedMessage="Saved. Your new name and avatar are live."
           onSaved={onSaved}
         >
-          <Link className="qp-button" to="/app/dashboard/present">
-            Back to dashboard
+          <Link className="qp-button" to="/app/classes">
+            Back to classes
           </Link>
         </ProfileForm>
       </div>

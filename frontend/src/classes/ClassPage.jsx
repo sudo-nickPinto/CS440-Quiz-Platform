@@ -438,6 +438,7 @@ function PresentTable({ classInfo }) {
 function MyQuizzesTable({ classInfo, onApprovalChange }) {
   const api = useApi();
   const action = useAction();
+  const confirmer = useConfirm();
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState("recent");
   const resource = useMyClassQuizzes(classInfo.id, page, sortKey);
@@ -474,13 +475,34 @@ function MyQuizzesTable({ classInfo, onApprovalChange }) {
     }
   }
 
+  // Moved here from the old global dashboard. Only the owner can archive.
+  async function archive(quiz) {
+    const sure = await confirmer.confirm({
+      label: "Archive quiz",
+      title: `Archive “${quiz.title}”?`,
+      message: "It will no longer be available to host.",
+      confirmLabel: "Archive quiz",
+      cancelLabel: "Keep it",
+    });
+    if (!sure) return;
+    const done = await action.run(async () => {
+      await api(`/quizzes/${quiz.quiz_id}/archive`, { method: "PATCH" });
+      return true;
+    });
+    if (done) {
+      resource.reload();
+      onApprovalChange?.();
+    }
+  }
+
   return (
     <>
+    <ConfirmDialog confirmer={confirmer} />
     <RequestError error={action.error} />
     <ReportTable
       caption="My quizzes"
       noun="quiz"
-      headers={["Quiz", "Access", "Status", "Approval", "Questions", "Last edited"]}
+      headers={["Quiz", "Access", "Status", "Approval", "Questions", "Last edited", "Manage"]}
       emptyTitle="No quizzes yet"
       emptyText={
         classInfo.membershipStatus === "ACTIVE" && !classInfo.archived
@@ -539,6 +561,19 @@ function MyQuizzesTable({ classInfo, onApprovalChange }) {
           </span>,
           formatScore(quiz.question_count),
           formatDate(quiz.updated_at),
+          quiz.my_access === "OWNER" && quiz.status !== "ARCHIVED" ? (
+            <button
+              type="button"
+              className="cl-secondary cl-danger-text"
+              disabled={action.busy}
+              aria-label={`Archive ${quiz.title}`}
+              onClick={() => void archive(quiz)}
+            >
+              Archive
+            </button>
+          ) : (
+            "—"
+          ),
         ],
       }))}
     />

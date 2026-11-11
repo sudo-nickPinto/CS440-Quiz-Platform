@@ -10,6 +10,7 @@ import { HostFinal, ParticipantFinal } from "./LiveFinal";
 import Avatar from "../avatars/Avatar";
 import QuizStartCountdown from "./QuizStartCountdown";
 import CopyCodeButton from "./CopyCodeButton";
+import { classPagePath } from "../classes/classHelpers";
 
 const CONNECTION_ERRORS = {
   unauthorized: "Your login needs to be renewed.",
@@ -590,7 +591,7 @@ function ConnectedSession({ sessionId }) {
   const host = state.role === "host";
   const canAct = state.connection === "open" && !action.busy;
   const title = metadata.data?.quiz_title || `Session ${sessionId}`;
-  const dashboard = `/app/dashboard/${host ? "present" : "participate"}`;
+  const classPage = classPagePath(metadata.data?.class_id);
   const terminalMessage = CONNECTION_ERRORS[state.connection];
 
   const canAdvance =
@@ -636,6 +637,7 @@ function ConnectedSession({ sessionId }) {
             title={title}
             totalQuestions={total ?? "—"}
             sessionId={sessionId}
+            backTo={classPage}
           />
         </section>
       );
@@ -652,6 +654,7 @@ function ConnectedSession({ sessionId }) {
             final={state.final}
             totalQuestions={total ?? "—"}
             sessionId={sessionId}
+            backTo={classPage}
           />
         </section>
       );
@@ -808,8 +811,8 @@ function ConnectedSession({ sessionId }) {
                   : undefined
               }
             />
-            <Link className="qb-btn qb-btn-paper" to={dashboard}>
-              Back to dashboard
+            <Link className="qb-btn qb-btn-paper" to={classPage}>
+              Back to class
             </Link>
           </div>
         )}
@@ -838,8 +841,8 @@ function ConnectedSession({ sessionId }) {
             {phase === "left" && (
               <div className="lv-centered">
                 <h1>You left the session</h1>
-                <Link className="qb-btn" to="/app/dashboard/participate">
-                  Back to dashboard
+                <Link className="qb-btn" to={classPage}>
+                  Back to class
                 </Link>
               </div>
             )}
@@ -979,7 +982,7 @@ export default function LiveSessionPage() {
     return (
       <section className="qp-content">
         <h1>Invalid session ID</h1>
-        <Link to="/app/dashboard/present">Back to dashboard</Link>
+        <Link to="/app/classes">Back to classes</Link>
       </section>
     );
   }
