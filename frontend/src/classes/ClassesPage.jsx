@@ -152,22 +152,22 @@ export default function ClassesPage() {
 
         <button
           type="button"
-          className="cl-join-quiz"
-          aria-expanded={panel === "quiz"}
-          aria-controls="quiz-join-panel"
-          onClick={() => togglePanel("quiz")}
-        >
-          Join quiz
-        </button>
-
-        <button
-          type="button"
           className="cl-join"
           aria-expanded={panel === "join"}
           aria-controls="class-join-panel"
           onClick={() => togglePanel("join")}
         >
           Join class
+        </button>
+
+        <button
+          type="button"
+          className="cl-join-quiz"
+          aria-expanded={panel === "quiz"}
+          aria-controls="quiz-join-panel"
+          onClick={() => togglePanel("quiz")}
+        >
+          Join quiz
         </button>
       </div>
 
