@@ -36,9 +36,3 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
-
-/* Under the big join code in the host's waiting room. */
-.ui-copy-code.lv-join-copy {
-  display: flex;
-  margin: 4px auto 2px;
-}
