@@ -366,6 +366,7 @@ def test_my_quizzes_show_approval_state_of_newest_published_version(
     amys, amy_sub = quizzes["amy"]
     assert items["Amy's quiz"]["approval_status"] == "PENDING"
     assert items["Amy's quiz"]["approval_submission_id"] == amy_sub["submission_id"]
+    assert items["Amy's quiz"]["approval_sent_by_me"] is True
     assert (
         items["Amy's quiz"]["published_version_id"]
         == amys["version"]["quiz_version_id"]

@@ -916,14 +916,6 @@
   font-size: 14px;
 }
 
-.qp .cl-subheading {
-  margin: 28px 0 0;
-  padding: 12px 14px 0;
-  font-family: "Archivo Black", sans-serif;
-  font-size: 18px;
-  text-transform: uppercase;
-}
-
 /* V3 Task 6: read-only preview of a submitted quiz version */
 .qp .cl-preview-actions {
   padding: 16px 20px 0;

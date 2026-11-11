@@ -123,7 +123,7 @@ Errors:
 - `500 quiz_save_failed`.
 
 ### `GET /classes/{class_id}/quizzes` → `200 ClassQuizListPage`
-The class's quizzes. Organizers get every quiz in the class; members get only the ones they own or collaborate on. `mine=true` narrows an organizer's list the same way. It takes `page`, `page_size` (1–100, default 25), `sort=created_at|updated_at|title` (default `created_at`) and `order=asc|desc` (default `desc`). Each item's `my_access` is `OWNER`, `EDITOR` (an active collaborator), or null when an organizer sees someone else's quiz. `published_version_id` is the newest published version (null for a draft-only quiz), and `approval_status` / `approval_submission_id` describe that version's newest submission to this class (`PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`, or null if it was never submitted).
+The class's quizzes. Organizers get every quiz in the class; members get only the ones they own or collaborate on. `mine=true` narrows an organizer's list the same way. It takes `page`, `page_size` (1–100, default 25), `sort=created_at|updated_at|title` (default `created_at`) and `order=asc|desc` (default `desc`). Each item's `my_access` is `OWNER`, `EDITOR` (an active collaborator), or null when an organizer sees someone else's quiz. `published_version_id` is the newest published version (null for a draft-only quiz), and `approval_status` / `approval_submission_id` describe that version's newest submission to this class (`PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`, or null if it was never submitted). `approval_sent_by_me` says whether the caller sent that submission, so the class page offers Withdraw only to them.
 
 ```json
 {

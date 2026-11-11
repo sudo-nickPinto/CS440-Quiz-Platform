@@ -460,6 +460,20 @@ function MyQuizzesTable({ classInfo, onApprovalChange }) {
     }
   }
 
+  async function withdraw(quiz) {
+    const done = await action.run(async () => {
+      await api(
+        `/classes/${classInfo.id}/quiz-submissions/${quiz.approval_submission_id}`,
+        { method: "DELETE" },
+      );
+      return true;
+    });
+    if (done) {
+      resource.reload();
+      onApprovalChange?.();
+    }
+  }
+
   return (
     <>
     <RequestError error={action.error} />
@@ -512,42 +526,38 @@ function MyQuizzesTable({ classInfo, onApprovalChange }) {
                 {quiz.approval_status ? "Send again" : "Send for approval"}
               </button>
             )}
+            {quiz.approval_status === "PENDING" && quiz.approval_sent_by_me && (
+              <button
+                type="button"
+                className="cl-secondary"
+                disabled={action.busy}
+                onClick={() => void withdraw(quiz)}
+              >
+                Withdraw
+              </button>
+            )}
           </span>,
           formatScore(quiz.question_count),
           formatDate(quiz.updated_at),
         ],
       }))}
     />
-    <SubmissionsTable
-      classInfo={classInfo}
-      organizer={false}
-      onChange={() => {
-        resource.reload();
-        onApprovalChange?.();
-      }}
-    />
     </>
   );
 }
 
-// The approval queue. Organizers (Admin view) see every submission in the
-// class and decide pending ones; members see their own and may withdraw a
-// pending one.
-function SubmissionsTable({ classInfo, organizer, onChange }) {
+// The organizer's approval queue (Admin view): every submission in the class,
+// pending first by default. Members follow their own requests in My quizzes.
+function SubmissionsTable({ classInfo, onChange }) {
   const api = useApi();
   const action = useAction();
   const [page, setPage] = useState(1);
-  const [sortKey, setSortKey] = useState(organizer ? "oldest" : "newest");
-  const [status, setStatus] = useState(organizer ? "PENDING" : "");
+  const [sortKey, setSortKey] = useState("oldest");
+  const [status, setStatus] = useState("PENDING");
   const resource = useClassSubmissions(classInfo.id, page, sortKey, status);
   const pending = reportResource(resource);
 
   if (pending) return pending;
-
-  // A member with nothing sent yet doesn't need an empty history table.
-  if (!organizer && resource.data.pagination.total_items === 0 && !status) {
-    return null;
-  }
 
   async function act(submission, request) {
     const done = await action.run(async () => {
@@ -568,26 +578,16 @@ function SubmissionsTable({ classInfo, organizer, onChange }) {
       method: "PATCH",
       body: JSON.stringify({ status: decision }),
     });
-  const withdraw = (submission) => act(submission, { method: "DELETE" });
 
   return (
     <>
-      {!organizer && <h2 className="cl-subheading">My submissions</h2>}
       <RequestError error={action.error} />
       <ReportTable
-        caption={organizer ? "Approvals" : "My submissions"}
+        caption="Approvals"
         noun="submission"
-        headers={
-          organizer
-            ? ["Quiz", "Version", "Submitted by", "Submitted", "Status", "Decision"]
-            : ["Quiz", "Version", "Submitted", "Status", ""]
-        }
-        emptyTitle={organizer && status === "PENDING" ? "Nothing to review" : "No submissions"}
-        emptyText={
-          organizer
-            ? "When a member sends a published quiz for approval, it shows up here."
-            : "Send a published quiz for approval from the table above."
-        }
+        headers={["Quiz", "Version", "Submitted by", "Submitted", "Status", "Decision"]}
+        emptyTitle={status === "PENDING" ? "Nothing to review" : "No submissions"}
+        emptyText="When a member sends a published quiz for approval, it shows up here."
         pagination={resource.data.pagination}
         onPageChange={setPage}
         controls={
@@ -626,7 +626,7 @@ function SubmissionsTable({ classInfo, organizer, onChange }) {
           const actions =
             item.status !== "PENDING" ? (
               "—"
-            ) : organizer ? (
+            ) : (
               <span className="cl-approval">
                 <button
                   type="button"
@@ -649,46 +649,24 @@ function SubmissionsTable({ classInfo, organizer, onChange }) {
                   Reject
                 </button>
               </span>
-            ) : (
-              <button
-                type="button"
-                className="cl-secondary"
-                disabled={action.busy}
-                onClick={() => void withdraw(item)}
-              >
-                Withdraw
-              </button>
             );
 
           return {
             key: item.submission_id,
             text: `${item.quiz_title} ${item.submitter_name}`,
-            cells: organizer
-              ? [
-                  <Link
-                    to={`/app/classes/${classInfo.id}/submissions/${item.submission_id}`}
-                    title="See exactly the version that was submitted"
-                  >
-                    {item.quiz_title}
-                  </Link>,
-                  version,
-                  item.submitter_name,
-                  formatDate(item.submitted_at),
-                  statusCell,
-                  actions,
-                ]
-              : [
-                  <Link
-                    to={`/app/classes/${classInfo.id}/submissions/${item.submission_id}`}
-                    title="See exactly the version that was submitted"
-                  >
-                    {item.quiz_title}
-                  </Link>,
-                  version,
-                  formatDate(item.submitted_at),
-                  statusCell,
-                  actions,
-                ],
+            cells: [
+              <Link
+                to={`/app/classes/${classInfo.id}/submissions/${item.submission_id}`}
+                title="See exactly the version that was submitted"
+              >
+                {item.quiz_title}
+              </Link>,
+              version,
+              item.submitter_name,
+              formatDate(item.submitted_at),
+              statusCell,
+              actions,
+            ],
           };
         })}
       />
@@ -1081,7 +1059,6 @@ function ClassWorkspace({ classInfo, onChange }) {
       ) : activeSection === "Approvals" ? (
         <SubmissionsTable
           classInfo={classInfo}
-          organizer
           onChange={dashboard.reload}
         />
       ) : activeSection === "My quizzes" ? (

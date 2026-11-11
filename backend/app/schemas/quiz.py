@@ -225,6 +225,7 @@ class ClassQuizListItem(QuizListItem):
     published_version_id: int | None = None
     approval_status: SubmissionStatus | None = None
     approval_submission_id: int | None = None
+    approval_sent_by_me: bool = False
 
 
 class ClassQuizListPage(BaseModel):
