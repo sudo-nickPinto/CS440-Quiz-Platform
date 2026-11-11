@@ -1,11 +1,12 @@
+import QuizCard from "../authenticated-demo/QuizCard";
 import { useState } from "react";
-import { useAuth0 } from "@auth0/auth0-react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 import HostQuizButton from "../authenticated-demo/HostQuizButton";
 import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import RequestError from "../authenticated-demo/RequestError";
 import { useConfirm } from "../authenticated-demo/useConfirm";
+import { useFileDownload } from "../authenticated-demo/useFileDownload";
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import ClassLiveButton from "./ClassLiveButton";
 import {
@@ -339,48 +340,6 @@ function ClassSummary({ dashboard }) {
   );
 }
 
-// Same authenticated download as the session results page.
-function useCsvDownload() {
-  const { getAccessTokenSilently } = useAuth0();
-  const action = useAction();
-
-  async function download(path, fallbackName) {
-    const result = await action.run(async () => {
-      const token = await getAccessTokenSilently();
-      const base = import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "");
-      const response = await fetch(base + path, {
-        headers: { Authorization: "Bearer " + token },
-      });
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        const error = new Error(body?.error?.message || "Export failed.");
-        error.status = response.status;
-        error.code = body?.error?.code;
-        throw error;
-      }
-
-      const name = /filename="([^"]+)"/.exec(
-        response.headers.get("Content-Disposition") || "",
-      )?.[1];
-      return { blob: await response.blob(), name: name || fallbackName };
-    });
-
-    if (!result) return;
-
-    const url = URL.createObjectURL(result.blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = result.name;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  return { download, busy: action.busy, error: action.error };
-}
-
 // Quizzes the caller wrote and may host as a session of this class.
 function PresentTable({ classInfo }) {
   const account = useAccount();
@@ -452,56 +411,27 @@ function PresentTable({ classInfo }) {
 
       <RequestError error={action.error} />
 
-      <div className="cl-table-wrap">
-        <table className="cl-table">
-          <caption className="cl-sr">Quizzes you can host</caption>
-          <thead>
-            <tr>
-              <th scope="col">Quiz</th>
-              <th scope="col">Questions</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {quizzes.length === 0 ? (
-              <tr>
-                <td colSpan={3}>
-                  <div className="cl-state" role="status">
-                    <h2>No quizzes to host</h2>
-                    <p>
-                      {needle
-                        ? "No published quiz matches your search."
-                        : "Publish a quiz to host it in this class."}
-                    </p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              quizzes.map((quiz) => (
-                <tr key={quiz.quiz_id}>
-                  <td>
-                    <Link
-                      to={`/app/quizzes/${quiz.quiz_id}`}
-                      state={{ classId: classInfo.id }}
-                    >
-                      {quiz.title}
-                    </Link>
-                  </td>
-                  <td>{quiz.question_count}</td>
-                  <td>
-                    <HostQuizButton
-                      quiz={quiz}
-                      action={action}
-                      classId={classInfo.id}
-                      label="Host in this class"
-                    />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {quizzes.length === 0 ? (
+        <EmptyMessage title="No quizzes to host">
+          {needle ? "No published quiz matches your search." : "Publish a quiz to host it in this class."}
+        </EmptyMessage>
+      ) : (
+        <div className="qc-grid" aria-label="Quizzes you can host">
+          {quizzes.map((quiz) => (
+            <QuizCard
+              key={quiz.quiz_id}
+              title={quiz.title}
+              to={"/app/quizzes/" + quiz.quiz_id}
+              state={{ classId: classInfo.id }}
+              status="Published"
+              headline={quiz.question_count + (quiz.question_count === 1 ? " question" : " questions")}
+              actions={<HostQuizButton quiz={quiz} action={action} label="Host in this class" />}
+            >
+              <p>{classInfo.name}</p>
+            </QuizCard>
+          ))}
+        </div>
+      )}
     </>
   );
 }
@@ -620,7 +550,7 @@ function ClassWorkspace({ classInfo, onChange }) {
   const leave = useAction();
   const confirmer = useConfirm();
   const [copied, setCopied] = useState(false);
-  const csv = useCsvDownload();
+  const csv = useFileDownload();
   const dashboard = useClassDashboard(classInfo.id);
   const studentCount =
     dashboard.status === "ready" ? dashboard.data.student_count : null;

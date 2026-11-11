@@ -17,7 +17,6 @@ from app.schemas.results import (
 )
 from app.schemas.session import (
     ClassActiveSessionResponse,
-    SessionCreateRequest,
     SessionJoinRequest,
     SessionJoinResponse,
     SessionParticipantResponse,
@@ -37,19 +36,18 @@ router = APIRouter(tags=["sessions"])
 
 
 @router.post(
-    "/quizzes/{quiz_id}/sessions",
+    "/classes/{class_id}/quizzes/{quiz_id}/sessions",
     response_model=SessionResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def create_session_route(
+    class_id: int,
     quiz_id: int,
-    payload: SessionCreateRequest | None = None,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> SessionResponse:
-    # The body is optional: no body (or no class_id) creates an open session.
-    class_id = payload.class_id if payload is not None else None
-    return create_session(db, account, quiz_id, class_id=class_id)
+    # Every session belongs to a class; there are no open sessions.
+    return create_session(db, account, class_id, quiz_id)
 
 
 @router.post(
@@ -98,6 +96,7 @@ def _announce_join(
         joined.session.session_id,
         joined.participant.session_participant_id,
         joined.participant.display_name,
+        joined.participant.avatar_key,
     )
 
 
@@ -145,7 +144,7 @@ def get_final_results_route(
 ) -> FinalResults | ParticipantFinalResults:
     """Final standings after a session ends, e.g. when the results page reloads.
 
-    The host and Admins get every row; a participant gets their own row plus
+    The host gets every row; a participant gets their own row plus
     the top 5, the same cut as the live session_ended event.
     """
     results, viewer_participant_id = get_final_results(db, account, session_id)

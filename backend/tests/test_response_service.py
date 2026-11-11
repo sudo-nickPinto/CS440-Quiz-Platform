@@ -16,6 +16,7 @@ from app.models import (
     SessionQuestionStatus,
 )
 from app.schemas.response import ResponseSubmit
+from app.services import responses as response_service
 from app.services.responses import _evaluate_response, submit_response
 
 
@@ -119,6 +120,7 @@ class DuplicateRaceSession:
                     session_participant_id=60,
                     session_id=20,
                     account_id=7,
+                    joined_at=OPENED_AT - timedelta(minutes=1),
                 ),
                 question,
                 None,
@@ -141,8 +143,16 @@ class DuplicateRaceSession:
         self.rolled_back = True
 
 
-def test_simultaneous_second_insert_becomes_first_response_error() -> None:
+def test_simultaneous_second_insert_becomes_first_response_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     database = DuplicateRaceSession()
+    # This double has no class tables; class membership is tested elsewhere.
+    monkeypatch.setattr(
+        response_service,
+        "require_session_class_member",
+        lambda *_args: None,
+    )
 
     with pytest.raises(APIError) as caught:
         submit_response(

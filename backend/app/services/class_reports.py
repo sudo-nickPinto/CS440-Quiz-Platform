@@ -151,6 +151,7 @@ def get_class_quiz_results(
     return {
         "class_id": class_id,
         "quiz_id": quiz_id,
+        "view": "organizer" if organizer else "member",
         "title": title,
         "session_count": len(sessions),
         "participant_count": sum(s.participant_count for s in sessions),
@@ -280,6 +281,7 @@ def get_class_student_results(
     return {
         "class_id": class_id,
         "account_id": student.account_id,
+        "view": "organizer" if organizer else "member",
         "display_name": student.display_name,
         "email": student.email if organizer else None,
         "role": student.role.value,

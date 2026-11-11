@@ -1,0 +1,73 @@
+.qp .qc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 24px;
+  padding: 24px;
+}
+
+.qp .qc-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.qp .qc-card:has(details[open]) { position: relative; z-index: 5; }
+.qp .qc-banner {
+  position: relative;
+  display: flex;
+  align-items: end;
+  min-height: 140px;
+  padding: 48px 18px 18px;
+  border-bottom: var(--b);
+  background: var(--apricot);
+  color: var(--ink);
+}
+.qp .qc-card:nth-child(even) .qc-banner { background: var(--sky-soft); }
+.qp .qc-card.qc-archived .qc-banner { background: var(--sand); }
+.qp .qc-status {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 6px 10px;
+  background: var(--navy);
+  color: var(--paper);
+  border-right: var(--b-thin);
+  border-bottom: var(--b-thin);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.qp .qc-archived .qc-status { background: var(--ink); }
+.qp .qc-headline { font-size: 24px; overflow-wrap: anywhere; }
+.qp .qc-body { flex: 1; padding: 20px 18px; }
+.qp .qc-body h2 { margin: 0 0 14px; font-size: 21px; overflow-wrap: anywhere; }
+.qp .qc-body h2 a { color: var(--ink); text-decoration: none; }
+.qp .qc-body h2 a:hover { text-decoration: underline; }
+.qp .qc-meta { display: grid; gap: 8px; font-size: 14px; overflow-wrap: anywhere; }
+.qp .qc-meta p { margin: 0; }
+.qp .qc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 18px;
+  border-top: var(--b-thin);
+  background: var(--sand);
+}
+.qp .qc-footer > a { color: var(--navy); font-weight: 800; }
+.qp .qc-footer .ui-row-menu,
+.qp .qc-footer .ui-row-menu[open] { position: relative; margin: 0; flex: 0 0 auto; }
+.qp .qc-footer .ui-row-options { top: calc(100% + 8px); right: 0; left: auto; min-width: 0; width: min(260px, 72vw); }
+.qp .qc-card a:focus-visible, .qp .qc-card summary:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 4px;
+}
+.qp .qc-progress { height: 10px; border: var(--b-thin); background: var(--sand); }
+.qp .qc-progress > span { display: block; height: 100%; background: var(--navy); }
+@media (max-width: 600px) {
+  .qp .qc-grid { gap: 18px; padding: 16px; }
+}

@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from app.auth import CurrentAccount, get_active_account
-from tests.class_quiz_helpers import post_class_quiz
+from tests.class_quiz_helpers import host_quiz, post_class_quiz
 
 
 QUIZ_PAYLOAD = {
@@ -27,7 +27,7 @@ def test_session_create_and_join_use_migrated_schema(
     assert quiz_response.status_code == 201
     quiz = quiz_response.json()
 
-    session_response = client.post(f"/quizzes/{quiz['quiz_id']}/sessions")
+    session_response = host_quiz(client, quiz["quiz_id"])
     assert session_response.status_code == 201
     session = session_response.json()
     assert session["host_id"] == author.account_id
@@ -45,7 +45,7 @@ def test_session_create_and_join_use_migrated_schema(
     with client.app.state.database.engine.connect() as connection:
         stored_session = connection.execute(
             text(
-                "SELECT quiz_version_id, host_id, group_id, status "
+                "SELECT quiz_version_id, host_id, group_id, class_id, status "
                 "FROM live_session WHERE session_id = :session_id"
             ),
             {"session_id": session["session_id"]},
@@ -61,6 +61,8 @@ def test_session_create_and_join_use_migrated_schema(
     assert stored_session["quiz_version_id"] == quiz["version"]["quiz_version_id"]
     assert stored_session["host_id"] == author.account_id
     assert stored_session["group_id"] is None
+    # Every new session belongs to the quiz's class.
+    assert stored_session["class_id"] == quiz["class_id"]
     assert stored_session["status"] == "LOBBY"
     assert stored_participant["session_id"] == session["session_id"]
     assert stored_participant["account_id"] == reader.account_id

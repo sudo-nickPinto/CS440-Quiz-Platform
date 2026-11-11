@@ -42,6 +42,7 @@ from app.services.class_authorization import (
     require_class_member,
     require_class_organizer,
 )
+from app.services.spreadsheet import safe_cell
 
 RECENT_SCORE_COUNT = 5
 LIVE_STATUSES = (LiveSessionStatus.LOBBY, LiveSessionStatus.ACTIVE)
@@ -474,13 +475,6 @@ def get_class_dashboard(
     )
 
 
-def _csv_safe(value):
-    # Same rule as the session export: stop names from running as formulas.
-    if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
-        return "'" + value
-    return value
-
-
 def export_class_grades(
     db: Session,
     account: CurrentAccount,
@@ -501,7 +495,7 @@ def export_class_grades(
     writer = csv.writer(output)
 
     def write(row):
-        writer.writerow([_csv_safe(value) for value in row])
+        writer.writerow([safe_cell(value) for value in row])
 
     write(
         [

@@ -64,6 +64,10 @@ class QuestionCreate(QuizRequestModel):
         return self
 
 
+class QuestionUpdate(QuestionCreate):
+    expected_revision: int = Field(ge=1, strict=True)
+
+
 class QuizCreate(QuizRequestModel):
     title: str = Field(max_length=200)
     description: str | None = None
@@ -135,7 +139,14 @@ class QuestionResponse(BaseModel):
     explanation: str | None = None
     time_limit_seconds: int
     base_points: int
+    revision: int
     choices: list[AnswerChoiceResponse]
+
+
+class QuestionUpdateResponse(BaseModel):
+    quiz_id: int
+    quiz_revision: int
+    question: QuestionResponse
 
 
 class QuizVersionResponse(BaseModel):
@@ -160,6 +171,7 @@ class QuizResponse(BaseModel):
     visibility: QuizVisibility
     created_at: datetime
     updated_at: datetime
+    can_edit: bool
     version: QuizVersionResponse
 
 

@@ -51,10 +51,27 @@ No auth. `200 {"status": "ok", "components": {"database": "ok"}}`, or `503 datab
 The caller's account, created on first call.
 
 ```json
-{ "account_id": 7, "email": "a@gettysburg.edu", "display_name": "Ana", "role": "USER", "is_active": true }
+{
+  "account_id": 7, "email": "a@gettysburg.edu", "display_name": "Ana Lopez",
+  "first_name": "Ana", "last_name": "Lopez", "avatar_key": "owl.sky",
+  "profile_complete": true, "role": "USER", "is_active": true
+}
 ```
 
-`role` is `USER` or `ADMIN`.
+`role` is `USER` or `ADMIN`. `profile_complete` is false until both names are saved; the app shows the profile setup screen until then. `first_name`, `last_name` and `avatar_key` are `null` on a new account.
+
+### `PATCH /me`
+Saves the caller's profile and returns the same body as `GET /me`. Always send all three fields:
+
+```json
+{ "first_name": "Ana", "last_name": "Lopez", "avatar_key": "owl.sky" }
+```
+
+- Names are trimmed and must be 1–50 characters with no control characters.
+- `avatar_key` is `"figure.color"` from the preset list in `backend/app/avatars.py`, or `null` for initials. There are no uploads.
+- `display_name` becomes `"First Last"`, so every screen, report and export that shows names picks up the change.
+
+Errors: `403 inactive_account`, `422 invalid_profile` (blank or too-long name, bad characters, unknown avatar).
 
 ## Quizzes
 
@@ -191,27 +208,110 @@ revocation immediately blocks future draft reads and writes. Errors include `not
 `already_quiz_collaborator`, `quiz_owner_cannot_collaborate`,
 `collaborator_management_denied`, and `quiz_collaborator_not_found`.
 
+## Quiz submissions and approvals
+
+Task 4 adds a class approval layer around an exact immutable quiz version.
+Every route first requires an active membership in the class; missing classes,
+invited/removed/left members, outsiders, and unrelated faculty all receive
+`404 class_not_found`. Approval makes a version available to the class but does
+not grant edit, collaborator, class-management, report, or results access.
+Archived classes retain readable submission history, but cannot receive new
+submissions, approve versions, or return hostable quizzes. Organizers may still
+reject pending submissions, and submitters may still withdraw their own.
+
+### `POST /classes/{class_id}/quiz-submissions` → `201 QuizSubmissionResponse`
+
+Body: `{ "quiz_version_id": 321 }`. The caller must own the quiz or be an
+active named collaborator. The exact version must be published, current,
+non-archived, and owned by this class. A newer draft does not make a published
+version stale; a newer published version does.
+
+Errors: `404 quiz_version_not_found`, `409 class_archived`,
+`409 quiz_version_not_published`, `409 quiz_version_stale`,
+`409 quiz_submission_conflict`, and
+`500 quiz_submission_failed`. The database's generated active-version key
+makes duplicate pending/approved submissions safe under concurrent requests.
+
+### `GET /classes/{class_id}/quiz-submissions` → `200 QuizSubmissionResponse[]`
+
+Newest first, without pagination. Active faculty organizers see every class
+submission; other active members see only submissions they created.
+
+`QuizSubmissionResponse`: `submission_id, class_id, quiz_version_id,
+submitted_by_id, status, decided_by_id, submitted_at, decided_at`.
+
+### `PATCH /classes/{class_id}/quiz-submissions/{submission_id}` → `200 QuizSubmissionResponse`
+
+Body accepts only `{ "status": "APPROVED" }` or
+`{ "status": "REJECTED" }`. Only an active faculty `ORGANIZER` may decide;
+self-approval is allowed. Approval rechecks the version and that the submitter
+still has an active account and class membership and still owns or actively
+collaborates on the quiz. Rejection remains available after that eligibility
+is lost or the class is archived. Approval of an archived class returns
+`409 class_archived`. Conditional `PENDING` updates give concurrent decisions
+one winner.
+
+Errors: `404 submission_not_found`, `403 not_class_organizer`,
+`409 class_archived`, `409 submission_no_longer_eligible`,
+`409 invalid_submission_transition`, the version errors above, and
+`500 quiz_submission_decision_failed`.
+
+### `DELETE /classes/{class_id}/quiz-submissions/{submission_id}` → `204`
+
+Soft-withdraws the original submitter's pending row. The row remains as
+`WITHDRAWN`, with the submitter in `decided_by_id` and a `decided_at` timestamp.
+Rejected and withdrawn versions may be submitted again.
+Withdrawal remains available after the class is archived so pending records
+can be closed without deleting their audit history.
+
+Errors: `404 submission_not_found`, `403 not_submission_owner`,
+`409 invalid_submission_transition`, and
+`500 quiz_submission_withdrawal_failed`. A submission the caller cannot see is
+always `404`; the 403 applies only when the resource is visible.
+
+### `GET /classes/{class_id}/approved-quizzes` → `200 ApprovedQuizResponse[]`
+
+Available to every active class member. Returns approved, published, current,
+non-archived versions that still belong to the class, newest approval first.
+An archived class returns `409 class_archived` instead of a hostable list.
+
+`ApprovedQuizResponse`: `submission_id, quiz_id, quiz_version_id,
+version_number, title, author_id, approved_at, approved_by_id`.
+
+Task 4 also exposes
+`require_approved_quiz_version(db, class_id, quiz_version_id)` for Task 5. It
+uses the same filtering and raises `409 quiz_version_not_approved` when the
+exact version is not currently hostable, or `409 class_archived` when the class
+itself cannot host. Session creation calls it (Task 5).
+
 ## Sessions
 
 Statuses: `LOBBY → ACTIVE → COMPLETED`, or `LOBBY → CANCELLED`. Starting, advancing, ending and answering all happen over the WebSocket ([LIVE_PROTOCOL.md](LIVE_PROTOCOL.md) §1, §4). A session whose host is gone for 15 minutes is ended automatically (§5, PR #53).
 
-`SessionResponse`: `session_id, quiz_id, quiz_version_id, quiz_title, host_id, class_id, join_code, status, current_question_order, created_at, started_at, ended_at`. `class_id` is `null` for an open session.
+`SessionResponse`: `session_id, quiz_id, quiz_version_id, quiz_title, host_id, class_id, join_code, status, current_question_order, created_at, started_at, ended_at`. Every new session has a `class_id`. It's `null` only on old sessions from before V3, which are read-only history: nobody can join or answer in them.
 
-### `POST /quizzes/{quiz_id}/sessions` → `201 SessionResponse`
-Only the quiz's author can host it (Admins can't host other people's quizzes). Creates a `LOBBY` session with a fresh 6-digit `join_code`.
+### `POST /classes/{class_id}/quizzes/{quiz_id}/sessions` → `201 SessionResponse`
+Starts a `LOBBY` session in the class with a fresh 6-digit `join_code`. There are no open sessions: every session belongs to a class, and only the class's active members can join it. No body.
 
-Optional body: `{"class_id": 12}`. No body, or `{"class_id": null}`, creates an **open session** that anyone with the code can join. With a `class_id` it creates a **class session**: the caller must also be an active organizer of that class (or an Admin), and only the class's active members can join it.
+Rules, checked in this order:
+1. The caller is an active member of the class, and the class isn't archived.
+2. The quiz belongs to this class.
+3. The caller is the quiz owner or an active organizer of the class. Being a collaborator isn't enough, and faculty status gives no extra access.
+4. The quiz isn't archived and has a published version.
+5. That newest published version is approved for the class (Task 4). Pending, rejected, withdrawn and stale (a newer version was published) versions can't be hosted.
 
 | Status | Code | When |
 |---|---|---|
-| 403 | `session_host_denied` | Caller isn't the quiz author |
-| 403 | `not_class_organizer` | `class_id` given and the caller isn't an active organizer or Admin |
-| 404 | `class_not_found` | `class_id` given and the class doesn't exist or the caller isn't in it |
-| 409 | `class_archived` | `class_id` given and the class is archived |
-| 404 | `quiz_not_found` | |
+| 404 | `class_not_found` | The class doesn't exist or the caller isn't an active member |
+| 409 | `class_archived` | The class is archived |
+| 404 | `quiz_not_found` | The quiz doesn't exist or belongs to another class |
+| 403 | `session_host_denied` | Caller is neither the quiz owner nor a class organizer |
 | 409 | `quiz_not_hostable` | Quiz is archived, or has no published version |
+| 409 | `quiz_version_not_approved` | The newest published version isn't approved for the class |
 | 500 | `session_creation_failed` | |
 | 503 | `join_code_unavailable` | No free join code after several tries; retry |
+
+The old `POST /quizzes/{quiz_id}/sessions` route is gone.
 
 ### `POST /sessions/join` → `201 SessionJoinResponse`
 Any active account. Body: `{"join_code": "123456"}` (6 digits; surrounding spaces are trimmed). Works in `LOBBY` or `ACTIVE`; a late joiner starts from the next question. The host is notified over the WebSocket after the commit.
@@ -220,14 +320,14 @@ Response: `{ "session": SessionResponse, "participant": { "session_participant_i
 
 | Status | Code | When |
 |---|---|---|
-| 403 | `not_class_member` | It's a class session and the caller isn't an active member, even with the right code |
+| 403 | `not_class_member` | The caller isn't an active member of the session's class, even with the right code (also for old sessions with no class) |
 | 404 | `join_code_not_found` | No LOBBY/ACTIVE session uses the code |
 | 409 | `host_cannot_join` | The host tried to join their own session |
 | 409 | `session_already_joined` | This account already has a participant row, even one that has left |
 | 500 | `session_join_failed` | |
 
 ### `POST /sessions/{session_id}/join` → `201 SessionJoinResponse`
-The class page's Live button: join a **class session** by id, with no code. Same response, errors and late-join rules as joining by code. Only active members of the session's class can use it. Open sessions answer `404 session_not_found` so they still need their code.
+The class page's Live button: join a session by id, with no code. Same response, errors and late-join rules as joining by code. Only active members of the session's class can use it; anyone else gets `404 session_not_found`.
 
 ### `GET /classes/{class_id}/active-sessions` → `200 ClassActiveSession[]`
 Any active member. The class's `LOBBY` and `ACTIVE` sessions, newest first; the class page polls it every 5 seconds to draw the Live button.
@@ -240,7 +340,7 @@ Host, Admin, or a participant who hasn't left.
 Errors: `403 session_access_denied`, `404 session_not_found`, `500 invalid_session`.
 
 ### `GET /sessions/{session_id}/participants` → `200 SessionParticipant[]`
-Host or Admin. Participants who haven't left, in join order.
+Host or Admin. Participants who haven't left, in join order. Each row is `{ session_participant_id, account_id, display_name, avatar_key, joined_at }`.
 
 Errors: `403 session_access_denied`, `404 session_not_found`, `500 invalid_participant`.
 
@@ -256,6 +356,7 @@ The receipt deliberately leaves out correctness and points until the question cl
 | 409 | `session_not_active` | Session isn't ACTIVE |
 | 409 | `question_not_open` | Question is PENDING or CLOSED |
 | 409 | `response_deadline_passed` | Arrived after `closes_at` |
+| 409 | `joined_after_question_opened` | Joined after this question opened (`joined_at > opened_at`); they start with the next question |
 | 409 | `response_already_submitted` | Already answered this question |
 | 422 | `choice_not_for_question` | `choice_id` belongs to another question |
 | 500 | `invalid_question_timing` | Server timestamps are inconsistent |
@@ -270,8 +371,8 @@ Shared errors: `403 session_access_denied`, `404 session_not_found`, `409 result
 
 ### `GET /sessions/{session_id}/results` → `200 FinalResults | ParticipantFinalResults`
 Final standings, matching the live `session_ended` event. Ties share a rank (1, 1, 3).
-- Host or Admin: `{ session_id, status, ended_at, standings: [{ session_participant_id, display_name, total_score, correct_count, final_rank }] }`.
-- Participant: `{ session_id, status, ended_at, me: <own standing or null>, leaderboard: [{ display_name, total_score, final_rank }] }` (top 5).
+- Host or Admin: `{ session_id, status, ended_at, standings: [{ session_participant_id, display_name, avatar_key, total_score, correct_count, final_rank }] }`.
+- Participant: `{ session_id, status, ended_at, me: <own standing or null>, leaderboard: [{ display_name, avatar_key, total_score, final_rank }] }` (top 5).
 
 ### `GET /sessions/{session_id}/report` → `200`
 Per-question breakdown for the results pages, sent with `Cache-Control: no-store`.
@@ -358,16 +459,30 @@ Organizers and Admins see everyone. Members see only their own rows, and class-w
 
 - `GET /classes/{class_id}/sessions/{session_id}/results`: the same body as `GET /sessions/{session_id}/report`, plus `class_id` and `started_at`. Any organizer gets every player (`view: "host"`), not just the one who hosted. A member gets `view: "participant"` with only their own row.
   - Errors: `404 session_not_found` (a session from another class, an open session, or one that isn't `COMPLETED`), `403 participant_report_denied` (a member who didn't play it).
-- `GET /classes/{class_id}/quizzes/{quiz_id}/results`: every completed presentation of the quiz in this class, newest first. It returns `{ class_id, quiz_id, title, session_count, participant_count, average_score, sessions }`.
+- `GET /classes/{class_id}/quizzes/{quiz_id}/results`: every completed presentation of the quiz in this class, newest first. It returns `{ class_id, quiz_id, view, title, session_count, participant_count, average_score, sessions }`, where `view` is `organizer` or `member`.
   - Each session has the same fields as a `/sessions` item, plus `results: [{ account_id, name, rank, points, correct }]`. Members only get their own result.
   - `average_score` is averaged over every player in every session (organizers only).
   - Errors: `404 quiz_not_found`, also for a quiz that has no completed session in this class.
 - `GET /classes/{class_id}/students/{account_id}/results`: one student's history in the class. Members can only ask for themselves (`403 not_class_organizer` otherwise). It returns:
+  - `view`: `organizer` or `member`;
   - `display_name`, `email` (organizers only), `role` and `status`. Removed and departed students keep their history;
   - `class_session_count`, `session_count`, `attendance_rate`, `total_points`, `average_score`, `correct_count` and `incorrect_count`;
   - `class_average`, organizers only, using the same formula as the dashboard;
   - `sessions`: every completed class session, newest first, with `played, points, rank, question_count, correct, incorrect`. The last four are null when the student missed it. Unanswered questions count as incorrect.
   - Errors: `404 student_not_found` (never in this class).
+
+### Excel exports of the class reports → `200 .xlsx`
+Each export is built from the matching report above, so the workbook shows the same numbers. They return `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` with `Cache-Control: no-store`. They take the same errors as the report, and times are in UTC.
+
+| Endpoint | Who | File | Sheets |
+|---|---|---|---|
+| `GET /classes/{class_id}/sessions/{session_id}/export.xlsx` | Organizers | `class-{cid}-session-{sid}-results.xlsx` | **Summary**; **Scores** (rank, participant, total points, correct); **Answers** (one row per participant per question: result, selected and correct answer, time, points) |
+| `GET /classes/{class_id}/quizzes/{quiz_id}/export.xlsx` | Organizers | `class-{cid}-quiz-{qid}-results.xlsx` | **Summary**; **Presentations** (one row per completed presentation); **Results** (every player's result in each presentation) |
+| `GET /classes/{class_id}/students/{account_id}/export.xlsx` | Organizers, or the student themselves | `class-{cid}-student-{aid}-results.xlsx` | **Summary** (totals, attendance, class average); **Sessions** (every completed class session, played or not) |
+
+- A member who exports a session or quiz gets `403 not_class_organizer`. So does a member who exports another student.
+- A member's own student export leaves out the email and the class average, as the report does.
+- Cells starting with `=`, `+`, `-` or `@` get a leading `'`, as in the CSV exports, so they stay text. Control characters that Excel can't store are dropped.
 
 ### `GET /classes/{class_id}/grades/export.csv` → `200 text/csv`
 Organizers only. Returns `{class-name}-grades.csv`, a gradebook (UTF-8 with BOM, `no-store`):

@@ -18,6 +18,7 @@ from app.models.quiz import (
     QuizVersion,
     QuizVisibility,
 )
+from app.models.quiz_submission import QuizSubmission, SubmissionStatus
 from app.models.session import (
     LiveSession,
     LiveSessionStatus,
@@ -44,8 +45,10 @@ __all__ = [
     "QuizCollaborator",
     "QuizCollaboratorEvent",
     "QuizStatus",
+    "QuizSubmission",
     "QuizVersion",
     "QuizVisibility",
+    "SubmissionStatus",
     "effective_role",
     "LiveSession",
     "LiveSessionStatus",

@@ -82,7 +82,11 @@ def compute_final_standings(db: Session, session_id: int) -> list[FinalStanding]
     the final board never reshuffles people the last question left tied.
     """
     participants = db.execute(
-        select(SessionParticipant.session_participant_id, Account.display_name)
+        select(
+            SessionParticipant.session_participant_id,
+            Account.display_name,
+            Account.avatar_key,
+        )
         .join(Account, Account.account_id == SessionParticipant.account_id)
         .where(SessionParticipant.session_id == session_id)
     ).all()
@@ -112,15 +116,18 @@ def compute_final_standings(db: Session, session_id: int) -> list[FinalStanding]
                 session_participant_id,
                 display_name,
                 *totals.get(session_participant_id, (0, 0)),
+                avatar_key,
             )
-            for session_participant_id, display_name in participants
+            for session_participant_id, display_name, avatar_key in participants
         ),
         key=lambda row: (-row[2], row[1].casefold(), row[1], row[0]),
     )
     standings = []
     previous_score: int | None = None
     rank = 0
-    for position, (participant_id, name, score, correct) in enumerate(rows, start=1):
+    for position, (participant_id, name, score, correct, avatar) in enumerate(
+        rows, start=1
+    ):
         if score != previous_score:
             rank = position
             previous_score = score
@@ -128,6 +135,7 @@ def compute_final_standings(db: Session, session_id: int) -> list[FinalStanding]
             FinalStanding(
                 session_participant_id=participant_id,
                 display_name=name,
+                avatar_key=avatar,
                 total_score=score,
                 correct_count=correct,
                 final_rank=rank,
@@ -276,6 +284,63 @@ def cancel_session(
         account,
         session_id,
         ended_at or _utc_now(),
+    )
+
+
+def class_departure(
+    db: Session,
+    session_id: int,
+    account_id: int,
+) -> tuple[ParticipantLeft, int | None] | None:
+    """What the host needs after someone was dropped from a session because
+    they left or were removed from its class: who left, the new participant
+    count, and the open question to re-check, if any."""
+    row = db.execute(
+        select(SessionParticipant.session_participant_id, Account.display_name)
+        .join(Account, Account.account_id == SessionParticipant.account_id)
+        .where(
+            SessionParticipant.session_id == session_id,
+            SessionParticipant.account_id == account_id,
+        )
+    ).one_or_none()
+    if row is None:
+        return None
+    participant_count = int(
+        db.scalar(
+            select(func.count(SessionParticipant.session_participant_id)).where(
+                SessionParticipant.session_id == session_id,
+                SessionParticipant.left_at.is_(None),
+            )
+        )
+        or 0
+    )
+    open_question_id = db.scalar(
+        select(SessionQuestion.session_question_id).where(
+            SessionQuestion.session_id == session_id,
+            SessionQuestion.status == SessionQuestionStatus.OPEN,
+        )
+    )
+    left = ParticipantLeft(
+        session_id=session_id,
+        session_participant_id=row.session_participant_id,
+        display_name=row.display_name or "",
+        participant_count=participant_count,
+    )
+    return left, open_question_id
+
+
+def live_class_session_ids(db: Session, class_id: int) -> list[int]:
+    """The class's LOBBY or ACTIVE sessions, for closing a removed member's
+    live sockets."""
+    return list(
+        db.scalars(
+            select(LiveSession.session_id).where(
+                LiveSession.class_id == class_id,
+                LiveSession.status.in_(
+                    (LiveSessionStatus.LOBBY, LiveSessionStatus.ACTIVE)
+                ),
+            )
+        )
     )
 
 
@@ -462,6 +527,7 @@ def load_final_results(db: Session, session: LiveSession) -> FinalResults:
         select(
             Result.session_participant_id,
             Account.display_name,
+            Account.avatar_key,
             Result.total_score,
             Result.correct_count,
             Result.final_rank,
@@ -478,6 +544,7 @@ def load_final_results(db: Session, session: LiveSession) -> FinalResults:
             FinalStanding(
                 session_participant_id=row.session_participant_id,
                 display_name=row.display_name,
+                avatar_key=row.avatar_key,
                 total_score=row.total_score,
                 correct_count=row.correct_count,
                 final_rank=row.final_rank,

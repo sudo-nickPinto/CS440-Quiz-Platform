@@ -622,6 +622,11 @@
   color: var(--gray);
 }
 
+.qp .ui-published.ui-draft {
+  background: var(--apricot);
+  color: var(--ink);
+}
+
 .qp .ui-quiz-title {
   padding: 12px 18px;
 }
@@ -712,32 +717,13 @@
   text-decoration: none;
 }
 
-/* Host live session inside the menu: "For [class ▾]" above the button */
+/* Host live session button inside the menu */
 .qp .ui-row-options > .ui-host-item {
   display: grid;
   gap: 8px;
   padding: 10px 14px;
   border-bottom: var(--b-thin);
   background: var(--paper);
-}
-
-.qp .ui-host-item .ui-host-for {
-  display: flex;
-  justify-content: space-between;
-  color: var(--gray);
-  font-size: 11px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.qp .ui-host-item .ui-host-for select {
-  flex: 1;
-  max-width: none;
-  min-height: 34px;
-  color: var(--ink);
-  font-size: 14px;
-  letter-spacing: 0;
-  text-transform: none;
 }
 
 .qp .ui-host-item > button {
@@ -1452,6 +1438,138 @@
   outline: none;
 }
 
+.qp .qe-collaboration {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: var(--b);
+  background: var(--paper);
+}
+
+.qp .qe-live-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.qp .qe-live-state > span:last-child,
+.qp .qe-live-message p {
+  display: grid;
+  gap: 2px;
+}
+
+.qp .qe-live-state b,
+.qp .qe-live-message strong {
+  font-size: 13px;
+  letter-spacing: 0.3px;
+}
+
+.qp .qe-live-state small,
+.qp .qe-live-message small {
+  color: var(--gray);
+  font-size: 12px;
+}
+
+.qp .qe-live-dot {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--orange-deep);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.qp .qe-collaboration.is-open .qe-live-dot {
+  background: #54b76b;
+}
+
+.qp .qe-collaboration.is-connecting .qe-live-dot,
+.qp .qe-collaboration.is-reconnecting .qe-live-dot {
+  animation: qb-live-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes qb-live-pulse {
+  to {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+}
+
+.qp .qe-live-message {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 720px;
+  padding: 8px 10px;
+  border: var(--b-thin);
+  background: var(--sky-soft);
+}
+
+.qp .qe-live-message.is-warning {
+  background: var(--apricot);
+}
+
+.qp .qe-live-message.is-success {
+  background: #e4f5e7;
+}
+
+.qp .qe-live-message > span:first-child {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  font-weight: 900;
+}
+
+.qp .qe-live-message p {
+  flex: 1;
+  margin: 0;
+}
+
+.qp .qe-live-message .qb-btn {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.qp .qe-question-save {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.qp .qe-question-save > span {
+  color: var(--ink-muted, #5d5968);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.qp .qe-question-save > span.is-saving,
+.qp .qe-question-save > span.is-pending {
+  color: #725b00;
+}
+
+.qp .qe-question-save > span.is-saved {
+  color: #24733c;
+}
+
+.qp .qe-question-save > span.is-remote {
+  color: #0b4b8a;
+}
+
+.qp .qe-question-save > span.is-error,
+.qp .qe-question-save > span.is-conflict,
+.qp .qe-question-save > span.is-invalid {
+  color: #a3182d;
+}
+
 .qp .qe-top {
   display: flex;
   align-items: center;
@@ -2130,30 +2248,12 @@
   font-size: 14px;
 }
 
-/* Host: "For [open session / class ▾]" next to the orange button */
+/* Host: the orange button on the quiz page */
 .qp .qv-host {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-}
-
-.qp .qv-host .ui-host-for {
-  color: var(--gray);
-  font-size: 12px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.qp .qv-host .ui-host-for select {
-  max-width: 320px;
-  min-height: 44px;
-  border: var(--b);
-  box-shadow: 3px 3px 0 var(--ink);
-  color: var(--ink);
-  font-size: 14px;
-  letter-spacing: 0;
-  text-transform: none;
 }
 
 .qp .qv-host > button {
@@ -2177,6 +2277,132 @@
 .qp .qv-host > button:active:not(:disabled) {
   transform: translate(4px, 4px);
   box-shadow: none;
+}
+
+/* Quiz sharing: deliberately uses the same heavy borders and paper cards as
+   the editor so it reads as part of QuizBurg rather than a settings widget. */
+.qp .qv-collaborators {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr);
+  gap: 18px 28px;
+  padding: 22px clamp(16px, 4vw, 40px);
+  border-bottom: var(--b);
+  background: var(--sky-soft);
+}
+
+.qp .qv-collaborators-copy h2 {
+  margin: 4px 0 8px;
+  font: 20px "Archivo Black", sans-serif;
+  text-transform: uppercase;
+}
+
+.qp .qv-collaborators-copy p {
+  max-width: 560px;
+  margin: 0;
+  color: var(--gray);
+  line-height: 1.5;
+}
+
+.qp .qv-collaborator-form label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .qv-collaborator-form > div {
+  display: flex;
+  gap: 10px;
+}
+
+.qp .qv-collaborator-form input {
+  flex: 1;
+  min-width: 0;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.qp .qv-collaborator-form .qb-btn {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.qp .qv-share-message,
+.qp .qv-collaborator-list,
+.qp .qv-collaborators > .ui-error {
+  grid-column: 2;
+}
+
+.qp .qv-share-message {
+  margin: -8px 0 0;
+  padding: 8px 10px;
+  border: var(--b-thin);
+  background: #e4f5e7;
+  font-weight: 700;
+}
+
+.qp .qv-collaborator-list {
+  display: grid;
+  gap: 8px;
+}
+
+.qp .qv-collaborator-list > p {
+  margin: 0;
+}
+
+.qp .qv-collaborator-list article {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: var(--b-thin);
+  background: var(--paper);
+}
+
+.qp .qv-collaborator-avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 2px solid var(--ink);
+  background: var(--apricot);
+  font: 16px "Archivo Black", sans-serif;
+}
+
+.qp .qv-collaborator-list article > div {
+  display: grid;
+  min-width: 0;
+}
+
+.qp .qv-collaborator-list article > div span {
+  color: var(--gray);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.qp .qv-collaborator-role {
+  padding: 4px 8px;
+  border: var(--b-thin);
+  background: var(--sand);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .qv-remove-collaborator {
+  color: var(--red, #a91f2f);
+}
+
+.qp .qv-collaborator-empty {
+  padding: 12px;
+  border: 2px dashed var(--gray);
+  background: color-mix(in srgb, var(--paper) 78%, transparent);
+  color: var(--gray);
 }
 
 .qp .qv-gap {
@@ -2257,6 +2483,29 @@
 
   .qp .qv-explanation {
     padding: 10px 12px 12px;
+  }
+
+  .qp .qv-collaborators {
+    grid-template-columns: 1fr;
+  }
+
+  .qp .qv-share-message,
+  .qp .qv-collaborator-list,
+  .qp .qv-collaborators > .ui-error {
+    grid-column: 1;
+  }
+
+  .qp .qv-collaborator-form > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .qp .qv-collaborator-list article {
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+  }
+
+  .qp .qv-collaborator-role {
+    display: none;
   }
 }
 
@@ -2679,7 +2928,11 @@
 }
 
 .qp .lv-chip {
-  padding: 8px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 6px 14px 6px 6px;
   border: var(--b-thin);
   background: var(--sky-soft);
   box-shadow: 3px 3px 0 var(--ink);
@@ -2688,6 +2941,14 @@
   font-weight: 700;
   overflow-wrap: anywhere;
   animation: lv-chip-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.qp .lv-chip-avatar {
+  --avatar-size: 32px;
+}
+
+.qp .lv-chip-name {
+  min-width: 0;
 }
 
 @keyframes lv-chip-in {
@@ -2801,7 +3062,8 @@
   font-weight: 700;
 }
 
-/* Answer colours, shared by the projector letter tiles and the phone */
+/* Answer colours, shared by the full projector cards, letter tiles and phone */
+.qp .lv-host-answer.ui-tone-0,
 .qp .lv .ui-tone-0 .lv-index,
 .qp .lv-index.ui-tone-0,
 .qp .lv-my-pick.ui-tone-0 {
@@ -2809,6 +3071,7 @@
   color: #ffffff;
 }
 
+.qp .lv-host-answer.ui-tone-1,
 .qp .lv .ui-tone-1 .lv-index,
 .qp .lv-index.ui-tone-1,
 .qp .lv-my-pick.ui-tone-1 {
@@ -2816,6 +3079,7 @@
   color: #ffffff;
 }
 
+.qp .lv-host-answer.ui-tone-2,
 .qp .lv .ui-tone-2 .lv-index,
 .qp .lv-index.ui-tone-2,
 .qp .lv-my-pick.ui-tone-2 {
@@ -2823,6 +3087,7 @@
   color: #222222;
 }
 
+.qp .lv-host-answer.ui-tone-3,
 .qp .lv .ui-tone-3 .lv-index,
 .qp .lv-index.ui-tone-3,
 .qp .lv-my-pick.ui-tone-3 {
@@ -3151,7 +3416,7 @@
 
 .qp .lv-board li {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) auto;
+  grid-template-columns: 72px auto minmax(0, 1fr) auto;
   align-items: center;
   min-height: 68px;
   padding-right: 22px;
@@ -3189,9 +3454,14 @@
   color: var(--ink);
 }
 
+.qp .lv-board-avatar {
+  --avatar-size: 40px;
+  margin-left: 18px;
+}
+
 .qp .lv-board li > strong {
   min-width: 0;
-  padding-left: 18px;
+  padding: 0 12px;
   overflow: hidden;
   font: 19px "Archivo Black", sans-serif;
   text-overflow: ellipsis;
@@ -3518,7 +3788,13 @@
   white-space: nowrap;
 }
 
-.qp .lv-podium-name span {
+.qp .lv-podium-avatar {
+  --avatar-size: 48px;
+  display: grid;
+  margin: 0 auto 8px;
+}
+
+.qp .lv-podium-name .lv-podium-pts {
   color: var(--gray);
   font-size: 14px;
   font-weight: 700;
@@ -3721,8 +3997,13 @@
   }
 
   .qp .lv-chip {
-    padding: 6px 10px;
+    gap: 8px;
+    padding: 5px 10px 5px 5px;
     font-size: 14px;
+  }
+
+  .qp .lv-chip-avatar {
+    --avatar-size: 26px;
   }
 
   .qp .lv-hq,
@@ -3797,12 +4078,17 @@
   }
 
   .qp .lv-board li {
-    grid-template-columns: 52px minmax(0, 1fr) auto;
+    grid-template-columns: 52px auto minmax(0, 1fr) auto;
     padding-right: 10px;
   }
 
+  .qp .lv-board-avatar {
+    --avatar-size: 32px;
+    margin-left: 10px;
+  }
+
   .qp .lv-board li > strong {
-    padding-left: 10px;
+    padding: 0 8px;
     font-size: 16px;
   }
 
@@ -3824,7 +4110,12 @@
     font-size: 15px;
   }
 
-  .qp .lv-podium-name span {
+  .qp .lv-podium-avatar {
+    --avatar-size: 34px;
+    margin-bottom: 6px;
+  }
+
+  .qp .lv-podium-name .lv-podium-pts {
     font-size: 12px;
   }
 
@@ -4993,6 +5284,7 @@
   padding: 20px 34px;
   font-size: clamp(15px, 1.6vw, 22px);
   letter-spacing: 1px;
+  white-space: nowrap;
 }
 
 .qp .cl-titlebar .cl-new[aria-expanded="true"] {
@@ -5538,4 +5830,17 @@
   font-weight: 700;
   text-decoration-thickness: 2px;
   text-underline-offset: 4px;
+}
+
+/* Header avatar: the summary keeps its border and shadow; the preset tile
+   fills it. */
+.qp .ui-avatar .avatar {
+  --avatar-size: 38px;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.qp .ui-user .qb-account-menu button + button {
+  border-top: var(--b-thin);
 }

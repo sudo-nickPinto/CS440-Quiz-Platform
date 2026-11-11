@@ -1,7 +1,7 @@
+import QuizCard from "./QuizCard";
 import { useState } from "react";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router";
 
-import { useClassesResource } from "../classes/classResources";
 import { useAccount } from "./account";
 import HostQuizButton from "./HostQuizButton";
 import { useAction, useApi, useResource } from "./rest";
@@ -39,11 +39,6 @@ export default function PreviewDashboard() {
 
   const presenting = view === "present";
   const resource = useResource(presenting ? "/quizzes" : null);
-  const classes = useClassesResource();
-  const hostClasses =
-    classes.status === "ready"
-      ? classes.data.filter((item) => item.canManage && !item.archived)
-      : [];
 
   if (view === "taken") {
     return <Navigate to="/app/dashboard/participate" replace />;
@@ -56,8 +51,7 @@ export default function PreviewDashboard() {
   const quizzes = (resource.data || [])
     .filter(
       (quiz) =>
-        quiz.author_id === account.account_id &&
-        ["PUBLISHED", "ARCHIVED"].includes(quiz.status) &&
+        ["DRAFT", "PUBLISHED", "ARCHIVED"].includes(quiz.status) &&
         quiz.title.toLowerCase().includes(query.trim().toLowerCase()),
     )
     .sort((a, b) => {
@@ -190,7 +184,7 @@ export default function PreviewDashboard() {
           <input
             type="search"
             className="ui-search"
-            aria-label="Search your published and archived quizzes"
+            aria-label="Search your quizzes"
             placeholder="Search your quizzes…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -250,14 +244,6 @@ export default function PreviewDashboard() {
 
         {presenting ? (
           <>
-            <div className="ui-list-heading" aria-hidden="true">
-              <span>Status</span>
-              <span>Quiz</span>
-              <span>Qs</span>
-              <span>Created</span>
-              <span className="ui-sr">Actions</span>
-            </div>
-
             {resource.loading && (
               <p className="ui-empty" role="status">
                 Loading your quizzes…
@@ -286,84 +272,80 @@ export default function PreviewDashboard() {
               </div>
             )}
 
-            {quizzes.map((quiz) => (
-              <article className="ui-quiz-row" key={quiz.quiz_id}>
-                <span
-                  className={
-                    quiz.status === "ARCHIVED"
-                      ? "ui-published ui-archived"
-                      : "ui-published"
-                  }
-                >
-                  {quiz.status === "ARCHIVED" ? "Archived" : "Published"}
-                </span>
+            {!resource.loading && !resource.error && quizzes.length > 0 && (
+              <div className="qc-grid" aria-label="Your quizzes">
+                {quizzes.map((quiz) => (
+                  <QuizCard
+                    key={quiz.quiz_id}
+                    title={quiz.title}
+                    to={"/app/quizzes/" + quiz.quiz_id}
+                    status={
+                      quiz.status === "ARCHIVED"
+                        ? "Archived"
+                        : quiz.status === "DRAFT"
+                          ? "Draft"
+                          : "Published"
+                    }
+                    archived={quiz.status === "ARCHIVED"}
+                    headline={
+                      quiz.question_count +
+                      " " +
+                      plural(quiz.question_count, "question")
+                    }
+                    actions={
+                      quiz.status !== "ARCHIVED" ? (
+                        <details className="ui-row-menu">
+                          <summary aria-label={`Actions for ${quiz.title}`}>
+                            ⋯
+                          </summary>
 
-                <div className="ui-quiz-title">
-                  <Link to={`/app/quizzes/${quiz.quiz_id}`}>{quiz.title}</Link>
+                          <div className="ui-row-options" role="menu">
+                            <Link
+                              role="menuitem"
+                              to={`/app/quizzes/${quiz.quiz_id}/edit`}
+                            >
+                              <span aria-hidden="true">✎</span> Edit
+                            </Link>
 
-                  <small>
-                    {quiz.question_count}{" "}
-                    {plural(quiz.question_count, "question")}
-                    {" · created "}
-                    {displayDate(quiz.created_at)}
-                  </small>
-                </div>
+                            {quiz.status === "PUBLISHED" &&
+                              quiz.author_id === account.account_id && (
+                                <div
+                                  className="ui-host-item"
+                                  role="group"
+                                  aria-label="Host live session"
+                                >
+                                  <HostQuizButton
+                                    quiz={quiz}
+                                    action={action}
+                                  />
+                                </div>
+                              )}
 
-                <span className="ui-desktop-cell">{quiz.question_count}</span>
-
-                <span className="ui-desktop-cell">
-                  {displayDate(quiz.created_at)}
-                </span>
-
-                {quiz.status === "PUBLISHED" ? (
-                  <details className="ui-row-menu">
-                    <summary aria-label={`Actions for ${quiz.title}`}>
-                      ⋯
-                    </summary>
-
-                    <div className="ui-row-options" role="menu">
-                      {quiz.author_id === account.account_id && (
-                        <Link
-                          role="menuitem"
-                          to={`/app/quizzes/${quiz.quiz_id}/edit`}
-                        >
-                          <span aria-hidden="true">✎</span> Edit
-                        </Link>
-                      )}
-
-                      {quiz.author_id === account.account_id && (
-                        <div
-                          className="ui-host-item"
-                          role="group"
-                          aria-label="Host live session"
-                        >
-                          <HostQuizButton
-                            quiz={quiz}
-                            action={action}
-                            hostClasses={hostClasses}
-                            hostClassesStatus={classes.status}
-                            hostClassesError={classes.error}
-                            reloadHostClasses={classes.reload}
-                          />
-                        </div>
-                      )}
-
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="ui-danger"
-                        disabled={action.busy}
-                        onClick={() => void archive(quiz)}
-                      >
-                        <span aria-hidden="true">▣</span> Archive
-                      </button>
-                    </div>
-                  </details>
-                ) : (
-                  <span className="ui-row-menu" aria-hidden="true" />
-                )}
-              </article>
-            ))}
+                            {quiz.author_id === account.account_id && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="ui-danger"
+                                disabled={action.busy}
+                                onClick={() => void archive(quiz)}
+                              >
+                                <span aria-hidden="true">▣</span> Archive
+                              </button>
+                            )}
+                          </div>
+                        </details>
+                      ) : null
+                    }
+                  >
+                    <p>
+                      Created {displayDate(quiz.created_at)}
+                      {quiz.author_id !== account.account_id &&
+                        " · Shared with you"}
+                    </p>
+                  </QuizCard>
+                ))}
+              </div>
+            )}
           </>
         ) : (
           <ParticipantHistory />

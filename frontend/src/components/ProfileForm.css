@@ -1,0 +1,137 @@
+/* Profile form: shared by the setup screen (sign-in card) and the in-app
+   Edit profile page, so it styles its own controls in both places. */
+.pf {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  min-width: 0;
+  margin: 28px 0 0;
+}
+
+.pf-preview {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 14px;
+  border: var(--b-thin);
+  background: var(--sand);
+}
+
+.pf-preview .avatar {
+  border: var(--b);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.pf-preview-text {
+  min-width: 0;
+}
+
+.pf-preview-label {
+  margin: 0;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.pf-preview-name {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 22px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.pf .pf-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pf-names {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.pf .pf-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+}
+
+.pf .pf-field > span {
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.pf .pf-field input.pf-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: var(--b);
+  border-radius: 0;
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--ink);
+  font: 500 16px/1.4 "Space Grotesk", system-ui, sans-serif;
+}
+
+.pf .pf-field input.pf-input:focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 3px;
+}
+
+.pf .pf-body:disabled {
+  opacity: 0.65;
+}
+
+.pf-note {
+  margin: 0 0 14px;
+  padding: 12px;
+  border: var(--b-thin);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pf-note-error {
+  background: var(--apricot);
+}
+
+.pf-note-saved {
+  background: var(--sky-soft);
+  color: var(--navy);
+}
+
+/* Keep the live regions in the DOM so updates are announced. */
+.pf-note:empty {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+@media (min-width: 641px) {
+  .pf-names {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

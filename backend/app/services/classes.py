@@ -24,6 +24,7 @@ from app.services.class_authorization import (
     require_class_member,
     require_class_organizer,
 )
+from app.services.class_access import leave_class_sessions
 from app.services.class_memberships import _load_class, _protect_last_organizer
 from app.models.account import AccountRole, effective_role
 
@@ -333,7 +334,9 @@ def leave_class(
     db: Session,
     account: CurrentAccount,
     class_id: int,
-) -> None:
+) -> list[int]:
+    """Leave a class. Returns the live sessions the caller was playing in,
+    which now mark them as left."""
     # Roster mutations lock the class before any membership rows. Following
     # the same order here serializes leave with organizer removal/demotion and
     # prevents a stale ACTIVE read from overwriting REMOVED with LEFT.
@@ -353,4 +356,8 @@ def leave_class(
     membership.status = MembershipStatus.LEFT
     membership.decided_by_id = account.account_id
     membership.decided_at = _utc_now_milliseconds()
+    left_sessions = leave_class_sessions(
+        db, class_id, account.account_id, membership.decided_at
+    )
     _commit(db, "class_leave_failed", "Could not leave the class.")
+    return left_sessions

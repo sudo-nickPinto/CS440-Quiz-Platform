@@ -147,9 +147,12 @@ def test_a_new_draft_cannot_be_hosted(classes) -> None:
     act_as(client, identities["prof"])
     quiz = create(client, data["main"])
 
-    response = client.post(f"/quizzes/{quiz['quiz_id']}/sessions")
+    response = client.post(
+        f"/classes/{data['main']}/quizzes/{quiz['quiz_id']}/sessions"
+    )
 
     assert response.status_code == 409
+    assert response.json()["error"]["code"] == "quiz_not_hostable"
 
 
 @pytest.mark.parametrize("name", ["invited", "left", "removed", "outsider"])

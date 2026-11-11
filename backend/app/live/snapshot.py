@@ -34,6 +34,10 @@ def resolve_membership(
         raise LiveCloseError(CloseCode.NOT_FOUND, "session_not_found")
     if session.status in (LiveSessionStatus.COMPLETED, LiveSessionStatus.CANCELLED):
         raise LiveCloseError(CloseCode.SESSION_OVER, "session_over")
+    # Hosts need active class membership too, so a removed host (or the host
+    # of an old session with no class) can't reconnect and keep control.
+    if not may_play(db, session, account.account_id):
+        raise LiveCloseError(CloseCode.FORBIDDEN, "not_class_member")
     if session.host_id == account.account_id:
         return "host", None
 
@@ -46,8 +50,6 @@ def resolve_membership(
     )
     if participant_id is None:
         raise LiveCloseError(CloseCode.FORBIDDEN, "session_access_denied")
-    if not may_play(db, session, account.account_id):
-        raise LiveCloseError(CloseCode.FORBIDDEN, "not_class_member")
     return "participant", participant_id
 
 
@@ -78,6 +80,7 @@ def participant_results_view(
         "leaderboard": [
             {
                 "display_name": row.display_name,
+                "avatar_key": row.avatar_key,
                 "cumulative_score": row.cumulative_score,
                 "rank": row.rank,
             }
