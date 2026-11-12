@@ -425,10 +425,9 @@ Extra error: `500 results_incomplete`.
 
 Only an active faculty organizer of the session's class may use these routes.
 The correction belongs to this completed session only: it never edits the quiz
-or any other presentation. Every applied correction records its actor, reason,
-old and new choices, timestamp, and score revision.
+or any other presentation. Every applied correction records its actor, old and
+new choices, timestamp, and score revision.
 
-- `GET /sessions/{session_id}/questions/{session_question_id}/correction-preview?choice_id={choice_id}` returns the projected question points, totals, and ranks without saving anything.
 - `POST /sessions/{session_id}/questions/{session_question_id}/correct-answer` applies the correction and recalculates stored responses, totals, correct counts, and ranks in one transaction.
 
 ```json
@@ -438,11 +437,9 @@ old and new choices, timestamp, and score revision.
 }
 ```
 
-`reason` is optional. When omitted or blank, the audit log records
-`Corrected by class organizer.`
-
-The `expected_score_revision` must come from the preview. A concurrent rescore
-returns `409 score_revision_conflict`; the caller must load a fresh preview.
+`expected_score_revision` comes from the session report's `score_revision`.
+A concurrent rescore returns `409 score_revision_conflict`; the caller must
+reload the report before trying again.
 Other errors include `403 not_class_organizer`, `409 session_not_completed`,
 `409 session_question_not_closed`, `409 correct_answer_unchanged`, and
 `422 choice_not_in_question`.

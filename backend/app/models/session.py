@@ -320,7 +320,6 @@ class SessionAnswerCorrection(Base):
         ForeignKey("answer_choice.choice_id", ondelete="RESTRICT"),
         nullable=False,
     )
-    reason: Mapped[str] = mapped_column(String(500), nullable=False)
     corrected_by_id: Mapped[int] = mapped_column(
         INTEGER(unsigned=True),
         ForeignKey("account.account_id", ondelete="RESTRICT"),

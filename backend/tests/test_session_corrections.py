@@ -24,11 +24,7 @@ from app.models import (
     SessionQuestion,
     SessionQuestionStatus,
 )
-from app.services.session_corrections import (
-    correct_session_answer,
-    preview_session_answer_correction,
-)
-from app.schemas.session_correction import CorrectSessionAnswerRequest
+from app.services.session_corrections import correct_session_answer
 from app.services.session_report import build_session_report
 from app.services.session_end import load_final_results
 
@@ -90,15 +86,8 @@ def db():
     database.dispose()
 
 
-def test_preview_then_correct_rescores_without_mutating_quiz(db):
-    preview = preview_session_answer_correction(db, ORGANIZER, 1, 1, 11)
-
-    assert preview.score_revision == 0
-    assert preview.affected_response_count == 2
-    assert [(p.display_name, p.new_total_score, p.new_rank) for p in preview.affected_participants] == [("Bob", 1000, 1), ("Alice", 0, 2)]
-    assert db.get(Response, 1).points_awarded == 875
-
-    result = correct_session_answer(db, ORGANIZER, 1, 1, 11, "The answer key was wrong.", 0)
+def test_correct_rescores_without_mutating_quiz(db):
+    result = correct_session_answer(db, ORGANIZER, 1, 1, 11, 0)
 
     assert result.score_revision == 1
     assert db.get(LiveSession, 1).score_revision == 1
@@ -110,46 +99,33 @@ def test_preview_then_correct_rescores_without_mutating_quiz(db):
     assert db.get(AnswerChoice, 10).is_correct is True
     assert db.get(AnswerChoice, 11).is_correct is False
     audit = db.get(SessionAnswerCorrection, result.correction_id)
-    assert (audit.previous_correct_choice_id, audit.corrected_choice_id, audit.reason) == (10, 11, "The answer key was wrong.")
+    assert (audit.previous_correct_choice_id, audit.corrected_choice_id) == (10, 11)
+    assert result.previous_correct_choice.choice_id == 10
+    assert result.corrected_choice.choice_id == 11
 
 
-def test_stale_preview_and_unauthorized_users_are_rejected(db):
+def test_stale_report_and_unauthorized_users_are_rejected(db):
     with pytest.raises(APIError) as member_error:
-        preview_session_answer_correction(db, MEMBER, 1, 1, 11)
+        correct_session_answer(db, MEMBER, 1, 1, 11, 0)
     assert member_error.value.code == "not_class_organizer"
 
     with pytest.raises(APIError) as outsider_error:
-        preview_session_answer_correction(db, OUTSIDER_FACULTY, 1, 1, 11)
+        correct_session_answer(db, OUTSIDER_FACULTY, 1, 1, 11, 0)
     assert outsider_error.value.code == "class_not_found"
 
-    correct_session_answer(db, ORGANIZER, 1, 1, 11, "Correction", 0)
+    correct_session_answer(db, ORGANIZER, 1, 1, 11, 0)
     with pytest.raises(APIError) as stale_error:
-        correct_session_answer(db, ORGANIZER, 1, 1, 10, "Undo", 0)
+        correct_session_answer(db, ORGANIZER, 1, 1, 10, 0)
     assert stale_error.value.code == "score_revision_conflict"
     assert stale_error.value.details == {"current_revision": 1}
 
 
 def test_report_uses_session_override_and_exposes_audit(db):
-    correct_session_answer(db, ORGANIZER, 1, 1, 11, "Correction", 0)
+    correct_session_answer(db, ORGANIZER, 1, 1, 11, 0)
     session = db.get(LiveSession, 1)
     report = build_session_report(db, session, load_final_results(db, session), None)
 
     assert report["score_revision"] == 1
     assert report["questions"][0]["corrected"] is True
     assert [choice["id"] for choice in report["questions"][0]["choices"] if choice["correct"]] == [11]
-    assert report["corrections"][0]["reason"] == "Correction"
-
-
-def test_request_uses_an_auditable_default_reason():
-    payload = CorrectSessionAnswerRequest(
-        choice_id=11,
-        expected_score_revision=0,
-    )
-    assert payload.reason == "Corrected by class organizer."
-
-    blank = CorrectSessionAnswerRequest(
-        choice_id=11,
-        reason="   ",
-        expected_score_revision=0,
-    )
-    assert blank.reason == "Corrected by class organizer."
+    assert report["corrections"][0]["corrected_choice_id"] == 11

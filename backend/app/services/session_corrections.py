@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models import (
-    Account,
     AnswerChoice,
     LiveSession,
     LiveSessionStatus,
@@ -24,8 +23,6 @@ from app.models import (
 )
 from app.schemas.session_correction import (
     CorrectChoiceSummary,
-    ParticipantRescorePreview,
-    SessionAnswerCorrectionPreview,
     SessionAnswerCorrectionResult,
 )
 from app.services.class_authorization import require_class_organizer
@@ -150,7 +147,7 @@ def _load_context(
         raise APIError(
             409,
             "correct_answer_unchanged",
-            "Choose a different answer before previewing a rescore.",
+            "Choose a different answer before rescoring the session.",
         )
 
     return CorrectionContext(
@@ -162,168 +159,12 @@ def _load_context(
     )
 
 
-def _rank_by_score(rows: list[tuple[int, str, int]]) -> dict[int, int]:
-    ordered = sorted(rows, key=lambda row: (-row[2], row[1].casefold(), row[1], row[0]))
-    ranks: dict[int, int] = {}
-    previous_score: int | None = None
-    rank = 0
-    for position, (participant_id, _, score) in enumerate(ordered, start=1):
-        if score != previous_score:
-            rank = position
-            previous_score = score
-        ranks[participant_id] = rank
-    return ranks
-
-
-def _build_preview(
-    db: Session, context: CorrectionContext
-) -> SessionAnswerCorrectionPreview:
-    result_rows = db.execute(
-        select(
-            SessionParticipant.session_participant_id,
-            Account.display_name,
-            Result.total_score,
-            Result.correct_count,
-            Result.final_rank,
-        )
-        .join(
-            Account, Account.account_id == SessionParticipant.account_id
-        )
-        .join(
-            Result,
-            Result.session_participant_id
-            == SessionParticipant.session_participant_id,
-        )
-        .where(SessionParticipant.session_id == context.session.session_id)
-    ).all()
-    if not result_rows:
-        raise APIError(
-            500, "results_incomplete", "This completed session has no saved results."
-        )
-
-    responses = {
-        response.session_participant_id: response
-        for response in db.scalars(
-            select(Response).where(
-                Response.session_question_id
-                == context.session_question.session_question_id
-            )
-        ).all()
-    }
-
-    projected: dict[int, tuple[bool, int, int, int]] = {}
-    new_rank_rows: list[tuple[int, str, int]] = []
-    for row in result_rows:
-        response = responses.get(row.session_participant_id)
-        old_correct = bool(response.is_correct) if response else False
-        old_points = int(response.points_awarded) if response else 0
-        new_correct = bool(
-            response and response.choice_id == context.proposed_choice.choice_id
-        )
-        new_points = (
-            calculate_points(
-                is_correct=new_correct,
-                response_time_ms=response.response_time_ms,
-                time_limit_seconds=context.question.time_limit_seconds,
-                max_points=context.question.base_points,
-            )
-            if response
-            else 0
-        )
-        new_total = int(row.total_score) - old_points + new_points
-        new_correct_count = int(row.correct_count) - int(old_correct) + int(new_correct)
-        projected[row.session_participant_id] = (
-            new_correct,
-            new_points,
-            new_total,
-            new_correct_count,
-        )
-        new_rank_rows.append(
-            (row.session_participant_id, row.display_name, new_total)
-        )
-
-    new_ranks = _rank_by_score(new_rank_rows)
-    affected: list[ParticipantRescorePreview] = []
-    for row in result_rows:
-        response = responses.get(row.session_participant_id)
-        old_correct = bool(response.is_correct) if response else False
-        old_points = int(response.points_awarded) if response else 0
-        new_correct, new_points, new_total, _ = projected[
-            row.session_participant_id
-        ]
-        new_rank = new_ranks[row.session_participant_id]
-        if (
-            old_correct == new_correct
-            and old_points == new_points
-            and int(row.total_score) == new_total
-            and int(row.final_rank) == new_rank
-        ):
-            continue
-        affected.append(
-            ParticipantRescorePreview(
-                session_participant_id=row.session_participant_id,
-                display_name=row.display_name,
-                old_correct=old_correct,
-                new_correct=new_correct,
-                old_question_points=old_points,
-                new_question_points=new_points,
-                old_total_score=int(row.total_score),
-                new_total_score=new_total,
-                old_rank=int(row.final_rank),
-                new_rank=new_rank,
-            )
-        )
-
-    affected.sort(key=lambda item: (item.new_rank, item.display_name.casefold()))
-    return SessionAnswerCorrectionPreview(
-        session_id=context.session.session_id,
-        session_question_id=context.session_question.session_question_id,
-        question_order=context.question.question_order,
-        question_text=context.question.question_text,
-        score_revision=context.session.score_revision,
-        current_correct_choice=CorrectChoiceSummary(
-            choice_id=context.current_choice.choice_id,
-            text=context.current_choice.choice_text,
-        ),
-        proposed_correct_choice=CorrectChoiceSummary(
-            choice_id=context.proposed_choice.choice_id,
-            text=context.proposed_choice.choice_text,
-        ),
-        affected_response_count=sum(
-            1
-            for item in affected
-            if item.old_correct != item.new_correct
-            or item.old_question_points != item.new_question_points
-        ),
-        affected_participants=affected,
-    )
-
-
-def preview_session_answer_correction(
-    db: Session,
-    account: CurrentAccount,
-    session_id: int,
-    session_question_id: int,
-    proposed_choice_id: int,
-) -> SessionAnswerCorrectionPreview:
-    context = _load_context(
-        db,
-        account,
-        session_id,
-        session_question_id,
-        proposed_choice_id,
-        lock=False,
-    )
-    return _build_preview(db, context)
-
-
 def correct_session_answer(
     db: Session,
     account: CurrentAccount,
     session_id: int,
     session_question_id: int,
     proposed_choice_id: int,
-    reason: str,
     expected_score_revision: int,
 ) -> SessionAnswerCorrectionResult:
     try:
@@ -339,11 +180,10 @@ def correct_session_answer(
             raise APIError(
                 409,
                 "score_revision_conflict",
-                "The session was rescored after this preview was loaded.",
+                "The session was rescored after this report was loaded.",
                 details={"current_revision": context.session.score_revision},
             )
 
-        preview = _build_preview(db, context)
         corrected_at = _utc_now()
         new_revision = context.session.score_revision + 1
 
@@ -374,7 +214,6 @@ def correct_session_answer(
             session_question_id=session_question_id,
             previous_correct_choice_id=context.current_choice.choice_id,
             corrected_choice_id=context.proposed_choice.choice_id,
-            reason=reason,
             corrected_by_id=account.account_id,
             score_revision=new_revision,
             corrected_at=corrected_at,
@@ -410,12 +249,20 @@ def correct_session_answer(
 
         db.commit()
         return SessionAnswerCorrectionResult(
-            **preview.model_dump(exclude={"score_revision"}),
+            session_id=session_id,
+            session_question_id=session_question_id,
             score_revision=new_revision,
             correction_id=audit.correction_id,
+            previous_correct_choice=CorrectChoiceSummary(
+                choice_id=context.current_choice.choice_id,
+                text=context.current_choice.choice_text,
+            ),
+            corrected_choice=CorrectChoiceSummary(
+                choice_id=context.proposed_choice.choice_id,
+                text=context.proposed_choice.choice_text,
+            ),
             corrected_at=corrected_at,
             corrected_by_id=account.account_id,
-            reason=reason,
         )
     except APIError:
         db.rollback()

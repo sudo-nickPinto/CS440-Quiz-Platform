@@ -146,7 +146,6 @@ def build_session_report(
             "session_question_id": correction.session_question_id,
             "previous_correct_choice_id": correction.previous_correct_choice_id,
             "corrected_choice_id": correction.corrected_choice_id,
-            "reason": correction.reason,
             "corrected_by": display_name,
             "score_revision": correction.score_revision,
             "corrected_at": (

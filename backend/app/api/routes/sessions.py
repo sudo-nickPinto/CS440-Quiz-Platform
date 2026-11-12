@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from fastapi import Response as HTTPResponse
@@ -24,13 +24,9 @@ from app.schemas.session import (
 )
 from app.schemas.session_correction import (
     CorrectSessionAnswerRequest,
-    SessionAnswerCorrectionPreview,
     SessionAnswerCorrectionResult,
 )
-from app.services.session_corrections import (
-    correct_session_answer,
-    preview_session_answer_correction,
-)
+from app.services.session_corrections import correct_session_answer
 from app.services.session_end import get_final_results
 from app.services.sessions import (
     create_session,
@@ -180,22 +176,6 @@ def session_report_route(
     )
 
 
-@router.get(
-    "/sessions/{session_id}/questions/{session_question_id}/correction-preview",
-    response_model=SessionAnswerCorrectionPreview,
-)
-def preview_session_answer_correction_route(
-    session_id: int,
-    session_question_id: int,
-    choice_id: int = Query(gt=0),
-    db: Session = Depends(get_db),
-    account: CurrentAccount = Depends(get_active_account),
-) -> SessionAnswerCorrectionPreview:
-    return preview_session_answer_correction(
-        db, account, session_id, session_question_id, choice_id
-    )
-
-
 @router.post(
     "/sessions/{session_id}/questions/{session_question_id}/correct-answer",
     response_model=SessionAnswerCorrectionResult,
@@ -213,7 +193,6 @@ def correct_session_answer_route(
         session_id,
         session_question_id,
         payload.choice_id,
-        payload.reason,
         payload.expected_score_revision,
     )
 

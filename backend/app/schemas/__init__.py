@@ -45,7 +45,6 @@ from app.schemas.session import (
 )
 from app.schemas.session_correction import (
     CorrectSessionAnswerRequest,
-    SessionAnswerCorrectionPreview,
     SessionAnswerCorrectionResult,
 )
 
@@ -83,6 +82,5 @@ __all__ = [
     "SessionJoinResponse",
     "SessionParticipantResponse",
     "SessionResponse",
-    "SessionAnswerCorrectionPreview",
     "SessionAnswerCorrectionResult",
 ]

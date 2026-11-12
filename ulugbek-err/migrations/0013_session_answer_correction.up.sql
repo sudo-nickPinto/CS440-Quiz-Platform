@@ -21,7 +21,6 @@ CREATE TABLE session_answer_correction (
     session_question_id        INT UNSIGNED      NOT NULL,
     previous_correct_choice_id INT UNSIGNED      NOT NULL,
     corrected_choice_id        INT UNSIGNED      NOT NULL,
-    reason                     VARCHAR(500)      NOT NULL,
     corrected_by_id            INT UNSIGNED      NOT NULL,
     score_revision             SMALLINT UNSIGNED NOT NULL,
     corrected_at               DATETIME(3)       NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
