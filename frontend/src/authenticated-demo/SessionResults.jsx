@@ -71,142 +71,47 @@ function RescoreNotice({ report }) {
   );
 }
 
-function CorrectAnswerPanel({ report, question, onCorrected }) {
-  const api = useApi();
-  const previewAction = useAction();
-  const applyAction = useAction();
-  const current = question.choices.find((choice) => choice.correct);
-  const [choiceId, setChoiceId] = useState("");
-  const [reason, setReason] = useState("");
-  const [preview, setPreview] = useState(null);
-  const [complete, setComplete] = useState("");
-
-  async function previewRescore(event) {
-    event.preventDefault();
-    setComplete("");
-    const result = await previewAction.run(() =>
-      api(
-        `/sessions/${report.session_id}/questions/${question.session_question_id}/correction-preview?choice_id=${choiceId}`,
-      ),
-    );
-    if (result) setPreview(result);
-  }
-
-  async function applyCorrection() {
-    const result = await applyAction.run(() =>
-      api(
-        `/sessions/${report.session_id}/questions/${question.session_question_id}/correct-answer`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            choice_id: Number(choiceId),
-            reason,
-            expected_score_revision: preview.score_revision,
-          }),
-        },
-      ),
-    );
-    if (!result) return;
-    setPreview(null);
-    setChoiceId("");
-    setReason("");
-    setComplete(`Question ${question.order} was corrected and all saved results were rescored.`);
-    onCorrected?.();
-  }
-
-  const changedSelection = preview && Number(choiceId) !== preview.proposed_correct_choice.choice_id;
-
+function RescorePreview({ preview, busy, onConfirm, onCancel }) {
   return (
-    <section className="rr-correction" aria-label={`Correct answer for question ${question.order}`}>
-      <div>
-        <small>Organizer correction</small>
-        <h4>Correct the saved session</h4>
-        <p>
-          This changes only this completed presentation. The quiz and every other session stay unchanged.
-        </p>
+    <section className="rr-rescore-preview" aria-label="Rescore preview">
+      <div className="rr-panel-heading">
+        <span>Preview · no changes saved yet</span>
+        <span>{preview.affected_response_count} affected responses</span>
       </div>
+      <p className="rr-padding">
+        Correct answer: <b>{preview.current_correct_choice.text}</b> → <b>{preview.proposed_correct_choice.text}</b>
+      </p>
 
-      <form onSubmit={previewRescore}>
-        <label>
-          Correct answer
-          <select
-            value={choiceId}
-            required
-            onChange={(event) => {
-              setChoiceId(event.target.value);
-              setPreview(null);
-            }}
-          >
-            <option value="">Select a replacement…</option>
-            {question.choices
-              .filter((choice) => choice.id !== current?.id)
-              .map((choice) => (
-                <option value={choice.id} key={choice.id}>
-                  {letterOf(question.choices.indexOf(choice))}. {choice.text}
-                </option>
-              ))}
-          </select>
-        </label>
-
-        <label>
-          Reason for the audit log
-          <textarea
-            value={reason}
-            required
-            maxLength={500}
-            rows={3}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="Explain why the saved answer key is being corrected."
-          />
-        </label>
-
-        <button className="rr-button" type="submit" disabled={previewAction.busy || !choiceId || !reason.trim()}>
-          {previewAction.busy ? "Calculating…" : "Preview rescore"}
-        </button>
-      </form>
-
-      <RequestError error={previewAction.error || applyAction.error} />
-      {complete && <p className="rr-correction-success" role="status">✓ {complete}</p>}
-
-      {preview && !changedSelection && (
-        <div className="rr-rescore-preview">
-          <div className="rr-panel-heading">
-            <span>Preview · no changes saved yet</span>
-            <span>{preview.affected_response_count} affected responses</span>
+      {preview.affected_participants.length ? (
+        <div className="rr-rescore-table" role="table" aria-label="Projected score changes">
+          <div role="row" className="rr-rescore-row heading">
+            <span role="columnheader">Participant</span>
+            <span role="columnheader">Question</span>
+            <span role="columnheader">Total</span>
+            <span role="columnheader">Rank</span>
           </div>
-          <p className="rr-padding">
-            Correct answer: <b>{preview.current_correct_choice.text}</b> → <b>{preview.proposed_correct_choice.text}</b>
-          </p>
-
-          {preview.affected_participants.length ? (
-            <div className="rr-rescore-table" role="table" aria-label="Projected score changes">
-              <div role="row" className="rr-rescore-row heading">
-                <span role="columnheader">Participant</span>
-                <span role="columnheader">Question</span>
-                <span role="columnheader">Total</span>
-                <span role="columnheader">Rank</span>
-              </div>
-              {preview.affected_participants.map((person) => (
-                <div role="row" className="rr-rescore-row" key={person.session_participant_id}>
-                  <strong role="cell">{person.display_name}</strong>
-                  <span role="cell">{fmt(person.old_question_points)} → {fmt(person.new_question_points)}</span>
-                  <span role="cell">{fmt(person.old_total_score)} → {fmt(person.new_total_score)}</span>
-                  <span role="cell">#{person.old_rank} → #{person.new_rank}</span>
-                </div>
-              ))}
+          {preview.affected_participants.map((person) => (
+            <div role="row" className="rr-rescore-row" key={person.session_participant_id}>
+              <strong role="cell">{person.display_name}</strong>
+              <span role="cell">{fmt(person.old_question_points)} → {fmt(person.new_question_points)}</span>
+              <span role="cell">{fmt(person.old_total_score)} → {fmt(person.new_total_score)}</span>
+              <span role="cell">#{person.old_rank} → #{person.new_rank}</span>
             </div>
-          ) : (
-            <p className="rr-padding">No participant score or rank would change.</p>
-          )}
-
-          <div className="rr-correction-confirm">
-            <p>This action updates saved answers, totals, and ranks and records an audit entry.</p>
-            <button type="button" className="rr-button orange" disabled={applyAction.busy} onClick={() => void applyCorrection()}>
-              {applyAction.busy ? "Rescoring…" : "Confirm correction & rescore"}
-            </button>
-          </div>
+          ))}
         </div>
+      ) : (
+        <p className="rr-padding">No participant score or rank would change.</p>
       )}
+
+      <div className="rr-correction-confirm">
+        <p>This updates this saved session only, then recalculates scores and ranks.</p>
+        <div className="rr-correction-actions">
+          <button type="button" className="rr-button" disabled={busy} onClick={onCancel}>Cancel</button>
+          <button type="button" className="rr-button orange" disabled={busy} onClick={onConfirm}>
+            {busy ? "Rescoring…" : "Confirm correction & rescore"}
+          </button>
+        </div>
+      </div>
     </section>
   );
 }
@@ -415,6 +320,54 @@ function People({ title, kind, people, questionIndex, onPerson }) {
 }
 
 function QuestionBreakdown({ question, index, players, onPerson, report, onCorrected }) {
+  const api = useApi();
+  const previewAction = useAction();
+  const applyAction = useAction();
+  const [editingCorrectAnswer, setEditingCorrectAnswer] = useState(false);
+  const [selectedChoiceId, setSelectedChoiceId] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [complete, setComplete] = useState("");
+  const canCorrect = Boolean(report.can_correct && question.session_question_id);
+
+  function closeCorrection() {
+    setEditingCorrectAnswer(false);
+    setSelectedChoiceId(null);
+    setPreview(null);
+  }
+
+  async function selectCorrectAnswer(choice) {
+    if (!editingCorrectAnswer || choice.correct || previewAction.busy || applyAction.busy) return;
+    setComplete("");
+    setSelectedChoiceId(choice.id);
+    setPreview(null);
+    const result = await previewAction.run(() =>
+      api(
+        `/sessions/${report.session_id}/questions/${question.session_question_id}/correction-preview?choice_id=${choice.id}`,
+      ),
+    );
+    if (result) setPreview(result);
+  }
+
+  async function applyCorrection() {
+    if (!preview) return;
+    const result = await applyAction.run(() =>
+      api(
+        `/sessions/${report.session_id}/questions/${question.session_question_id}/correct-answer`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            choice_id: Number(selectedChoiceId),
+            expected_score_revision: preview.score_revision,
+          }),
+        },
+      ),
+    );
+    if (!result) return;
+    closeCorrection();
+    setComplete(`Question ${question.order} was corrected and the saved results were rescored.`);
+    onCorrected?.();
+  }
+
   const byState = (state) =>
     players.filter((p) => p.answers[index].state === state);
 
@@ -476,21 +429,59 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
           <div className="rr-xp">
             <div className="rr-panel-heading">
               <span>Q{question.order} · Answer split</span>
-              <span>
-                {right.length}/{players.length} correct
+              <span className="rr-correction-tools">
+                <span>{right.length}/{players.length} correct</span>
+                {canCorrect && !editingCorrectAnswer && (
+                  <button
+                    type="button"
+                    className="rr-edit-answer-button"
+                    onClick={() => {
+                      setComplete("");
+                      setEditingCorrectAnswer(true);
+                    }}
+                  >
+                    Edit correct answer
+                  </button>
+                )}
+                {editingCorrectAnswer && (
+                  <button
+                    type="button"
+                    className="rr-edit-answer-button"
+                    disabled={previewAction.busy || applyAction.busy}
+                    onClick={closeCorrection}
+                  >
+                    Cancel edit
+                  </button>
+                )}
               </span>
             </div>
 
+            {editingCorrectAnswer && (
+              <p className="rr-correction-hint" role="status">
+                Select the answer that should have been marked correct. Nothing changes until you confirm the rescore.
+              </p>
+            )}
+            {complete && <p className="rr-correction-success" role="status">✓ {complete}</p>}
+
             <div className="rr-breakdown">
               <div className="rr-padding">
-                {groups.map((group) => (
-                  <div
+                {groups.map((group) => {
+                  const choice = question.choices.find((item) => item.id === group.key);
+                  const selectable = Boolean(editingCorrectAnswer && choice && !choice.correct);
+                  const Row = selectable ? "button" : "div";
+                  return (
+                  <Row
+                    type={selectable ? "button" : undefined}
                     className={
                       "rr-bar-row" +
                       (group.correct ? " correct" : "") +
-                      (group.missed ? " is-missed" : "")
+                      (group.missed ? " is-missed" : "") +
+                      (selectable ? " is-selectable" : "") +
+                      (selectedChoiceId === group.key ? " is-selected" : "")
                     }
                     key={group.key}
+                    onClick={selectable ? () => void selectCorrectAnswer(choice) : undefined}
+                    disabled={selectable && (previewAction.busy || applyAction.busy)}
                   >
                     <span className="rr-let" aria-hidden="true">
                       {group.letter}
@@ -508,8 +499,9 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
                         {group.count} / {players.length}
                       </small>
                     </span>
-                  </div>
-                ))}
+                  </Row>
+                  );
+                })}
               </div>
 
               <div>
@@ -537,11 +529,13 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
               </div>
             </div>
 
-            {report.can_correct && question.session_question_id && (
-              <CorrectAnswerPanel
-                report={report}
-                question={question}
-                onCorrected={onCorrected}
+            <RequestError error={previewAction.error || applyAction.error} />
+            {editingCorrectAnswer && preview && selectedChoiceId === preview.proposed_correct_choice.choice_id && (
+              <RescorePreview
+                preview={preview}
+                busy={applyAction.busy}
+                onCancel={closeCorrection}
+                onConfirm={() => void applyCorrection()}
               />
             )}
           </div>
