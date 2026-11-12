@@ -71,49 +71,19 @@ function RescoreNotice({ report }) {
   );
 }
 
-function RescorePreview({ preview, busy, onConfirm, onCancel }) {
+function CorrectionConfirmation({ preview, busy, onConfirm, onCancel }) {
   return (
-    <section className="rr-rescore-preview" aria-label="Rescore preview">
-      <div className="rr-panel-heading">
-        <span>Preview · no changes saved yet</span>
-        <span>{preview.affected_response_count} affected responses</span>
-      </div>
-      <p className="rr-padding">
-        Correct answer: <b>{preview.current_correct_choice.text}</b> → <b>{preview.proposed_correct_choice.text}</b>
+    <section className="rr-correction-prompt" aria-label="Confirm correct answer change">
+      <p>
+        <strong>Are you sure you want to make this change?</strong><br />
+        Correct answer: <b>{preview.current_correct_choice.text}</b> → <b>{preview.proposed_correct_choice.text}</b>.
+        Scores and ranks for this saved session will be recalculated.
       </p>
-
-      {preview.affected_participants.length ? (
-        <div className="rr-rescore-table" role="table" aria-label="Projected score changes">
-          <div role="row" className="rr-rescore-row heading">
-            <span role="columnheader">Participant</span>
-            <span role="columnheader">Question</span>
-            <span role="columnheader">Total</span>
-            <span role="columnheader">Rank</span>
-          </div>
-          {preview.affected_participants.map((person) => (
-            <div role="row" className="rr-rescore-row" key={person.session_participant_id}>
-              <strong role="cell">{person.display_name}</strong>
-              <span role="cell">{fmt(person.old_question_points)} → {fmt(person.new_question_points)}</span>
-              <span role="cell">{fmt(person.old_total_score)} → {fmt(person.new_total_score)}</span>
-              <span role="cell">#{person.old_rank} → #{person.new_rank}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="rr-padding">No participant score or rank would change.</p>
-      )}
-
-      <div className="rr-correction-confirm">
-        <p>
-          <strong>Are you sure you want to make this change?</strong><br />
-          This updates this saved session only, then recalculates scores and ranks.
-        </p>
-        <div className="rr-correction-actions">
-          <button type="button" className="rr-button" disabled={busy} onClick={onCancel}>Cancel</button>
-          <button type="button" className="rr-button orange" disabled={busy} onClick={onConfirm}>
-            {busy ? "Rescoring…" : "Confirm correction & rescore"}
-          </button>
-        </div>
+      <div className="rr-correction-actions">
+        <button type="button" className="rr-button" disabled={busy} onClick={onCancel}>Cancel</button>
+        <button type="button" className="rr-button orange" disabled={busy} onClick={onConfirm}>
+          {busy ? "Rescoring…" : "Confirm correction & rescore"}
+        </button>
       </div>
     </section>
   );
@@ -539,7 +509,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
 
             <RequestError error={previewAction.error || applyAction.error} />
             {editingCorrectAnswer && preview && selectedChoiceId === preview.proposed_correct_choice.choice_id && (
-              <RescorePreview
+              <CorrectionConfirmation
                 preview={preview}
                 busy={applyAction.busy}
                 onCancel={closeCorrection}
