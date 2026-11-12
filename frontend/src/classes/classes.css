@@ -159,6 +159,7 @@
 .qp .cl-classes-toolbar {
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
 }
 
 .qp .cl-classes-toolbar > * {
