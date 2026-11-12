@@ -1,6 +1,7 @@
 from datetime import datetime
 
 import pytest
+from sqlalchemy import select
 
 from app.auth import CurrentAccount
 from app.database import Base, Database
@@ -19,9 +20,11 @@ from app.models import (
     QuizVersion,
     Response,
     Result,
+    SessionCorrectionMode,
     SessionAnswerCorrection,
     SessionParticipant,
     SessionQuestion,
+    SessionQuestionCorrectChoice,
     SessionQuestionStatus,
 )
 from app.services.session_corrections import correct_session_answer
@@ -86,12 +89,16 @@ def db():
     database.dispose()
 
 
-def test_correct_rescores_without_mutating_quiz(db):
-    result = correct_session_answer(db, ORGANIZER, 1, 1, 11, 0)
+def test_replace_correct_answer_rescores_without_mutating_quiz(db):
+    result = correct_session_answer(
+        db, ORGANIZER, 1, 1, 11, SessionCorrectionMode.REPLACE, 0
+    )
 
     assert result.score_revision == 1
     assert db.get(LiveSession, 1).score_revision == 1
-    assert db.get(SessionQuestion, 1).corrected_choice_id == 11
+    assert db.scalars(
+        select(SessionQuestionCorrectChoice.choice_id)
+    ).all() == [11]
     assert (db.get(Response, 1).is_correct, db.get(Response, 1).points_awarded) == (False, 0)
     assert (db.get(Response, 2).is_correct, db.get(Response, 2).points_awarded) == (True, 1000)
     assert (db.get(Result, 1).total_score, db.get(Result, 1).final_rank) == (0, 2)
@@ -99,33 +106,72 @@ def test_correct_rescores_without_mutating_quiz(db):
     assert db.get(AnswerChoice, 10).is_correct is True
     assert db.get(AnswerChoice, 11).is_correct is False
     audit = db.get(SessionAnswerCorrection, result.correction_id)
-    assert (audit.previous_correct_choice_id, audit.corrected_choice_id) == (10, 11)
-    assert result.previous_correct_choice.choice_id == 10
-    assert result.corrected_choice.choice_id == 11
+    assert audit.previous_correct_choice_ids == [10]
+    assert audit.corrected_choice_ids == [11]
+    assert audit.correction_mode == SessionCorrectionMode.REPLACE
+    assert [choice.choice_id for choice in result.previous_correct_choices] == [10]
+    assert [choice.choice_id for choice in result.corrected_choices] == [11]
+
+
+def test_additional_correct_answer_accepts_both_choices(db):
+    result = correct_session_answer(
+        db, ORGANIZER, 1, 1, 11, SessionCorrectionMode.ADD, 0
+    )
+
+    assert result.correction_mode == SessionCorrectionMode.ADD
+    assert set(db.scalars(select(SessionQuestionCorrectChoice.choice_id)).all()) == {
+        10,
+        11,
+    }
+    assert (db.get(Response, 1).is_correct, db.get(Response, 1).points_awarded) == (
+        True,
+        875,
+    )
+    assert (db.get(Response, 2).is_correct, db.get(Response, 2).points_awarded) == (
+        True,
+        1000,
+    )
+    assert db.get(Result, 1).correct_count == 1
+    assert db.get(Result, 2).correct_count == 1
 
 
 def test_stale_report_and_unauthorized_users_are_rejected(db):
     with pytest.raises(APIError) as member_error:
-        correct_session_answer(db, MEMBER, 1, 1, 11, 0)
+        correct_session_answer(
+            db, MEMBER, 1, 1, 11, SessionCorrectionMode.REPLACE, 0
+        )
     assert member_error.value.code == "not_class_organizer"
 
     with pytest.raises(APIError) as outsider_error:
-        correct_session_answer(db, OUTSIDER_FACULTY, 1, 1, 11, 0)
+        correct_session_answer(
+            db, OUTSIDER_FACULTY, 1, 1, 11, SessionCorrectionMode.REPLACE, 0
+        )
     assert outsider_error.value.code == "class_not_found"
 
-    correct_session_answer(db, ORGANIZER, 1, 1, 11, 0)
+    correct_session_answer(
+        db, ORGANIZER, 1, 1, 11, SessionCorrectionMode.REPLACE, 0
+    )
     with pytest.raises(APIError) as stale_error:
-        correct_session_answer(db, ORGANIZER, 1, 1, 10, 0)
+        correct_session_answer(
+            db, ORGANIZER, 1, 1, 10, SessionCorrectionMode.REPLACE, 0
+        )
     assert stale_error.value.code == "score_revision_conflict"
     assert stale_error.value.details == {"current_revision": 1}
 
 
 def test_report_uses_session_override_and_exposes_audit(db):
-    correct_session_answer(db, ORGANIZER, 1, 1, 11, 0)
+    correct_session_answer(
+        db, ORGANIZER, 1, 1, 11, SessionCorrectionMode.ADD, 0
+    )
     session = db.get(LiveSession, 1)
     report = build_session_report(db, session, load_final_results(db, session), None)
 
     assert report["score_revision"] == 1
     assert report["questions"][0]["corrected"] is True
-    assert [choice["id"] for choice in report["questions"][0]["choices"] if choice["correct"]] == [11]
-    assert report["corrections"][0]["corrected_choice_id"] == 11
+    assert [
+        choice["id"]
+        for choice in report["questions"][0]["choices"]
+        if choice["correct"]
+    ] == [10, 11]
+    assert report["corrections"][0]["correction_mode"] == "ADD"
+    assert report["corrections"][0]["corrected_choice_ids"] == [10, 11]

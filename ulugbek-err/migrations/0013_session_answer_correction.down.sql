@@ -2,10 +2,7 @@ DELETE FROM schema_migrations
 WHERE version = '0013_session_answer_correction';
 
 DROP TABLE session_answer_correction;
-
-ALTER TABLE session_question
-    DROP FOREIGN KEY fk_session_question_corrected_choice,
-    DROP COLUMN corrected_choice_id;
+DROP TABLE session_question_correct_choice;
 
 ALTER TABLE live_session
     DROP FOREIGN KEY fk_live_session_rescored_by,

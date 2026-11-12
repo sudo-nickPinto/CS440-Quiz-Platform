@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -16,9 +16,11 @@ from app.models import (
     Question,
     Response,
     Result,
+    SessionCorrectionMode,
     SessionAnswerCorrection,
     SessionParticipant,
     SessionQuestion,
+    SessionQuestionCorrectChoice,
     SessionQuestionStatus,
 )
 from app.schemas.session_correction import (
@@ -35,7 +37,7 @@ class CorrectionContext:
     session: LiveSession
     session_question: SessionQuestion
     question: Question
-    current_choice: AnswerChoice
+    current_choices: tuple[AnswerChoice, ...]
     proposed_choice: AnswerChoice
 
 
@@ -125,36 +127,35 @@ def _load_context(
             "The proposed answer choice does not belong to this question.",
         )
 
-    if session_question.corrected_choice_id is not None:
-        current = next(
-            (
-                choice
-                for choice in choices
-                if choice.choice_id == session_question.corrected_choice_id
-            ),
-            None,
+    override_ids = set(
+        db.scalars(
+            select(SessionQuestionCorrectChoice.choice_id).where(
+                SessionQuestionCorrectChoice.session_question_id
+                == session_question_id
+            )
+        ).all()
+    )
+    current = tuple(
+        choice
+        for choice in choices
+        if (
+            choice.choice_id in override_ids
+            if override_ids
+            else choice.is_correct
         )
-    else:
-        original = [choice for choice in choices if choice.is_correct]
-        current = original[0] if len(original) == 1 else None
-    if current is None:
+    )
+    if not current:
         raise APIError(
             500,
             "results_incomplete",
-            "The session question does not have exactly one effective correct answer.",
-        )
-    if current.choice_id == proposed.choice_id:
-        raise APIError(
-            409,
-            "correct_answer_unchanged",
-            "Choose a different answer before rescoring the session.",
+            "The session question does not have an effective correct answer.",
         )
 
     return CorrectionContext(
         session=session,
         session_question=session_question,
         question=question,
-        current_choice=current,
+        current_choices=current,
         proposed_choice=proposed,
     )
 
@@ -165,6 +166,7 @@ def correct_session_answer(
     session_id: int,
     session_question_id: int,
     proposed_choice_id: int,
+    mode: SessionCorrectionMode,
     expected_score_revision: int,
 ) -> SessionAnswerCorrectionResult:
     try:
@@ -184,6 +186,26 @@ def correct_session_answer(
                 details={"current_revision": context.session.score_revision},
             )
 
+        previous_ids = [choice.choice_id for choice in context.current_choices]
+        if mode == SessionCorrectionMode.ADD:
+            if context.proposed_choice.choice_id in previous_ids:
+                raise APIError(
+                    409,
+                    "correct_answer_unchanged",
+                    "That answer is already accepted as correct.",
+                )
+            corrected_choices = (*context.current_choices, context.proposed_choice)
+        else:
+            corrected_choices = (context.proposed_choice,)
+            if previous_ids == [context.proposed_choice.choice_id]:
+                raise APIError(
+                    409,
+                    "correct_answer_unchanged",
+                    "Choose a different answer before rescoring the session.",
+                )
+        corrected_ids = [choice.choice_id for choice in corrected_choices]
+        corrected_id_set = set(corrected_ids)
+
         corrected_at = _utc_now()
         new_revision = context.session.score_revision + 1
 
@@ -193,9 +215,7 @@ def correct_session_answer(
             )
         ).all()
         for response in responses:
-            response.is_correct = (
-                response.choice_id == context.proposed_choice.choice_id
-            )
+            response.is_correct = response.choice_id in corrected_id_set
             response.points_awarded = calculate_points(
                 is_correct=response.is_correct,
                 response_time_ms=response.response_time_ms,
@@ -203,8 +223,18 @@ def correct_session_answer(
                 max_points=context.question.base_points,
             )
 
-        context.session_question.corrected_choice_id = (
-            context.proposed_choice.choice_id
+        db.execute(
+            delete(SessionQuestionCorrectChoice).where(
+                SessionQuestionCorrectChoice.session_question_id
+                == session_question_id
+            )
+        )
+        db.add_all(
+            SessionQuestionCorrectChoice(
+                session_question_id=session_question_id,
+                choice_id=choice_id,
+            )
+            for choice_id in corrected_ids
         )
         context.session.score_revision = new_revision
         context.session.rescored_at = corrected_at
@@ -212,8 +242,10 @@ def correct_session_answer(
         audit = SessionAnswerCorrection(
             session_id=session_id,
             session_question_id=session_question_id,
-            previous_correct_choice_id=context.current_choice.choice_id,
-            corrected_choice_id=context.proposed_choice.choice_id,
+            selected_choice_id=context.proposed_choice.choice_id,
+            correction_mode=mode,
+            previous_correct_choice_ids=previous_ids,
+            corrected_choice_ids=corrected_ids,
             corrected_by_id=account.account_id,
             score_revision=new_revision,
             corrected_at=corrected_at,
@@ -253,14 +285,19 @@ def correct_session_answer(
             session_question_id=session_question_id,
             score_revision=new_revision,
             correction_id=audit.correction_id,
-            previous_correct_choice=CorrectChoiceSummary(
-                choice_id=context.current_choice.choice_id,
-                text=context.current_choice.choice_text,
-            ),
-            corrected_choice=CorrectChoiceSummary(
+            correction_mode=mode,
+            selected_choice=CorrectChoiceSummary(
                 choice_id=context.proposed_choice.choice_id,
                 text=context.proposed_choice.choice_text,
             ),
+            previous_correct_choices=[
+                CorrectChoiceSummary(choice_id=choice.choice_id, text=choice.choice_text)
+                for choice in context.current_choices
+            ],
+            corrected_choices=[
+                CorrectChoiceSummary(choice_id=choice.choice_id, text=choice.choice_text)
+                for choice in corrected_choices
+            ],
             corrected_at=corrected_at,
             corrected_by_id=account.account_id,
         )

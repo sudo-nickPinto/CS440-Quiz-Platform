@@ -193,6 +193,7 @@ def correct_session_answer_route(
         session_id,
         session_question_id,
         payload.choice_id,
+        payload.mode,
         payload.expected_score_revision,
     )
 

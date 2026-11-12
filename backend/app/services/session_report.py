@@ -16,6 +16,7 @@ from app.models import (
     SessionAnswerCorrection,
     SessionParticipant,
     SessionQuestion,
+    SessionQuestionCorrectChoice,
     SessionQuestionStatus,
 )
 from app.schemas.results import FinalResults
@@ -132,6 +133,19 @@ def build_session_report(
         ).all()
     }
 
+    corrected_choice_ids: dict[int, set[int]] = {}
+    for session_question_id, choice_id in db.execute(
+        select(
+            SessionQuestionCorrectChoice.session_question_id,
+            SessionQuestionCorrectChoice.choice_id,
+        ).join(
+            SessionQuestion,
+            SessionQuestion.session_question_id
+            == SessionQuestionCorrectChoice.session_question_id,
+        ).where(SessionQuestion.session_id == session_id)
+    ):
+        corrected_choice_ids.setdefault(session_question_id, set()).add(choice_id)
+
     report["played_count"] = len(played)
 
     correction_rows = db.execute(
@@ -144,8 +158,10 @@ def build_session_report(
         {
             "correction_id": correction.correction_id,
             "session_question_id": correction.session_question_id,
-            "previous_correct_choice_id": correction.previous_correct_choice_id,
-            "corrected_choice_id": correction.corrected_choice_id,
+            "correction_mode": correction.correction_mode.value,
+            "selected_choice_id": correction.selected_choice_id,
+            "previous_correct_choice_ids": correction.previous_correct_choice_ids,
+            "corrected_choice_ids": correction.corrected_choice_ids,
             "corrected_by": display_name,
             "score_revision": correction.score_revision,
             "corrected_at": (
@@ -160,8 +176,8 @@ def build_session_report(
     report["questions"] = []
     for q in questions:
         sq = played.get(q.question_id)
-        effective_correct_choice_id = (
-            sq.corrected_choice_id if sq and sq.corrected_choice_id else None
+        effective_correct_choice_ids = (
+            corrected_choice_ids.get(sq.session_question_id) if sq else None
         )
         report["questions"].append(
             {
@@ -173,14 +189,14 @@ def build_session_report(
                 "seconds": q.time_limit_seconds,
                 "base_points": q.base_points,
                 "played": sq is not None,
-                "corrected": bool(sq and sq.corrected_choice_id),
+                "corrected": bool(effective_correct_choice_ids),
                 "choices": [
                     {
                         "id": c.choice_id,
                         "text": c.choice_text,
                         "correct": (
-                            c.choice_id == effective_correct_choice_id
-                            if effective_correct_choice_id is not None
+                            c.choice_id in effective_correct_choice_ids
+                            if effective_correct_choice_ids
                             else c.is_correct
                         ),
                     }

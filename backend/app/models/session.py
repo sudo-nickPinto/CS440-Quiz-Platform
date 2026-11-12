@@ -10,6 +10,7 @@ from sqlalchemy import (
     Enum as SqlEnum,
     ForeignKey,
     Index,
+    JSON,
     String,
     UniqueConstraint,
     func,
@@ -36,6 +37,11 @@ class SessionQuestionStatus(str, Enum):
     PENDING = "PENDING"
     OPEN = "OPEN"
     CLOSED = "CLOSED"
+
+
+class SessionCorrectionMode(str, Enum):
+    REPLACE = "REPLACE"
+    ADD = "ADD"
 
 
 class LiveSession(Base):
@@ -160,10 +166,6 @@ class SessionQuestion(Base):
         ForeignKey("question.question_id", ondelete="RESTRICT"),
         nullable=False,
     )
-    corrected_choice_id: Mapped[int | None] = mapped_column(
-        INTEGER(unsigned=True),
-        ForeignKey("answer_choice.choice_id", ondelete="RESTRICT"),
-    )
     status: Mapped[SessionQuestionStatus] = mapped_column(
         SqlEnum(SessionQuestionStatus, values_callable=enum_values),
         nullable=False,
@@ -176,12 +178,34 @@ class SessionQuestion(Base):
 
     session: Mapped[LiveSession] = relationship(back_populates="questions")
     question: Mapped[Question] = relationship()
-    corrected_choice: Mapped[AnswerChoice | None] = relationship(
-        foreign_keys=[corrected_choice_id]
+    corrected_choices: Mapped[list[SessionQuestionCorrectChoice]] = relationship(
+        back_populates="session_question", passive_deletes=True
     )
     responses: Mapped[list[Response]] = relationship(
         back_populates="session_question", passive_deletes=True
     )
+
+
+class SessionQuestionCorrectChoice(Base):
+    """One accepted choice in a completed session's corrected answer set."""
+
+    __tablename__ = "session_question_correct_choice"
+
+    session_question_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("session_question.session_question_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    choice_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("answer_choice.choice_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+
+    session_question: Mapped[SessionQuestion] = relationship(
+        back_populates="corrected_choices"
+    )
+    choice: Mapped[AnswerChoice] = relationship()
 
 
 class Response(Base):
@@ -286,10 +310,6 @@ class SessionAnswerCorrection(Base):
             "score_revision >= 1",
             name="ck_session_answer_correction_revision",
         ),
-        CheckConstraint(
-            "previous_correct_choice_id <> corrected_choice_id",
-            name="ck_session_answer_correction_changed",
-        ),
         Index(
             "idx_session_answer_correction_question",
             "session_question_id",
@@ -310,16 +330,18 @@ class SessionAnswerCorrection(Base):
         ForeignKey("session_question.session_question_id", ondelete="CASCADE"),
         nullable=False,
     )
-    previous_correct_choice_id: Mapped[int] = mapped_column(
+    selected_choice_id: Mapped[int] = mapped_column(
         INTEGER(unsigned=True),
         ForeignKey("answer_choice.choice_id", ondelete="RESTRICT"),
         nullable=False,
     )
-    corrected_choice_id: Mapped[int] = mapped_column(
-        INTEGER(unsigned=True),
-        ForeignKey("answer_choice.choice_id", ondelete="RESTRICT"),
-        nullable=False,
+    correction_mode: Mapped[SessionCorrectionMode] = mapped_column(
+        SqlEnum(SessionCorrectionMode, values_callable=enum_values), nullable=False
     )
+    previous_correct_choice_ids: Mapped[list[int]] = mapped_column(
+        JSON, nullable=False
+    )
+    corrected_choice_ids: Mapped[list[int]] = mapped_column(JSON, nullable=False)
     corrected_by_id: Mapped[int] = mapped_column(
         INTEGER(unsigned=True),
         ForeignKey("account.account_id", ondelete="RESTRICT"),

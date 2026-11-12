@@ -433,9 +433,14 @@ new choices, timestamp, and score revision.
 ```json
 {
   "choice_id": 42,
+  "mode": "REPLACE",
   "expected_score_revision": 0
 }
 ```
+
+`mode` is `REPLACE` to make only the selected choice correct, or `ADD` to keep
+the existing accepted choices and add the selected choice as another correct
+answer. It defaults to `REPLACE` for API compatibility.
 
 `expected_score_revision` comes from the session report's `score_revision`.
 A concurrent rescore returns `409 score_revision_conflict`; the caller must
