@@ -438,7 +438,8 @@
 .qp .rr-bar-row.is-selected .rr-let {
   border-color: var(--rr-navy) !important;
   background: var(--rr-sky);
-  outline: 0;
+  outline: none !important;
+  box-shadow: inset 0 0 0 1px var(--rr-navy);
 }
 
 .qp .rr-let-button:disabled {

@@ -71,12 +71,12 @@ function RescoreNotice({ report }) {
   );
 }
 
-function CorrectionConfirmation({ preview, busy, onConfirm, onCancel }) {
+function CorrectionConfirmation({ currentChoice, selectedChoice, busy, onConfirm, onCancel }) {
   return (
     <section className="rr-correction-prompt" aria-label="Confirm correct answer change">
       <p>
         <strong>Are you sure you want to make this change?</strong><br />
-        Correct answer: <b>{preview.current_correct_choice.text}</b> → <b>{preview.proposed_correct_choice.text}</b>.
+        Correct answer: <b>{currentChoice.text}</b> → <b>{selectedChoice.text}</b>.
         Scores and ranks for this saved session will be recalculated.
       </p>
       <div className="rr-correction-actions">
@@ -294,35 +294,27 @@ function People({ title, kind, people, questionIndex, onPerson }) {
 
 function QuestionBreakdown({ question, index, players, onPerson, report, onCorrected }) {
   const api = useApi();
-  const previewAction = useAction();
   const applyAction = useAction();
   const [editingCorrectAnswer, setEditingCorrectAnswer] = useState(false);
   const [selectedChoiceId, setSelectedChoiceId] = useState(null);
-  const [preview, setPreview] = useState(null);
   const [complete, setComplete] = useState("");
   const canCorrect = Boolean(report.can_correct && question.session_question_id);
+  const currentChoice = question.choices.find((choice) => choice.correct);
+  const selectedChoice = question.choices.find((choice) => choice.id === selectedChoiceId);
 
   function closeCorrection() {
     setEditingCorrectAnswer(false);
     setSelectedChoiceId(null);
-    setPreview(null);
   }
 
-  async function selectCorrectAnswer(choice) {
-    if (!editingCorrectAnswer || choice.correct || previewAction.busy || applyAction.busy) return;
+  function selectCorrectAnswer(choice) {
+    if (!editingCorrectAnswer || choice.correct || applyAction.busy) return;
     setComplete("");
     setSelectedChoiceId(choice.id);
-    setPreview(null);
-    const result = await previewAction.run(() =>
-      api(
-        `/sessions/${report.session_id}/questions/${question.session_question_id}/correction-preview?choice_id=${choice.id}`,
-      ),
-    );
-    if (result) setPreview(result);
   }
 
   async function applyCorrection() {
-    if (!preview) return;
+    if (!selectedChoice) return;
     const result = await applyAction.run(() =>
       api(
         `/sessions/${report.session_id}/questions/${question.session_question_id}/correct-answer`,
@@ -330,7 +322,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
           method: "POST",
           body: JSON.stringify({
             choice_id: Number(selectedChoiceId),
-            expected_score_revision: preview.score_revision,
+            expected_score_revision: report.score_revision,
           }),
         },
       ),
@@ -420,7 +412,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
                   <button
                     type="button"
                     className="rr-edit-answer-button"
-                    disabled={previewAction.busy || applyAction.busy}
+                    disabled={applyAction.busy}
                     onClick={closeCorrection}
                   >
                     Cancel edit
@@ -456,8 +448,8 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
                         type="button"
                         className="rr-let rr-let-button"
                         aria-label={`Make answer ${group.label} correct`}
-                        disabled={previewAction.busy || applyAction.busy}
-                        onClick={() => void selectCorrectAnswer(choice)}
+                        disabled={applyAction.busy}
+                        onClick={() => selectCorrectAnswer(choice)}
                       >
                         {group.letter}
                       </button>
@@ -507,10 +499,11 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
               </div>
             </div>
 
-            <RequestError error={previewAction.error || applyAction.error} />
-            {editingCorrectAnswer && preview && selectedChoiceId === preview.proposed_correct_choice.choice_id && (
+            <RequestError error={applyAction.error} />
+            {editingCorrectAnswer && currentChoice && selectedChoice && (
               <CorrectionConfirmation
-                preview={preview}
+                currentChoice={currentChoice}
+                selectedChoice={selectedChoice}
                 busy={applyAction.busy}
                 onCancel={closeCorrection}
                 onConfirm={() => void applyCorrection()}
