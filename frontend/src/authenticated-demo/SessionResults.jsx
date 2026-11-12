@@ -84,13 +84,19 @@ function CorrectionConfirmation({ currentChoices, selectedChoice, busy, onConfir
       </p>
       <div className="rr-correction-actions">
         <button type="button" className="rr-button" disabled={busy} onClick={onCancel}>Cancel</button>
-        <button type="button" className="rr-button" disabled={busy} onClick={() => onConfirm("REPLACE")}>
-          {busy ? "Rescoring…" : alreadyCorrect ? "Keep only this answer" : "Replace correct answer"}
-        </button>
-        {!alreadyCorrect && (
-          <button type="button" className="rr-button orange" disabled={busy} onClick={() => onConfirm("ADD")}>
-            {busy ? "Rescoring…" : "Add another correct answer"}
+        {alreadyCorrect ? (
+          <button type="button" className="rr-button orange" disabled={busy} onClick={() => onConfirm("REMOVE")}>
+            {busy ? "Rescoring…" : "Remove correct answer"}
           </button>
+        ) : (
+          <>
+            <button type="button" className="rr-button" disabled={busy} onClick={() => onConfirm("REPLACE")}>
+              {busy ? "Rescoring…" : "Replace correct answer"}
+            </button>
+            <button type="button" className="rr-button orange" disabled={busy} onClick={() => onConfirm("ADD")}>
+              {busy ? "Rescoring…" : "Add another correct answer"}
+            </button>
+          </>
         )}
       </div>
     </section>
