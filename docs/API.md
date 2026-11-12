@@ -438,16 +438,17 @@ new choices, timestamp, and score revision.
 }
 ```
 
-`mode` is `REPLACE` to make only the selected choice correct, or `ADD` to keep
-the existing accepted choices and add the selected choice as another correct
-answer. It defaults to `REPLACE` for API compatibility.
+`mode` is `REPLACE` to make only the selected choice correct, `ADD` to keep the
+existing accepted choices and add the selected choice, or `REMOVE` to stop
+accepting a selected currently-correct choice. Removing the last correct answer
+is rejected. The mode defaults to `REPLACE` for API compatibility.
 
 `expected_score_revision` comes from the session report's `score_revision`.
 A concurrent rescore returns `409 score_revision_conflict`; the caller must
 reload the report before trying again.
 Other errors include `403 not_class_organizer`, `409 session_not_completed`,
 `409 session_question_not_closed`, `409 correct_answer_unchanged`, and
-`422 choice_not_in_question`.
+`409 last_correct_answer`, and `422 choice_not_in_question`.
 
 ### `GET /sessions/{session_id}/results/export.csv` → `200 text/csv`
 Host or Admin only. Returns `session-{id}-results.csv` (UTF-8 with BOM, `no-store`). It contains:

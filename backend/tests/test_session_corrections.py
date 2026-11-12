@@ -135,6 +135,27 @@ def test_additional_correct_answer_accepts_both_choices(db):
     assert db.get(Result, 2).correct_count == 1
 
 
+def test_remove_correct_answer_keeps_at_least_one(db):
+    correct_session_answer(
+        db, ORGANIZER, 1, 1, 11, SessionCorrectionMode.ADD, 0
+    )
+    result = correct_session_answer(
+        db, ORGANIZER, 1, 1, 10, SessionCorrectionMode.REMOVE, 1
+    )
+
+    assert result.correction_mode == SessionCorrectionMode.REMOVE
+    assert [choice.choice_id for choice in result.corrected_choices] == [11]
+    assert db.scalars(
+        select(SessionQuestionCorrectChoice.choice_id)
+    ).all() == [11]
+
+    with pytest.raises(APIError) as last_answer_error:
+        correct_session_answer(
+            db, ORGANIZER, 1, 1, 11, SessionCorrectionMode.REMOVE, 2
+        )
+    assert last_answer_error.value.code == "last_correct_answer"
+
+
 def test_stale_report_and_unauthorized_users_are_rejected(db):
     with pytest.raises(APIError) as member_error:
         correct_session_answer(

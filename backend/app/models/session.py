@@ -42,6 +42,7 @@ class SessionQuestionStatus(str, Enum):
 class SessionCorrectionMode(str, Enum):
     REPLACE = "REPLACE"
     ADD = "ADD"
+    REMOVE = "REMOVE"
 
 
 class LiveSession(Base):

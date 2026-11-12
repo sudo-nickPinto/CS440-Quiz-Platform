@@ -28,7 +28,7 @@ CREATE TABLE session_answer_correction (
     session_id                 INT UNSIGNED      NOT NULL,
     session_question_id        INT UNSIGNED      NOT NULL,
     selected_choice_id         INT UNSIGNED      NOT NULL,
-    correction_mode            ENUM('REPLACE', 'ADD') NOT NULL,
+    correction_mode            ENUM('REPLACE', 'ADD', 'REMOVE') NOT NULL,
     previous_correct_choice_ids JSON             NOT NULL,
     corrected_choice_ids        JSON             NOT NULL,
     corrected_by_id            INT UNSIGNED      NOT NULL,

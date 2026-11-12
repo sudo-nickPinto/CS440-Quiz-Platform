@@ -195,6 +195,24 @@ def correct_session_answer(
                     "That answer is already accepted as correct.",
                 )
             corrected_choices = (*context.current_choices, context.proposed_choice)
+        elif mode == SessionCorrectionMode.REMOVE:
+            if context.proposed_choice.choice_id not in previous_ids:
+                raise APIError(
+                    409,
+                    "correct_answer_unchanged",
+                    "Only an accepted answer can be removed.",
+                )
+            if len(context.current_choices) == 1:
+                raise APIError(
+                    409,
+                    "last_correct_answer",
+                    "At least one answer must remain correct.",
+                )
+            corrected_choices = tuple(
+                choice
+                for choice in context.current_choices
+                if choice.choice_id != context.proposed_choice.choice_id
+            )
         else:
             corrected_choices = (context.proposed_choice,)
             if previous_ids == [context.proposed_choice.choice_id]:
