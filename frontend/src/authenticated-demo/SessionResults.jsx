@@ -71,19 +71,27 @@ function RescoreNotice({ report }) {
   );
 }
 
-function CorrectionConfirmation({ currentChoice, selectedChoice, busy, onConfirm, onCancel }) {
+function CorrectionConfirmation({ currentChoices, selectedChoice, busy, onConfirm, onCancel }) {
+  const alreadyCorrect = currentChoices.some((choice) => choice.id === selectedChoice.id);
+  const currentLabels = currentChoices.map((choice) => choice.text).join(", ");
+
   return (
     <section className="rr-correction-prompt" aria-label="Confirm correct answer change">
       <p>
         <strong>Are you sure you want to make this change?</strong><br />
-        Correct answer: <b>{currentChoice.text}</b> → <b>{selectedChoice.text}</b>.
+        Currently accepted: <b>{currentLabels}</b>. Selected: <b>{selectedChoice.text}</b>.
         Scores and ranks for this saved session will be recalculated.
       </p>
       <div className="rr-correction-actions">
         <button type="button" className="rr-button" disabled={busy} onClick={onCancel}>Cancel</button>
-        <button type="button" className="rr-button orange" disabled={busy} onClick={onConfirm}>
-          {busy ? "Rescoring…" : "Confirm correction & rescore"}
+        <button type="button" className="rr-button" disabled={busy} onClick={() => onConfirm("REPLACE")}>
+          {busy ? "Rescoring…" : alreadyCorrect ? "Keep only this answer" : "Replace correct answer"}
         </button>
+        {!alreadyCorrect && (
+          <button type="button" className="rr-button orange" disabled={busy} onClick={() => onConfirm("ADD")}>
+            {busy ? "Rescoring…" : "Add another correct answer"}
+          </button>
+        )}
       </div>
     </section>
   );
@@ -299,7 +307,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
   const [selectedChoiceId, setSelectedChoiceId] = useState(null);
   const [complete, setComplete] = useState("");
   const canCorrect = Boolean(report.can_correct && question.session_question_id);
-  const currentChoice = question.choices.find((choice) => choice.correct);
+  const currentChoices = question.choices.filter((choice) => choice.correct);
   const selectedChoice = question.choices.find((choice) => choice.id === selectedChoiceId);
 
   function closeCorrection() {
@@ -308,12 +316,16 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
   }
 
   function selectCorrectAnswer(choice) {
-    if (!editingCorrectAnswer || choice.correct || applyAction.busy) return;
+    if (
+      !editingCorrectAnswer ||
+      (choice.correct && currentChoices.length === 1) ||
+      applyAction.busy
+    ) return;
     setComplete("");
     setSelectedChoiceId(choice.id);
   }
 
-  async function applyCorrection() {
+  async function applyCorrection(mode) {
     if (!selectedChoice) return;
     const result = await applyAction.run(() =>
       api(
@@ -322,6 +334,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
           method: "POST",
           body: JSON.stringify({
             choice_id: Number(selectedChoiceId),
+            mode,
             expected_score_revision: report.score_revision,
           }),
         },
@@ -432,7 +445,11 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
               <div className="rr-padding">
                 {groups.map((group) => {
                   const choice = question.choices.find((item) => item.id === group.key);
-                  const selectable = Boolean(editingCorrectAnswer && choice && !choice.correct);
+                  const selectable = Boolean(
+                    editingCorrectAnswer &&
+                    choice &&
+                    (!choice.correct || currentChoices.length > 1)
+                  );
                   return (
                   <div
                     className={
@@ -500,13 +517,13 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
             </div>
 
             <RequestError error={applyAction.error} />
-            {editingCorrectAnswer && currentChoice && selectedChoice && (
+            {editingCorrectAnswer && currentChoices.length > 0 && selectedChoice && (
               <CorrectionConfirmation
-                currentChoice={currentChoice}
+                currentChoices={currentChoices}
                 selectedChoice={selectedChoice}
                 busy={applyAction.busy}
                 onCancel={closeCorrection}
-                onConfirm={() => void applyCorrection()}
+                onConfirm={(mode) => void applyCorrection(mode)}
               />
             )}
           </div>
