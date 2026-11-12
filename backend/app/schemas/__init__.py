@@ -43,12 +43,18 @@ from app.schemas.session import (
     SessionParticipantResponse,
     SessionResponse,
 )
+from app.schemas.session_correction import (
+    CorrectSessionAnswerRequest,
+    SessionAnswerCorrectionPreview,
+    SessionAnswerCorrectionResult,
+)
 
 __all__ = [
     "ClassDashboardResponse",
     "ClassQuizPage",
     "ClassSessionPage",
     "ClassStudentPage",
+    "CorrectSessionAnswerRequest",
     "AnswerChoiceCreate",
     "AnswerChoiceResult",
     "AnswerChoiceResponse",
@@ -77,4 +83,6 @@ __all__ = [
     "SessionJoinResponse",
     "SessionParticipantResponse",
     "SessionResponse",
+    "SessionAnswerCorrectionPreview",
+    "SessionAnswerCorrectionResult",
 ]

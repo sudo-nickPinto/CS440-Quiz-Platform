@@ -408,7 +408,8 @@ Per-question breakdown for the results pages, sent with `Cache-Control: no-store
   "session_id": 12, "view": "host", "status": "COMPLETED",
   "quiz_title": "…", "host_name": "…", "ended_at": "…+00:00",
   "total_participants": 8, "played_count": 5,
-  "questions": [{ "question_id", "order", "text", "explanation", "seconds", "base_points", "played", "choices": [{ "id", "text", "correct" }] }],
+  "score_revision": 1, "rescored_at": "…+00:00", "can_correct": true,
+  "questions": [{ "question_id", "session_question_id", "order", "text", "explanation", "seconds", "base_points", "played", "corrected", "choices": [{ "id", "text", "correct" }] }],
   "players": [{ "id", "name", "rank", "points", "correct",
                 "answers": [{ "question_id", "state", "choice_id", "points", "time_ms" }] }]
 }
@@ -419,6 +420,30 @@ Per-question breakdown for the results pages, sent with `Cache-Control: no-store
 - A `CANCELLED` session returns empty `questions` and `players`.
 
 Extra error: `500 results_incomplete`.
+
+### Correct a completed session's answer and rescore it
+
+Only an active faculty organizer of the session's class may use these routes.
+The correction belongs to this completed session only: it never edits the quiz
+or any other presentation. Every applied correction records its actor, reason,
+old and new choices, timestamp, and score revision.
+
+- `GET /sessions/{session_id}/questions/{session_question_id}/correction-preview?choice_id={choice_id}` returns the projected question points, totals, and ranks without saving anything.
+- `POST /sessions/{session_id}/questions/{session_question_id}/correct-answer` applies the correction and recalculates stored responses, totals, correct counts, and ranks in one transaction.
+
+```json
+{
+  "choice_id": 42,
+  "reason": "The saved answer key was incorrect.",
+  "expected_score_revision": 0
+}
+```
+
+The `expected_score_revision` must come from the preview. A concurrent rescore
+returns `409 score_revision_conflict`; the caller must load a fresh preview.
+Other errors include `403 not_class_organizer`, `409 session_not_completed`,
+`409 session_question_not_closed`, `409 correct_answer_unchanged`, and
+`422 choice_not_in_question`.
 
 ### `GET /sessions/{session_id}/results/export.csv` → `200 text/csv`
 Host or Admin only. Returns `session-{id}-results.csv` (UTF-8 with BOM, `no-store`). It contains:

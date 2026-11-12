@@ -13,12 +13,14 @@ from app.models import (
     Question,
     QuizVersion,
     Response,
+    SessionAnswerCorrection,
     SessionParticipant,
     SessionQuestion,
     SessionQuestionStatus,
 )
 from app.schemas.results import FinalResults
 from app.services.session_end import get_final_results
+from app.services.session_corrections import can_correct_session
 from app.services.spreadsheet import safe_cell
 
 
@@ -47,7 +49,10 @@ def get_session_report(
                 "You did not participate in this session.",
             )
 
-    return build_session_report(db, db.get(LiveSession, session_id), final, viewer_id)
+    session = db.get(LiveSession, session_id)
+    report = build_session_report(db, session, final, viewer_id)
+    report["can_correct"] = can_correct_session(db, account, session)
+    return report
 
 
 def build_session_report(
@@ -94,6 +99,14 @@ def build_session_report(
         "host_name": host_name,
         "ended_at": ended_at.isoformat() if ended_at else None,
         "total_participants": int(total or 0),
+        "score_revision": session.score_revision,
+        "rescored_at": (
+            session.rescored_at.replace(tzinfo=UTC).isoformat()
+            if session.rescored_at and session.rescored_at.tzinfo is None
+            else session.rescored_at.isoformat() if session.rescored_at else None
+        ),
+        "can_correct": False,
+        "corrections": [],
         "played_count": 0,
         "questions": [],
         "players": [],
@@ -121,26 +134,61 @@ def build_session_report(
 
     report["played_count"] = len(played)
 
-    report["questions"] = [
+    correction_rows = db.execute(
+        select(SessionAnswerCorrection, Account.display_name)
+        .join(Account, Account.account_id == SessionAnswerCorrection.corrected_by_id)
+        .where(SessionAnswerCorrection.session_id == session_id)
+        .order_by(SessionAnswerCorrection.score_revision)
+    ).all()
+    report["corrections"] = [
         {
-            "question_id": q.question_id,
-            "order": q.question_order,
-            "text": q.question_text,
-            "explanation": q.explanation,
-            "seconds": q.time_limit_seconds,
-            "base_points": q.base_points,
-            "played": q.question_id in played,
-            "choices": [
-                {
-                    "id": c.choice_id,
-                    "text": c.choice_text,
-                    "correct": c.is_correct,
-                }
-                for c in q.choices
-            ],
+            "correction_id": correction.correction_id,
+            "session_question_id": correction.session_question_id,
+            "previous_correct_choice_id": correction.previous_correct_choice_id,
+            "corrected_choice_id": correction.corrected_choice_id,
+            "reason": correction.reason,
+            "corrected_by": display_name,
+            "score_revision": correction.score_revision,
+            "corrected_at": (
+                correction.corrected_at.replace(tzinfo=UTC).isoformat()
+                if correction.corrected_at.tzinfo is None
+                else correction.corrected_at.isoformat()
+            ),
         }
-        for q in questions
+        for correction, display_name in correction_rows
     ]
+
+    report["questions"] = []
+    for q in questions:
+        sq = played.get(q.question_id)
+        effective_correct_choice_id = (
+            sq.corrected_choice_id if sq and sq.corrected_choice_id else None
+        )
+        report["questions"].append(
+            {
+                "question_id": q.question_id,
+                "session_question_id": sq.session_question_id if sq else None,
+                "order": q.question_order,
+                "text": q.question_text,
+                "explanation": q.explanation,
+                "seconds": q.time_limit_seconds,
+                "base_points": q.base_points,
+                "played": sq is not None,
+                "corrected": bool(sq and sq.corrected_choice_id),
+                "choices": [
+                    {
+                        "id": c.choice_id,
+                        "text": c.choice_text,
+                        "correct": (
+                            c.choice_id == effective_correct_choice_id
+                            if effective_correct_choice_id is not None
+                            else c.is_correct
+                        ),
+                    }
+                    for c in q.choices
+                ],
+            }
+        )
 
     # Participants receive only their own stored responses,
     # including after leaving the session.
