@@ -79,6 +79,17 @@
   cursor: default;
   opacity: 1;
 }
+.qp .qc-approval .qc-host > button {
+  min-width: 172px;
+  padding: 6px 12px;
+  background: var(--navy);
+  color: var(--paper);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.qp .qc-approval .qc-host > button:hover:not(:disabled) {
+  background: var(--orange-deep);
+}
 .qp .qc-approval button.cl-send:disabled:not(.is-approved) {
   background: var(--sand);
   color: var(--gray);
