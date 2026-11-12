@@ -153,30 +153,6 @@
   min-width: 0;
 }
 
-/* Keep the Classes-page search useful without allowing it to become an
-   oversized row when the remaining toolbar controls wrap. Other class
-   toolbars intentionally retain the more flexible shared search sizing. */
-.qp .cl-classes-toolbar {
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-}
-
-.qp .cl-classes-toolbar > * {
-  min-width: 0;
-}
-
-.qp .cl-classes-toolbar > .cl-search {
-  flex: 1 1 320px;
-  max-width: 640px;
-}
-
-.qp .cl-classes-toolbar > .cl-search input {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-}
-
 .qp .cl-page input,
 .qp .cl-page select {
   min-height: 44px;
@@ -616,11 +592,6 @@
 }
 
 @media (max-width: 640px) {
-  .qp .cl-classes-toolbar > .cl-search {
-    flex-basis: 100%;
-    max-width: none;
-  }
-
   .qp .cl-titlebar h1 {
     padding: 16px 12px;
     font-size: 20px;

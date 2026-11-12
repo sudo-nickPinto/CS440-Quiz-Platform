@@ -1,7 +1,7 @@
 /* Drafts in progress (Classes page) and the new-quiz class picker. */
 
 .qp .dr-section {
-  margin-bottom: 24px;
+  margin-bottom: 0;
   border-bottom: var(--b);
 }
 

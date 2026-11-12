@@ -337,7 +337,7 @@ export default function ClassesPage() {
 
       {ready && classes.length > 0 && <MyDrafts classes={classes} />}
 
-      <div className="cl-toolbar cl-classes-toolbar">
+      <div className="cl-toolbar">
         <label className="cl-search">
           <span className="cl-sr">Search classes</span>
           <input
