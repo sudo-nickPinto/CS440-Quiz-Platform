@@ -7,7 +7,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router";
-import { useResource } from "./rest";
+import { useAction, useApi, useResource } from "./rest";
 import { classPagePath } from "../classes/classPaths";
 import RequestError from "./RequestError";
 import { useFileDownload } from "./useFileDownload";
@@ -52,6 +52,162 @@ function Stat({ label, value }) {
       <small>{label}</small>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function RescoreNotice({ report }) {
+  if (!report.score_revision) return null;
+
+  return (
+    <aside className="rr-rescore-notice" role="status">
+      <strong>Results updated</strong>
+      <span>
+        This session has been rescored {report.score_revision} {report.score_revision === 1 ? "time" : "times"}.
+        {report.rescored_at
+          ? ` Latest update: ${new Date(report.rescored_at).toLocaleString()}.`
+          : ""}
+      </span>
+    </aside>
+  );
+}
+
+function CorrectAnswerPanel({ report, question, onCorrected }) {
+  const api = useApi();
+  const previewAction = useAction();
+  const applyAction = useAction();
+  const current = question.choices.find((choice) => choice.correct);
+  const [choiceId, setChoiceId] = useState("");
+  const [reason, setReason] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [complete, setComplete] = useState("");
+
+  async function previewRescore(event) {
+    event.preventDefault();
+    setComplete("");
+    const result = await previewAction.run(() =>
+      api(
+        `/sessions/${report.session_id}/questions/${question.session_question_id}/correction-preview?choice_id=${choiceId}`,
+      ),
+    );
+    if (result) setPreview(result);
+  }
+
+  async function applyCorrection() {
+    const result = await applyAction.run(() =>
+      api(
+        `/sessions/${report.session_id}/questions/${question.session_question_id}/correct-answer`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            choice_id: Number(choiceId),
+            reason,
+            expected_score_revision: preview.score_revision,
+          }),
+        },
+      ),
+    );
+    if (!result) return;
+    setPreview(null);
+    setChoiceId("");
+    setReason("");
+    setComplete(`Question ${question.order} was corrected and all saved results were rescored.`);
+    onCorrected?.();
+  }
+
+  const changedSelection = preview && Number(choiceId) !== preview.proposed_correct_choice.choice_id;
+
+  return (
+    <section className="rr-correction" aria-label={`Correct answer for question ${question.order}`}>
+      <div>
+        <small>Organizer correction</small>
+        <h4>Correct the saved session</h4>
+        <p>
+          This changes only this completed presentation. The quiz and every other session stay unchanged.
+        </p>
+      </div>
+
+      <form onSubmit={previewRescore}>
+        <label>
+          Correct answer
+          <select
+            value={choiceId}
+            required
+            onChange={(event) => {
+              setChoiceId(event.target.value);
+              setPreview(null);
+            }}
+          >
+            <option value="">Select a replacement…</option>
+            {question.choices
+              .filter((choice) => choice.id !== current?.id)
+              .map((choice) => (
+                <option value={choice.id} key={choice.id}>
+                  {letterOf(question.choices.indexOf(choice))}. {choice.text}
+                </option>
+              ))}
+          </select>
+        </label>
+
+        <label>
+          Reason for the audit log
+          <textarea
+            value={reason}
+            required
+            maxLength={500}
+            rows={3}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Explain why the saved answer key is being corrected."
+          />
+        </label>
+
+        <button className="rr-button" type="submit" disabled={previewAction.busy || !choiceId || !reason.trim()}>
+          {previewAction.busy ? "Calculating…" : "Preview rescore"}
+        </button>
+      </form>
+
+      <RequestError error={previewAction.error || applyAction.error} />
+      {complete && <p className="rr-correction-success" role="status">✓ {complete}</p>}
+
+      {preview && !changedSelection && (
+        <div className="rr-rescore-preview">
+          <div className="rr-panel-heading">
+            <span>Preview · no changes saved yet</span>
+            <span>{preview.affected_response_count} affected responses</span>
+          </div>
+          <p className="rr-padding">
+            Correct answer: <b>{preview.current_correct_choice.text}</b> → <b>{preview.proposed_correct_choice.text}</b>
+          </p>
+
+          {preview.affected_participants.length ? (
+            <div className="rr-rescore-table" role="table" aria-label="Projected score changes">
+              <div role="row" className="rr-rescore-row heading">
+                <span role="columnheader">Participant</span>
+                <span role="columnheader">Question</span>
+                <span role="columnheader">Total</span>
+                <span role="columnheader">Rank</span>
+              </div>
+              {preview.affected_participants.map((person) => (
+                <div role="row" className="rr-rescore-row" key={person.session_participant_id}>
+                  <strong role="cell">{person.display_name}</strong>
+                  <span role="cell">{fmt(person.old_question_points)} → {fmt(person.new_question_points)}</span>
+                  <span role="cell">{fmt(person.old_total_score)} → {fmt(person.new_total_score)}</span>
+                  <span role="cell">#{person.old_rank} → #{person.new_rank}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rr-padding">No participant score or rank would change.</p>
+          )}
+
+          <div className="rr-correction-confirm">
+            <p>This action updates saved answers, totals, and ranks and records an audit entry.</p>
+            <button type="button" className="rr-button orange" disabled={applyAction.busy} onClick={() => void applyCorrection()}>
+              {applyAction.busy ? "Rescoring…" : "Confirm correction & rescore"}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -258,7 +414,7 @@ function People({ title, kind, people, questionIndex, onPerson }) {
   );
 }
 
-function QuestionBreakdown({ question, index, players, onPerson }) {
+function QuestionBreakdown({ question, index, players, onPerson, report, onCorrected }) {
   const byState = (state) =>
     players.filter((p) => p.answers[index].state === state);
 
@@ -380,6 +536,14 @@ function QuestionBreakdown({ question, index, players, onPerson }) {
                 />
               </div>
             </div>
+
+            {report.can_correct && question.session_question_id && (
+              <CorrectAnswerPanel
+                report={report}
+                question={question}
+                onCorrected={onCorrected}
+              />
+            )}
           </div>
         </div>
       )}
@@ -398,6 +562,7 @@ export function HostResults({
   exportPath = `/sessions/${report.session_id}/results/export.csv`,
   exportName = `session-${report.session_id}-results.csv`,
   exportLabel = "Export CSV",
+  onCorrected,
 }) {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
@@ -453,6 +618,7 @@ export function HostResults({
       </Title>
 
       <RequestError error={file.error} />
+      <RescoreNotice report={report} />
 
       <div className="rr-summary">
         <Stat label="Participants" value={report.total_participants} />
@@ -529,6 +695,8 @@ export function HostResults({
               index={report.questions.indexOf(q)}
               players={players}
               onPerson={showPerson}
+              report={report}
+              onCorrected={onCorrected}
             />
           ))}
 
@@ -680,6 +848,8 @@ export function ParticipantResults({ report, backTo, backLabel }) {
         </div>
         <div className="rr-private">You, the host &amp; admins</div>
       </nav>
+
+      <RescoreNotice report={report} />
 
       <div className="rr-me-content">
         <section className="rr-band" aria-label="Report card">
@@ -883,7 +1053,7 @@ export default function SessionResults() {
   }
 
   return host ? (
-    <HostResults report={report} {...back} />
+    <HostResults report={report} onCorrected={resource.reload} {...back} />
   ) : (
     <ParticipantResults report={report} {...back} />
   );
