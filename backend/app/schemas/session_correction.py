@@ -5,16 +5,17 @@ from pydantic import BaseModel, Field, field_validator
 
 class CorrectSessionAnswerRequest(BaseModel):
     choice_id: int = Field(gt=0)
-    reason: str = Field(min_length=1, max_length=500)
+    reason: str = Field(
+        default="Corrected by class organizer.",
+        max_length=500,
+    )
     expected_score_revision: int = Field(ge=0)
 
     @field_validator("reason")
     @classmethod
     def normalize_reason(cls, value: str) -> str:
         normalized = value.strip()
-        if not normalized:
-            raise ValueError("Reason must not be blank.")
-        return normalized
+        return normalized or "Corrected by class organizer."
 
 
 class CorrectChoiceSummary(BaseModel):

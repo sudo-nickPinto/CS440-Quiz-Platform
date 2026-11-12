@@ -28,6 +28,7 @@ from app.services.session_corrections import (
     correct_session_answer,
     preview_session_answer_correction,
 )
+from app.schemas.session_correction import CorrectSessionAnswerRequest
 from app.services.session_report import build_session_report
 from app.services.session_end import load_final_results
 
@@ -137,3 +138,18 @@ def test_report_uses_session_override_and_exposes_audit(db):
     assert report["questions"][0]["corrected"] is True
     assert [choice["id"] for choice in report["questions"][0]["choices"] if choice["correct"]] == [11]
     assert report["corrections"][0]["reason"] == "Correction"
+
+
+def test_request_uses_an_auditable_default_reason():
+    payload = CorrectSessionAnswerRequest(
+        choice_id=11,
+        expected_score_revision=0,
+    )
+    assert payload.reason == "Corrected by class organizer."
+
+    blank = CorrectSessionAnswerRequest(
+        choice_id=11,
+        reason="   ",
+        expected_score_revision=0,
+    )
+    assert blank.reason == "Corrected by class organizer."

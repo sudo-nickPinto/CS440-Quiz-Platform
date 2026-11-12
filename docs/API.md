@@ -434,10 +434,12 @@ old and new choices, timestamp, and score revision.
 ```json
 {
   "choice_id": 42,
-  "reason": "The saved answer key was incorrect.",
   "expected_score_revision": 0
 }
 ```
+
+`reason` is optional. When omitted or blank, the audit log records
+`Corrected by class organizer.`
 
 The `expected_score_revision` must come from the preview. A concurrent rescore
 returns `409 score_revision_conflict`; the caller must load a fresh preview.
