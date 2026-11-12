@@ -420,8 +420,16 @@
 }
 
 .qp .rr-let-button {
+  box-sizing: border-box;
+  width: 30px;
+  min-width: 30px;
+  max-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
   padding: 0;
   color: inherit;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -430,8 +438,7 @@
 .qp .rr-bar-row.is-selected .rr-let {
   border-color: var(--rr-navy) !important;
   background: var(--rr-sky);
-  outline: 3px solid var(--rr-navy);
-  outline-offset: 2px;
+  outline: 0;
 }
 
 .qp .rr-let-button:disabled {
