@@ -322,7 +322,9 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
       applyAction.busy
     ) return;
     setComplete("");
-    setSelectedChoiceId(choice.id);
+    setSelectedChoiceId((selectedId) =>
+      selectedId === choice.id ? null : choice.id
+    );
   }
 
   async function applyCorrection(mode) {
@@ -464,7 +466,11 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
                       <button
                         type="button"
                         className="rr-let rr-let-button"
-                        aria-label={`Make answer ${group.label} correct`}
+                        aria-label={
+                          selectedChoiceId === group.key
+                            ? `Cancel selection of answer ${group.label}`
+                            : `Select answer ${group.label} as correct`
+                        }
                         disabled={applyAction.busy}
                         onClick={() => selectCorrectAnswer(choice)}
                       >
