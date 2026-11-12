@@ -104,7 +104,10 @@ function RescorePreview({ preview, busy, onConfirm, onCancel }) {
       )}
 
       <div className="rr-correction-confirm">
-        <p>This updates this saved session only, then recalculates scores and ranks.</p>
+        <p>
+          <strong>Are you sure you want to make this change?</strong><br />
+          This updates this saved session only, then recalculates scores and ranks.
+        </p>
         <div className="rr-correction-actions">
           <button type="button" className="rr-button" disabled={busy} onClick={onCancel}>Cancel</button>
           <button type="button" className="rr-button orange" disabled={busy} onClick={onConfirm}>
@@ -458,7 +461,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
 
             {editingCorrectAnswer && (
               <p className="rr-correction-hint" role="status">
-                Select the answer that should have been marked correct. Nothing changes until you confirm the rescore.
+                Click an answer letter to choose the answer that should have been marked correct. Nothing changes until you confirm the rescore.
               </p>
             )}
             {complete && <p className="rr-correction-success" role="status">✓ {complete}</p>}
@@ -468,24 +471,29 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
                 {groups.map((group) => {
                   const choice = question.choices.find((item) => item.id === group.key);
                   const selectable = Boolean(editingCorrectAnswer && choice && !choice.correct);
-                  const Row = selectable ? "button" : "div";
                   return (
-                  <Row
-                    type={selectable ? "button" : undefined}
+                  <div
                     className={
                       "rr-bar-row" +
                       (group.correct ? " correct" : "") +
                       (group.missed ? " is-missed" : "") +
-                      (selectable ? " is-selectable" : "") +
                       (selectedChoiceId === group.key ? " is-selected" : "")
                     }
                     key={group.key}
-                    onClick={selectable ? () => void selectCorrectAnswer(choice) : undefined}
-                    disabled={selectable && (previewAction.busy || applyAction.busy)}
                   >
-                    <span className="rr-let" aria-hidden="true">
-                      {group.letter}
-                    </span>
+                    {selectable ? (
+                      <button
+                        type="button"
+                        className="rr-let rr-let-button"
+                        aria-label={`Make answer ${group.label} correct`}
+                        disabled={previewAction.busy || applyAction.busy}
+                        onClick={() => void selectCorrectAnswer(choice)}
+                      >
+                        {group.letter}
+                      </button>
+                    ) : (
+                      <span className="rr-let" aria-hidden="true">{group.letter}</span>
+                    )}
                     <strong>
                       {group.label}
                       {group.correct && <em> Correct</em>}
@@ -499,7 +507,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
                         {group.count} / {players.length}
                       </small>
                     </span>
-                  </Row>
+                  </div>
                   );
                 })}
               </div>

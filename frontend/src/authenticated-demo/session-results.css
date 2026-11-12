@@ -452,24 +452,22 @@
   accent-color: var(--rr-navy);
 }
 
-.qp .rr-bar-row.is-selectable {
-  width: 100%;
-  border: 2px solid transparent;
-  border-radius: 0;
-  font: inherit;
-  text-align: left;
+.qp .rr-let-button {
+  padding: 0;
+  color: inherit;
   cursor: pointer;
 }
 
-.qp .rr-bar-row.is-selectable:hover,
-.qp .rr-bar-row.is-selectable:focus-visible,
-.qp .rr-bar-row.is-selected {
-  border-color: var(--rr-navy);
+.qp .rr-let-button:hover,
+.qp .rr-let-button:focus-visible,
+.qp .rr-bar-row.is-selected .rr-let {
+  border-color: var(--rr-navy) !important;
   background: var(--rr-sky);
-  outline: 0;
+  outline: 3px solid var(--rr-navy);
+  outline-offset: 2px;
 }
 
-.qp .rr-bar-row.is-selectable:disabled {
+.qp .rr-let-button:disabled {
   color: inherit;
   cursor: wait;
   opacity: 0.75;
