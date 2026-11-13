@@ -77,6 +77,7 @@ export default function QuizCollaborators({ quiz, embedded = false }) {
 
       <details className="qv-collaborator-disclosure">
         <summary>
+          <span className="qe-eyebrow">Shared editing</span>
           <h2 id="collaborators-title">Quiz collaborators</h2>
           <span className="qv-collaborator-count">
             {resource.loading

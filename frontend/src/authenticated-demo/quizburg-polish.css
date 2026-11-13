@@ -2291,7 +2291,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 20px;
-  padding: 12px clamp(16px, 4vw, 40px);
+  padding: 18px clamp(16px, 4vw, 40px);
   cursor: pointer;
   list-style: none;
 }
@@ -2311,11 +2311,12 @@
 
 .qp .qv-collaborator-disclosure h2 {
   grid-column: 1;
-  margin: 0 0 3px;
+  margin: 4px 0 8px;
   font: 20px "Archivo Black", sans-serif;
   text-transform: uppercase;
 }
 
+.qp .qv-collaborator-disclosure > summary > .qe-eyebrow,
 .qp .qv-collaborator-count {
   grid-column: 1;
 }
@@ -2329,7 +2330,7 @@
 .qp .qv-collaborator-arrow {
   display: grid;
   grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-row: 1 / span 3;
   width: 42px;
   height: 42px;
   place-items: center;
