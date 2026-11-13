@@ -180,11 +180,13 @@ describe("initials", () => {
 });
 
 describe("resolveUserSection", () => {
-  it("keeps Present and Participate and sends old names to Present", () => {
-    expect(resolveUserSection("Participate")).toBe("Participate");
-    expect(resolveUserSection("Present")).toBe("Present");
-    expect(resolveUserSection("My quizzes")).toBe("Present");
-    expect(resolveUserSection(null)).toBe("Present");
+  it("uses clear user labels while preserving legacy section links", () => {
+    expect(resolveUserSection("Participate")).toBe("Reports");
+    expect(resolveUserSection("Present")).toBe("My quizzes");
+    expect(resolveUserSection("History")).toBe("Reports");
+    expect(resolveUserSection("Reports")).toBe("Reports");
+    expect(resolveUserSection("My quizzes")).toBe("My quizzes");
+    expect(resolveUserSection(null)).toBe("My quizzes");
   });
 });
 
