@@ -86,6 +86,7 @@ Note: `frontend/.env.example` points at the backend on port `8001`, so run `uvic
 ## API
 
 Every REST route, who may call it and its error codes: [docs/API.md](docs/API.md). The live WebSocket: [docs/LIVE_PROTOCOL.md](docs/LIVE_PROTOCOL.md).
+For optional quiz-title search in a class's completed session history, see the [class reports API](docs/API.md#class-reports).
 
 ## V3 Task 4: Quiz submission and approval
 

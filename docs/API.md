@@ -495,10 +495,12 @@ Built from the class's `COMPLETED` sessions only; open sessions never count. Sco
   - `pending_submission_count`: every pending submission in the class for organizers, the caller's own for members; and `approved_quiz_count`, the hostable approved quizzes.
 
   `is_global_admin` was removed in V3: Admin status never grants access to a class.
-- `GET /classes/{class_id}/sessions`: for any member. It takes `page`, `page_size` (1–100), `sort=started_at|participant_count|average_score` and `order`. Each item has:
+- `GET /classes/{class_id}/sessions`: for any member. It takes `page`, `page_size` (1–100), `sort=started_at|participant_count|average_score`, `order`, and optional `q` (at most 200 characters; longer values return `422`). The server trims leading and trailing whitespace from `q`, then matches a case-insensitive substring of `quiz_title` across all completed sessions in this class before sorting and pagination. Missing, empty, or whitespace-only `q` returns the original full list. `total_items` and `total_pages` count matching sessions. Each item has:
   - `session_id, quiz_id, quiz_title, status, host_name, is_host, started_at, ended_at, participant_count`;
   - `average_score` and `top_score`, which are organizers only;
   - `my_score` and `my_rank`, the caller's own result or null.
+
+  Example: `GET /classes/12/sessions?q=week%201&page=1&page_size=25&sort=started_at&order=desc` returns the first page of that class's completed sessions whose quiz titles contain `week 1`, newest first.
 - `GET /classes/{class_id}/presented-quizzes`: for any member. (It was `/quizzes` before V3; that address now lists the class's own quizzes.) Completed sessions grouped by quiz, with `presented_at, session_count, participant_count` and `average_score` (organizers only). It takes `sort=presented_at|title|participant_count`.
 - `GET /classes/{class_id}/students`: organizers only (`403 not_class_organizer`). Active `MEMBER`s, with:
   - `session_count, average_score, total_points`;
