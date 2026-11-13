@@ -71,11 +71,7 @@ export default function QuizCollaborators({ quiz }) {
       <div className="qv-collaborators-copy">
         <span className="qe-eyebrow">Shared editing</span>
         <h2 id="collaborators-title">Quiz collaborators</h2>
-        <p>
-          Invite an active member of this class by email. Access is granted
-          immediately; collaborators can edit questions but cannot publish,
-          archive, host, or manage sharing.
-        </p>
+        <p>Invite an active member of this class by email.</p>
       </div>
 
       <form className="qv-collaborator-form" onSubmit={invite}>
