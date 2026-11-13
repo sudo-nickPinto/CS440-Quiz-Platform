@@ -1464,7 +1464,7 @@ export function QuizViewer() {
               <div className="qv-host">
                 <Link
                   className="qb-btn"
-                  to={`/app/classes/${quiz.class_id}?view=user&section=Present`}
+                  to={`/app/classes/${quiz.class_id}?view=user&section=My%20quizzes`}
                 >
                   Send for approval →
                 </Link>

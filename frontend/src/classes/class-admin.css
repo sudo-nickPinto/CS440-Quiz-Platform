@@ -1302,12 +1302,12 @@
 
 /* ---------- Selected tab colors, logo order: blue on the left, orange on
    the right (QUIZ | BURG). ---------- */
-/* Member view: Present navy, Participate orange. */
-.qp .cl-section-tabs > [role="group"] button[data-section="Present"][aria-pressed="true"] {
+/* Member view: My quizzes navy, Reports orange. */
+.qp .cl-section-tabs > [role="group"] button[data-section="My quizzes"][aria-pressed="true"] {
   background: var(--navy);
 }
 
-.qp .cl-section-tabs > [role="group"] button[data-section="Participate"][aria-pressed="true"] {
+.qp .cl-section-tabs > [role="group"] button[data-section="Reports"][aria-pressed="true"] {
   background: var(--orange-deep);
 }
 

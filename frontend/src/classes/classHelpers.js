@@ -118,16 +118,25 @@ export function resolveAdminSection(requested) {
   };
 }
 
-// Member (User view) tabs. "Present" is the caller's own quizzes with their
-// approval state; "Participate" is the sessions they played. Old links to
-// "My quizzes" land on Present.
-export const USER_SECTIONS = ["Present", "Participate"];
+// Member (User view) tabs. "My quizzes" contains quizzes the caller owns or
+// collaborates on; "Reports" contains class sessions and personal results.
+export const USER_SECTIONS = ["My quizzes", "Reports"];
 
 export function resolveUserSection(requested) {
-  return USER_SECTIONS.includes(requested) ? requested : "Present";
+  if (requested === "Present" || requested === "My quizzes") {
+    return "My quizzes";
+  }
+  if (
+    requested === "Participate" ||
+    requested === "History" ||
+    requested === "Reports"
+  ) {
+    return "Reports";
+  }
+  return "My quizzes";
 }
 
-// The lead block on a Present row. Members only see Draft or Approved:
+// The lead block on a My quizzes row. Members only see Draft or Approved:
 // publishing (freezing a version) happens inside "Send for approval". A quiz
 // edited after approval is a Draft again until the new version is approved.
 export function presentStatus(quiz) {
@@ -138,7 +147,7 @@ export function presentStatus(quiz) {
   return { key: "draft", label: "Draft" };
 }
 
-// The one approval button on a Present row and the short note under it.
+// The one approval button on a My quizzes row and the short note under it.
 //   send      Send for approval / Send again (orange)
 //   withdraw  Withdraw request (while waiting, for whoever sent it)
 //   waiting   Waiting for approval (sent by a co-editor; not clickable)

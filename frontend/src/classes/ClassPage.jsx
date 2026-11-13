@@ -962,8 +962,6 @@ function ClassWorkspace({ classInfo, onChange }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const showAdminLayout = classInfo.canManage === true;
   const api = useApi();
-  const navigate = useNavigate();
-  const leave = useAction();
   const confirmer = useConfirm();
   const [copied, setCopied] = useState(false);
   const csv = useFileDownload();
@@ -1006,7 +1004,7 @@ function ClassWorkspace({ classInfo, onChange }) {
   );
   const [userSection, setUserSection] = useRemembered(
     `${memory}:user-section`,
-    "Present",
+    "My quizzes",
     {
       override:
         urlTargetsUser && urlSection ? resolveUserSection(urlSection) : null,
@@ -1093,23 +1091,6 @@ function ClassWorkspace({ classInfo, onChange }) {
     await copyText(classInfo.code);
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
-  }
-
-  async function leaveClass() {
-    const confirmed = await confirmer.confirm({
-      label: "Leave class",
-      title: `Leave ${classInfo.name}?`,
-      message: "You can rejoin with the class code.",
-      confirmLabel: "Leave class",
-    });
-    if (!confirmed) return;
-
-    const left = await leave.run(async () => {
-      await api(`/classes/${classInfo.id}/membership`, { method: "DELETE" });
-      return true;
-    });
-
-    if (left) navigate("/app/classes");
   }
 
   return (
@@ -1256,19 +1237,6 @@ function ClassWorkspace({ classInfo, onChange }) {
           </div>
         )}
 
-        {!adminView && classInfo.membershipStatus === "ACTIVE" && (
-          <div className="cl-actions">
-            <button
-              type="button"
-              className="cl-secondary cl-danger"
-              disabled={leave.busy}
-              onClick={() => void leaveClass()}
-            >
-              Leave class
-            </button>
-          </div>
-        )}
-
         {/* Last in the bar, so it stays in the same spot in both views. */}
         {showAdminLayout && (
           <div
@@ -1310,7 +1278,7 @@ function ClassWorkspace({ classInfo, onChange }) {
         <p className="cl-section-note">This class is archived.</p>
       )}
 
-      <RequestError error={csv.error || leave.error || manage.error} />
+      <RequestError error={csv.error || manage.error} />
 
       <div className="cl-section-tabs">
         <div role="group" aria-label="Class sections">
@@ -1371,7 +1339,7 @@ function ClassWorkspace({ classInfo, onChange }) {
         />
       ) : activeSection === "Approvals" ? (
         <SubmissionsTable classInfo={classInfo} onChange={dashboard.reload} />
-      ) : activeSection === "Present" ? (
+      ) : activeSection === "My quizzes" ? (
         <PresentTable
           classInfo={classInfo}
           onApprovalChange={dashboard.reload}

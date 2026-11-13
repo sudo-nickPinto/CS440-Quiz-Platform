@@ -895,7 +895,7 @@
   }
 }
 
-/* Participate tab rows (ParticipantHistory) */
+/* Reports tab rows (ParticipantHistory) */
 .qp .ph-head > span {
   padding: 9px 16px;
 }
@@ -5543,19 +5543,6 @@
 .qp .cl-section-tabs > .cl-actions > button:hover:not(:disabled),
 .qp .cl-section-tabs > .cl-actions > button[aria-expanded="true"] {
   background: var(--ink);
-}
-
-/* "Leave class" sits where JOIN was, but it is a quiet secondary action */
-.qp .cl-section-tabs > .cl-actions > button.cl-secondary {
-  padding: 0 24px;
-  background: var(--paper);
-  color: var(--ink);
-  font: 700 14px "Space Grotesk", sans-serif;
-  letter-spacing: 1px;
-}
-
-.qp .cl-section-tabs > .cl-actions > button.cl-secondary:hover:not(:disabled) {
-  background: var(--apricot);
 }
 
 /* Members */

@@ -14,7 +14,7 @@ What the class features do today, and where the code for each one lives. The des
 
 1. The quiz must belong to the class, and its newest published version must be approved for the class (see the quiz submission and approval endpoints in [API.md](API.md)).
 2. The host must be an active member of the class and either the quiz owner or a class organizer. Collaborators can't host just because they collaborate. The class must not be archived.
-3. They start the session from the quiz page or from **Class page → Present tab → Host in this class**. A quiz lives in exactly one class, so there is no class to choose.
+3. They start the session from the quiz page or from **Class page → My quizzes → Host in this class**. A quiz lives in exactly one class, so there is no class to choose.
 4. The frontend sends `POST /classes/{class_id}/quizzes/{quiz_id}/sessions` with no body.
 
 Code:
@@ -50,9 +50,9 @@ Checked on the server every time. Hiding a button in the UI is not a permission 
 | Join by code | Active member | `403 not_class_member` |
 | Join by id (Live button) | Active member | `404 session_not_found` |
 | Answer | Still an active member | `403 not_class_member` |
-| WebSocket | Still an active member, host included | close `4403 not_class_member` on connect, and right away for an open socket when the person is removed or leaves the class |
+| WebSocket | Still an active member, host included | close `4403 not_class_member` on connect, and right away for an open socket when an organizer removes the person from the class |
 
-A member (or host) removed mid-game, or who leaves the class, has their live socket closed with `4403` and can't reconnect, rejoin or answer. They are marked as left in the class's running sessions: the host sees the smaller participant count, and they stop counting toward an open question, so it can still close when everyone else has answered. Timing, late join, scoring and duplicate-answer rules are the same as before classes ([LIVE_PROTOCOL.md](LIVE_PROTOCOL.md)).
+A member (or host) removed mid-game has their live socket closed with `4403` and can't reconnect, rejoin or answer. They are marked as left in the class's running sessions: the host sees the smaller participant count, and they stop counting toward an open question, so it can still close when everyone else has answered. Timing, late join, scoring and duplicate-answer rules are the same as before classes ([LIVE_PROTOCOL.md](LIVE_PROTOCOL.md)).
 
 Code: `backend/app/services/class_access.py` (`may_play`, `require_session_class_member`).
 
@@ -62,7 +62,7 @@ Code: `backend/app/services/class_access.py` (`may_play`, `require_session_class
 - **By link:** an organizer can share `/app/join/class/ABCD-2345` (shown in **Settings → Class code**). Opening it joins straight away. Signed-out visitors sign in first and come back to the link.
 - **By invite:** organizers can still invite by email from **Members**.
 - **Who can't join:** turning the code off, or archiving the class, stops new joins. Someone an organizer removed can't come back with the code; they need a new invite.
-- **Leaving:** the User view of a class has a **Leave class** button (`DELETE /classes/{id}/membership`). The last organizer can't leave.
+- **Removal:** members cannot leave a class themselves. An organizer removes them from **Admin view → Members**, which preserves their historical results and immediately removes access.
 - **Rate limit:** each account gets 10 join attempts a minute, counted in memory per server process.
 
 Code: `join_class` and `leave_class` in `backend/app/services/classes.py`, `frontend/src/classes/ClassesPage.jsx`, `frontend/src/classes/JoinClassPage.jsx`.
@@ -76,7 +76,7 @@ Every number below comes from the class's **completed** sessions (`live_session.
 | Summary bar (Admin view) | Organizers | Students, presentations, class average (mean of student averages), attendance (mean of student attendance) |
 | **Presentations** tab | Organizers | Each session: date, quiz, attendance (players / students), average, top score, and a link to the full report when the viewer hosted it |
 | **Students** tab | Organizers | Each student ranked by average: last five scores (dotted dash = absent), average, attendance, total points |
-| **Participate** tab | Everyone | Each session with the viewer's own score and rank, and a link to their results |
+| **Reports** tab | Everyone | Each session with the viewer's own score and rank, and a link to their results |
 | **Export grades** | Organizers | CSV gradebook: a row per student, a column per session, and the totals |
 
 - **Members never see classmates' scores.** For them the class-wide fields come back null.
