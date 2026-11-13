@@ -185,6 +185,21 @@ def list_class_submissions(
     )
 
 
+def _can_still_open_quiz(db: Session, quiz_id: int, account_id: int) -> bool:
+    """The quiz's owner, or a collaborator whose access hasn't been revoked."""
+    author_id = db.scalar(select(Quiz.author_id).where(Quiz.quiz_id == quiz_id))
+    if author_id == account_id:
+        return True
+    collaborator = db.scalar(
+        select(QuizCollaborator.quiz_id).where(
+            QuizCollaborator.quiz_id == quiz_id,
+            QuizCollaborator.account_id == account_id,
+            QuizCollaborator.revoked_at.is_(None),
+        )
+    )
+    return collaborator is not None
+
+
 def get_class_submission_preview(
     db: Session, account: CurrentAccount, class_id: int, submission_id: int
 ) -> ClassSubmissionPreview:
@@ -196,6 +211,12 @@ def get_class_submission_preview(
         )
     ).first()
     if row is None:
+        raise APIError(404, "submission_not_found", "Submission not found.")
+    # The preview shows every question and correct answer. A collaborator
+    # who sent the quiz and later lost access must not keep reading it here.
+    if not access.is_organizer and not _can_still_open_quiz(
+        db, row.QuizVersion.quiz_id, account.account_id
+    ):
         raise APIError(404, "submission_not_found", "Submission not found.")
     version = db.scalars(
         select(QuizVersion)
