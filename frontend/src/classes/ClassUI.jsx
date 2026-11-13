@@ -90,8 +90,6 @@ export function ClassCard({ item }) {
 
         {item.ownerName && <p className="cl-owner">{item.ownerName}</p>}
 
-        {managesClass && <p className="cl-owner cl-you">You run this class</p>}
-
         <p className="cl-muted">
           {item.archived ? "Archived class" : "Active class"}
         </p>
