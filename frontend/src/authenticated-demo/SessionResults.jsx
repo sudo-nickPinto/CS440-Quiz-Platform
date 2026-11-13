@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { readRemembered, writeRemembered } from "./remember";
 import {
   Link,
@@ -7,10 +7,16 @@ import {
   useParams,
   useSearchParams,
 } from "react-router";
-import { useResource } from "./rest";
+import { useAction, useApi, useResource } from "./rest";
 import { classPagePath } from "../classes/classPaths";
 import RequestError from "./RequestError";
 import { useFileDownload } from "./useFileDownload";
+import {
+  canCorrectSessionQuestion,
+  canSelectCorrectChoice,
+  correctionModesForChoice,
+  correctionRequest,
+} from "./sessionCorrections";
 import "./session-results.css";
 
 const LABEL = {
@@ -52,6 +58,60 @@ function Stat({ label, value }) {
       <small>{label}</small>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function RescoreNotice({ report }) {
+  if (!report.score_revision) return null;
+
+  return (
+    <aside className="rr-rescore-notice" role="status">
+      <strong>Results updated</strong>
+      <span>
+        This session has been rescored {report.score_revision} {report.score_revision === 1 ? "time" : "times"}.
+        {report.rescored_at
+          ? ` Latest update: ${new Date(report.rescored_at).toLocaleString()}.`
+          : ""}
+      </span>
+    </aside>
+  );
+}
+
+function CorrectionConfirmation({ currentChoices, selectedChoice, busy, pendingMode, onConfirm, onCancel, promptRef }) {
+  const modes = correctionModesForChoice(currentChoices, selectedChoice);
+  const alreadyCorrect = modes[0] === "REMOVE";
+  const currentLabels = currentChoices.map((choice) => choice.text).join(", ");
+
+  return (
+    <section
+      className="rr-correction-prompt"
+      aria-label="Confirm correct answer change"
+      ref={promptRef}
+      tabIndex={-1}
+    >
+      <p>
+        <strong>Are you sure you want to make this change?</strong><br />
+        Currently accepted: <b>{currentLabels}</b>. Selected: <b>{selectedChoice.text}</b>.
+        Scores and ranks for this saved session will be recalculated.
+      </p>
+      <div className="rr-correction-actions">
+        <button type="button" className="rr-button" disabled={busy} onClick={onCancel}>Cancel</button>
+        {alreadyCorrect ? (
+          <button type="button" className="rr-button orange" disabled={busy} onClick={() => onConfirm("REMOVE")}>
+            {busy && pendingMode === "REMOVE" ? "Rescoring…" : "Remove correct answer"}
+          </button>
+        ) : (
+          <>
+            <button type="button" className="rr-button" disabled={busy} onClick={() => onConfirm("REPLACE")}>
+              {busy && pendingMode === "REPLACE" ? "Rescoring…" : "Replace correct answer"}
+            </button>
+            <button type="button" className="rr-button orange" disabled={busy} onClick={() => onConfirm("ADD")}>
+              {busy && pendingMode === "ADD" ? "Rescoring…" : "Add another correct answer"}
+            </button>
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -258,7 +318,79 @@ function People({ title, kind, people, questionIndex, onPerson }) {
   );
 }
 
-function QuestionBreakdown({ question, index, players, onPerson }) {
+function QuestionBreakdown({ question, index, players, onPerson, report, onCorrected, refreshing }) {
+  const api = useApi();
+  const applyAction = useAction();
+  const [editingCorrectAnswer, setEditingCorrectAnswer] = useState(false);
+  const [selectedChoiceId, setSelectedChoiceId] = useState(null);
+  const [complete, setComplete] = useState("");
+  const [pendingMode, setPendingMode] = useState(null);
+  const correctionPrompt = useRef(null);
+  const canCorrect = canCorrectSessionQuestion(report, question);
+  const currentChoices = question.choices.filter((choice) => choice.correct);
+  const selectedChoice = question.choices.find((choice) => choice.id === selectedChoiceId);
+  const correctionBusy = applyAction.busy || refreshing;
+
+  useEffect(() => {
+    if (!selectedChoice) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      correctionPrompt.current?.focus();
+      correctionPrompt.current?.scrollIntoView({ block: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedChoice]);
+
+  function closeCorrection() {
+    setEditingCorrectAnswer(false);
+    setSelectedChoiceId(null);
+  }
+
+  function selectCorrectAnswer(choice) {
+    if (!canSelectCorrectChoice({
+      editing: editingCorrectAnswer,
+      choice,
+      currentChoices,
+      busy: correctionBusy,
+    })) return;
+    setComplete("");
+    setSelectedChoiceId((selectedId) =>
+      selectedId === choice.id ? null : choice.id
+    );
+  }
+
+  async function applyCorrection(mode) {
+    if (!selectedChoice) return;
+    let correctionError = null;
+    setPendingMode(mode);
+    const result = await applyAction.run(() =>
+      api(
+        `/sessions/${report.session_id}/questions/${question.session_question_id}/correct-answer`,
+        {
+          method: "POST",
+          body: JSON.stringify(
+            correctionRequest(selectedChoiceId, mode, report.score_revision),
+          ),
+        },
+      ).catch((error) => {
+        correctionError = error;
+        throw error;
+      }),
+    );
+    setPendingMode(null);
+    if (!result) {
+      if (correctionError?.code === "score_revision_conflict") {
+        applyAction.clearError();
+        closeCorrection();
+        setComplete("Someone else updated these results. The latest answers and scores were loaded; review them before trying again.");
+        onCorrected?.();
+      }
+      return;
+    }
+    closeCorrection();
+    setComplete(`Question ${question.order} was corrected and the saved results were rescored.`);
+    onCorrected?.();
+  }
+
   const byState = (state) =>
     players.filter((p) => p.answers[index].state === state);
 
@@ -320,25 +452,78 @@ function QuestionBreakdown({ question, index, players, onPerson }) {
           <div className="rr-xp">
             <div className="rr-panel-heading">
               <span>Q{question.order} · Answer split</span>
-              <span>
-                {right.length}/{players.length} correct
+              <span className="rr-correction-tools">
+                <span>{right.length}/{players.length} correct</span>
+                {canCorrect && !editingCorrectAnswer && (
+                  <button
+                    type="button"
+                    className="rr-edit-answer-button"
+                    disabled={refreshing}
+                    onClick={() => {
+                      setComplete("");
+                      setEditingCorrectAnswer(true);
+                    }}
+                  >
+                    Edit correct answer
+                  </button>
+                )}
+                {editingCorrectAnswer && (
+                  <button
+                    type="button"
+                    className="rr-edit-answer-button"
+                    disabled={correctionBusy}
+                    onClick={closeCorrection}
+                  >
+                    Cancel edit
+                  </button>
+                )}
               </span>
             </div>
 
+            {editingCorrectAnswer && (
+              <p className="rr-correction-hint" role="status">
+                Click an answer letter to choose the answer that should have been marked correct. Nothing changes until you confirm the rescore.
+              </p>
+            )}
+            {complete && <p className="rr-correction-success" role="status">✓ {complete}</p>}
+
             <div className="rr-breakdown">
               <div className="rr-padding">
-                {groups.map((group) => (
+                {groups.map((group) => {
+                  const choice = question.choices.find((item) => item.id === group.key);
+                  const selectable = canSelectCorrectChoice({
+                    editing: editingCorrectAnswer,
+                    choice,
+                    currentChoices,
+                    busy: correctionBusy,
+                  });
+                  return (
                   <div
                     className={
                       "rr-bar-row" +
                       (group.correct ? " correct" : "") +
-                      (group.missed ? " is-missed" : "")
+                      (group.missed ? " is-missed" : "") +
+                      (selectedChoiceId === group.key ? " is-selected" : "")
                     }
                     key={group.key}
                   >
-                    <span className="rr-let" aria-hidden="true">
-                      {group.letter}
-                    </span>
+                    {selectable ? (
+                      <button
+                        type="button"
+                        className="rr-let rr-let-button"
+                        aria-label={
+                          selectedChoiceId === group.key
+                            ? `Cancel selection of answer ${group.label}`
+                            : `Select answer ${group.label} as correct`
+                        }
+                        disabled={correctionBusy}
+                        onClick={() => selectCorrectAnswer(choice)}
+                      >
+                        {group.letter}
+                      </button>
+                    ) : (
+                      <span className="rr-let" aria-hidden="true">{group.letter}</span>
+                    )}
                     <strong>
                       {group.label}
                       {group.correct && <em> Correct</em>}
@@ -353,7 +538,8 @@ function QuestionBreakdown({ question, index, players, onPerson }) {
                       </small>
                     </span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div>
@@ -380,6 +566,19 @@ function QuestionBreakdown({ question, index, players, onPerson }) {
                 />
               </div>
             </div>
+
+            <RequestError error={applyAction.error} />
+            {editingCorrectAnswer && currentChoices.length > 0 && selectedChoice && (
+              <CorrectionConfirmation
+                currentChoices={currentChoices}
+                selectedChoice={selectedChoice}
+                busy={correctionBusy}
+                pendingMode={pendingMode}
+                promptRef={correctionPrompt}
+                onCancel={closeCorrection}
+                onConfirm={(mode) => void applyCorrection(mode)}
+              />
+            )}
           </div>
         </div>
       )}
@@ -398,6 +597,8 @@ export function HostResults({
   exportPath = `/sessions/${report.session_id}/results/export.csv`,
   exportName = `session-${report.session_id}-results.csv`,
   exportLabel = "Export CSV",
+  onCorrected,
+  refreshing = false,
 }) {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
@@ -453,6 +654,7 @@ export function HostResults({
       </Title>
 
       <RequestError error={file.error} />
+      <RescoreNotice report={report} />
 
       <div className="rr-summary">
         <Stat label="Participants" value={report.total_participants} />
@@ -529,6 +731,9 @@ export function HostResults({
               index={report.questions.indexOf(q)}
               players={players}
               onPerson={showPerson}
+              report={report}
+              onCorrected={onCorrected}
+              refreshing={refreshing}
             />
           ))}
 
@@ -680,6 +885,8 @@ export function ParticipantResults({ report, backTo, backLabel }) {
         </div>
         <div className="rr-private">You, the host &amp; admins</div>
       </nav>
+
+      <RescoreNotice report={report} />
 
       <div className="rr-me-content">
         <section className="rr-band" aria-label="Report card">
@@ -883,7 +1090,12 @@ export default function SessionResults() {
   }
 
   return host ? (
-    <HostResults report={report} {...back} />
+    <HostResults
+      report={report}
+      onCorrected={resource.refresh}
+      refreshing={resource.refreshing}
+      {...back}
+    />
   ) : (
     <ParticipantResults report={report} {...back} />
   );
