@@ -636,7 +636,7 @@ def test_participant_removed_while_connected_stops_getting_events(live) -> None:
         assert_closed_with(ws, CloseCode.FORBIDDEN)
 
 
-def test_participant_who_leaves_the_class_is_disconnected(live) -> None:
+def test_rejected_self_leave_keeps_participant_connected(live) -> None:
     client, people = live
     class_id, session = faculty_class_session(client, people)
     sid = session["session_id"]
@@ -645,9 +645,12 @@ def test_participant_who_leaves_the_class_is_disconnected(live) -> None:
         assert authenticate(alice_ws, "alice")["type"] == "session_state"
 
         as_account(client, people["alice"])
-        assert client.delete(f"/classes/{class_id}/membership").status_code == 204
+        response = client.delete(f"/classes/{class_id}/membership")
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "class_self_leave_disabled"
 
-        assert_eventually_closed_with(alice_ws, CloseCode.FORBIDDEN)
+        alice_ws.send_json({"type": "ping"})
+        assert alice_ws.receive_json() == {"type": "pong"}
 
 
 def left_at(client, session_id: int, account_id: int):
@@ -732,35 +735,6 @@ def test_removing_the_last_unanswered_participant_closes_the_question(live) -> N
         left = [m for m in messages if m["type"] == "participant_left"]
         assert left and left[0]["participant_count"] == 1
         assert receive_until(bob_ws, "question_closed")
-
-
-def test_leaving_the_class_mid_question_also_frees_the_question(live) -> None:
-    client, people = live
-    class_id, session = faculty_class_session(client, people)
-    sid = session["session_id"]
-    join(client, people["bob"], session["join_code"])
-
-    with client.websocket_connect(ws_url(sid)) as host_ws:
-        authenticate(host_ws, "host")
-        host_ws.send_json(
-            {"type": "open_question", "question_order": 1, "request_id": "o1"}
-        )
-        opened = receive_until(host_ws, "question_opened")[-1]
-        sqid = opened["session_question_id"]
-
-        as_account(client, people["bob"])
-        answered = client.post(
-            f"/sessions/{sid}/questions/{sqid}/responses",
-            json={"choice_id": opened["choices"][0]["choice_id"]},
-        )
-        assert answered.status_code == 201
-
-        as_account(client, people["alice"])
-        assert client.delete(f"/classes/{class_id}/membership").status_code == 204
-
-        closed = receive_until(host_ws, "question_closed")[-1]
-        assert closed["reason"] == "ALL_ANSWERED"
-        assert closed["eligible_count"] == 1
 
 
 def test_removing_a_member_leaves_other_classes_sessions_alone(live) -> None:

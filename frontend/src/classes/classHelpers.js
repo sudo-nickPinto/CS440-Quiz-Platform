@@ -136,7 +136,7 @@ export function resolveUserSection(requested) {
   return "My quizzes";
 }
 
-// The lead block on a Present row. Members only see Draft or Approved:
+// The lead block on a My quizzes row. Members only see Draft or Approved:
 // publishing (freezing a version) happens inside "Send for approval". A quiz
 // edited after approval is a Draft again until the new version is approved.
 export function presentStatus(quiz) {
@@ -147,7 +147,7 @@ export function presentStatus(quiz) {
   return { key: "draft", label: "Draft" };
 }
 
-// The one approval button on a Present row and the short note under it.
+// The one approval button on a My quizzes row and the short note under it.
 //   send      Send for approval / Send again (orange)
 //   withdraw  Withdraw request (while waiting, for whoever sent it)
 //   waiting   Waiting for approval (sent by a co-editor; not clickable)

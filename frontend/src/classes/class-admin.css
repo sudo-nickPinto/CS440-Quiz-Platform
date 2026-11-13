@@ -1302,7 +1302,7 @@
 
 /* ---------- Selected tab colors, logo order: blue on the left, orange on
    the right (QUIZ | BURG). ---------- */
-/* Member view: Present navy, Participate orange. */
+/* Member view: My quizzes navy, Reports orange. */
 .qp .cl-section-tabs > [role="group"] button[data-section="My quizzes"][aria-pressed="true"] {
   background: var(--navy);
 }

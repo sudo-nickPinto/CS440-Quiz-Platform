@@ -690,7 +690,7 @@ def test_join_by_code_is_rate_limited_per_account(class_client) -> None:
     assert client.post("/classes/join", json={"code": "NOPE0000"}).status_code == 404
 
 
-def test_member_can_leave_but_last_organizer_cannot(class_client) -> None:
+def test_members_and_organizers_cannot_leave_without_roster_action(class_client) -> None:
     client, identities = class_client
     class_id = seed_class(
         client,
@@ -701,12 +701,13 @@ def test_member_can_leave_but_last_organizer_cannot(class_client) -> None:
     )
 
     act_as(client, identities["member"])
-    left = client.delete(f"/classes/{class_id}/membership")
+    member_leave = client.delete(f"/classes/{class_id}/membership")
     after = client.get(f"/classes/{class_id}")
     act_as(client, identities["creator"])
-    organizer = client.delete(f"/classes/{class_id}/membership")
+    organizer_leave = client.delete(f"/classes/{class_id}/membership")
 
-    assert left.status_code == 204
-    assert after.status_code == 404
-    assert organizer.status_code == 409
-    assert organizer.json()["error"]["code"] == "last_organizer"
+    assert member_leave.status_code == 403
+    assert member_leave.json()["error"]["code"] == "class_self_leave_disabled"
+    assert after.status_code == 200
+    assert organizer_leave.status_code == 403
+    assert organizer_leave.json()["error"]["code"] == "class_self_leave_disabled"
