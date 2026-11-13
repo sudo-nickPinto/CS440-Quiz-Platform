@@ -70,6 +70,7 @@ function ReportTable({
   onPageChange,
   emptyTitle,
   emptyText,
+  emptyAction = null,
   controls = null,
   columnClasses = [],
   tableClass = "",
@@ -146,6 +147,7 @@ function ReportTable({
                   <div className="cl-state" role="status">
                     <h2>{needle ? "No matches" : emptyTitle}</h2>
                     <p>{needle ? "Try another search." : emptyText}</p>
+                    {!needle && emptyAction}
                   </div>
                 </td>
               </tr>
@@ -418,8 +420,31 @@ function PresentationsTable({ classInfo, studentCount, controls }) {
   );
 }
 
-// Member view: completed and missed sessions shown as responsive quiz cards.
-function ParticipateTable({ classInfo }) {
+// The member tabs can show quizzes as cards or as list rows; the choice is
+// remembered across classes.
+const LAYOUTS = { cards: "Cards", list: "Rows" };
+
+function LayoutToggle({ layout, onChange }) {
+  return (
+    <div className="cl-toggle" role="group" aria-label="Layout">
+      {Object.entries(LAYOUTS).map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={layout === key}
+          onClick={() => onChange(key)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const PARTICIPATE_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-wide", "cl-go-cell"];
+
+// Member view: completed and missed sessions, as cards or list rows.
+function ParticipateTable({ classInfo, layout, onLayoutChange }) {
   const memory = `class:${classInfo.id}:participate`;
   const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const resource = useClassSessions(classInfo.id, page);
@@ -432,9 +457,88 @@ function ParticipateTable({ classInfo }) {
     0,
     ...resource.data.items.map((session) => session.my_score ?? 0),
   );
+  const toggle = <LayoutToggle layout={layout} onChange={onLayoutChange} />;
+
+  if (layout === "list") {
+    return (
+      <ReportTable
+        caption="Sessions"
+        rememberAs={memory}
+        noun="session"
+        tableClass="cl-rows cl-member-rows"
+        columnClasses={PARTICIPATE_COLUMNS}
+        headers={["Rank", "Quiz", "Score", "Host", "Date", ""]}
+        emptyTitle="No sessions yet"
+        emptyText={
+          "When an organizer hosts a quiz here, a Live button appears at " +
+          "the top of this page."
+        }
+        pagination={resource.data.pagination}
+        onPageChange={setPage}
+        controls={toggle}
+        rows={resource.data.items.map((session) => {
+          const played = session.my_score != null;
+          const report =
+            classInfo.canManage || played
+              ? `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`
+              : null;
+          return {
+            key: session.session_id,
+            text: `${session.quiz_title} ${session.host_name}`,
+            leadClass: `cl-rank-lead${played ? "" : " is-none"}`,
+            cells: [
+              played ? (
+                <span className="cl-rank-block">
+                  <b>#{session.my_rank}</b>
+                  <small>of {formatScore(session.participant_count)}</small>
+                </span>
+              ) : (
+                "Absent"
+              ),
+              <span className="cl-quiz-cell">
+                {report ? (
+                  <Link className="cl-quiz-name" to={report}>
+                    {session.quiz_title}
+                  </Link>
+                ) : (
+                  <strong className="cl-quiz-name">{session.quiz_title}</strong>
+                )}
+                <small className="cl-meta">
+                  {played && (
+                    <span className="cl-phone-only">
+                      {formatScore(session.my_score)} pts ·{" "}
+                    </span>
+                  )}
+                  Hosted by {session.host_name} · {formatDate(session.started_at)}
+                </small>
+              </span>,
+              played ? (
+                <ScoreMeter
+                  value={session.my_score}
+                  max={session.top_score ?? best}
+                  label={`Your score ${formatScore(session.my_score)} points`}
+                />
+              ) : (
+                <span className="cl-dim">—</span>
+              ),
+              session.host_name,
+              <span className="cl-dim">{formatDate(session.started_at)}</span>,
+              report ? (
+                <GoLink
+                  to={report}
+                  label={`${classInfo.canManage ? "Session report" : "My results"} for ${session.quiz_title}`}
+                />
+              ) : null,
+            ],
+          };
+        })}
+      />
+    );
+  }
 
   return (
     <CardCollection
+      controls={toggle}
       caption="Sessions"
       rememberAs={memory}
       noun="session"
@@ -508,10 +612,13 @@ function SortSelect({ label, value, choices, onChange }) {
   );
 }
 
+const PRESENT_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-num cl-wide", "cl-wide", "cl-go-cell"];
+
 // Member view: the caller's own quizzes in this class (owned or shared with
-// them). Clicking a card opens the editor; Host live and the approval button
-// stay on the card, and Archive lives in the editor.
-function PresentTable({ classInfo, onApprovalChange }) {
+// them), as cards or list rows. Clicking a quiz opens the editor; Host live
+// and the approval button stay on the card or row, and Archive lives in the
+// editor.
+function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
   const api = useApi();
   const account = useAccount();
   const action = useAction();
@@ -549,75 +656,170 @@ function PresentTable({ classInfo, onApprovalChange }) {
     );
   }
 
+  function describe(quiz) {
+    const status = presentStatus(quiz);
+    const archived = quiz.status === "ARCHIVED";
+    const button = approvalButton(quiz);
+    return {
+      status,
+      archived,
+      owner: quiz.my_access === "OWNER",
+      // Archived quizzes can't be edited, so those open the read-only page.
+      to:
+        quiz.my_access && !archived
+          ? `/app/quizzes/${quiz.quiz_id}/edit`
+          : `/app/quizzes/${quiz.quiz_id}`,
+      hostable:
+        status.key === "approved" &&
+        !classInfo.archived &&
+        showsHostControl(quiz, account?.account_id) &&
+        hostingState(quiz, classInfo.id).canHost,
+      button,
+      // Send and Withdraw need an active membership in a live class.
+      clickable: button && !button.disabled && canSubmit && !action.busy,
+      press: () =>
+        void (button.kind === "withdraw"
+          ? withdraw(quiz)
+          : submitForApproval(quiz)),
+    };
+  }
 
+  // Ready to host: the one button starts the session. Otherwise it's the
+  // approval button (send / withdraw).
+  function approvalControl(quiz, { hostable, button, clickable, press }, wrap) {
+    if (hostable) {
+      return (
+        <div className={wrap}>
+          <span className="qc-host">
+            <HostQuizButton
+              quiz={quiz}
+              classId={classInfo.id}
+              action={action}
+              label="▶ Host live"
+            />
+          </span>
+          <small className="cl-approval-note">Approved</small>
+        </div>
+      );
+    }
+    if (!button) return null;
+    return (
+      <div className={wrap}>
+        <button
+          type="button"
+          className={`cl-send is-${button.kind}`}
+          disabled={!clickable}
+          aria-disabled={button.kind === "approved" || undefined}
+          title={button.title}
+          onClick={press}
+        >
+          {button.label}
+        </button>
+        {button.note && (
+          <small className="cl-approval-note">{button.note}</small>
+        )}
+      </div>
+    );
+  }
+
+  const shared = {
+    caption: "My quizzes",
+    rememberAs: memory,
+    noun: "quiz",
+    emptyTitle: "No quizzes yet",
+    emptyText: canSubmit
+      ? "Start a draft for this class, or ask a classmate to share one with you. Drafts stay private until you send them for approval."
+      : "Quizzes you own or that are shared with you in this class appear here.",
+    emptyAction: canSubmit && (
+      <Link className="cl-button" to={`/app/quizzes/new?class=${classInfo.id}`}>
+        + New quiz
+      </Link>
+    ),
+    pagination: resource.data.pagination,
+    onPageChange: setPage,
+    controls: (
+      <>
+        <SortSelect
+          label="Sort my quizzes"
+          value={sortKey}
+          choices={MY_QUIZ_SORTS}
+          onChange={(key) => {
+            setSortKey(key);
+            setPage(1);
+          }}
+        />
+        <LayoutToggle layout={layout} onChange={onLayoutChange} />
+      </>
+    ),
+  };
+
+  if (layout === "list") {
+    return (
+      <>
+        <RequestError error={action.error} />
+        <ReportTable
+          {...shared}
+          tableClass="cl-rows cl-member-rows"
+          columnClasses={PRESENT_COLUMNS}
+          headers={["Status", "Quiz", "Approval", "Owner", "Qs", "Edited", ""]}
+          rows={resource.data.items.map((quiz) => {
+            const info = describe(quiz);
+            return {
+              key: quiz.quiz_id,
+              text: `${quiz.title} ${quiz.author_name}`,
+              leadClass: `cl-status is-${info.status.key}`,
+              cells: [
+                info.status.label,
+                <span className="cl-quiz-cell">
+                  <Link
+                    className="cl-quiz-name"
+                    to={info.to}
+                    state={{ classId: classInfo.id }}
+                  >
+                    {quiz.title}
+                  </Link>
+                  <small className="cl-meta">
+                    {quiz.question_count}{" "}
+                    {quiz.question_count === 1 ? "question" : "questions"} ·
+                    edited {formatDate(quiz.updated_at)}
+                    {info.owner ? "" : ` · shared by ${quiz.author_name}`}
+                  </small>
+                </span>,
+                approvalControl(quiz, info, "cl-approval-cell") ?? (
+                  <span className="cl-dim">—</span>
+                ),
+                info.owner ? (
+                  <span className="cl-tag is-me">Me</span>
+                ) : (
+                  <span className="cl-tag">Shared · {quiz.author_name}</span>
+                ),
+                <span className="cl-dim">{formatScore(quiz.question_count)}</span>,
+                <span className="cl-dim">{formatDate(quiz.updated_at)}</span>,
+                <GoLink to={info.to} label={`Open ${quiz.title}`} />,
+              ],
+            };
+          })}
+        />
+      </>
+    );
+  }
 
   return (
     <>
       <RequestError error={action.error} />
       <CardCollection
-        caption="My quizzes"
-        rememberAs={memory}
-        noun="quiz"
-        emptyTitle="No quizzes yet"
-        emptyText={
-          canSubmit
-            ? "Start a draft for this class, or ask a classmate to share one with you. Drafts stay private until you send them for approval."
-            : "Quizzes you own or that are shared with you in this class appear here."
-        }
-        emptyAction={
-          canSubmit && (
-            <Link
-              className="cl-button"
-              to={`/app/quizzes/new?class=${classInfo.id}`}
-            >
-              + New quiz
-            </Link>
-          )
-        }
-        pagination={resource.data.pagination}
-        onPageChange={setPage}
-        controls={
-          <SortSelect
-            label="Sort my quizzes"
-            value={sortKey}
-            choices={MY_QUIZ_SORTS}
-            onChange={(key) => {
-              setSortKey(key);
-              setPage(1);
-            }}
-          />
-        }
+        {...shared}
         items={resource.data.items}
         getText={(quiz) => `${quiz.title} ${quiz.author_name}`}
         renderCard={(quiz) => {
-          const status = presentStatus(quiz);
-          const owner = quiz.my_access === "OWNER";
-          const archived = quiz.status === "ARCHIVED";
-          const hostable =
-            status.key === "approved" &&
-            !classInfo.archived &&
-            showsHostControl(quiz, account?.account_id) &&
-            hostingState(quiz, classInfo.id).canHost;
-          const button = approvalButton(quiz);
-          // Send and Withdraw need an active membership in a live class.
-          const clickable =
-            button && !button.disabled && canSubmit && !action.busy;
-          const press = () =>
-            void (button.kind === "withdraw"
-              ? withdraw(quiz)
-              : submitForApproval(quiz));
+          const info = describe(quiz);
+          const { status, owner, archived } = info;
 
           return (
             <QuizCard
               key={quiz.quiz_id}
               title={quiz.title}
-              // Clicking the card opens the editor; archived quizzes can't
-              // be edited, so those open the read-only quiz page.
-              to={
-                quiz.my_access && !archived
-                  ? `/app/quizzes/${quiz.quiz_id}/edit`
-                  : `/app/quizzes/${quiz.quiz_id}`
-              }
+              to={info.to}
               state={{ classId: classInfo.id }}
               wholeCard
               status={status.label}
@@ -634,37 +836,7 @@ function PresentTable({ classInfo, onApprovalChange }) {
                 )}
               </p>
               <p>Edited {formatDate(quiz.updated_at)}</p>
-              {/* Ready to host: the card's one button starts the session.
-                  Otherwise it's the approval button (send / withdraw). */}
-              {hostable ? (
-                <div className="qc-approval">
-                  <span className="qc-host">
-                    <HostQuizButton
-                      quiz={quiz}
-                      classId={classInfo.id}
-                      action={action}
-                      label="▶ Host live"
-                    />
-                  </span>
-                  <small className="cl-approval-note">Approved</small>
-                </div>
-              ) : button && (
-                <div className="qc-approval">
-                  <button
-                    type="button"
-                    className={`cl-send is-${button.kind}`}
-                    disabled={!clickable}
-                    aria-disabled={button.kind === "approved" || undefined}
-                    title={button.title}
-                    onClick={press}
-                  >
-                    {button.label}
-                  </button>
-                  {button.note && (
-                    <small className="cl-approval-note">{button.note}</small>
-                  )}
-                </div>
-              )}
+              {approvalControl(quiz, info, "qc-approval")}
             </QuizCard>
           );
         }}
@@ -1011,6 +1183,10 @@ function ClassWorkspace({ classInfo, onChange }) {
       isValid: (value) => USER_SECTIONS.includes(value),
     },
   );
+  // Cards or rows on the member tabs, shared by every class.
+  const [layout, setLayout] = useRemembered("class:member-layout", "cards", {
+    isValid: (key) => key in LAYOUTS,
+  });
   const [historyView, setHistoryView] = useRemembered(
     `${memory}:history-view`,
     "sessions",
@@ -1343,6 +1519,8 @@ function ClassWorkspace({ classInfo, onChange }) {
         <PresentTable
           classInfo={classInfo}
           onApprovalChange={dashboard.reload}
+          layout={layout}
+          onLayoutChange={setLayout}
         />
       ) : activeSection === "Presentations" ? (
         <ClassHistory
@@ -1352,7 +1530,11 @@ function ClassWorkspace({ classInfo, onChange }) {
           onViewChange={setHistoryView}
         />
       ) : (
-        <ParticipateTable classInfo={classInfo} />
+        <ParticipateTable
+          classInfo={classInfo}
+          layout={layout}
+          onLayoutChange={setLayout}
+        />
       )}
     </section>
   );
