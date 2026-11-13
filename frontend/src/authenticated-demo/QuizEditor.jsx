@@ -755,11 +755,6 @@ export function QuizEditor({
 
   return (
     <>
-    {/* The collaborator disclosure owns its own invite form, so it must stay
-        outside the quiz editor form. Put it first so sharing is visible at
-        the top of editing mode instead of below every question. */}
-    {ownsQuiz && <QuizCollaborators quiz={existingQuiz} />}
-
     <form
       className="qe"
       noValidate
@@ -821,6 +816,10 @@ export function QuizEditor({
             </span>
           </div>
         </div>
+
+        {ownsQuiz && (
+          <QuizCollaborators quiz={existingQuiz} embedded />
+        )}
 
         <div className="qe-strip">
           <JumpChips ids={ids} current={current} />

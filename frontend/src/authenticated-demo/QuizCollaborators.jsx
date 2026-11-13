@@ -5,7 +5,7 @@ import RequestError from "./RequestError";
 import { useAction, useApi, useResource } from "./rest";
 import { useConfirm } from "./useConfirm";
 
-export default function QuizCollaborators({ quiz }) {
+export default function QuizCollaborators({ quiz, embedded = false }) {
   const api = useApi();
   const action = useAction();
   const confirmer = useConfirm();
@@ -39,6 +39,11 @@ export default function QuizCollaborators({ quiz }) {
     resource.reload();
   }
 
+  function inviteOnEnter(event) {
+    if (event.key !== "Enter" || event.target.tagName !== "INPUT") return;
+    void invite(event);
+  }
+
   async function remove(collaborator) {
     const confirmed = await confirmer.confirm({
       label: "Remove collaborator",
@@ -63,6 +68,8 @@ export default function QuizCollaborators({ quiz }) {
     });
     resource.reload();
   }
+
+  const InviteContainer = embedded ? "div" : "form";
 
   return (
     <section className="qv-collaborators" aria-labelledby="collaborators-title">
@@ -89,7 +96,11 @@ export default function QuizCollaborators({ quiz }) {
             Invite an active member of this class by email.
           </p>
 
-          <form className="qv-collaborator-form" onSubmit={invite}>
+          <InviteContainer
+            className="qv-collaborator-form"
+            onSubmit={embedded ? undefined : invite}
+            onKeyDown={embedded ? inviteOnEnter : undefined}
+          >
             <label htmlFor="collaborator-email">Class member email</label>
             <div>
               <input
@@ -103,14 +114,15 @@ export default function QuizCollaborators({ quiz }) {
                 onChange={(event) => setEmail(event.target.value)}
               />
               <button
-                type="submit"
+                type={embedded ? "button" : "submit"}
                 className="qb-btn"
                 disabled={action.busy || !email.trim()}
+                onClick={embedded ? invite : undefined}
               >
                 {action.busy ? "Inviting…" : "Invite editor"}
               </button>
             </div>
-          </form>
+          </InviteContainer>
 
           {message && (
             <p className={`qv-share-message is-${message.tone}`} role="status">
