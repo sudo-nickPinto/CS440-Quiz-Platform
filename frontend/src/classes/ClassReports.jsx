@@ -119,7 +119,7 @@ function ExcelButton({ file, path, name }) {
   );
 }
 
-function SessionReport({ report, classId, onCorrected }) {
+function SessionReport({ report, classId, onCorrected, refreshing }) {
   const backTo = `/app/classes/${classId}`;
 
   /*
@@ -136,6 +136,7 @@ function SessionReport({ report, classId, onCorrected }) {
         exportName={`class-${classId}-session-${report.session_id}-results.xlsx`}
         exportLabel="Export Excel"
         onCorrected={onCorrected}
+        refreshing={refreshing}
       />
     );
   }
@@ -172,6 +173,7 @@ export function ClassSessionReportPage() {
           report={report}
           classId={classId}
           onCorrected={resource.refresh}
+          refreshing={resource.refreshing}
         />
       )}
     </ReportRequest>

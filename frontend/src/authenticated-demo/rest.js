@@ -13,8 +13,8 @@ export function useApi() {
 
 export function useResource(path, pollMs = 0) {
   const api = useApi()
-  const [revision, setRevision] = useState(0)
-  const key = `${path}:${revision}`
+  const [request, setRequest] = useState({ revision: 0, preserveData: false })
+  const key = `${path}:${request.revision}`
 
   const [result, setResult] = useState({
     key: null,
@@ -24,13 +24,25 @@ export function useResource(path, pollMs = 0) {
   })
 
   const reload = useCallback(
-    () => setRevision((value) => value + 1),
+    () =>
+      setRequest((value) => ({
+        revision: value.revision + 1,
+        preserveData: false,
+      })),
     [],
   )
 
-  // Mutations use refresh so already-rendered data remains on screen while
-  // its authoritative replacement is loading.
-  const refresh = reload
+  // Opt-in background refresh: keep the already-rendered resource visible
+  // while its authoritative replacement is loading. Ordinary reload callers
+  // retain the original loading-state behavior.
+  const refresh = useCallback(
+    () =>
+      setRequest((value) => ({
+        revision: value.revision + 1,
+        preserveData: true,
+      })),
+    [],
+  )
 
   useEffect(() => {
     if (!path) return
@@ -81,12 +93,15 @@ export function useResource(path, pollMs = 0) {
   }, [api, path, key, pollMs])
 
   const current = path && result.key === key
-  const previousForPath = path && result.path === path && result.data
+  const previousForPath =
+    request.preserveData && path && result.path === path && result.data
+  const refreshing = Boolean(path) && !current && Boolean(previousForPath)
 
   return {
     data: current ? result.data : previousForPath || null,
     error: current ? result.error : null,
     loading: Boolean(path) && !current && !previousForPath,
+    refreshing,
     reload,
     refresh,
   }

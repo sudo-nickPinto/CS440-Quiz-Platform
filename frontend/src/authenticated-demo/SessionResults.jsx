@@ -318,7 +318,7 @@ function People({ title, kind, people, questionIndex, onPerson }) {
   );
 }
 
-function QuestionBreakdown({ question, index, players, onPerson, report, onCorrected }) {
+function QuestionBreakdown({ question, index, players, onPerson, report, onCorrected, refreshing }) {
   const api = useApi();
   const applyAction = useAction();
   const [editingCorrectAnswer, setEditingCorrectAnswer] = useState(false);
@@ -329,6 +329,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
   const canCorrect = canCorrectSessionQuestion(report, question);
   const currentChoices = question.choices.filter((choice) => choice.correct);
   const selectedChoice = question.choices.find((choice) => choice.id === selectedChoiceId);
+  const correctionBusy = applyAction.busy || refreshing;
 
   useEffect(() => {
     if (!selectedChoice) return undefined;
@@ -349,7 +350,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
       editing: editingCorrectAnswer,
       choice,
       currentChoices,
-      busy: applyAction.busy,
+      busy: correctionBusy,
     })) return;
     setComplete("");
     setSelectedChoiceId((selectedId) =>
@@ -457,6 +458,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
                   <button
                     type="button"
                     className="rr-edit-answer-button"
+                    disabled={refreshing}
                     onClick={() => {
                       setComplete("");
                       setEditingCorrectAnswer(true);
@@ -469,7 +471,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
                   <button
                     type="button"
                     className="rr-edit-answer-button"
-                    disabled={applyAction.busy}
+                    disabled={correctionBusy}
                     onClick={closeCorrection}
                   >
                     Cancel edit
@@ -493,7 +495,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
                     editing: editingCorrectAnswer,
                     choice,
                     currentChoices,
-                    busy: applyAction.busy,
+                    busy: correctionBusy,
                   });
                   return (
                   <div
@@ -514,7 +516,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
                             ? `Cancel selection of answer ${group.label}`
                             : `Select answer ${group.label} as correct`
                         }
-                        disabled={applyAction.busy}
+                        disabled={correctionBusy}
                         onClick={() => selectCorrectAnswer(choice)}
                       >
                         {group.letter}
@@ -570,7 +572,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
               <CorrectionConfirmation
                 currentChoices={currentChoices}
                 selectedChoice={selectedChoice}
-                busy={applyAction.busy}
+                busy={correctionBusy}
                 pendingMode={pendingMode}
                 promptRef={correctionPrompt}
                 onCancel={closeCorrection}
@@ -596,6 +598,7 @@ export function HostResults({
   exportName = `session-${report.session_id}-results.csv`,
   exportLabel = "Export CSV",
   onCorrected,
+  refreshing = false,
 }) {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
@@ -730,6 +733,7 @@ export function HostResults({
               onPerson={showPerson}
               report={report}
               onCorrected={onCorrected}
+              refreshing={refreshing}
             />
           ))}
 
@@ -1086,7 +1090,12 @@ export default function SessionResults() {
   }
 
   return host ? (
-    <HostResults report={report} onCorrected={resource.refresh} {...back} />
+    <HostResults
+      report={report}
+      onCorrected={resource.refresh}
+      refreshing={resource.refreshing}
+      {...back}
+    />
   ) : (
     <ParticipantResults report={report} {...back} />
   );
