@@ -189,7 +189,8 @@
   }
 }
 
-/* Editor archive settings remain below the questions. */
+/* Editor: Sharing and settings, below the questions (owner only). The
+   collaborators panel keeps its quiz-page styling (.qv-collaborators). */
 .qp .qe-settings {
   border-top: var(--b);
 }
