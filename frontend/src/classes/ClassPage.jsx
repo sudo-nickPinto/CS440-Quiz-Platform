@@ -1004,7 +1004,7 @@ function ClassWorkspace({ classInfo, onChange }) {
   );
   const [userSection, setUserSection] = useRemembered(
     `${memory}:user-section`,
-    "Present",
+    "My quizzes",
     {
       override:
         urlTargetsUser && urlSection ? resolveUserSection(urlSection) : null,
@@ -1339,7 +1339,7 @@ function ClassWorkspace({ classInfo, onChange }) {
         />
       ) : activeSection === "Approvals" ? (
         <SubmissionsTable classInfo={classInfo} onChange={dashboard.reload} />
-      ) : activeSection === "Present" ? (
+      ) : activeSection === "My quizzes" ? (
         <PresentTable
           classInfo={classInfo}
           onApprovalChange={dashboard.reload}

@@ -18,7 +18,7 @@ export default function SubmissionPreviewPage() {
   const organizer = classInfo.status === "ready" && classInfo.data.canManage;
   const backTo = organizer
     ? `/app/classes/${classId}?section=Approvals`
-    : `/app/classes/${classId}?view=user&section=${"Present"}`;
+    : `/app/classes/${classId}?view=user&section=My%20quizzes`;
 
   async function decide(status) {
     const done = await action.run(async () => {
@@ -35,7 +35,7 @@ export default function SubmissionPreviewPage() {
     <section className="cl-page">
       <header className="cl-classbar">
         <Link className="cl-button cl-secondary" to={backTo}>
-          ← {organizer ? "Approvals" : "Present"}
+          ← {organizer ? "Approvals" : "My quizzes"}
         </Link>
         <div className="cl-class-title">
           <p className="cl-eyebrow">Submitted version</p>
