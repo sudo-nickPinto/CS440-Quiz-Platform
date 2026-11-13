@@ -1,0 +1,190 @@
+/* Quiz page: Draft → Approval → Ready to host, and the next-step button.
+   Editor: the two save buttons. Same borders, shadows and colors as the
+   rest of the quiz pages (quizburg-polish.css). */
+
+.qp .qf {
+  display: grid;
+  gap: 16px;
+  padding: 18px clamp(16px, 4vw, 40px);
+  border-bottom: var(--b);
+  background: var(--paper);
+}
+
+.qp .qf-track {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qp .qf-track li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+
+/* The connecting line between steps. */
+.qp .qf-track li + li::before {
+  content: "";
+  flex: 0 1 56px;
+  min-width: 12px;
+  height: 3px;
+  margin-right: 0;
+  background: var(--ink);
+}
+
+.qp .qf-track li + li {
+  flex: 1 1 auto;
+  padding-left: 10px;
+}
+
+.qp .qf-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: var(--b-thin);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.qp .qf-track li.is-done {
+  color: var(--navy);
+}
+
+.qp .qf-track li.is-done .qf-mark {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.qp .qf-track li.is-current {
+  color: var(--ink);
+}
+
+.qp .qf-track li.is-current .qf-mark {
+  background: var(--orange-deep);
+  color: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.qp .qf-next {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding-top: 14px;
+  border-top: var(--b-thin);
+}
+
+.qp .qf-note {
+  flex: 1 1 260px;
+  min-width: 0;
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+/* The one next-step button: same look as the quiz page's Host button. */
+.qp .qf-go,
+.qp .qf-host > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 9px 18px;
+  border: var(--b);
+  background: var(--orange-deep);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--paper);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-decoration: none;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.qp .qf-go:hover:not(:disabled),
+.qp .qf-host > button:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.qp .qf-go:active:not(:disabled),
+.qp .qf-host > button:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+.qp .qf-go.is-quiet {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.qp .qf-go.is-quiet:hover:not(:disabled) {
+  background: var(--apricot);
+}
+
+.qp .qf-go:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+/* Shown once after saving in the editor. */
+.qp .qf-notice {
+  margin: 0;
+  padding: 12px clamp(16px, 4vw, 40px);
+  border-bottom: var(--b);
+  background: var(--sky-soft);
+  font-weight: 700;
+}
+
+.qp .qf-notice.is-warning {
+  background: var(--apricot);
+}
+
+/* Editor save bar: Save draft + Save and send for approval. */
+.qp .qe-save-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .qp .qf-track li {
+    font-size: 11px;
+    gap: 6px;
+  }
+
+  .qp .qf-track li + li {
+    padding-left: 6px;
+  }
+
+  .qp .qf-mark {
+    width: 26px;
+    height: 26px;
+  }
+
+  .qp .qf-go,
+  .qp .qf-host > button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .qp .qe-save-actions {
+    width: 100%;
+  }
+
+  .qp .qe-save-actions > * {
+    flex: 1 1 auto;
+  }
+}

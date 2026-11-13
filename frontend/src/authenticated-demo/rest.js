@@ -13,17 +13,34 @@ export function useApi() {
 
 export function useResource(path, pollMs = 0) {
   const api = useApi()
-  const [revision, setRevision] = useState(0)
-  const key = `${path}:${revision}`
+  const [request, setRequest] = useState({ revision: 0, preserveData: false })
+  const key = `${path}:${request.revision}`
 
   const [result, setResult] = useState({
     key: null,
+    path: null,
     data: null,
     error: null,
   })
 
   const reload = useCallback(
-    () => setRevision((value) => value + 1),
+    () =>
+      setRequest((value) => ({
+        revision: value.revision + 1,
+        preserveData: false,
+      })),
+    [],
+  )
+
+  // Opt-in background refresh: keep the already-rendered resource visible
+  // while its authoritative replacement is loading. Ordinary reload callers
+  // retain the original loading-state behavior.
+  const refresh = useCallback(
+    () =>
+      setRequest((value) => ({
+        revision: value.revision + 1,
+        preserveData: true,
+      })),
     [],
   )
 
@@ -42,11 +59,11 @@ export function useResource(path, pollMs = 0) {
         })
 
         if (!controller.signal.aborted) {
-          setResult({ key, data, error: null })
+          setResult({ key, path, data, error: null })
         }
       } catch (error) {
         if (!controller.signal.aborted) {
-          setResult({ key, data: null, error })
+          setResult({ key, path, data: null, error })
         }
 
         if (error.status >= 400 && error.status < 500) {
@@ -76,12 +93,17 @@ export function useResource(path, pollMs = 0) {
   }, [api, path, key, pollMs])
 
   const current = path && result.key === key
+  const previousForPath =
+    request.preserveData && path && result.path === path && result.data
+  const refreshing = Boolean(path) && !current && Boolean(previousForPath)
 
   return {
-    data: current ? result.data : null,
+    data: current ? result.data : previousForPath || null,
     error: current ? result.error : null,
-    loading: Boolean(path) && !current,
+    loading: Boolean(path) && !current && !previousForPath,
+    refreshing,
     reload,
+    refresh,
   }
 }
 
@@ -89,6 +111,7 @@ export function useAction() {
   const locked = useRef(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const clearError = useCallback(() => setError(null), [])
 
   async function run(action) {
     if (locked.current) return null
@@ -108,5 +131,5 @@ export function useAction() {
     }
   }
 
-  return { run, busy, error }
+  return { run, busy, error, clearError }
 }
