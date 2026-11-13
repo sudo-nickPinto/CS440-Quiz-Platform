@@ -6,6 +6,7 @@
   --rr-ink: #222222;
   --rr-navy: #043371;
   --rr-orange: #cc4e00;
+  --rr-success: #187239;
   background: var(--rr-paper);
   color: var(--rr-ink);
 }
@@ -88,7 +89,7 @@
 
 .qp .rr-button.orange {
   background: var(--rr-orange);
-  color: #ffffff;
+  color: var(--rr-paper);
 }
 
 .qp .rr-summary,
@@ -357,7 +358,7 @@
 
 .qp .rr-edit-answer-button:hover,
 .qp .rr-edit-answer-button:focus-visible {
-  background: #ffffff;
+  background: var(--rr-paper);
   color: var(--rr-ink);
 }
 
@@ -380,7 +381,7 @@
   padding: 12px;
   border: 2px solid var(--rr-ink);
   background: var(--rr-sky);
-  color: #187239;
+  color: var(--rr-success);
   font-weight: 700;
 }
 

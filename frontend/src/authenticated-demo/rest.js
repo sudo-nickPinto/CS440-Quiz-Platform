@@ -18,6 +18,7 @@ export function useResource(path, pollMs = 0) {
 
   const [result, setResult] = useState({
     key: null,
+    path: null,
     data: null,
     error: null,
   })
@@ -26,6 +27,10 @@ export function useResource(path, pollMs = 0) {
     () => setRevision((value) => value + 1),
     [],
   )
+
+  // Mutations use refresh so already-rendered data remains on screen while
+  // its authoritative replacement is loading.
+  const refresh = reload
 
   useEffect(() => {
     if (!path) return
@@ -42,11 +47,11 @@ export function useResource(path, pollMs = 0) {
         })
 
         if (!controller.signal.aborted) {
-          setResult({ key, data, error: null })
+          setResult({ key, path, data, error: null })
         }
       } catch (error) {
         if (!controller.signal.aborted) {
-          setResult({ key, data: null, error })
+          setResult({ key, path, data: null, error })
         }
 
         if (error.status >= 400 && error.status < 500) {
@@ -76,12 +81,14 @@ export function useResource(path, pollMs = 0) {
   }, [api, path, key, pollMs])
 
   const current = path && result.key === key
+  const previousForPath = path && result.path === path && result.data
 
   return {
-    data: current ? result.data : null,
+    data: current ? result.data : previousForPath || null,
     error: current ? result.error : null,
-    loading: Boolean(path) && !current,
+    loading: Boolean(path) && !current && !previousForPath,
     reload,
+    refresh,
   }
 }
 
@@ -89,6 +96,7 @@ export function useAction() {
   const locked = useRef(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const clearError = useCallback(() => setError(null), [])
 
   async function run(action) {
     if (locked.current) return null
@@ -108,5 +116,5 @@ export function useAction() {
     }
   }
 
-  return { run, busy, error }
+  return { run, busy, error, clearError }
 }

@@ -171,7 +171,7 @@ export function ClassSessionReportPage() {
         <SessionReport
           report={report}
           classId={classId}
-          onCorrected={resource.reload}
+          onCorrected={resource.refresh}
         />
       )}
     </ReportRequest>

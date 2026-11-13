@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { readRemembered, writeRemembered } from "./remember";
 import {
   Link,
@@ -11,6 +11,12 @@ import { useAction, useApi, useResource } from "./rest";
 import { classPagePath } from "../classes/classPaths";
 import RequestError from "./RequestError";
 import { useFileDownload } from "./useFileDownload";
+import {
+  canCorrectSessionQuestion,
+  canSelectCorrectChoice,
+  correctionModesForChoice,
+  correctionRequest,
+} from "./sessionCorrections";
 import "./session-results.css";
 
 const LABEL = {
@@ -71,12 +77,18 @@ function RescoreNotice({ report }) {
   );
 }
 
-function CorrectionConfirmation({ currentChoices, selectedChoice, busy, onConfirm, onCancel }) {
-  const alreadyCorrect = currentChoices.some((choice) => choice.id === selectedChoice.id);
+function CorrectionConfirmation({ currentChoices, selectedChoice, busy, pendingMode, onConfirm, onCancel, promptRef }) {
+  const modes = correctionModesForChoice(currentChoices, selectedChoice);
+  const alreadyCorrect = modes[0] === "REMOVE";
   const currentLabels = currentChoices.map((choice) => choice.text).join(", ");
 
   return (
-    <section className="rr-correction-prompt" aria-label="Confirm correct answer change">
+    <section
+      className="rr-correction-prompt"
+      aria-label="Confirm correct answer change"
+      ref={promptRef}
+      tabIndex={-1}
+    >
       <p>
         <strong>Are you sure you want to make this change?</strong><br />
         Currently accepted: <b>{currentLabels}</b>. Selected: <b>{selectedChoice.text}</b>.
@@ -86,15 +98,15 @@ function CorrectionConfirmation({ currentChoices, selectedChoice, busy, onConfir
         <button type="button" className="rr-button" disabled={busy} onClick={onCancel}>Cancel</button>
         {alreadyCorrect ? (
           <button type="button" className="rr-button orange" disabled={busy} onClick={() => onConfirm("REMOVE")}>
-            {busy ? "Rescoring…" : "Remove correct answer"}
+            {busy && pendingMode === "REMOVE" ? "Rescoring…" : "Remove correct answer"}
           </button>
         ) : (
           <>
             <button type="button" className="rr-button" disabled={busy} onClick={() => onConfirm("REPLACE")}>
-              {busy ? "Rescoring…" : "Replace correct answer"}
+              {busy && pendingMode === "REPLACE" ? "Rescoring…" : "Replace correct answer"}
             </button>
             <button type="button" className="rr-button orange" disabled={busy} onClick={() => onConfirm("ADD")}>
-              {busy ? "Rescoring…" : "Add another correct answer"}
+              {busy && pendingMode === "ADD" ? "Rescoring…" : "Add another correct answer"}
             </button>
           </>
         )}
@@ -312,9 +324,20 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
   const [editingCorrectAnswer, setEditingCorrectAnswer] = useState(false);
   const [selectedChoiceId, setSelectedChoiceId] = useState(null);
   const [complete, setComplete] = useState("");
-  const canCorrect = Boolean(report.can_correct && question.session_question_id);
+  const [pendingMode, setPendingMode] = useState(null);
+  const correctionPrompt = useRef(null);
+  const canCorrect = canCorrectSessionQuestion(report, question);
   const currentChoices = question.choices.filter((choice) => choice.correct);
   const selectedChoice = question.choices.find((choice) => choice.id === selectedChoiceId);
+
+  useEffect(() => {
+    if (!selectedChoice) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      correctionPrompt.current?.focus();
+      correctionPrompt.current?.scrollIntoView({ block: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedChoice]);
 
   function closeCorrection() {
     setEditingCorrectAnswer(false);
@@ -322,11 +345,12 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
   }
 
   function selectCorrectAnswer(choice) {
-    if (
-      !editingCorrectAnswer ||
-      (choice.correct && currentChoices.length === 1) ||
-      applyAction.busy
-    ) return;
+    if (!canSelectCorrectChoice({
+      editing: editingCorrectAnswer,
+      choice,
+      currentChoices,
+      busy: applyAction.busy,
+    })) return;
     setComplete("");
     setSelectedChoiceId((selectedId) =>
       selectedId === choice.id ? null : choice.id
@@ -335,20 +359,32 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
 
   async function applyCorrection(mode) {
     if (!selectedChoice) return;
+    let correctionError = null;
+    setPendingMode(mode);
     const result = await applyAction.run(() =>
       api(
         `/sessions/${report.session_id}/questions/${question.session_question_id}/correct-answer`,
         {
           method: "POST",
-          body: JSON.stringify({
-            choice_id: Number(selectedChoiceId),
-            mode,
-            expected_score_revision: report.score_revision,
-          }),
+          body: JSON.stringify(
+            correctionRequest(selectedChoiceId, mode, report.score_revision),
+          ),
         },
-      ),
+      ).catch((error) => {
+        correctionError = error;
+        throw error;
+      }),
     );
-    if (!result) return;
+    setPendingMode(null);
+    if (!result) {
+      if (correctionError?.code === "score_revision_conflict") {
+        applyAction.clearError();
+        closeCorrection();
+        setComplete("Someone else updated these results. The latest answers and scores were loaded; review them before trying again.");
+        onCorrected?.();
+      }
+      return;
+    }
     closeCorrection();
     setComplete(`Question ${question.order} was corrected and the saved results were rescored.`);
     onCorrected?.();
@@ -453,11 +489,12 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
               <div className="rr-padding">
                 {groups.map((group) => {
                   const choice = question.choices.find((item) => item.id === group.key);
-                  const selectable = Boolean(
-                    editingCorrectAnswer &&
-                    choice &&
-                    (!choice.correct || currentChoices.length > 1)
-                  );
+                  const selectable = canSelectCorrectChoice({
+                    editing: editingCorrectAnswer,
+                    choice,
+                    currentChoices,
+                    busy: applyAction.busy,
+                  });
                   return (
                   <div
                     className={
@@ -534,6 +571,8 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
                 currentChoices={currentChoices}
                 selectedChoice={selectedChoice}
                 busy={applyAction.busy}
+                pendingMode={pendingMode}
+                promptRef={correctionPrompt}
                 onCancel={closeCorrection}
                 onConfirm={(mode) => void applyCorrection(mode)}
               />
@@ -1047,7 +1086,7 @@ export default function SessionResults() {
   }
 
   return host ? (
-    <HostResults report={report} onCorrected={resource.reload} {...back} />
+    <HostResults report={report} onCorrected={resource.refresh} {...back} />
   ) : (
     <ParticipantResults report={report} {...back} />
   );
