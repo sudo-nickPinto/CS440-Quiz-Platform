@@ -2282,25 +2282,94 @@
 /* Quiz sharing: deliberately uses the same heavy borders and paper cards as
    the editor so it reads as part of QuizBurg rather than a settings widget. */
 .qp .qv-collaborators {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr);
-  gap: 18px 28px;
-  padding: 22px clamp(16px, 4vw, 40px);
   border-bottom: var(--b);
   background: var(--sky-soft);
 }
 
-.qp .qv-collaborators-copy h2 {
+.qp .qv-collaborator-disclosure > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 20px;
+  padding: 18px clamp(16px, 4vw, 40px);
+  cursor: pointer;
+  list-style: none;
+}
+
+.qp .qv-collaborator-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.qp .qv-collaborator-disclosure > summary:hover {
+  background: color-mix(in srgb, var(--paper) 22%, transparent);
+}
+
+.qp .qv-collaborator-disclosure > summary:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: -6px;
+}
+
+.qp .qv-collaborator-disclosure h2 {
+  grid-column: 1;
   margin: 4px 0 8px;
   font: 20px "Archivo Black", sans-serif;
   text-transform: uppercase;
 }
 
-.qp .qv-collaborators-copy p {
+.qp .qv-collaborator-disclosure > summary > .qe-eyebrow,
+.qp .qv-collaborator-count {
+  grid-column: 1;
+}
+
+.qp .qv-collaborator-count {
+  color: var(--gray);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.qp .qv-collaborator-arrow {
+  display: grid;
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: var(--b-thin);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--navy);
+  font-size: 24px;
+  line-height: 1;
+  transition: transform 160ms ease;
+}
+
+.qp .qv-collaborator-disclosure[open] .qv-collaborator-arrow {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp .qv-collaborator-arrow {
+    transition: none;
+  }
+}
+
+.qp .qv-collaborator-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr);
+  gap: 18px 28px;
+  padding: 0 clamp(16px, 4vw, 40px) 22px;
+  border-top: var(--b-thin);
+}
+
+.qp .qv-collaborator-help {
   max-width: 560px;
-  margin: 0;
+  margin: 18px 0 0;
   color: var(--gray);
   line-height: 1.5;
+}
+
+.qp .qv-collaborator-form {
+  margin-top: 18px;
 }
 
 .qp .qv-collaborator-form label {
@@ -2332,7 +2401,7 @@
 
 .qp .qv-share-message,
 .qp .qv-collaborator-list,
-.qp .qv-collaborators > .ui-error {
+.qp .qv-collaborator-panel > .qp-error {
   grid-column: 2;
 }
 
@@ -2485,13 +2554,13 @@
     padding: 10px 12px 12px;
   }
 
-  .qp .qv-collaborators {
+  .qp .qv-collaborator-panel {
     grid-template-columns: 1fr;
   }
 
   .qp .qv-share-message,
   .qp .qv-collaborator-list,
-  .qp .qv-collaborators > .ui-error {
+  .qp .qv-collaborator-panel > .qp-error {
     grid-column: 1;
   }
 
