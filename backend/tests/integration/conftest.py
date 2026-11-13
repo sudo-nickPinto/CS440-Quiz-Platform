@@ -81,6 +81,8 @@ def cleanup_database(app) -> None:
         "group_membership",
         "course_group",
         "account_identity",
+        # Points at account twice (0014).
+        "faculty_access_event",
         "account",
     ]
     with app.state.database.engine.begin() as connection:

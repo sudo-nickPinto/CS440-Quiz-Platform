@@ -73,6 +73,58 @@ Saves the caller's profile and returns the same body as `GET /me`. Always send a
 
 Errors: `403 inactive_account`, `422 invalid_profile` (blank or too-long name, bad characters, unknown avatar).
 
+## Faculty access
+
+Faculty status (`role: "ADMIN"`, stored as `account_type = 'ADMINISTRATOR'`) lets someone create classes and be made a class organizer. It never gives access to a class they don't organize. These routes let faculty manage it from the app's **Faculty access** page (issue #116). Every route needs an active faculty account; anyone else gets `403 faculty_required`.
+
+### `GET /faculty` → `200 FacultyAccessPage`
+
+```json
+{
+  "faculty": [
+    {
+      "account_id": 3,
+      "display_name": "Ana Lopez",
+      "email": "alopez@gettysburg.edu",
+      "is_me": false,
+      "granted_at": "2026-11-13T15:02:11.120000Z",
+      "granted_by_name": "Jane Kim"
+    }
+  ],
+  "history": [
+    {
+      "event_id": 7,
+      "action": "GRANTED",
+      "account_id": 3,
+      "account_name": "Ana Lopez",
+      "account_email": "alopez@gettysburg.edu",
+      "actor_name": "Jane Kim",
+      "occurred_at": "2026-11-13T15:02:11.120000Z"
+    }
+  ]
+}
+```
+
+`faculty` lists active faculty by name. `granted_at` and `granted_by_name` are `null` for faculty set up directly in the database. `history` is the newest 50 grants and removals.
+
+### `POST /faculty` → `201 FacultyMember`
+
+```json
+{ "email": "alopez@gettysburg.edu" }
+```
+
+Gives faculty status to the account with that email (trimmed, case-insensitive). The person has to sign in to the app once first so their account exists. Recorded in `faculty_access_event`.
+
+Errors: `404 account_not_found`, `409 account_inactive`, `409 already_faculty`, `422 email_required` / validation errors.
+
+### `DELETE /faculty/{account_id}` → `204`
+
+Removes faculty status. The person keeps their account and class memberships, but every organizer power needs faculty status, so they can no longer manage classes. You can't remove your own access, so at least one faculty account always remains. Recorded in `faculty_access_event`.
+
+Errors: `404 faculty_not_found` (no such account, or not faculty), `409 cannot_revoke_self`.
+
+Both changes lock the two account rows and re-read the caller's own status, so faculty who were just removed can't keep granting or removing access.
+
 ## Quizzes
 
 Since V3, **every quiz belongs to a class** (`class_id`), and there is no app-wide quiz list. Who can do what:

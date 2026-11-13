@@ -19,6 +19,7 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0011_account_profile` | Adds `account.first_name`, `last_name` and `avatar_key`: the profile people fill in once after signing up. `display_name` becomes "first last" when it is saved |
 | `0012_question_revision` | Adds per-question optimistic revisions so collaborators can save different questions concurrently |
 | `0013_session_answer_correction` | Adds session-specific correct-answer overrides, score revisions, and an append-only correction audit log |
+| `0014_faculty_access` | Adds `faculty_access_event`: an append-only history of faculty status granted or removed in the app (issue #116). Faculty status itself is still `account.account_type = 'ADMINISTRATOR'` |
 
 Each migration comes in two files:
 

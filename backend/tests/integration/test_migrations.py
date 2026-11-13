@@ -17,6 +17,7 @@ from sqlalchemy.engine import URL, make_url
 
 from app.models import (
     Class,
+    FacultyAccessEvent,
     ClassMembership,
     Quiz,
     QuizCollaborator,
@@ -152,6 +153,7 @@ def test_models_match_migrated_tables(
             QuizSubmission,
             SessionQuestion,
             SessionAnswerCorrection,
+            FacultyAccessEvent,
         ):
             table = model.__table__
             columns = {
