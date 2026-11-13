@@ -68,73 +68,88 @@ export default function QuizCollaborators({ quiz }) {
     <section className="qv-collaborators" aria-labelledby="collaborators-title">
       <ConfirmDialog confirmer={confirmer} />
 
-      <div className="qv-collaborators-copy">
-        <span className="qe-eyebrow">Shared editing</span>
-        <h2 id="collaborators-title">Quiz collaborators</h2>
-        <p>Invite an active member of this class by email.</p>
-      </div>
+      <details className="qv-collaborator-disclosure">
+        <summary>
+          <div>
+            <span className="qe-eyebrow">Shared editing</span>
+            <h2 id="collaborators-title">Quiz collaborators</h2>
+          </div>
+          <span className="qv-collaborator-arrow" aria-hidden="true">
+            ▾
+          </span>
+        </summary>
 
-      <form className="qv-collaborator-form" onSubmit={invite}>
-        <label htmlFor="collaborator-email">Class member email</label>
-        <div>
-          <input
-            id="collaborator-email"
-            type="email"
-            value={email}
-            placeholder="student@gettysburg.edu"
-            autoComplete="email"
-            required
-            disabled={action.busy}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-          <button
-            type="submit"
-            className="qb-btn"
-            disabled={action.busy || !email.trim()}
-          >
-            {action.busy ? "Inviting…" : "Invite editor"}
-          </button>
-        </div>
-      </form>
-
-      {message && (
-        <p className={`qv-share-message is-${message.tone}`} role="status">
-          {message.text}
-        </p>
-      )}
-      <RequestError error={action.error} />
-
-      <div className="qv-collaborator-list" aria-live="polite">
-        {resource.loading && <p role="status">Loading collaborators…</p>}
-        <RequestError error={resource.error} retry={resource.reload} />
-
-        {!resource.loading && !resource.error && resource.data?.length === 0 && (
-          <p className="qv-collaborator-empty">
-            Only you can edit this quiz right now.
+        <div className="qv-collaborator-panel">
+          <p className="qv-collaborator-help">
+            Invite an active member of this class by email.
           </p>
-        )}
 
-        {resource.data?.map((collaborator) => (
-          <article key={collaborator.account_id}>
-            <span className="qv-collaborator-avatar" aria-hidden="true">
-              {collaborator.display_name.trim().charAt(0).toUpperCase() || "?"}
-            </span>
+          <form className="qv-collaborator-form" onSubmit={invite}>
+            <label htmlFor="collaborator-email">Class member email</label>
             <div>
-              <strong>{collaborator.display_name}</strong>
-              <span>{collaborator.email}</span>
+              <input
+                id="collaborator-email"
+                type="email"
+                value={email}
+                placeholder="student@gettysburg.edu"
+                autoComplete="email"
+                required
+                disabled={action.busy}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+              <button
+                type="submit"
+                className="qb-btn"
+                disabled={action.busy || !email.trim()}
+              >
+                {action.busy ? "Inviting…" : "Invite editor"}
+              </button>
             </div>
-            <span className="qv-collaborator-role">Editor</span>
-            <button
-              type="button"
-              className="ui-linkbtn qv-remove-collaborator"
-              disabled={action.busy}
-              onClick={() => void remove(collaborator)}
-            >
-              Remove
-            </button>
-          </article>
-        ))}
-      </div>
+          </form>
+
+          {message && (
+            <p className={`qv-share-message is-${message.tone}`} role="status">
+              {message.text}
+            </p>
+          )}
+          <RequestError error={action.error} />
+
+          <div className="qv-collaborator-list" aria-live="polite">
+            {resource.loading && <p role="status">Loading collaborators…</p>}
+            <RequestError error={resource.error} retry={resource.reload} />
+
+            {!resource.loading &&
+              !resource.error &&
+              resource.data?.length === 0 && (
+                <p className="qv-collaborator-empty">
+                  Only you can edit this quiz right now.
+                </p>
+              )}
+
+            {resource.data?.map((collaborator) => (
+              <article key={collaborator.account_id}>
+                <span className="qv-collaborator-avatar" aria-hidden="true">
+                  {collaborator.display_name.trim().charAt(0).toUpperCase() ||
+                    "?"}
+                </span>
+                <div>
+                  <strong>{collaborator.display_name}</strong>
+                  <span>{collaborator.email}</span>
+                </div>
+                <span className="qv-collaborator-role">Editor</span>
+                <button
+                  type="button"
+                  className="ui-linkbtn qv-remove-collaborator"
+                  disabled={action.busy}
+                  onClick={() => void remove(collaborator)}
+                >
+                  Remove
+                </button>
+              </article>
+            ))}
+          </div>
+        </div>
+      </details>
     </section>
   );
 }
