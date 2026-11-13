@@ -380,7 +380,14 @@ export function QuizEditor({
     }
   }
 
+  // Archive and save can't overlap in either direction: archiving waits for
+  // a save (including the publish and submit of "Save and send"), and saving
+  // waits for an archive. Otherwise a send could land on an archived quiz.
+  const archiveBlocked =
+    archiveAction.busy || action.busy || Boolean(savingKind) || questionSaving;
+
   async function archiveQuiz() {
+    if (archiveBlocked) return;
     const sure = await confirmer.confirm({
       label: "Archive quiz",
       title: `Archive “${editor.title.trim() || "this quiz"}”?`,
@@ -646,7 +653,14 @@ export function QuizEditor({
   // Saves the draft. With send, it then publishes and sends that version for
   // approval in the same click, so nobody has to go back to the class page.
   async function save({ send = false } = {}) {
-    if (conflict || savingQuestions.current.size > 0 || savingKind) return;
+    if (
+      conflict ||
+      savingQuestions.current.size > 0 ||
+      savingKind ||
+      archiveAction.busy
+    ) {
+      return;
+    }
     if (!validate()) return;
     setSavingKind(send ? "send" : "draft");
     try {
@@ -748,7 +762,10 @@ export function QuizEditor({
     >
       <ConfirmDialog confirmer={confirmer} />
 
-      <fieldset disabled={action.busy} className="qp-form-fields">
+      <fieldset
+        disabled={action.busy || archiveAction.busy}
+        className="qp-form-fields"
+      >
         <div className="qe-bar">
           <Link className="qe-back" to={backTo} onClick={leaveEditor}>
             <span aria-hidden="true">←</span>
@@ -1243,7 +1260,12 @@ export function QuizEditor({
               <button
                 type="button"
                 className={"qb-btn" + (canSendFromEditor ? " qb-btn-paper" : "")}
-                disabled={conflict || questionSaving || Boolean(savingKind)}
+                disabled={
+                  conflict ||
+                  questionSaving ||
+                  Boolean(savingKind) ||
+                  archiveAction.busy
+                }
                 onClick={() => void save()}
               >
                 {questionSaving
@@ -1259,7 +1281,12 @@ export function QuizEditor({
                 <button
                   type="button"
                   className="qb-btn"
-                  disabled={conflict || questionSaving || Boolean(savingKind)}
+                  disabled={
+                  conflict ||
+                  questionSaving ||
+                  Boolean(savingKind) ||
+                  archiveAction.busy
+                }
                   title="Saves your quiz and sends it to the class organizers. You can host it once they approve it."
                   onClick={() => void save({ send: true })}
                 >
@@ -1289,7 +1316,7 @@ export function QuizEditor({
           <button
             type="button"
             className="qb-btn qb-btn-paper qe-archive-button"
-            disabled={archiveAction.busy || action.busy}
+            disabled={archiveBlocked}
             onClick={() => void archiveQuiz()}
           >
             {archiveAction.busy ? "Archiving…" : "Archive quiz"}
