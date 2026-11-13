@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 
-import { copyText, shortName } from "./classHelpers";
+import { shortName } from "./classHelpers";
 
 export function ResourceMessage({ resource }) {
   if (resource.status === "loading") {
@@ -62,6 +62,9 @@ export function EmptyMessage({ title, children }) {
   );
 }
 
+// The whole card opens the class. The class name is the only link, stretched
+// over the card (see .cl-card-link in classes.css), so it stays one tab stop
+// with a clear name for screen readers. Class actions live inside the class.
 export function ClassCard({ item }) {
   const managesClass = item.canManage === true;
   const href = `/app/classes/${encodeURIComponent(item.id)}`;
@@ -80,54 +83,16 @@ export function ClassCard({ item }) {
 
       <div className="cl-card-body">
         <h2>
-          <Link to={href}>{item.name}</Link>
+          <Link className="cl-card-link" to={href}>
+            {item.name}
+          </Link>
         </h2>
 
         {item.ownerName && <p className="cl-owner">{item.ownerName}</p>}
 
-        {managesClass && <p className="cl-owner cl-you">You run this class</p>}
-
         <p className="cl-muted">
           {item.archived ? "Archived class" : "Active class"}
         </p>
-      </div>
-
-      <div className="cl-card-footer">
-        <Link to={href}>
-          {managesClass ? "Admin view" : "Open class"}
-          <span aria-hidden="true"> →</span>
-        </Link>
-
-        {managesClass ? (
-          <details className="ui-row-menu">
-            <summary aria-label={`Actions for ${item.name}`}>⋯</summary>
-
-            <div className="ui-row-options" role="menu">
-              <Link role="menuitem" to={href}>
-                <span aria-hidden="true">→</span> Open admin view
-              </Link>
-
-              {item.code && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => copyText(item.code)}
-                >
-                  <span aria-hidden="true">⧉</span> Copy class code ·{" "}
-                  {item.code}
-                </button>
-              )}
-            </div>
-          </details>
-        ) : (
-          <Link
-            className="cl-card-go"
-            to={href}
-            aria-label={`Open ${item.name}`}
-          >
-            →
-          </Link>
-        )}
       </div>
     </article>
   );

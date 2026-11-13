@@ -200,12 +200,50 @@
 }
 
 .qp .cl-card {
+  position: relative;
   min-width: 0;
   display: flex;
   flex-direction: column;
   border: var(--b);
   background: var(--paper);
   box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+/* The class name's link covers the whole card, so a click anywhere opens it. */
+.qp .cl-card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.qp .cl-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0 var(--ink);
+}
+
+.qp .cl-card:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.qp .cl-card:has(.cl-card-link:focus-visible) {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 3px;
+}
+
+.qp .cl-card-link:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp .cl-card,
+  .qp .cl-card:hover,
+  .qp .cl-card:active {
+    transition: none;
+    transform: none;
+  }
 }
 
 .qp .cl-card-banner {
@@ -264,7 +302,7 @@
   text-decoration: none;
 }
 
-.qp .cl-card-body h2 a:hover {
+.qp .cl-card:hover .cl-card-body h2 a {
   text-decoration: underline;
   text-decoration-color: var(--orange-deep);
 }
@@ -277,17 +315,6 @@
 .qp .cl-muted {
   color: var(--gray);
   font-size: 14px;
-}
-
-.qp .cl-card-footer {
-  padding: 14px 16px;
-  border-top: var(--b-thin);
-  background: var(--sand);
-}
-
-.qp .cl-card-footer a {
-  color: var(--navy);
-  font-weight: 700;
 }
 
 .qp .cl-state {

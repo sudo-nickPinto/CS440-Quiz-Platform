@@ -5420,64 +5420,6 @@
   font-weight: 700;
 }
 
-.qp .cl-card-footer {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 72px;
-  padding: 0;
-  border-top: var(--b);
-}
-
-.qp .cl-card-footer > a:first-child {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 50px;
-  padding: 0 16px;
-  color: var(--navy);
-  font-size: 13px;
-  letter-spacing: 1px;
-  text-decoration: none;
-  text-transform: uppercase;
-}
-
-.qp .cl-card-footer > a:first-child:hover {
-  background: var(--sky-soft);
-}
-
-.qp .cl-card-footer > .ui-row-menu,
-.qp .cl-card-footer > .cl-card-go {
-  border-left: var(--b);
-}
-
-.qp .cl-card-footer > .cl-card-go {
-  display: grid;
-  place-items: center;
-  color: var(--ink);
-  font-size: 20px;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.qp .cl-card-footer > .cl-card-go:hover {
-  background: var(--sky-soft);
-}
-
-.qp .cl-card-footer .ui-row-menu > summary {
-  width: 46px;
-  height: 34px;
-}
-
-.qp .cl-card-footer .ui-row-options {
-  top: calc(100% - 6px);
-  right: 6px;
-  min-width: 270px;
-}
-
-.qp .cl-card-footer .ui-row-options > * {
-  white-space: nowrap;
-}
-
 /* Class page header: role tag + copyable class code above the name */
 .qp .cl-classbar .cl-button.cl-secondary {
   font-size: 13px;

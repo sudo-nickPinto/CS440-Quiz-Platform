@@ -31,7 +31,7 @@ import { useConfirm } from "./useConfirm";
 import { QuestionMenu, TimePicker } from "./EditorParts";
 import { useQuizCollaboration } from "./useQuizCollaboration";
 import { classPagePath } from "../classes/classPaths";
-import { NewQuizClassPicker } from "../classes/MyDrafts";
+import NewQuizClassPicker from "../classes/NewQuizClassPicker";
 import HostQuizButton from "./HostQuizButton";
 import { sendQuizForApproval, useQuizFlow } from "./quizFlow";
 import { QuizFlowPanel } from "./QuizFlowPanel";
@@ -133,9 +133,15 @@ export function QuizEditor({
   const account = useAccount();
   const navigate = useNavigate();
   const confirmer = useConfirm();
+  const archiveAction = useAction();
   const [searchParams] = useSearchParams();
 
   const editing = existingQuiz !== null;
+  // Sharing and archiving are the owner's, on a saved quiz in a class.
+  const ownsQuiz =
+    editing &&
+    existingQuiz.author_id === account.account_id &&
+    Boolean(existingQuiz.class_id);
   // Sending publishes the draft first, and only the owner can publish.
   const canSendFromEditor =
     !editing || existingQuiz.author_id === account.account_id;
@@ -371,6 +377,36 @@ export function QuizEditor({
       })
     ) {
       navigate(backTo);
+    }
+  }
+
+  // Archive and save can't overlap in either direction: archiving waits for
+  // a save (including the publish and submit of "Save and send"), and saving
+  // waits for an archive. Otherwise a send could land on an archived quiz.
+  const archiveBlocked =
+    archiveAction.busy || action.busy || Boolean(savingKind) || questionSaving;
+
+  async function archiveQuiz() {
+    if (archiveBlocked) return;
+    const sure = await confirmer.confirm({
+      label: "Archive quiz",
+      title: `Archive “${editor.title.trim() || "this quiz"}”?`,
+      message:
+        (dirty ? "Your unsaved changes will be lost. " : "") +
+        "It will no longer be available to edit or host. Past results stay saved.",
+      confirmLabel: "Archive quiz",
+      cancelLabel: "Keep it",
+    });
+    if (!sure) return;
+
+    const done = await archiveAction.run(async () => {
+      await api(`/quizzes/${existingQuiz.quiz_id}/archive`, {
+        method: "PATCH",
+      });
+      return true;
+    });
+    if (done) {
+      navigate(classPagePath(existingQuiz.class_id), { replace: true });
     }
   }
 
@@ -617,7 +653,14 @@ export function QuizEditor({
   // Saves the draft. With send, it then publishes and sends that version for
   // approval in the same click, so nobody has to go back to the class page.
   async function save({ send = false } = {}) {
-    if (conflict || savingQuestions.current.size > 0 || savingKind) return;
+    if (
+      conflict ||
+      savingQuestions.current.size > 0 ||
+      savingKind ||
+      archiveAction.busy
+    ) {
+      return;
+    }
     if (!validate()) return;
     setSavingKind(send ? "send" : "draft");
     try {
@@ -711,6 +754,7 @@ export function QuizEditor({
   }
 
   return (
+    <>
     <form
       className="qe"
       noValidate
@@ -718,7 +762,10 @@ export function QuizEditor({
     >
       <ConfirmDialog confirmer={confirmer} />
 
-      <fieldset disabled={action.busy} className="qp-form-fields">
+      <fieldset
+        disabled={action.busy || archiveAction.busy}
+        className="qp-form-fields"
+      >
         <div className="qe-bar">
           <Link className="qe-back" to={backTo} onClick={leaveEditor}>
             <span aria-hidden="true">←</span>
@@ -1213,7 +1260,12 @@ export function QuizEditor({
               <button
                 type="button"
                 className={"qb-btn" + (canSendFromEditor ? " qb-btn-paper" : "")}
-                disabled={conflict || questionSaving || Boolean(savingKind)}
+                disabled={
+                  conflict ||
+                  questionSaving ||
+                  Boolean(savingKind) ||
+                  archiveAction.busy
+                }
                 onClick={() => void save()}
               >
                 {questionSaving
@@ -1229,7 +1281,12 @@ export function QuizEditor({
                 <button
                   type="button"
                   className="qb-btn"
-                  disabled={conflict || questionSaving || Boolean(savingKind)}
+                  disabled={
+                  conflict ||
+                  questionSaving ||
+                  Boolean(savingKind) ||
+                  archiveAction.busy
+                }
                   title="Saves your quiz and sends it to the class organizers. You can host it once they approve it."
                   onClick={() => void save({ send: true })}
                 >
@@ -1241,6 +1298,34 @@ export function QuizEditor({
         </div>
       </fieldset>
     </form>
+
+    {/* Outside the editor's <form>: the collaborators panel has its own
+        form, and forms can't be nested. */}
+    {ownsQuiz && (
+      <section className="qe-settings" aria-label="Sharing and settings">
+        <QuizCollaborators quiz={existingQuiz} />
+
+        <div className="qe-archive">
+          <div>
+            <h2>Archive quiz</h2>
+            <p>
+              Archived quizzes can&apos;t be edited or hosted. Past sessions
+              and results stay saved.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="qb-btn qb-btn-paper qe-archive-button"
+            disabled={archiveBlocked}
+            onClick={() => void archiveQuiz()}
+          >
+            {archiveAction.busy ? "Archiving…" : "Archive quiz"}
+          </button>
+          <RequestError error={archiveAction.error} />
+        </div>
+      </section>
+    )}
+    </>
   );
 }
 

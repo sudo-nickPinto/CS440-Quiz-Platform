@@ -5,7 +5,6 @@ import { useNavigate } from "react-router";
 import { useAction, useApi } from "../authenticated-demo/rest";
 import { useClassesResource } from "./classResources";
 import { ClassCard, ResourceMessage } from "./ClassUI";
-import { MyDrafts } from "./MyDrafts";
 import { useAccount } from "../authenticated-demo/account";
 
 export default function ClassesPage() {
@@ -20,7 +19,6 @@ export default function ClassesPage() {
   const [sessionCode, setSessionCode] = useState("");
   const [query, setQuery] = useRemembered("classes:query", "");
   const [filter, setFilter] = useRemembered("classes:filter", "all");
-  const [sort, setSort] = useRemembered("classes:sort", "name");
 
   const account = useAccount();
   const canCreateClass = account.is_active === true && account.role === "ADMIN";
@@ -44,11 +42,8 @@ export default function ClassesPage() {
       if (filter === "archived") return item.archived;
       return true;
     })
-    .sort((a, b) =>
-      sort === "name-desc"
-        ? b.name.localeCompare(a.name)
-        : a.name.localeCompare(b.name),
-    );
+    // Always alphabetical; the list is short and people scan it by name.
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   function togglePanel(nextPanel) {
     setPanel((current) => (current === nextPanel ? null : nextPanel));
@@ -335,8 +330,6 @@ export default function ClassesPage() {
         </section>
       )}
 
-      {ready && classes.length > 0 && <MyDrafts classes={classes} />}
-
       <div className="cl-toolbar">
         <label className="cl-search">
           <span className="cl-sr">Search classes</span>
@@ -363,31 +356,12 @@ export default function ClassesPage() {
           </select>
         </label>
 
-        <label>
-          <span className="cl-sr">Sort classes</span>
-          <select
-            value={sort}
-            onChange={(event) => setSort(event.target.value)}
-            disabled={!ready}
-          >
-            <option value="name">Name: A–Z</option>
-            <option value="name-desc">Name: Z–A</option>
-          </select>
-        </label>
-
-        <span className="cl-count" aria-live="polite">
+        {/* Not shown, but read out when a search or filter changes the list. */}
+        <span className="cl-sr" aria-live="polite">
           {ready
             ? `${visible.length} ${visible.length === 1 ? "class" : "classes"}`
-            : "— classes"}
+            : ""}
         </span>
-
-        <button
-          type="button"
-          onClick={resource.reload}
-          disabled={action.busy || resource.status === "loading"}
-        >
-          Refresh
-        </button>
       </div>
 
       {!ready ? (
