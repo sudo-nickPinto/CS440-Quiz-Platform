@@ -817,6 +817,10 @@ export function QuizEditor({
           </div>
         </div>
 
+        {ownsQuiz && (
+          <QuizCollaborators quiz={existingQuiz} embedded />
+        )}
+
         <div className="qe-strip">
           <JumpChips ids={ids} current={current} />
 
@@ -1299,12 +1303,9 @@ export function QuizEditor({
       </fieldset>
     </form>
 
-    {/* Outside the editor's <form>: the collaborators panel has its own
-        form, and forms can't be nested. */}
+    {/* Outside the editor's <form>: archive controls remain at the bottom. */}
     {ownsQuiz && (
       <section className="qe-settings" aria-label="Sharing and settings">
-        <QuizCollaborators quiz={existingQuiz} />
-
         <div className="qe-archive">
           <div>
             <h2>Archive quiz</h2>
