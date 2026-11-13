@@ -755,6 +755,11 @@ export function QuizEditor({
 
   return (
     <>
+    {/* The collaborator disclosure owns its own invite form, so it must stay
+        outside the quiz editor form. Put it first so sharing is visible at
+        the top of editing mode instead of below every question. */}
+    {ownsQuiz && <QuizCollaborators quiz={existingQuiz} />}
+
     <form
       className="qe"
       noValidate
@@ -1299,12 +1304,9 @@ export function QuizEditor({
       </fieldset>
     </form>
 
-    {/* Outside the editor's <form>: the collaborators panel has its own
-        form, and forms can't be nested. */}
+    {/* Outside the editor's <form>: archive controls remain at the bottom. */}
     {ownsQuiz && (
       <section className="qe-settings" aria-label="Sharing and settings">
-        <QuizCollaborators quiz={existingQuiz} />
-
         <div className="qe-archive">
           <div>
             <h2>Archive quiz</h2>
