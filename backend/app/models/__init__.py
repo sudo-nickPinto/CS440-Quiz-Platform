@@ -24,8 +24,11 @@ from app.models.session import (
     LiveSessionStatus,
     Response,
     Result,
+    SessionCorrectionMode,
+    SessionAnswerCorrection,
     SessionParticipant,
     SessionQuestion,
+    SessionQuestionCorrectChoice,
     SessionQuestionStatus,
 )
 
@@ -54,7 +57,10 @@ __all__ = [
     "LiveSessionStatus",
     "Response",
     "Result",
+    "SessionCorrectionMode",
+    "SessionAnswerCorrection",
     "SessionParticipant",
     "SessionQuestion",
+    "SessionQuestionCorrectChoice",
     "SessionQuestionStatus",
 ]

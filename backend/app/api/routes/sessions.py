@@ -22,6 +22,11 @@ from app.schemas.session import (
     SessionParticipantResponse,
     SessionResponse,
 )
+from app.schemas.session_correction import (
+    CorrectSessionAnswerRequest,
+    SessionAnswerCorrectionResult,
+)
+from app.services.session_corrections import correct_session_answer
 from app.services.session_end import get_final_results
 from app.services.sessions import (
     create_session,
@@ -168,6 +173,28 @@ def session_report_route(
         account,
         session_id,
         personal=personal,
+    )
+
+
+@router.post(
+    "/sessions/{session_id}/questions/{session_question_id}/correct-answer",
+    response_model=SessionAnswerCorrectionResult,
+)
+def correct_session_answer_route(
+    session_id: int,
+    session_question_id: int,
+    payload: CorrectSessionAnswerRequest,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> SessionAnswerCorrectionResult:
+    return correct_session_answer(
+        db,
+        account,
+        session_id,
+        session_question_id,
+        payload.choice_id,
+        payload.mode,
+        payload.expected_score_revision,
     )
 
 
