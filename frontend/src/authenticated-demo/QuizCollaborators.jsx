@@ -70,10 +70,15 @@ export default function QuizCollaborators({ quiz }) {
 
       <details className="qv-collaborator-disclosure">
         <summary>
-          <div>
-            <span className="qe-eyebrow">Shared editing</span>
-            <h2 id="collaborators-title">Quiz collaborators</h2>
-          </div>
+          <span className="qe-eyebrow">Shared editing</span>
+          <h2 id="collaborators-title">Quiz collaborators</h2>
+          <span className="qv-collaborator-count">
+            {resource.loading
+              ? "Loading editors…"
+              : `${resource.data?.length ?? 0} ${
+                  resource.data?.length === 1 ? "editor" : "editors"
+                }`}
+          </span>
           <span className="qv-collaborator-arrow" aria-hidden="true">
             ▾
           </span>

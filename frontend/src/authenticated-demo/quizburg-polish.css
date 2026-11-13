@@ -2287,10 +2287,10 @@
 }
 
 .qp .qv-collaborator-disclosure > summary {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  column-gap: 20px;
   padding: 18px clamp(16px, 4vw, 40px);
   cursor: pointer;
   list-style: none;
@@ -2310,16 +2310,29 @@
 }
 
 .qp .qv-collaborator-disclosure h2 {
+  grid-column: 1;
   margin: 4px 0 8px;
   font: 20px "Archivo Black", sans-serif;
   text-transform: uppercase;
 }
 
+.qp .qv-collaborator-disclosure > summary > .qe-eyebrow,
+.qp .qv-collaborator-count {
+  grid-column: 1;
+}
+
+.qp .qv-collaborator-count {
+  color: var(--gray);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .qp .qv-collaborator-arrow {
   display: grid;
+  grid-column: 2;
+  grid-row: 1 / span 3;
   width: 42px;
   height: 42px;
-  flex: 0 0 auto;
   place-items: center;
   border: var(--b-thin);
   background: var(--paper);
@@ -2332,6 +2345,12 @@
 
 .qp .qv-collaborator-disclosure[open] .qv-collaborator-arrow {
   transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp .qv-collaborator-arrow {
+    transition: none;
+  }
 }
 
 .qp .qv-collaborator-panel {
@@ -2382,7 +2401,7 @@
 
 .qp .qv-share-message,
 .qp .qv-collaborator-list,
-.qp .qv-collaborator-panel > .ui-error {
+.qp .qv-collaborator-panel > .qp-error {
   grid-column: 2;
 }
 
@@ -2541,7 +2560,7 @@
 
   .qp .qv-share-message,
   .qp .qv-collaborator-list,
-  .qp .qv-collaborator-panel > .ui-error {
+  .qp .qv-collaborator-panel > .qp-error {
     grid-column: 1;
   }
 
