@@ -31,7 +31,7 @@ import { useConfirm } from "./useConfirm";
 import { QuestionMenu, TimePicker } from "./EditorParts";
 import { useQuizCollaboration } from "./useQuizCollaboration";
 import { classPagePath } from "../classes/classPaths";
-import { NewQuizClassPicker } from "../classes/MyDrafts";
+import NewQuizClassPicker from "../classes/NewQuizClassPicker";
 import HostQuizButton from "./HostQuizButton";
 import { sendQuizForApproval, useQuizFlow } from "./quizFlow";
 import { QuizFlowPanel } from "./QuizFlowPanel";
@@ -133,9 +133,15 @@ export function QuizEditor({
   const account = useAccount();
   const navigate = useNavigate();
   const confirmer = useConfirm();
+  const archiveAction = useAction();
   const [searchParams] = useSearchParams();
 
   const editing = existingQuiz !== null;
+  // Sharing and archiving are the owner's, on a saved quiz in a class.
+  const ownsQuiz =
+    editing &&
+    existingQuiz.author_id === account.account_id &&
+    Boolean(existingQuiz.class_id);
   // Sending publishes the draft first, and only the owner can publish.
   const canSendFromEditor =
     !editing || existingQuiz.author_id === account.account_id;
@@ -371,6 +377,29 @@ export function QuizEditor({
       })
     ) {
       navigate(backTo);
+    }
+  }
+
+  async function archiveQuiz() {
+    const sure = await confirmer.confirm({
+      label: "Archive quiz",
+      title: `Archive “${editor.title.trim() || "this quiz"}”?`,
+      message:
+        (dirty ? "Your unsaved changes will be lost. " : "") +
+        "It will no longer be available to edit or host. Past results stay saved.",
+      confirmLabel: "Archive quiz",
+      cancelLabel: "Keep it",
+    });
+    if (!sure) return;
+
+    const done = await archiveAction.run(async () => {
+      await api(`/quizzes/${existingQuiz.quiz_id}/archive`, {
+        method: "PATCH",
+      });
+      return true;
+    });
+    if (done) {
+      navigate(classPagePath(existingQuiz.class_id), { replace: true });
     }
   }
 
@@ -711,6 +740,7 @@ export function QuizEditor({
   }
 
   return (
+    <>
     <form
       className="qe"
       noValidate
@@ -1241,6 +1271,34 @@ export function QuizEditor({
         </div>
       </fieldset>
     </form>
+
+    {/* Outside the editor's <form>: the collaborators panel has its own
+        form, and forms can't be nested. */}
+    {ownsQuiz && (
+      <section className="qe-settings" aria-label="Sharing and settings">
+        <QuizCollaborators quiz={existingQuiz} />
+
+        <div className="qe-archive">
+          <div>
+            <h2>Archive quiz</h2>
+            <p>
+              Archived quizzes can&apos;t be edited or hosted. Past sessions
+              and results stay saved.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="qb-btn qb-btn-paper qe-archive-button"
+            disabled={archiveAction.busy || action.busy}
+            onClick={() => void archiveQuiz()}
+          >
+            {archiveAction.busy ? "Archiving…" : "Archive quiz"}
+          </button>
+          <RequestError error={archiveAction.error} />
+        </div>
+      </section>
+    )}
+    </>
   );
 }
 

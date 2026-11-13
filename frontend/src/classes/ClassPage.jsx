@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRemembered } from "../authenticated-demo/remember";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
@@ -27,7 +27,6 @@ import {
   USER_SECTIONS,
 } from "./classHelpers";
 import { ResourceMessage } from "./ClassUI";
-import "./my-drafts.css";
 import { AddMemberDialog, ClassStudents } from "./ClassManagement";
 import {
   useClassDashboard,
@@ -509,83 +508,13 @@ function SortSelect({ label, value, choices, onChange }) {
   );
 }
 
-// The ⋯ button and its menu. The menu is fixed to the viewport so the
-// table's scroll box never clips it; it closes on outside click, Escape,
-// scroll, or after picking an item.
-function RowMenu({ label, children }) {
-  const [place, setPlace] = useState(null);
-  const wrap = useRef(null);
-
-  useEffect(() => {
-    if (!place) return undefined;
-    const close = () => setPlace(null);
-    const outside = (event) => {
-      if (!wrap.current?.contains(event.target)) close();
-    };
-    const escape = (event) => {
-      if (event.key === "Escape") close();
-    };
-    document.addEventListener("pointerdown", outside);
-    document.addEventListener("keydown", escape);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    return () => {
-      document.removeEventListener("pointerdown", outside);
-      document.removeEventListener("keydown", escape);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [place]);
-
-  function toggle(event) {
-    if (place) {
-      setPlace(null);
-      return;
-    }
-    const box = event.currentTarget.getBoundingClientRect();
-    const right = document.documentElement.clientWidth - box.right;
-    setPlace(
-      window.innerHeight - box.bottom > 260
-        ? { right, top: box.bottom + 8 }
-        : { right, bottom: window.innerHeight - box.top + 8 },
-    );
-  }
-
-  return (
-    <div className="cl-kebab-wrap" ref={wrap}>
-      <button
-        type="button"
-        className="cl-kebab"
-        aria-haspopup="menu"
-        aria-expanded={Boolean(place)}
-        aria-label={label}
-        title={label}
-        onClick={toggle}
-      >
-        ⋯
-      </button>
-      {place && (
-        <div
-          className="cl-menu"
-          role="menu"
-          style={{ position: "fixed", ...place }}
-          onClick={() => setPlace(null)}
-        >
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // Member view: the caller's own quizzes in this class (owned or shared with
-// them). Cards retain the approval workflow and the ⋯ menu edits, hosts, or
-// archives without losing the responsive treatment from PR #99.
+// them). Clicking a card opens the editor; Host live and the approval button
+// stay on the card, and Archive lives in the editor.
 function PresentTable({ classInfo, onApprovalChange }) {
   const api = useApi();
   const account = useAccount();
   const action = useAction();
-  const confirmer = useConfirm();
   const memory = `class:${classInfo.id}:present`;
   const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "recent", {
@@ -620,27 +549,10 @@ function PresentTable({ classInfo, onApprovalChange }) {
     );
   }
 
-  // Only the owner can archive.
-  async function archive(quiz) {
-    const sure = await confirmer.confirm({
-      label: "Archive quiz",
-      title: `Archive “${quiz.title}”?`,
-      message: "It will no longer be available to host.",
-      confirmLabel: "Archive quiz",
-      cancelLabel: "Keep it",
-    });
-    if (!sure) return;
-    refresh(
-      await action.run(async () => {
-        await api(`/quizzes/${quiz.quiz_id}/archive`, { method: "PATCH" });
-        return true;
-      }),
-    );
-  }
+
 
   return (
     <>
-      <ConfirmDialog confirmer={confirmer} />
       <RequestError error={action.error} />
       <CardCollection
         caption="My quizzes"
@@ -699,45 +611,20 @@ function PresentTable({ classInfo, onApprovalChange }) {
             <QuizCard
               key={quiz.quiz_id}
               title={quiz.title}
-              to={`/app/quizzes/${quiz.quiz_id}`}
+              // Clicking the card opens the editor; archived quizzes can't
+              // be edited, so those open the read-only quiz page.
+              to={
+                quiz.my_access && !archived
+                  ? `/app/quizzes/${quiz.quiz_id}/edit`
+                  : `/app/quizzes/${quiz.quiz_id}`
+              }
               state={{ classId: classInfo.id }}
+              wholeCard
               status={status.label}
               archived={archived}
               headline={`${quiz.question_count} ${
                 quiz.question_count === 1 ? "question" : "questions"
               }`}
-              linkLabel="Open quiz"
-              actions={
-                <RowMenu label={`Actions for ${quiz.title}`}>
-                  {quiz.my_access && !archived && (
-                    <Link
-                      role="menuitem"
-                      to={`/app/quizzes/${quiz.quiz_id}/edit`}
-                      state={{ classId: classInfo.id }}
-                    >
-                      ✎ Edit
-                    </Link>
-                  )}
-                  <Link
-                    role="menuitem"
-                    to={`/app/quizzes/${quiz.quiz_id}`}
-                    state={{ classId: classInfo.id }}
-                  >
-                    ◉ Open
-                  </Link>
-                  {owner && !archived && (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="is-danger"
-                      disabled={action.busy}
-                      onClick={() => void archive(quiz)}
-                    >
-                      Archive
-                    </button>
-                  )}
-                </RowMenu>
-              }
             >
               <p>
                 {owner ? (
@@ -1473,32 +1360,6 @@ function ClassWorkspace({ classInfo, onChange }) {
           </div>
         )}
       </div>
-
-      {/* Organizers keep their own quizzes and drafts in the User view;
-          this keeps them one click away from the admin tabs. */}
-      {adminView && classInfo.membershipStatus === "ACTIVE" && (
-        <div className="cl-admin-quizzes">
-          <span>Your own quizzes and drafts are in the User view.</span>
-          <button
-            type="button"
-            className="cl-secondary"
-            onClick={() => {
-              setUserSection("Present");
-              changeView("user");
-            }}
-          >
-            My quizzes
-          </button>
-          {!classInfo.archived && (
-            <Link
-              className="cl-button"
-              to={`/app/quizzes/new?class=${classInfo.id}`}
-            >
-              + New quiz
-            </Link>
-          )}
-        </div>
-      )}
 
       {!adminView && joinOpen && <JoinPanel />}
 

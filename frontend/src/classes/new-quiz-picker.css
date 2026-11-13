@@ -1,0 +1,31 @@
+/* New-quiz class picker (/app/quizzes/new without a class). */
+
+.qp .nq-picker-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 16px;
+  margin: 20px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qp .nq-picker-list a {
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  text-decoration: none;
+  box-shadow: var(--shadow);
+  overflow-wrap: anywhere;
+}
+
+.qp .nq-picker-list a:hover {
+  background: var(--sky-soft);
+}
+
+.qp .nq-picker-list span {
+  color: var(--gray);
+  font-size: 14px;
+}

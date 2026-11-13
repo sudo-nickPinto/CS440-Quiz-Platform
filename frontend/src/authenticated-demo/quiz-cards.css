@@ -142,3 +142,45 @@
 @media (max-width: 600px) {
   .qp .qc-grid { gap: 18px; padding: 16px; }
 }
+
+/* Whole-card link (QuizCard wholeCard). No transform on hover: the card's ⋯
+   menu pops up with position: fixed, which a transformed ancestor would
+   break. */
+.qp .qc-card.is-clickable {
+  position: relative;
+  cursor: pointer;
+  transition: box-shadow 120ms ease;
+}
+.qp .qc-card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+/* Controls on the card stay clickable above the card link. */
+.qp .qc-card.is-clickable .qc-approval,
+.qp .qc-card.is-clickable .qc-footer {
+  position: relative;
+  z-index: 1;
+}
+.qp .qc-card.is-clickable .qc-footer {
+  justify-content: flex-end;
+}
+.qp .qc-card.is-clickable:hover {
+  box-shadow: 9px 9px 0 var(--ink);
+}
+.qp .qc-card.is-clickable:hover .qc-body h2 a {
+  text-decoration: underline;
+  text-decoration-color: var(--orange-deep);
+}
+.qp .qc-card.is-clickable:has(.qc-card-link:focus-visible) {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 3px;
+}
+.qp .qc-card.is-clickable .qc-card-link:focus-visible {
+  outline: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .qp .qc-card.is-clickable {
+    transition: none;
+  }
+}
