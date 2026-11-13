@@ -9,6 +9,8 @@ they aren't an organizer of. The rules:
   (case-insensitive). The person has to sign in once so the account exists.
 - Faculty can remove anyone else's faculty status, never their own, so at
   least one faculty account always remains.
+- Faculty status can't be removed from the last usable organizer of a class:
+  organizer powers need faculty status, and nobody else could manage it.
 - Every change is recorded in faculty_access_event.
 """
 
@@ -27,11 +29,13 @@ from app.models.account import (
     FacultyAccessAction,
     FacultyAccessEvent,
 )
+from app.models.classes import Class, ClassMembership, ClassRole, MembershipStatus
 from app.schemas.faculty import (
     FacultyAccessHistoryItem,
     FacultyAccessPage,
     FacultyMember,
 )
+from app.services.class_memberships import _lock_active_organizers
 
 HISTORY_LIMIT = 50
 
@@ -220,6 +224,38 @@ def grant_faculty_access(
     )
 
 
+def _classes_only_they_organize(db: Session, target: Account) -> list[Class]:
+    """Classes where the target is the only usable organizer.
+
+    Uses the same locked organizer count as removing, demoting or leaving
+    (_lock_active_organizers), archived classes included, so two changes at
+    once can't both pass and leave a class with no one to manage it.
+    """
+    classes = db.scalars(
+        select(Class)
+        .join(ClassMembership, ClassMembership.class_id == Class.class_id)
+        .where(
+            ClassMembership.account_id == target.account_id,
+            ClassMembership.status == MembershipStatus.ACTIVE,
+            ClassMembership.role == ClassRole.ORGANIZER,
+        )
+        .order_by(Class.class_id)
+    ).all()
+    stranded = []
+    for class_ in classes:
+        organizers = _lock_active_organizers(db, class_.class_id)
+        if [o.account_id for o in organizers] == [target.account_id]:
+            stranded.append(class_)
+    return stranded
+
+
+def _class_list(names: list[str]) -> str:
+    quoted = [f"“{name}”" for name in names]
+    if len(quoted) <= 2:
+        return " and ".join(quoted)
+    return ", ".join(quoted[:-1]) + f", and {quoted[-1]}"
+
+
 def revoke_faculty_access(
     db: Session, account: CurrentAccount, account_id: int
 ) -> None:
@@ -241,6 +277,23 @@ def revoke_faculty_access(
                 404,
                 "faculty_not_found",
                 "That person doesn't have faculty access.",
+            )
+
+        stranded = _classes_only_they_organize(db, target)
+        if stranded:
+            names = [class_.name for class_ in stranded]
+            raise APIError(
+                409,
+                "last_organizer",
+                f"{target.display_name} is the only organizer of "
+                f"{_class_list(names)}. Make another faculty member an "
+                "organizer there first, then remove their faculty access.",
+                details={
+                    "classes": [
+                        {"class_id": class_.class_id, "name": class_.name}
+                        for class_ in stranded
+                    ]
+                },
             )
 
         target.account_type = None

@@ -121,7 +121,19 @@ Errors: `404 account_not_found`, `409 account_inactive`, `409 already_faculty`, 
 
 Removes faculty status. The person keeps their account and class memberships, but every organizer power needs faculty status, so they can no longer manage classes. You can't remove your own access, so at least one faculty account always remains. Recorded in `faculty_access_event`.
 
-Errors: `404 faculty_not_found` (no such account, or not faculty), `409 cannot_revoke_self`.
+It's refused while the person is the only usable organizer (active `ORGANIZER` membership on an active faculty account) of any class, archived classes included, because no one else could manage that class. This uses the same locked organizer count as removing, demoting or leaving an organizer. Make another faculty member an organizer of those classes first. The error lists them:
+
+```json
+{
+  "error": {
+    "code": "last_organizer",
+    "message": "Jane Kim is the only organizer of “CS 440”. Make another faculty member an organizer there first, then remove their faculty access.",
+    "details": { "classes": [{ "class_id": 4, "name": "CS 440" }] }
+  }
+}
+```
+
+Errors: `404 faculty_not_found` (no such account, or not faculty), `409 cannot_revoke_self`, `409 last_organizer`.
 
 Both changes lock the two account rows and re-read the caller's own status, so faculty who were just removed can't keep granting or removing access.
 

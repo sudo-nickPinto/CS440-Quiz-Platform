@@ -18,6 +18,7 @@ from app.models import (
     ClassRole,
     FacultyAccessAction,
     FacultyAccessEvent,
+    MembershipStatus,
 )
 
 
@@ -259,18 +260,126 @@ def test_regrant_after_revoke_keeps_full_history(faculty_api) -> None:
     ]
 
 
-def test_removed_organizer_keeps_membership_but_loses_organizer_powers(
-    faculty_api,
-) -> None:
-    client, ids, act_as = faculty_api
+def add_class(client, ids, class_id, name, organizers, *, archived=False, others=()):
+    """A class whose organizers are the given names; `others` adds
+    (name, role, status) memberships."""
+    from datetime import datetime
+
     with client.app.state.database.session_factory() as db:
-        db.add(Class(class_id=1, name="CS 440", created_by_id=ids["lee"], join_code="LEECLASS"))
         db.add(
-            ClassMembership(class_id=1, account_id=ids["lee"], role=ClassRole.ORGANIZER)
+            Class(
+                class_id=class_id,
+                name=name,
+                created_by_id=ids[organizers[0]] if organizers else ids["kim"],
+                # Archived classes have no join code and are closed to joining.
+                join_code=None if archived else f"CODE{class_id:04d}",
+                joining_open=not archived,
+                archived_at=datetime(2026, 11, 1) if archived else None,
+            )
+        )
+        for organizer in organizers:
+            db.add(
+                ClassMembership(
+                    class_id=class_id,
+                    account_id=ids[organizer],
+                    role=ClassRole.ORGANIZER,
+                )
+            )
+        for other, role, status in others:
+            db.add(
+                ClassMembership(
+                    class_id=class_id,
+                    account_id=ids[other],
+                    role=role,
+                    status=status,
+                )
+            )
+        db.commit()
+
+
+def test_cannot_remove_the_only_organizer_of_a_class(faculty_api) -> None:
+    client, ids, _ = faculty_api
+    add_class(client, ids, 1, "CS 440", ["lee"])
+
+    response = client.delete(f"/faculty/{ids['lee']}")
+
+    assert_error(response, 409, "last_organizer")
+    error = response.json()["error"]
+    assert "Lee is the only organizer of “CS 440”" in error["message"]
+    assert error["details"] == {"classes": [{"class_id": 1, "name": "CS 440"}]}
+    assert account_type(client, ids["lee"]) == "ADMINISTRATOR"
+    assert events(client) == []
+
+
+def test_names_every_class_they_alone_organize(faculty_api) -> None:
+    client, ids, _ = faculty_api
+    add_class(client, ids, 1, "CS 440", ["lee"])
+    add_class(client, ids, 2, "Shared class", ["lee", "kim"])
+    add_class(client, ids, 3, "Old class", ["lee"], archived=True)
+
+    response = client.delete(f"/faculty/{ids['lee']}")
+
+    assert_error(response, 409, "last_organizer")
+    assert [c["name"] for c in response.json()["error"]["details"]["classes"]] == [
+        "CS 440",
+        "Old class",
+    ]
+    assert "“CS 440” and “Old class”" in response.json()["error"]["message"]
+
+
+def test_a_non_faculty_co_organizer_does_not_count(faculty_api) -> None:
+    """Organizer powers need faculty status, so an ORGANIZER membership held
+    by a non-faculty account can't take over the class."""
+    client, ids, _ = faculty_api
+    add_class(
+        client,
+        ids,
+        1,
+        "CS 440",
+        ["lee"],
+        others=[("amy", ClassRole.ORGANIZER, MembershipStatus.ACTIVE)],
+    )
+
+    assert_error(client.delete(f"/faculty/{ids['lee']}"), 409, "last_organizer")
+
+
+def test_former_and_invited_organizer_memberships_do_not_block(faculty_api) -> None:
+    client, ids, _ = faculty_api
+    with client.app.state.database.session_factory() as db:
+        db.add(Class(class_id=1, name="Left class", created_by_id=ids["kim"], join_code="LEFT0001"))
+        db.add(Class(class_id=2, name="Invited class", created_by_id=ids["kim"], join_code="INVT0001"))
+        db.add_all(
+            [
+                ClassMembership(class_id=1, account_id=ids["kim"], role=ClassRole.ORGANIZER),
+                ClassMembership(
+                    class_id=1,
+                    account_id=ids["lee"],
+                    role=ClassRole.ORGANIZER,
+                    status=MembershipStatus.LEFT,
+                ),
+                ClassMembership(class_id=2, account_id=ids["kim"], role=ClassRole.ORGANIZER),
+                ClassMembership(
+                    class_id=2,
+                    account_id=ids["lee"],
+                    role=ClassRole.ORGANIZER,
+                    status=MembershipStatus.INVITED,
+                ),
+            ]
         )
         db.commit()
 
-    client.delete(f"/faculty/{ids['lee']}")
+    assert client.delete(f"/faculty/{ids['lee']}").status_code == 204
+
+
+def test_removed_organizer_keeps_membership_but_loses_organizer_powers(
+    faculty_api,
+) -> None:
+    """With another faculty organizer in the class, removal is allowed; the
+    membership stays but its organizer powers stop working."""
+    client, ids, act_as = faculty_api
+    add_class(client, ids, 1, "CS 440", ["lee", "kim"])
+
+    assert client.delete(f"/faculty/{ids['lee']}").status_code == 204
 
     with client.app.state.database.session_factory() as db:
         membership = db.scalar(
