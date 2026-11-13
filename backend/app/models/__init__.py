@@ -1,4 +1,11 @@
-from app.models.account import Account, AccountRole, effective_role
+from app.models.account import (
+    FACULTY_ACCOUNT_TYPE,
+    Account,
+    AccountRole,
+    FacultyAccessAction,
+    FacultyAccessEvent,
+    effective_role,
+)
 from app.models.classes import (
     Class,
     ClassMembership,
@@ -33,8 +40,11 @@ from app.models.session import (
 )
 
 __all__ = [
+    "FACULTY_ACCOUNT_TYPE",
     "Account",
     "AccountRole",
+    "FacultyAccessAction",
+    "FacultyAccessEvent",
     "AnswerChoice",
     "CollaboratorPermission",
     "Class",

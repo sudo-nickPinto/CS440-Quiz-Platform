@@ -27,6 +27,8 @@ import { QuizEditor, QuizViewer } from "./QuizEditor";
 import { QuizHostingHistory } from "./QuizHistory";
 import JoinSessionPage from "./JoinSessionPage";
 import ProfilePage from "./ProfilePage";
+import FacultyAccessPage from "../faculty/FacultyAccessPage";
+import { isFaculty } from "../faculty/facultyAccess";
 import LiveSessionPage from "./LiveSessionPage";
 import EditQuizPage from "./EditQuizPage";
 import "./preview.css";
@@ -151,6 +153,11 @@ export default function PreviewApp({ onSignOut }) {
                 <button type="button" onClick={() => navigate("/app/profile")}>
                   Edit profile
                 </button>
+                {isFaculty(me) && (
+                  <button type="button" onClick={() => navigate("/app/faculty")}>
+                    Faculty access
+                  </button>
+                )}
                 <button type="button" onClick={onSignOut}>
                   Sign out
                 </button>
@@ -218,6 +225,8 @@ export default function PreviewApp({ onSignOut }) {
               path="profile"
               element={<ProfilePage onSaved={setSavedAccount} />}
             />
+
+            <Route path="faculty" element={<FacultyAccessPage />} />
 
             <Route
               path="join/class/:code"
