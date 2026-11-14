@@ -5062,7 +5062,7 @@
 }
 
 .qp .rr summary:hover .rr-tog {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .rr details[open] > summary .rr-tog {
@@ -5353,12 +5353,6 @@
   letter-spacing: 1px;
 }
 
-.qp .rr .rr-people h4 .rr-mark {
-  width: 22px;
-  height: 22px;
-  font-size: 12px;
-}
-
 .qp .rr .rr-people p {
   color: var(--gray);
   font-size: 14px;
@@ -5564,14 +5558,6 @@
   border-right: var(--b);
 }
 
-.qp .rr-me .rr-band-title small {
-  color: var(--navy);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
 .qp .rr-me .rr-band-title h1 {
   margin: 4px 0;
   font-size: clamp(24px, 3vw, 36px);
@@ -5656,27 +5642,6 @@
   text-transform: uppercase;
 }
 
-.qp .rr-me .rr-key {
-  display: flex;
-  gap: 10px;
-}
-
-.qp .rr-me .rr-key > span {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.qp .rr-me .rr-key i {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--paper);
-  font-size: 11px;
-  font-style: normal;
-}
-
 .qp .rr-me .rr-tiles {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -5725,13 +5690,6 @@
   box-shadow:
     0 0 0 3px var(--paper),
     0 0 0 6px var(--ink);
-}
-
-.qp .rr-me .rr-hint {
-  margin: 0;
-  padding: 0 14px 14px;
-  color: var(--gray);
-  font-size: 13px;
 }
 
 .qp .rr-me .rr-detail-tools {
@@ -5794,12 +5752,6 @@
 .qp .rr-me .rr-none {
   color: var(--gray);
   font-style: italic;
-}
-
-.qp .rr-me .rr-missed-note {
-  margin-top: 14px;
-  color: var(--gray);
-  font-weight: 700;
 }
 
 @media (max-width: 1150px) {

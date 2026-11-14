@@ -153,8 +153,7 @@ function AnswerDetail({ question, answer, total, nav }) {
         </span>
         <span className="rr-detail-tools">
           <span className={"rr-result " + answer.state}>
-            {GLYPH[answer.state]} {LABEL[answer.state]} · {fmt(answer.points)}{" "}
-            pts
+            {LABEL[answer.state]} · {fmt(answer.points)} pts
           </span>
           {nav}
         </span>
@@ -162,10 +161,6 @@ function AnswerDetail({ question, answer, total, nav }) {
 
       <div className="rr-detail-body">
         <h3>{question.text}</h3>
-
-        {!question.played && (
-          <p>This question was not played before the session ended.</p>
-        )}
 
         <div className="rr-choices">
           {question.choices.map((choice, index) => {
@@ -185,11 +180,11 @@ function AnswerDetail({ question, answer, total, nav }) {
                   <strong>{choice.text}</strong>
                   <small>
                     {choice.correct && selected
-                      ? "✓ Your answer · correct"
+                      ? "Your answer · correct"
                       : choice.correct
-                        ? "✓ Correct answer"
+                        ? "Correct answer"
                         : selected
-                          ? "✗ Your answer"
+                          ? "Your answer"
                           : ""}
                   </small>
                 </div>
@@ -217,12 +212,6 @@ function AnswerDetail({ question, answer, total, nav }) {
             </p>
           </div>
         </div>
-
-        {answer.state === "missed" && (
-          <p className="rr-missed-note">
-            No answer was recorded. A missed question counts as 0 points.
-          </p>
-        )}
       </div>
     </section>
   );
@@ -291,9 +280,6 @@ function People({ title, kind, people, questionIndex, onPerson }) {
   return (
     <section className="rr-people">
       <h4>
-        <span className={"rr-mark " + kind} aria-hidden="true">
-          {GLYPH[kind]}
-        </span>
         {title} · <b>{people.length}</b>
       </h4>
 
@@ -407,7 +393,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
   const groups = [
     ...question.choices.map((choice, i) => ({
       key: choice.id,
-      letter: choice.correct ? "✓" : letterOf(i),
+      letter: letterOf(i),
       label: letterOf(i) + ". " + choice.text,
       count: players.filter((p) => p.answers[index].choice_id === choice.id)
         .length,
@@ -486,7 +472,7 @@ function QuestionBreakdown({ question, index, players, onPerson, report, onCorre
                 Click an answer letter to choose the answer that should have been marked correct. Nothing changes until you confirm the rescore.
               </p>
             )}
-            {complete && <p className="rr-correction-success" role="status">✓ {complete}</p>}
+            {complete && <p className="rr-correction-success" role="status">{complete}</p>}
 
             <div className="rr-breakdown">
               <div className="rr-padding">
@@ -909,7 +895,6 @@ export function ParticipantResults({ report, backTo, backLabel }) {
       <div className="rr-me-content">
         <section className="rr-band" aria-label="Report card">
           <div className="rr-band-title">
-            <small>Report card</small>
             <h1>{report.quiz_title}</h1>
             <p>
               Hosted by <b>{report.host_name}</b> ·{" "}
@@ -968,20 +953,6 @@ export function ParticipantResults({ report, backTo, backLabel }) {
           <section className="rr-answer-map" aria-label="Your answers">
             <div className="rr-panel-heading">
               <span>Your answers</span>
-              <span className="rr-key">
-                <span aria-label={`${count("correct")} correct`}>
-                  <i className="correct" aria-hidden="true">✓</i>
-                  {count("correct")}
-                </span>
-                <span aria-label={`${count("wrong")} wrong`}>
-                  <i className="wrong" aria-hidden="true">✗</i>
-                  {count("wrong")}
-                </span>
-                <span aria-label={`${count("missed")} missed`}>
-                  <i className="missed" aria-hidden="true">—</i>
-                  {count("missed")}
-                </span>
-              </span>
             </div>
 
             <div className="rr-tiles">
@@ -1015,10 +986,6 @@ export function ParticipantResults({ report, backTo, backLabel }) {
                 </button>
               ))}
             </div>
-
-            <p className="rr-hint">
-              Pick a question to see your answer and the correct one.
-            </p>
           </section>
 
           <div>
