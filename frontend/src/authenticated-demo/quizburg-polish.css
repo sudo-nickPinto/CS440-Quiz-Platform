@@ -3136,32 +3136,32 @@
 .qp .lv .ui-tone-0 .lv-index,
 .qp .lv-index.ui-tone-0,
 .qp .lv-my-pick.ui-tone-0 {
-  background: #043371;
-  color: #ffffff;
+  background: var(--answer-0);
+  color: var(--color-on-answer);
 }
 
 .qp .lv-host-answer.ui-tone-1,
 .qp .lv .ui-tone-1 .lv-index,
 .qp .lv-index.ui-tone-1,
 .qp .lv-my-pick.ui-tone-1 {
-  background: #bf4c0c;
-  color: #ffffff;
+  background: var(--answer-1);
+  color: var(--color-on-answer);
 }
 
 .qp .lv-host-answer.ui-tone-2,
 .qp .lv .ui-tone-2 .lv-index,
 .qp .lv-index.ui-tone-2,
 .qp .lv-my-pick.ui-tone-2 {
-  background: #c9ddbf;
-  color: #222222;
+  background: var(--answer-2);
+  color: var(--color-on-answer);
 }
 
 .qp .lv-host-answer.ui-tone-3,
 .qp .lv .ui-tone-3 .lv-index,
 .qp .lv-index.ui-tone-3,
 .qp .lv-my-pick.ui-tone-3 {
-  background: #f3d477;
-  color: #222222;
+  background: var(--answer-3);
+  color: var(--color-on-answer);
 }
 
 .qp .lv-index {
@@ -3176,43 +3176,83 @@
   font: 0.62em "Archivo Black", sans-serif;
 }
 
-/* Question (projector) */
+/* Question (projector). Sizes follow the window (vh/vw) so the question,
+   timer, counts and answers fit 1280x720 to 1920x1080 without zooming. */
 .qp .lv-hq {
+  --lv-dial: clamp(76px, 15vh, 136px);
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - 190px);
+  min-height: 0;
 }
 
 .qp .lv-hq-top {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   display: grid;
-  grid-template-columns: 144px minmax(0, 1fr) 144px;
+  grid-template-columns: calc(var(--lv-dial) * 1.2) minmax(0, 1fr) calc(var(--lv-dial) * 1.2);
   align-items: center;
-  gap: clamp(18px, 2.5vw, 40px);
-  min-height: 240px;
-  padding: clamp(18px, 3vh, 34px) clamp(20px, 3vw, 44px);
+  gap: clamp(14px, 2.2vw, 40px);
+  min-height: 0;
+  padding: clamp(10px, 2.4vh, 30px) clamp(16px, 2.6vw, 44px);
+}
+
+.qp .lv-hq-text {
+  min-height: 0;
+  max-height: 36vh;
+  overflow-y: auto;
 }
 
 .qp .lv-hq-text h1 {
   max-width: 1100px;
   margin: 0 auto;
-  font-size: clamp(30px, min(4.4vw, 7.2vh), 64px);
+  font-size: clamp(22px, min(3.6vw, 6vh), 60px);
   line-height: 1.15;
   text-align: center;
   overflow-wrap: anywhere;
+}
+
+/* Question alone, before the timer and answers appear */
+.qp .lv-hq-preview {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 2.4vh, 24px);
+  min-height: 0;
+  padding: clamp(16px, 4vh, 48px) clamp(16px, 4vw, 64px);
+  overflow-y: auto;
+  text-align: center;
+}
+
+.qp .lv-hq-preview h1 {
+  max-width: 1200px;
+  margin: 0;
+  font-size: clamp(28px, min(4.8vw, 8.5vh), 80px);
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+  animation: lv-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.qp .lv-hq-ready {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-weight: 700;
 }
 
 .qp .lv-timer {
   display: grid;
   place-items: center;
   justify-self: center;
-  width: 124px;
-  height: 124px;
+  width: var(--lv-dial);
+  height: var(--lv-dial);
   border: var(--b);
   background: var(--orange-deep);
   box-shadow: 4px 4px 0 var(--ink);
   color: var(--paper);
-  font: 52px "Archivo Black", sans-serif;
+  font: calc(var(--lv-dial) * 0.42) "Archivo Black", sans-serif;
 }
 
 .qp .lv-timer.is-urgent,
@@ -3236,8 +3276,8 @@
   align-items: center;
   justify-content: center;
   justify-self: center;
-  width: 144px;
-  height: 124px;
+  width: calc(var(--lv-dial) * 1.16);
+  height: var(--lv-dial);
   border: var(--b);
   background: var(--sky-soft);
   box-shadow: 4px 4px 0 var(--ink);
@@ -3245,23 +3285,24 @@
 }
 
 .qp .lv-answer-count strong {
-  font: 44px/1.1 "Archivo Black", sans-serif;
+  font: calc(var(--lv-dial) * 0.34) / 1.1 "Archivo Black", sans-serif;
   white-space: nowrap;
 }
 
 .qp .lv-answer-count small {
-  font-size: 22px;
+  font-size: 0.5em;
 }
 
 .qp .lv-answer-count span {
-  font-size: 12px;
+  font-size: clamp(10px, 1.6vh, 13px);
   font-weight: 700;
   letter-spacing: 1px;
   text-transform: uppercase;
 }
 
 .qp .lv-track {
-  height: 12px;
+  flex: 0 0 auto;
+  height: clamp(8px, 1.4vh, 12px);
   border-top: var(--b);
   border-bottom: var(--b);
   background: var(--paper);
@@ -3274,32 +3315,92 @@
 }
 
 .qp .lv-host-answers {
-  flex: 1.2 1 auto;
+  flex: 1 1 auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(12px, 2vh, 22px);
-  padding: clamp(12px, 2vh, 22px);
+  grid-auto-rows: minmax(0, 1fr);
+  gap: clamp(10px, 2vh, 22px);
+  min-height: 0;
+  padding: clamp(10px, 2vh, 22px);
   background: var(--sand);
 }
 
 .qp .lv-host-answer {
   display: flex;
   align-items: center;
-  gap: clamp(14px, 1.6vw, 26px);
+  gap: clamp(10px, 1.4vw, 24px);
   min-width: 0;
-  min-height: 112px;
-  padding: 12px clamp(18px, 2.4vw, 36px);
+  min-height: 0;
+  padding: clamp(8px, 1.4vh, 16px) clamp(14px, 2vw, 32px);
   border: var(--b);
   background: var(--paper);
   box-shadow: 4px 4px 0 var(--ink);
-  font-size: clamp(20px, min(2.6vw, 4.4vh), 40px);
+  font-size: clamp(16px, min(2.3vw, 4vh), 40px);
   font-weight: 700;
   line-height: 1.15;
   overflow-wrap: anywhere;
+  overflow-y: auto;
 }
 
 .qp .lv-host-answer .lv-index {
   border-width: 3px;
+}
+
+.qp .lv-answer-text {
+  min-width: 0;
+}
+
+/* White card suit on each coloured answer (AnswerSuit.jsx) */
+.qp .lv-suit {
+  flex: 0 0 auto;
+  width: 1.5em;
+  height: 1.5em;
+  color: var(--color-on-answer);
+}
+
+.qp .lv-ptiles .ui-answer .lv-suit {
+  width: 0.62em;
+  height: 0.62em;
+}
+
+.qp .lv-hq .lv-strip {
+  flex: 0 0 auto;
+  min-height: 0;
+  padding-top: clamp(6px, 1.2vh, 12px);
+  padding-bottom: clamp(6px, 1.2vh, 12px);
+}
+
+/* On laptops and projectors the question screen fills the window under the
+   header, with no page scroll (same idea as the dashboard in taha-ui.css). */
+@media (min-width: 641px) {
+  .qp:has(.lv-hq) {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 0;
+    padding-bottom: clamp(12px, 2.4vh, 36px);
+  }
+
+  .qp:has(.lv-hq) .qp-header {
+    flex-shrink: 0;
+  }
+
+  .qp:has(.lv-hq) .qp-frame,
+  .qp .ui-live:has(.lv-hq),
+  .qp .lv-body:has(.lv-hq) {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .qp .lv-hq {
+    flex: 1 1 auto;
+  }
+
+  .qp .lv-host-answers {
+    flex-basis: 0;
+  }
 }
 
 /* Control strip at the bottom of a projector screen */
@@ -3634,7 +3735,9 @@
 
 .qp .lv-ptiles .ui-answer {
   aspect-ratio: 1;
+  flex-direction: column;
   justify-content: center;
+  gap: 6px;
   min-height: 0;
   padding: 12px;
   box-shadow: 3px 3px 0 var(--ink);
@@ -4002,20 +4105,6 @@
 }
 
 @media (max-width: 900px) {
-  .qp .lv-hq-top {
-    grid-template-columns: 112px minmax(0, 1fr) 112px;
-  }
-
-  .qp .lv-timer,
-  .qp .lv-answer-count {
-    width: 104px;
-    height: 104px;
-  }
-
-  .qp .lv-answer-count strong {
-    font-size: 32px;
-  }
-
   .qp .lv-join-step {
     text-align: center;
   }
@@ -4204,6 +4293,7 @@
   .qp .lv-dbar,
   .qp .lv-board li,
   .qp .lv-my-pick,
+  .qp .lv-hq-preview h1,
   .qp .lv-feedback-mark,
   .qp .lv-trophy,
   .qp .lv-timer.is-urgent,
@@ -4226,19 +4316,19 @@
 
 /* Keep each answer colour on hover/tap (touch keeps :hover after a tap) */
 .qp .lv-ptiles .ui-answer.ui-tone-0:hover:not(:disabled) {
-  background: #043371;
+  background: var(--answer-0);
 }
 
 .qp .lv-ptiles .ui-answer.ui-tone-1:hover:not(:disabled) {
-  background: #bf4c0c;
+  background: var(--answer-1);
 }
 
 .qp .lv-ptiles .ui-answer.ui-tone-2:hover:not(:disabled) {
-  background: #c9ddbf;
+  background: var(--answer-2);
 }
 
 .qp .lv-ptiles .ui-answer.ui-tone-3:hover:not(:disabled) {
-  background: #f3d477;
+  background: var(--answer-3);
 }
 
 /* Leave room above the tallest bar for its count */

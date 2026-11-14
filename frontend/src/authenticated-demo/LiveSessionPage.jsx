@@ -11,6 +11,8 @@ import Avatar from "../avatars/Avatar";
 import QuizStartCountdown from "./QuizStartCountdown";
 import CopyCodeButton from "./CopyCodeButton";
 import { classPagePath } from "../classes/classPaths";
+import { inPreview } from "../live/questionDisplay";
+import AnswerSuit from "./AnswerSuit";
 
 const CONNECTION_ERRORS = {
   unauthorized: "Your login needs to be renewed.",
@@ -220,6 +222,8 @@ function QuestionScreen({
 }) {
   const question = state.currentQuestion;
   const [now, setNow] = useState(() => Date.now());
+  // When this screen first showed the question; see previewEndsAt.
+  const [seenAt] = useState(() => Date.now());
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
@@ -238,6 +242,8 @@ function QuestionScreen({
       ? Math.max(0, Math.min(100, ((deadline - now) / duration) * 100))
       : 0;
 
+  const preview = inPreview(question, seenAt, now);
+
   const submittedIndex = question.choices.findIndex(
     (choice) => choice.choice_id === state.myAnswer?.choice_id,
   );
@@ -254,6 +260,28 @@ function QuestionScreen({
         <h1>Answer submitted!</h1>
         <p role="status">Waiting for everyone else to answer…</p>
         <Dots />
+      </section>
+    );
+  }
+
+  if (host && preview) {
+    return (
+      <section
+        className="lv-hq is-preview"
+        aria-label={`Question ${question.question_order}`}
+      >
+        <div className="lv-hq-preview">
+          <p className="lv-eyebrow">
+            Question {question.question_order} of {question.total_questions}
+          </p>
+          <h1>{question.question_text}</h1>
+          <p className="lv-hq-ready" role="status">
+            <Dots />
+            Answers in a moment…
+          </p>
+        </div>
+
+        {controls}
       </section>
     );
   }
@@ -300,8 +328,9 @@ function QuestionScreen({
               key={choice.choice_id}
               className={`lv-host-answer ui-tone-${index % 4}`}
             >
+              <AnswerSuit index={index} />
               <span className="lv-index">{letter(index)}</span>
-              <span>{choice.choice_text}</span>
+              <span className="lv-answer-text">{choice.choice_text}</span>
             </div>
           ))}
         </div>
@@ -357,10 +386,11 @@ function QuestionScreen({
             key={choice.choice_id}
             type="button"
             className={`ui-answer ui-tone-${index % 4}`}
-            disabled={!canAct || seconds === 0}
+            disabled={!canAct || preview || seconds === 0}
             aria-label={`Answer ${letter(index)}`}
             onClick={() => submit(choice.choice_id)}
           >
+            <AnswerSuit index={index} />
             {letter(index)}
           </button>
         ))}
@@ -376,6 +406,12 @@ function QuestionScreen({
           value={standing?.rank == null ? "—" : `#${standing.rank}`}
         />
       </div>
+
+      {preview && (
+        <p className="lv-note" role="status">
+          Read the question on the host’s screen. Answers open in a moment…
+        </p>
+      )}
 
       {busy && (
         <p className="lv-note" role="status">
