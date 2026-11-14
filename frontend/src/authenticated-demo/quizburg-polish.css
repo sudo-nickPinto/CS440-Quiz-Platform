@@ -6188,7 +6188,7 @@
   border-right: 0;
 }
 
-/* User view: "+" and JOIN are full-height cells, not floating buttons */
+/* User view: "+ New quiz" is a full-height cell, not a floating button */
 .qp .cl-section-tabs > .cl-actions {
   align-items: stretch;
   gap: 0;
@@ -6196,8 +6196,7 @@
   border-left: var(--b);
 }
 
-.qp .cl-section-tabs > .cl-actions > a,
-.qp .cl-section-tabs > .cl-actions > button {
+.qp .cl-section-tabs > .cl-actions > a {
   min-height: 0;
   margin: 0;
   border: 0;
@@ -6215,19 +6214,6 @@
 
 .qp .cl-section-tabs > .cl-actions > a:hover {
   background: var(--sand);
-}
-
-.qp .cl-section-tabs > .cl-actions > button {
-  padding: 0 36px;
-  border-left: var(--b);
-  background: var(--navy);
-  color: var(--paper);
-  font-size: clamp(16px, 2vw, 26px);
-}
-
-.qp .cl-section-tabs > .cl-actions > button:hover:not(:disabled),
-.qp .cl-section-tabs > .cl-actions > button[aria-expanded="true"] {
-  background: var(--ink);
 }
 
 /* Members */
@@ -6372,8 +6358,7 @@
     border-top: var(--b);
   }
 
-  .qp .cl-section-tabs > .cl-actions > a,
-  .qp .cl-section-tabs > .cl-actions > button {
+  .qp .cl-section-tabs > .cl-actions > a {
     flex: 1;
     min-height: 48px;
     display: grid;

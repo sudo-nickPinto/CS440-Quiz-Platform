@@ -1335,120 +1335,52 @@
   }
 }
 
-/* ---------- User view: "+" and JOIN cells, join strip (made-dashboard-main.html) ---------- */
+/* ---------- User view: "+ New quiz" cell (made-dashboard-main.html) ---------- */
 .qp .cl-section-tabs > .cl-actions > a.cl-plus {
-  display: grid;
-  place-items: center;
-  width: 96px;
-  padding: 0;
-  background: var(--sky-soft);
-  color: var(--navy);
-  font-size: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 24px;
+  background: var(--color-selected-bg);
+  color: var(--color-info);
+  font-size: 16px;
   text-decoration: none;
+  white-space: nowrap;
+  transition: var(--hover-transition);
+}
+
+.qp .cl-section-tabs > .cl-actions > a.cl-plus > span {
+  font-size: 28px;
+  line-height: 1;
 }
 
 .qp .cl-section-tabs > .cl-actions > a.cl-plus:hover {
-  background: var(--sand);
+  background: var(--color-selected-bg);
+  filter: var(--hover-shade);
 }
 
-.qp .cl-section-tabs > .cl-actions > a.cl-plus:active,
-.qp .cl-section-tabs > .cl-actions > button.cl-join:active {
-  transform: translate(2px, 2px);
-}
-
-.qp .cl-section-tabs > .cl-actions > button.cl-join {
-  padding: 20px 36px;
-  border-left: var(--b);
-  background: var(--navy);
-  color: var(--paper);
-  letter-spacing: 0.5px;
-}
-
-.qp .cl-join-panel {
-  padding: 14px 16px;
-  border-bottom: var(--b);
-  background: var(--sky-soft);
-}
-
-.qp .cl-join-panel form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-}
-
-.qp .cl-join-panel label {
-  padding: 6px 10px;
-  background: var(--ink);
-  color: var(--paper);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.qp .cl-page .cl-join-panel input {
-  width: 180px;
-  min-height: 0;
-  padding: 8px 12px;
-  border: var(--b);
-  background: var(--paper);
-  box-shadow: 3px 3px 0 var(--ink);
-  font: inherit;
-  font-weight: 700;
-  letter-spacing: 4px;
-}
-
-.qp .cl-page .cl-join-panel button {
-  padding: 8px 18px;
-  border: var(--b);
-  background: var(--orange-deep);
-  color: var(--paper);
-  box-shadow: 3px 3px 0 var(--ink);
-  font-weight: 700;
-}
-
-.qp .cl-page .cl-join-panel button:hover:not(:disabled) {
-  background: var(--orange);
-}
-
-.qp .cl-page .cl-join-panel button:disabled {
-  opacity: 0.6;
+.qp .cl-section-tabs > .cl-actions > a.cl-plus:active {
+  transform: var(--press);
 }
 
 @media (max-width: 640px) {
   .qp .cl-section-tabs > .cl-actions > a.cl-plus {
-    width: 56px;
-    font-size: 26px;
+    padding: 0 16px;
+    font-size: 15px;
   }
 
-  .qp .cl-section-tabs > .cl-actions > button.cl-join {
-    padding: 14px 18px;
+  .qp .cl-section-tabs > .cl-actions > a.cl-plus > span {
+    font-size: 22px;
   }
 }
 
-/* ---------- Classes list title bar: + New class · Join quiz · Join class ---------- */
+/* ---------- Classes list title bar: + New class · Join class ---------- */
 /* Any number of buttons after the heading, each its own full-height cell. */
 .qp .cl-titlebar {
   grid-template-columns: minmax(0, 1fr);
   grid-auto-columns: auto;
   grid-auto-flow: column;
-}
-
-/* Join quiz is the "play" action, so it takes the app's play color: deep
-   orange, as on Present, Go → and rank blocks. The 3px ink dividers keep
-   it from touching the navy Join class or the sky New class. */
-.qp .cl-titlebar .cl-join-quiz {
-  background: var(--orange-deep);
-  color: var(--paper);
-}
-
-.qp .cl-titlebar .cl-join-quiz:hover {
-  background: var(--orange);
-}
-
-.qp .cl-titlebar .cl-join-quiz[aria-expanded="true"] {
-  background: var(--ink);
 }
 
 .qp .cl-titlebar button:active {
@@ -1489,21 +1421,7 @@
   background: var(--orange-deep);
 }
 
-/* The JOIN cell is orange, ending the row in orange like the logo. */
-.qp .cl-section-tabs > .cl-actions > button.cl-join {
-  background: var(--orange-deep);
-}
-
-.qp .cl-section-tabs > .cl-actions > button.cl-join:hover:not(:disabled) {
-  background: var(--orange);
-}
-
-.qp .cl-section-tabs > .cl-actions > button.cl-join[aria-expanded="true"] {
-  background: var(--ink);
-}
-
-/* So the orange JOIN doesn't sit right above another orange block, the
-   member view's count chip is navy. */
+/* The member view's count chip is navy. */
 .qp .cl-page.is-user-view .cl-toolbar > .cl-count {
   background: var(--navy);
   color: var(--paper);
