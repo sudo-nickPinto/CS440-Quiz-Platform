@@ -9,7 +9,7 @@ import {
 import { useAccount } from "./account";
 import QuizCollaborators from "./QuizCollaborators";
 
-import { blankEditor, LETTERS, newQuestion } from "./model";
+import { blankEditor, LETTERS, newQuestion, TEXT_LIMIT } from "./model";
 import {
   normalizeEditorDefaultTime,
   quizQuestionToEditor,
@@ -29,7 +29,12 @@ import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 import ConfirmDialog from "./ConfirmDialog";
 import { useConfirm } from "./useConfirm";
-import { QuestionMenu, TimePicker } from "./EditorParts";
+import {
+  AutoGrowTextarea,
+  CharCount,
+  QuestionMenu,
+  TimePicker,
+} from "./EditorParts";
 import { useQuizCollaboration } from "./useQuizCollaboration";
 import { classPagePath } from "../classes/classPaths";
 import NewQuizClassPicker from "../classes/NewQuizClassPicker";
@@ -1182,19 +1187,23 @@ export function QuizEditor({
                   </div>
 
                   <div className="qe-body">
-                    <textarea
-                      id={`question-text-${question.id}`}
-                      className="qe-qtext"
-                      rows={1}
-                      aria-label={`Question ${index + 1} text`}
-                      placeholder="Type your question"
-                      value={question.text}
-                      onChange={(event) =>
-                        changeQuestion(question.id, {
-                          text: event.target.value,
-                        })
-                      }
-                    />
+                    <div className="qe-qtext-box">
+                      <AutoGrowTextarea
+                        id={`question-text-${question.id}`}
+                        className="qe-qtext"
+                        rows={1}
+                        maxLength={TEXT_LIMIT}
+                        aria-label={`Question ${index + 1} text`}
+                        placeholder="Type your question"
+                        value={question.text}
+                        onChange={(event) =>
+                          changeQuestion(question.id, {
+                            text: event.target.value,
+                          })
+                        }
+                      />
+                      <CharCount value={question.text} />
+                    </div>
 
                     <div
                       className="qe-choices"
@@ -1230,7 +1239,7 @@ export function QuizEditor({
                             </button>
 
                             <input
-                              maxLength={500}
+                              maxLength={TEXT_LIMIT}
                               value={option}
                               placeholder={`Choice ${LETTERS[choiceIndex]}`}
                               aria-label={
@@ -1249,6 +1258,8 @@ export function QuizEditor({
                             />
 
                             <span className="qe-choice-end">
+                              <CharCount value={option} />
+
                               {correct && (
                                 <span className="qe-tag" aria-hidden="true">
                                   Correct

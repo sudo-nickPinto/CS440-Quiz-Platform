@@ -1,4 +1,6 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+
+import { charCount, TEXT_LIMIT } from "./model";
 
 // Pieces of the quiz editor from quiz-editor-main.html. They only render
 // controls; QuizEditor owns the editor state and passes changes back.
@@ -135,6 +137,48 @@ export function TimePicker({
       </div>
     </details>
   );
+}
+
+// "87/120" next to a question or answer once it nears TEXT_LIMIT.
+export function CharCount({ value, limit = TEXT_LIMIT }) {
+  const count = charCount(value.length, limit);
+  if (!count.visible) return null;
+  return (
+    <span
+      className={"qe-count" + (count.over ? " is-over" : "")}
+      aria-live="polite"
+    >
+      {count.label}
+      <span className="ui-sr"> characters</span>
+    </span>
+  );
+}
+
+// A textarea that grows with its text instead of scrolling inside.
+export function AutoGrowTextarea({ value, ...props }) {
+  const ref = useRef(null);
+
+  useLayoutEffect(() => {
+    const box = ref.current;
+    if (!box) return undefined;
+    function fit() {
+      box.style.height = "auto";
+      box.style.height = `${box.scrollHeight}px`;
+    }
+    fit();
+    // Width changes (window resize, sidebar) rewrap the text.
+    if (typeof ResizeObserver === "undefined") return undefined;
+    let width = box.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (box.clientWidth === width) return;
+      width = box.clientWidth;
+      fit();
+    });
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [value]);
+
+  return <textarea ref={ref} value={value} {...props} />;
 }
 
 // The ⋯ menu in each question card's black title bar.
