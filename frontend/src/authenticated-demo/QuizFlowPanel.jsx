@@ -1,3 +1,4 @@
+import { useId, useState } from "react";
 import { Link } from "react-router";
 
 import HostQuizButton from "./HostQuizButton";
@@ -33,12 +34,16 @@ function Track({ step }) {
   );
 }
 
-// The track plus the one button for the next step.
+// A compact status row with the one button for the next step. The full
+// Draft → Approval → Ready to host track stays folded behind the status
+// toggle until someone opens it.
 // onChange(message) runs after a successful action, so the page can show the
 // message and reload the quiz.
 export function QuizFlowPanel({ quiz, flow, onChange }) {
   const api = useApi();
   const action = useAction();
+  const [open, setOpen] = useState(false);
+  const trackId = useId();
 
   if (!flow.visible) return null;
 
@@ -91,9 +96,24 @@ export function QuizFlowPanel({ quiz, flow, onChange }) {
 
   return (
     <section className="qf" aria-label="Approval status">
-      <Track step={step} />
-
       <div className="qf-next">
+        <button
+          type="button"
+          className="qf-toggle"
+          aria-expanded={open}
+          aria-controls={trackId}
+          onClick={() => setOpen((shown) => !shown)}
+        >
+          <span className="qf-toggle-label">Approval</span>
+          <b>{flow.state.label}</b>
+          <span className="qf-toggle-step">
+            Step {step} of {FLOW_STEPS.length}
+          </span>
+          <span className="qf-caret" aria-hidden="true">
+            ▾
+          </span>
+        </button>
+
         <p className="qf-note">{note}</p>
 
         {next === "send" && (
@@ -137,6 +157,10 @@ export function QuizFlowPanel({ quiz, flow, onChange }) {
             />
           </span>
         )}
+      </div>
+
+      <div id={trackId} className="qf-steps" hidden={!open}>
+        <Track step={step} />
       </div>
 
       <RequestError error={action.error} />

@@ -1,11 +1,12 @@
-/* Quiz page: Draft → Approval → Ready to host, and the next-step button.
+/* Quiz page: a compact approval status row with the next-step button; the
+   Draft → Approval → Ready to host track opens from the status toggle.
    Editor: the two save buttons. Same borders, shadows and colors as the
    rest of the quiz pages (quizburg-polish.css). */
 
 .qp .qf {
   display: grid;
-  gap: 16px;
-  padding: 18px clamp(16px, 4vw, 40px);
+  gap: 10px;
+  padding: 10px clamp(16px, 4vw, 40px);
   border-bottom: var(--b);
   background: var(--paper);
 }
@@ -21,9 +22,9 @@
 .qp .qf-track li {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -49,12 +50,12 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   border: var(--b-thin);
   background: var(--paper);
   color: var(--ink);
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .qp .qf-track li.is-done {
@@ -80,17 +81,61 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px 20px;
-  padding-top: 14px;
+  gap: 10px 16px;
+}
+
+/* "Approval · Draft · Step 1 of 3 ▾": opens the full track. */
+.qp .qf-toggle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 0;
+  padding: 6px 10px;
+  border: var(--b-thin);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 14px;
+  cursor: pointer;
+  transition: var(--hover-transition);
+}
+
+.qp .qf-toggle:hover {
+  filter: var(--hover-shade);
+}
+
+.qp .qf-toggle-label,
+.qp .qf-toggle-step {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .qf-caret {
+  transition: transform 0.12s ease;
+}
+
+.qp .qf-toggle[aria-expanded="true"] .qf-caret {
+  transform: rotate(180deg);
+}
+
+.qp .qf-steps {
+  padding-top: 10px;
   border-top: var(--b-thin);
+}
+
+.qp .qf-steps[hidden] {
+  display: none;
 }
 
 .qp .qf-note {
   flex: 1 1 260px;
   min-width: 0;
   margin: 0;
+  font-size: 14px;
   font-weight: 500;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 /* The one next-step button: same look as the quiz page's Host button. */
@@ -99,8 +144,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 9px 18px;
+  min-height: 40px;
+  padding: 7px 16px;
   border: var(--b);
   background: var(--orange-deep);
   box-shadow: 4px 4px 0 var(--ink);
@@ -170,8 +215,8 @@
   }
 
   .qp .qf-mark {
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
   }
 
   .qp .qf-go,
