@@ -23,6 +23,7 @@ import {
   presentStatus,
   resolveAdminSection,
   resolveUserSection,
+  rowLink,
   sendForApproval,
   SUBMISSION_FILTERS,
   SUBMISSION_SORTS,
@@ -61,8 +62,9 @@ function reportResource(resource) {
   );
 }
 
-// A searchable report table; `rows` are { key, text, cells } where `text`
-// is what the search box matches.
+// A searchable report table; `rows` are { key, text, cells, to? } where
+// `text` is what the search box matches and `to`, if set, is opened by a
+// click anywhere on the row (the row's own links stay the keyboard path).
 function ReportTable({
   caption,
   noun,
@@ -78,6 +80,7 @@ function ReportTable({
   tableClass = "",
   rememberAs = null,
 }) {
+  const navigate = useNavigate();
   const [query, setQuery] = useRemembered(
     rememberAs && `${rememberAs}:query`,
     "",
@@ -155,7 +158,10 @@ function ReportTable({
               </tr>
             ) : (
               visible.map((row) => (
-                <tr key={row.key}>
+                <tr
+                  key={row.key}
+                  {...(row.to ? rowLink(navigate, row.to) : null)}
+                >
                   {row.cells.map((cell, index) => (
                     <td
                       key={headers[index] || index}
@@ -392,6 +398,7 @@ function PresentationsTable({ classInfo, studentCount, controls }) {
         return {
           key: session.session_id,
           text: `${session.quiz_title} ${session.host_name}`,
+          to: report,
           leadClass: "cl-date",
           cells: [
             <DateBlock value={session.started_at} />,
@@ -487,6 +494,7 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
           return {
             key: session.session_id,
             text: `${session.quiz_title} ${session.host_name}`,
+            to: report,
             leadClass: `cl-rank-lead${played ? "" : " is-none"}`,
             cells: [
               played ? (
@@ -577,6 +585,8 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
                 : "Did not participate"
             }
             linkLabel={classInfo.canManage ? "Session report" : "My results"}
+            wholeCard
+            keepLink
           >
             <p>Hosted by {session.host_name}</p>
             <p>{formatDate(session.started_at)}</p>
@@ -1023,6 +1033,8 @@ function ClassQuizzesTable({ classInfo, controls }) {
               quiz.session_count === 1 ? "presentation" : "presentations"
             }`}
             linkLabel="View report"
+            wholeCard
+            keepLink
           >
             <p>Last presented {formatDate(quiz.presented_at)}</p>
             <p>{formatScore(quiz.participant_count)} total participations</p>

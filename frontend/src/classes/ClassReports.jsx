@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { useResource } from "../authenticated-demo/rest";
 import RequestError from "../authenticated-demo/RequestError";
 import {
@@ -6,6 +6,7 @@ import {
   ParticipantResults,
 } from "../authenticated-demo/SessionResults";
 import { useFileDownload } from "../authenticated-demo/useFileDownload";
+import { rowLink } from "./classHelpers";
 
 function validId(value) {
   return (
@@ -181,6 +182,8 @@ export function ClassSessionReportPage() {
 }
 
 function QuizReport({ report, classId }) {
+  const navigate = useNavigate();
+
   return (
     <>
       <Summary
@@ -213,7 +216,12 @@ function QuizReport({ report, classId }) {
 
           <tbody>
             {report.sessions.map((session) => (
-              <tr key={session.session_id}>
+              // The whole row opens the presentation's results; "Open
+              // report" stays the keyboard path.
+              <tr
+                key={session.session_id}
+                {...rowLink(navigate, sessionUrl(classId, session.session_id))}
+              >
                 <td>{date(session.started_at)}</td>
                 <td>{session.quiz_title}</td>
                 <td>{session.host_name}</td>
@@ -276,6 +284,8 @@ export function ClassQuizReportPage() {
 }
 
 function StudentReport({ report, classId }) {
+  const navigate = useNavigate();
+
   return (
     <>
       <Summary
@@ -320,7 +330,12 @@ function StudentReport({ report, classId }) {
 
           <tbody>
             {report.sessions.map((session) => (
-              <tr key={session.session_id}>
+              // A played session opens its results from anywhere on the row.
+              <tr
+                key={session.session_id}
+                {...(session.played &&
+                  rowLink(navigate, sessionUrl(classId, session.session_id)))}
+              >
                 <td>{date(session.started_at)}</td>
                 <td>{session.quiz_title}</td>
                 <td>{session.played ? "Played" : "Absent"}</td>

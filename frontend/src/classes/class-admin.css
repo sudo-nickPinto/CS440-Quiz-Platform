@@ -199,6 +199,49 @@
   line-height: 1.2;
 }
 
+/* A student's name links to their full report. Only the name itself is the
+   link, so the rest of the cell still opens the row. */
+.qp .cl-table td a.cl-stu-name {
+  width: fit-content;
+  color: var(--color-text);
+  text-decoration: none;
+  white-space: normal;
+}
+
+.qp .cl-table td a.cl-stu-name:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--color-info);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
+
+/* Report rows that open a page when clicked anywhere (rowLink in
+   classHelpers.js). Flat rows shade on hover rather than change color. */
+.qp .cl-click-row {
+  cursor: pointer;
+}
+
+/* Cells need a surface of their own for the shade to show; colored lead
+   cells keep their own background. */
+.qp .cl-click-row > td {
+  background-color: var(--color-surface);
+  transition: var(--hover-transition);
+}
+
+.qp .cl-rows tbody tr.cl-click-row:hover {
+  background: transparent;
+}
+
+.qp .cl-click-row:hover > td {
+  filter: var(--hover-shade);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp .cl-click-row > td {
+    transition: none;
+  }
+}
+
 .qp .cl-stu-strip {
   display: flex;
   gap: 5px;

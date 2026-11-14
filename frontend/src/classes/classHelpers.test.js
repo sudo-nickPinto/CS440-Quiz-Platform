@@ -14,6 +14,8 @@ import {
   quizStatusLabel,
   submissionPreviewPath,
   membersWithStats,
+  opensRow,
+  rowLink,
   initials,
   resolveAdminSection,
   scoreMark,
@@ -296,5 +298,43 @@ describe("collaboratorTags", () => {
 
   it("folds the rest into one +N tag", () => {
     expect(collaboratorTags(["Ana", "Ben", "Cy", "Dee", "Eli"])).toEqual({ shown: ["Ana", "Ben", "Cy"], rest: 2 });
+  });
+});
+
+describe("opensRow / rowLink", () => {
+  // A click on plain row text; `inside` is what closest() finds.
+  const click = (overrides = {}, inside = null) => ({
+    button: 0,
+    defaultPrevented: false,
+    target: { closest: () => inside },
+    ...overrides,
+  });
+
+  it("opens on a plain primary click", () => {
+    expect(opensRow(click())).toBe(true);
+  });
+
+  it("leaves clicks on links and buttons in the row to them", () => {
+    expect(opensRow(click({}, { tagName: "A" }))).toBe(false);
+  });
+
+  it("ignores modified, secondary and already-handled clicks", () => {
+    expect(opensRow(click({ ctrlKey: true }))).toBe(false);
+    expect(opensRow(click({ metaKey: true }))).toBe(false);
+    expect(opensRow(click({ button: 1 }))).toBe(false);
+    expect(opensRow(click({ defaultPrevented: true }))).toBe(false);
+  });
+
+  it("ignores a click that ends a text selection", () => {
+    expect(opensRow(click(), "Quiz 1")).toBe(false);
+  });
+
+  it("navigates once, and only for row clicks", () => {
+    const to = [];
+    const row = rowLink((path) => to.push(path), "/app/classes/4/sessions/7/report");
+    expect(row.className).toBe("cl-click-row");
+    row.onClick(click());
+    row.onClick(click({}, { tagName: "BUTTON" }));
+    expect(to).toEqual(["/app/classes/4/sessions/7/report"]);
   });
 });
