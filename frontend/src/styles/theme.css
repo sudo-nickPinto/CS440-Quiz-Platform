@@ -54,4 +54,15 @@
   --press: translate(2px, 2px);
   --press-shadow: 2px 2px 0 var(--ink);
   --hover-transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease, background-color 0.12s ease;
+
+  /*
+   * Live answer colors, one per answer position (ui-tone-0..3), each with its
+   * card suit. Text and suits on them are always --color-on-answer, so every
+   * shade keeps at least 4.5:1 contrast with white.
+   */
+  --answer-0: var(--navy); /* A, spade */
+  --answer-1: var(--orange-deep); /* B, heart */
+  --answer-2: #3f7d45; /* C, diamond: green */
+  --answer-3: #946c00; /* D, club: gold */
+  --color-on-answer: #ffffff;
 }
