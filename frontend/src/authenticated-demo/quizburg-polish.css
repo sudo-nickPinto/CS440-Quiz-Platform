@@ -1673,9 +1673,16 @@
   padding: 20px 20px 18px;
 }
 
+.qp .qe-qtext-box {
+  display: grid;
+  gap: 4px;
+}
+
+/* AutoGrowTextarea sets the height, so the box never scrolls inside. */
 .qp textarea.qe-qtext {
   min-height: 0;
   padding: 10px 12px;
+  overflow: hidden;
   resize: none;
   field-sizing: content;
   font: clamp(18px, 1.8vw, 21px) / 1.35 "Archivo Black", sans-serif;
@@ -1746,6 +1753,27 @@
 .qp .qe-choice-end {
   display: flex;
   align-items: center;
+}
+
+/* "87/120" once a question or answer nears the character limit. */
+.qp .qe-count {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.qp .qe-count.is-over {
+  color: var(--color-danger);
+}
+
+.qp .qe-qtext-box .qe-count {
+  justify-self: end;
+}
+
+.qp .qe-choice-end .qe-count {
+  margin-right: 10px;
 }
 
 .qp .qe-tag {
