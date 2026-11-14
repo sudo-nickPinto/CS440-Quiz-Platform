@@ -414,6 +414,52 @@ def test_question_save_broadcasts_committed_update(
     assert event["question"]["revision"] == 2
 
 
+def test_default_time_save_is_atomic_and_broadcasts_specific_event(
+    collaboration_client,
+    monkeypatch,
+) -> None:
+    client, class_id, owner, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    base = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    inherited = quiz["version"]["questions"][0]
+    explicit = client.post(base + "/questions", json=_new_question_payload("Explicit"))
+    assert explicit.status_code == 201
+    explicit_question = explicit.json()["question"]
+    monkeypatch.setattr(
+        quiz_editing_live,
+        "authenticate_token",
+        lambda db, settings, token: owner,
+    )
+
+    with client.websocket_connect(f"/ws/quizzes/{quiz['quiz_id']}") as socket:
+        socket.send_json({"type": "auth", "token": "test-token"})
+        socket.receive_json()
+        saved = client.patch(
+            base + "/default-time",
+            json={
+                "time_limit_seconds": 45,
+                "question_ids": [inherited["question_id"]],
+            },
+        )
+        assert saved.status_code == 200
+        event = socket.receive_json()
+
+    body = saved.json()
+    assert body["time_limit_seconds"] == 45
+    assert body["questions"][0]["time_limit_seconds"] == 45
+    assert body["questions"][0]["revision"] == 2
+    current = client.get(base).json()
+    questions = current["version"]["questions"]
+    assert questions[0]["time_limit_seconds"] == 45
+    assert questions[1]["question_id"] == explicit_question["question_id"]
+    assert questions[1]["time_limit_seconds"] == 30
+    assert event["type"] == "quiz_default_time_updated"
+    assert event["time_limit_seconds"] == 45
+    assert [item["question_id"] for item in event["questions"]] == [
+        inherited["question_id"]
+    ]
+
+
 def test_deactivated_editor_is_closed_before_later_broadcast(
     collaboration_client,
     monkeypatch,

@@ -122,6 +122,8 @@ export function QuizEditor({
   const [autosaveError, setAutosaveError] = useState(null);
   const [questionSaveStatus, setQuestionSaveStatus] = useState({});
   const autosaveTimers = useRef(new Map());
+  const defaultTimeTimer = useRef(null);
+  const savingDefaultTime = useRef(false);
   const savingQuestions = useRef(new Set());
   const editorRef = useRef(initial);
   const baselineEditorRef = useRef(initial);
@@ -162,6 +164,99 @@ export function QuizEditor({
     editing ? existingQuiz.quiz_id : null,
     (message) => {
       if (message.editor_account_id === account.account_id) return;
+      if (message.type === "quiz_default_time_updated") {
+        const currentEditor = editorRef.current;
+        const currentBaseline = baselineEditorRef.current;
+        if (currentEditor.defaultTime !== currentBaseline.defaultTime) {
+          aggregateStaleRef.current = true;
+          setRemoteNotice({
+            tone: "warning",
+            text: "A collaborator changed the default question time.",
+            detail:
+              "Your unsaved default-time change is still here. Reload to use the saved value.",
+            reload: true,
+          });
+          return;
+        }
+
+        const defaultTime = Number(message.time_limit_seconds);
+        const updates = new Map(
+          message.questions.map((question) => [question.question_id, question]),
+        );
+        const hasLocalTimerChange = currentEditor.questions.some((question) => {
+          if (!updates.has(question.questionId)) return false;
+          const baseline = currentBaseline.questions.find(
+            (item) => item.questionId === question.questionId,
+          );
+          return baseline && question.limit !== baseline.limit;
+        });
+        if (hasLocalTimerChange) {
+          aggregateStaleRef.current = true;
+          setRemoteNotice({
+            tone: "warning",
+            text: "A collaborator changed the default question time.",
+            detail:
+              "One of your unsaved question timers overlaps that change. Reload before saving it.",
+            reload: true,
+          });
+          return;
+        }
+        for (const questionId of updates.keys()) {
+          const timer = autosaveTimers.current.get(questionId);
+          if (timer) window.clearTimeout(timer);
+          autosaveTimers.current.delete(questionId);
+        }
+        const nextBaseline = {
+          ...currentBaseline,
+          defaultTime,
+          questions: currentBaseline.questions.map((question, index) => {
+            const saved = updates.get(question.questionId);
+            return saved
+              ? quizQuestionToEditor(saved, index, defaultTime)
+              : question;
+          }),
+        };
+        const nextEditor = {
+          ...currentEditor,
+          defaultTime,
+          questions: currentEditor.questions.map((question) => {
+            const saved = updates.get(question.questionId);
+            // The event only changes timers. Preserve local text/answer work,
+            // but accept the committed revision so its next autosave can merge.
+            return saved
+              ? { ...question, limit: null, revision: saved.revision }
+              : question;
+          }),
+        };
+        editorRef.current = nextEditor;
+        baselineEditorRef.current = nextBaseline;
+        setEditor(nextEditor);
+        setBaselineEditor(nextBaseline);
+        acceptQuizRevision(message.quiz_revision);
+        for (const question of nextEditor.questions) {
+          const baseline = nextBaseline.questions.find(
+            (item) => item.questionId === question.questionId,
+          );
+          if (
+            updates.has(question.questionId) &&
+            baseline &&
+            JSON.stringify(question) !== JSON.stringify(baseline)
+          ) {
+            scheduleQuestionAutosave(
+              question,
+              nextEditor.questions.indexOf(question),
+              250,
+            );
+          }
+        }
+        setRemoteNotice({
+          tone: "success",
+          text: `Default question time changed to ${defaultTime}s.`,
+          detail: "Questions using the quiz default were updated automatically.",
+          reload: false,
+        });
+        return;
+      }
       if (message.type === "question_updated") {
         const questionId = message.question.question_id;
         const currentEditor = editorRef.current;
@@ -353,6 +448,10 @@ export function QuizEditor({
         window.clearTimeout(timer);
       }
       autosaveTimers.current.clear();
+      if (defaultTimeTimer.current) {
+        window.clearTimeout(defaultTimeTimer.current);
+        defaultTimeTimer.current = null;
+      }
     },
     [],
   );
@@ -460,13 +559,125 @@ export function QuizEditor({
 
   // Changing the quiz-wide time moves every question that followed it.
   function setQuizTime(seconds) {
-    edit({
-      ...editor,
+    const currentEditor = editorRef.current;
+    const nextEditor = {
+      ...currentEditor,
       defaultTime: seconds,
-      questions: editor.questions.map((question) =>
-        ownTime(question) == null ? { ...question, limit: null } : question,
+      questions: currentEditor.questions.map((question) =>
+        question.limit == null ||
+        Number(question.limit) === Number(currentEditor.defaultTime)
+          ? { ...question, limit: null }
+          : question,
       ),
-    });
+    };
+    edit(nextEditor);
+    scheduleDefaultTimeAutosave();
+  }
+
+  function scheduleDefaultTimeAutosave(delay = 350) {
+    if (!editing || existingQuiz.status !== "DRAFT" || conflict) return;
+    if (defaultTimeTimer.current) {
+      window.clearTimeout(defaultTimeTimer.current);
+    }
+    defaultTimeTimer.current = window.setTimeout(() => {
+      defaultTimeTimer.current = null;
+      void autosaveDefaultTime();
+    }, delay);
+  }
+
+  async function autosaveDefaultTime() {
+    if (savingDefaultTime.current || savingQuestions.current.size > 0) {
+      scheduleDefaultTimeAutosave(250);
+      return;
+    }
+    const savingEditor = editorRef.current;
+    const questionIds = savingEditor.questions
+      .filter((question) => question.questionId && question.limit == null)
+      .map((question) => question.questionId);
+    if (!questionIds.length) return;
+
+    // The dedicated request owns inherited timers. Cancel delayed question
+    // requests so they cannot emit misleading per-question update events.
+    for (const questionId of questionIds) {
+      const timer = autosaveTimers.current.get(questionId);
+      if (timer) window.clearTimeout(timer);
+      autosaveTimers.current.delete(questionId);
+      setQuestionStatus(questionId, "saving");
+    }
+
+    savingDefaultTime.current = true;
+    setAutosaveError(null);
+    try {
+      const result = await api(
+        `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}` +
+          "/default-time",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            time_limit_seconds: Number(savingEditor.defaultTime),
+            question_ids: questionIds,
+          }),
+        },
+      );
+      const updates = new Map(
+        result.questions.map((question) => [question.question_id, question]),
+      );
+      const savedDefaultTime = Number(result.time_limit_seconds);
+      const currentBaseline = baselineEditorRef.current;
+      const nextBaseline = {
+        ...currentBaseline,
+        defaultTime: savedDefaultTime,
+        questions: currentBaseline.questions.map((question, index) => {
+          const saved = updates.get(question.questionId);
+          return saved
+            ? quizQuestionToEditor(saved, index, savedDefaultTime)
+            : question;
+        }),
+      };
+      const currentEditor = editorRef.current;
+      const nextEditor = {
+        ...currentEditor,
+        questions: currentEditor.questions.map((question) => {
+          const saved = updates.get(question.questionId);
+          return saved
+            ? { ...question, limit: null, revision: saved.revision }
+            : question;
+        }),
+      };
+      baselineEditorRef.current = nextBaseline;
+      editorRef.current = nextEditor;
+      setBaselineEditor(nextBaseline);
+      setEditor(nextEditor);
+      acceptQuizRevision(result.quiz_revision);
+      questionIds.forEach((questionId) => setQuestionStatus(questionId, "saved"));
+
+      // A second picker change made while the request was in flight wins.
+      if (Number(nextEditor.defaultTime) !== savedDefaultTime) {
+        scheduleDefaultTimeAutosave(100);
+      } else {
+        for (const question of nextEditor.questions) {
+          const baseline = nextBaseline.questions.find(
+            (item) => item.questionId === question.questionId,
+          );
+          if (
+            question.questionId &&
+            baseline &&
+            JSON.stringify(question) !== JSON.stringify(baseline)
+          ) {
+            scheduleQuestionAutosave(
+              question,
+              nextEditor.questions.indexOf(question),
+              250,
+            );
+          }
+        }
+      }
+    } catch (failure) {
+      setAutosaveError(failure);
+      questionIds.forEach((questionId) => setQuestionStatus(questionId, "error"));
+    } finally {
+      savingDefaultTime.current = false;
+    }
   }
 
   // Picking the quiz time for one question means "follow the quiz".
