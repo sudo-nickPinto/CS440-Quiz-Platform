@@ -152,8 +152,18 @@ export function presentStatus(quiz) {
   return { key: "draft", label: "Draft" };
 }
 
+// Collaborator names for a quiz card: the first `max` names, then
+// "+N more" for the rest. Returns "" when nobody else edits the quiz.
+export function collaboratorSummary(names, max = 3) {
+  const list = (names ?? []).filter(Boolean);
+  if (list.length === 0) return "";
+  const shown = list.slice(0, max).join(", ");
+  const rest = list.length - max;
+  return rest > 0 ? `${shown} +${rest} more` : shown;
+}
+
 // The one approval button on a My quizzes row and the short note under it.
-//   send      Send for approval / Send again (orange)
+//   send      Send for approval (orange; also after a rejection)
 //   withdraw  Withdraw request (while waiting, for whoever sent it)
 //   waiting   Waiting for approval (sent by a co-editor; not clickable)
 //   approved  ✓ Approved (blue; not clickable)
@@ -184,7 +194,7 @@ export function approvalButton(quiz) {
         : null;
   return {
     kind: "send",
-    label: status === "REJECTED" ? "Send again" : "Send for approval",
+    label: "Send for approval",
     disabled: ownerOnly,
     title: ownerOnly ? "Only the quiz owner can send a new version" : undefined,
     note,

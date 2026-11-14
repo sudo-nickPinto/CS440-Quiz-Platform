@@ -15,6 +15,7 @@ import {
   ADMIN_SECTIONS,
   approvalLabel,
   approvalButton,
+  collaboratorSummary,
   copyText,
   HISTORY_VIEWS,
   MY_QUIZ_SORTS,
@@ -836,6 +837,14 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
                   <span className="cl-tag">Shared by {quiz.author_name}</span>
                 )}
               </p>
+              {quiz.collaborator_names?.length > 0 && (
+                <p
+                  className="qc-collaborators"
+                  title={quiz.collaborator_names.join(", ")}
+                >
+                  With {collaboratorSummary(quiz.collaborator_names)}
+                </p>
+              )}
               <p>Edited {formatDate(quiz.updated_at)}</p>
               {approvalControl(quiz, info, "qc-approval")}
             </QuizCard>

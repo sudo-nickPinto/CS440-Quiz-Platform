@@ -531,6 +531,17 @@ def list_class_quizzes(
     }
     rows = [loaded[quiz_id] for quiz_id in page_ids]
     editing = set(db.scalars(collaborating))
+    collaborator_names: dict[int, list[str]] = {}
+    for quiz_id, name in db.execute(
+        select(QuizCollaborator.quiz_id, Account.display_name)
+        .join(Account, Account.account_id == QuizCollaborator.account_id)
+        .where(
+            QuizCollaborator.quiz_id.in_(page_ids),
+            QuizCollaborator.revoked_at.is_(None),
+        )
+        .order_by(Account.display_name, Account.account_id)
+    ).all():
+        collaborator_names.setdefault(quiz_id, []).append(name)
     newest_published = {
         quiz.quiz_id: max(published, key=lambda v: v.version_number)
         for quiz, _ in rows
@@ -575,6 +586,7 @@ def list_class_quizzes(
                     submission
                     and submission.submitted_by_id == account.account_id
                 ),
+                collaborator_names=collaborator_names.get(quiz.quiz_id, []),
             )
         )
 

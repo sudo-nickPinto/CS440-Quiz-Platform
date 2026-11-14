@@ -640,6 +640,27 @@ def test_owner_publishes_draft_and_a_later_edit_creates_a_new_version(
     assert edited.json()["version"]["published_at"] is None
 
 
+def test_class_quiz_list_names_active_collaborators(collaboration_client) -> None:
+    client, class_id, _, editor, _ = collaboration_client
+    quiz = _create(client, class_id)
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+
+    def names() -> list[str]:
+        listed = client.get(f"/classes/{class_id}/quizzes?mine=true")
+        assert listed.status_code == 200
+        return listed.json()["items"][0]["collaborator_names"]
+
+    assert names() == []
+    client.post(
+        f"{path}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+    assert names() == ["Editor"]
+
+    client.delete(f"{path}/collaborators/{editor.account_id}")
+    assert names() == []
+
+
 def test_collaborator_can_edit_but_cannot_publish(collaboration_client) -> None:
     client, class_id, _, editor, _ = collaboration_client
     quiz = _create(client, class_id)

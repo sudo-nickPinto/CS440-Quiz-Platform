@@ -4,6 +4,7 @@ import {
   approvalLabel,
   approvedQuizzesPath,
   approvalButton,
+  collaboratorSummary,
   presentStatus,
   sendForApproval,
   resolveUserSection,
@@ -242,7 +243,7 @@ describe("approvalButton", () => {
     const edited = quiz({ published_version_id: 3, approval_status: "APPROVED" });
     expect(approvalButton(edited)).toMatchObject({ kind: "send", note: "Edited since approval" });
     const rejected = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "REJECTED" });
-    expect(approvalButton(rejected)).toMatchObject({ kind: "send", label: "Send again", note: "Rejected" });
+    expect(approvalButton(rejected)).toMatchObject({ kind: "send", label: "Send for approval", note: "Rejected" });
     const withdrawn = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "WITHDRAWN" });
     expect(approvalButton(withdrawn)).toMatchObject({ kind: "send", label: "Send for approval", note: null });
   });
@@ -279,5 +280,22 @@ describe("sendForApproval", () => {
     };
     await sendForApproval(api, 4, { quiz_id: 9, status: "DRAFT", published_version_id: 12 });
     expect(calls).toEqual(["/quizzes/9", "/classes/4/quizzes/9/publish", "/classes/4/quiz-submissions"]);
+  });
+});
+
+describe("collaboratorSummary", () => {
+  it("is empty when nobody else edits the quiz", () => {
+    expect(collaboratorSummary([])).toBe("");
+    expect(collaboratorSummary(undefined)).toBe("");
+  });
+
+  it("lists up to three names", () => {
+    expect(collaboratorSummary(["Ana"])).toBe("Ana");
+    expect(collaboratorSummary(["Ana", "Ben", "Cy"])).toBe("Ana, Ben, Cy");
+  });
+
+  it("folds the rest into +N more", () => {
+    expect(collaboratorSummary(["Ana", "Ben", "Cy", "Dee"])).toBe("Ana, Ben, Cy +1 more");
+    expect(collaboratorSummary(["Ana", "Ben", "Cy", "Dee", "Eli", "Fay"])).toBe("Ana, Ben, Cy +3 more");
   });
 });
