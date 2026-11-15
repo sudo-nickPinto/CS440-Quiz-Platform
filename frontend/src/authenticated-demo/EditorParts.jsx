@@ -163,7 +163,9 @@ export function AutoGrowTextarea({ value, ...props }) {
     if (!box) return undefined;
     function fit() {
       box.style.height = "auto";
-      box.style.height = `${box.scrollHeight}px`;
+      // scrollHeight excludes the border, but the box is border-box sized.
+      const border = box.offsetHeight - box.clientHeight;
+      box.style.height = `${box.scrollHeight + border}px`;
     }
     fit();
     // Width changes (window resize, sidebar) rewrap the text.
