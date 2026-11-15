@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
-import { apiFetch, NEEDS_INTERACTION, returnToState } from '../api'
+import {
+  apiFetch,
+  NEEDS_INTERACTION,
+  PASSWORD_CONNECTION,
+  returnToState,
+} from '../api'
 import AccountDisabledScreen from './AccountDisabledScreen'
 import ProfileSetupScreen from './ProfileSetupScreen'
 import VerifyEmailScreen from './VerifyEmailScreen'
@@ -74,6 +79,7 @@ export default function AccountGate({ children }) {
           void loginWithRedirect({
             appState: returnToState(),
             authorizationParams: {
+              connection: PASSWORD_CONNECTION,
               prompt: 'login',
               ...(user?.email ? { login_hint: user.email } : {}),
             },
