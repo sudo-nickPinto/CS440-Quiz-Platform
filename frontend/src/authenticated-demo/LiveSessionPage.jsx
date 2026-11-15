@@ -481,7 +481,11 @@ function HostQuestionResults({ question, results, controls }) {
           of {question.total_questions}
         </p>
         <h1>{showBoard ? "Leaderboard" : "How did everyone answer?"}</h1>
-        {!showBoard && <p className="lv-r-q">{question.question_text}</p>}
+        {!showBoard && (
+          <p className="lv-r-q" title={question.question_text}>
+            {question.question_text}
+          </p>
+        )}
       </div>
 
       {showBoard ? (
@@ -489,7 +493,11 @@ function HostQuestionResults({ question, results, controls }) {
           <Leaderboard rows={results.participants || []} />
         </div>
       ) : (
-        <div className="lv-dist" style={{ "--n": choices.length }}>
+        <div
+          className="lv-dist"
+          style={{ "--n": choices.length }}
+          data-size={answerTextSize(question.choices)}
+        >
           {choices.map((choice, index) => (
             <div
               key={choice.choice_id}
@@ -508,7 +516,9 @@ function HostQuestionResults({ question, results, controls }) {
                 <span className={`lv-index ui-tone-${index % 4}`}>
                   {choice.label}
                 </span>
-                <span className="lv-dl-text">{choice.choice_text}</span>
+                <span className="lv-dl-text" title={choice.choice_text}>
+                  {choice.choice_text}
+                </span>
                 {choice.correct && (
                   <span className="lv-check" aria-label="Correct">
                     ✓
