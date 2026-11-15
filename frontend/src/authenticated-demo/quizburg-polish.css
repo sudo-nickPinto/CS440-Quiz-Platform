@@ -3396,10 +3396,12 @@
   padding-bottom: clamp(6px, 1.2vh, 12px);
 }
 
-/* On laptops and projectors the question screen fills the window under the
-   header, with no page scroll (same idea as the dashboard in taha-ui.css). */
+/* On laptops and projectors the question and results screens fill the
+   window under the header, with no page scroll (same idea as the dashboard
+   in taha-ui.css). */
 @media (min-width: 641px) {
-  .qp:has(.lv-hq) {
+  .qp:has(.lv-hq),
+  .qp:has(.lv-results) {
     display: flex;
     flex-direction: column;
     height: 100dvh;
@@ -3407,13 +3409,17 @@
     padding-bottom: clamp(12px, 2.4vh, 36px);
   }
 
-  .qp:has(.lv-hq) .qp-header {
+  .qp:has(.lv-hq) .qp-header,
+  .qp:has(.lv-results) .qp-header {
     flex-shrink: 0;
   }
 
   .qp:has(.lv-hq) .qp-frame,
+  .qp:has(.lv-results) .qp-frame,
   .qp .ui-live:has(.lv-hq),
-  .qp .lv-body:has(.lv-hq) {
+  .qp .ui-live:has(.lv-results),
+  .qp .lv-body:has(.lv-hq),
+  .qp .lv-body:has(.lv-results) {
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
@@ -3488,10 +3494,15 @@
 }
 
 .qp .lv-r-q {
+  display: -webkit-box;
   margin: 0;
+  overflow: hidden;
   font-size: clamp(17px, min(1.9vw, 3vh), 24px);
   font-weight: 700;
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .qp .lv-dist {
@@ -3545,8 +3556,8 @@
 .qp .lv-bar-num {
   position: absolute;
   bottom: calc(100% + 8px);
-  left: -40%;
-  right: -40%;
+  left: 0;
+  right: 0;
   color: var(--navy);
   font: clamp(24px, min(3vw, 5vh), 44px) / 1.1 "Archivo Black", sans-serif;
   text-align: center;
@@ -3577,9 +3588,25 @@
   font-size: 0.7em;
 }
 
+/* Long answers: at most 3 lines (full text in the title), sized like the
+   answer boxes from the longest answer (data-size from answerTextSize) */
 .qp .lv-dl-text {
+  display: -webkit-box;
   min-width: 0;
+  overflow: hidden;
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.qp .lv-dist[data-size="medium"] .lv-dist-label {
+  font-size: clamp(14px, min(1.5vw, 2.6vh), 22px);
+}
+
+.qp .lv-dist[data-size="long"] .lv-dist-label {
+  font-size: clamp(13px, min(1.25vw, 2.2vh), 19px);
+  line-height: 1.2;
 }
 
 .qp .lv-check {
@@ -4360,6 +4387,48 @@
 /* Leave room above the tallest bar for its count */
 .qp .lv-bar-area {
   margin-top: 46px;
+}
+
+/* Results screen filling the window (see the question screen above). Placed
+   after the base results rules so it overrides their minimum heights. */
+@media (min-width: 641px) {
+  .qp .lv-results {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .qp .lv-results .lv-strip {
+    flex: 0 0 auto;
+    min-height: 0;
+    padding-top: clamp(6px, 1.2vh, 12px);
+    padding-bottom: clamp(6px, 1.2vh, 12px);
+  }
+
+  .qp .lv-r-head {
+    flex: 0 0 auto;
+  }
+
+  .qp .lv-r-head h1 {
+    font-size: clamp(24px, min(3vw, 4.4vh), 46px);
+  }
+
+  .qp .lv-dist {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .qp .lv-bar-area {
+    min-height: 0;
+    margin-top: clamp(30px, 6vh, 46px);
+  }
+
+  .qp .lv-board-wrap {
+    min-height: 0;
+    margin: clamp(12px, 3vh, 28px) auto;
+    /* room for the board's shadow inside the scroll box */
+    padding: 0 8px 8px 0;
+    overflow-y: auto;
+  }
 }
 
 /* ---------- Session results (host-results-main.html, participant-results-main.html) ---------- */
