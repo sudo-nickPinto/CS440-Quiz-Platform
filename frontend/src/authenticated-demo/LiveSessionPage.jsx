@@ -11,7 +11,11 @@ import Avatar from "../avatars/Avatar";
 import QuizStartCountdown from "./QuizStartCountdown";
 import CopyCodeButton from "./CopyCodeButton";
 import { classPagePath } from "../classes/classPaths";
-import { inPreview } from "../live/questionDisplay";
+import {
+  answerTextSize,
+  inPreview,
+  questionTextSize,
+} from "../live/questionDisplay";
 import AnswerSuit from "./AnswerSuit";
 
 const CONNECTION_ERRORS = {
@@ -274,7 +278,9 @@ function QuestionScreen({
           <p className="lv-eyebrow">
             Question {question.question_order} of {question.total_questions}
           </p>
-          <h1>{question.question_text}</h1>
+          <h1 data-size={questionTextSize(question.question_text)}>
+            {question.question_text}
+          </h1>
           <p className="lv-hq-ready" role="status">
             <Dots />
             Answers in a moment…
@@ -306,7 +312,9 @@ function QuestionScreen({
           </div>
 
           <div className="lv-hq-text">
-            <h1>{question.question_text}</h1>
+            <h1 data-size={questionTextSize(question.question_text)}>
+              {question.question_text}
+            </h1>
           </div>
 
           <div className="lv-answer-count" aria-live="polite">
@@ -322,7 +330,10 @@ function QuestionScreen({
           <div style={{ width: `${progress}%` }} />
         </div>
 
-        <div className="lv-host-answers">
+        <div
+          className="lv-host-answers"
+          data-size={answerTextSize(question.choices)}
+        >
           {question.choices.map((choice, index) => (
             <div
               key={choice.choice_id}

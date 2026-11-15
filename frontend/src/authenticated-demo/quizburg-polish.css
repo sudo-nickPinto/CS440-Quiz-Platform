@@ -3243,6 +3243,16 @@
   overflow-wrap: anywhere;
 }
 
+/* Longer questions (data-size from questionTextSize) step down in size */
+.qp .lv-hq-text h1[data-size="medium"] {
+  font-size: clamp(20px, min(3vw, 4.8vh), 50px);
+}
+
+.qp .lv-hq-text h1[data-size="long"] {
+  font-size: clamp(18px, min(2.4vw, 3.9vh), 42px);
+  line-height: 1.2;
+}
+
 /* Question alone, before the timer and answers appear */
 .qp .lv-hq-preview {
   flex: 1 1 auto;
@@ -3264,6 +3274,10 @@
   line-height: 1.12;
   overflow-wrap: anywhere;
   animation: lv-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.qp .lv-hq-preview h1[data-size="long"] {
+  font-size: clamp(24px, min(3.8vw, 6.6vh), 64px);
 }
 
 .qp .lv-hq-ready {
@@ -3361,6 +3375,8 @@
 .qp .lv-host-answer {
   display: flex;
   align-items: center;
+  /* If text ever overflows, start at the top so no line is cut off above */
+  align-items: safe center;
   gap: clamp(10px, 1.4vw, 24px);
   min-width: 0;
   min-height: 0;
@@ -3373,6 +3389,16 @@
   line-height: 1.15;
   overflow-wrap: anywhere;
   overflow-y: auto;
+}
+
+/* Longer answers (data-size from answerTextSize) step down together */
+.qp .lv-host-answers[data-size="medium"] .lv-host-answer {
+  font-size: clamp(15px, min(1.9vw, 3.3vh), 34px);
+}
+
+.qp .lv-host-answers[data-size="long"] .lv-host-answer {
+  font-size: clamp(14px, min(1.55vw, 2.7vh), 28px);
+  line-height: 1.2;
 }
 
 .qp .lv-host-answer .lv-index {

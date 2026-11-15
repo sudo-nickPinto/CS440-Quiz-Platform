@@ -10,6 +10,22 @@ export function answerSuit(index) {
   return ANSWER_SUITS[position % ANSWER_SUITS.length]
 }
 
+// Size step for projector text, so long questions and answers (up to the
+// editor's 120 characters) fit without scrolling while short ones stay big.
+// Answers share one step, from the longest, so the boxes match.
+export function questionTextSize(text) {
+  const length = String(text ?? '').length
+  return length > 80 ? 'long' : length > 45 ? 'medium' : 'short'
+}
+
+export function answerTextSize(choices) {
+  const longest = Math.max(
+    0,
+    ...(choices ?? []).map((choice) => String(choice?.choice_text ?? '').length),
+  )
+  return longest > 60 ? 'long' : longest > 30 ? 'medium' : 'short'
+}
+
 // The server opens a question and starts its timer in one step, so the
 // preview is drawn by the client only: for the first few seconds the host
 // shows the question alone (no timer or answers) and players can't answer yet.
