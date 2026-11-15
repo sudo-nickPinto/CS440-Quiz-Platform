@@ -8,6 +8,7 @@ import {
   sendForApproval,
   resolveUserSection,
   myQuizzesPath,
+  pluralNoun,
   quizAccessLabel,
   quizStatusLabel,
   submissionPreviewPath,
@@ -47,6 +48,19 @@ describe("labels", () => {
     expect(quizAccessLabel(null)).toBe("—");
     expect(quizStatusLabel("PUBLISHED")).toBe("Published");
     expect(quizStatusLabel("weird")).toBe("—");
+  });
+});
+
+describe("pluralNoun", () => {
+  it("uses the correct singular and plural forms for quizzes", () => {
+    expect(pluralNoun(0, "quiz")).toBe("quizzes");
+    expect(pluralNoun(1, "quiz")).toBe("quiz");
+    expect(pluralNoun(2, "quiz")).toBe("quizzes");
+  });
+
+  it("keeps the regular plural used by other collections", () => {
+    expect(pluralNoun(0, "session")).toBe("sessions");
+    expect(pluralNoun(1, "session")).toBe("session");
   });
 });
 

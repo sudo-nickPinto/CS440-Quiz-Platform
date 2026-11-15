@@ -18,6 +18,7 @@ import {
   copyText,
   HISTORY_VIEWS,
   MY_QUIZ_SORTS,
+  pluralNoun,
   presentStatus,
   resolveAdminSection,
   resolveUserSection,
@@ -88,7 +89,7 @@ function ReportTable({
   const pageSize = pagination?.page_size ?? Math.max(rows.length, 1);
   const firstItem = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastItem = Math.min(firstItem + rows.length - 1, totalItems);
-  const nounLabel = totalItems === 1 ? noun : `${noun}s`;
+  const nounLabel = pluralNoun(totalItems, noun);
 
   // A remembered page can be past the end once rows are removed.
   const pastEnd = Boolean(onPageChange) && page > Math.max(totalPages, 1);
@@ -226,7 +227,7 @@ function CardCollection({
   const pageSize = pagination?.page_size ?? Math.max(items.length, 1);
   const firstItem = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastItem = Math.min(firstItem + items.length - 1, totalItems);
-  const nounLabel = totalItems === 1 ? noun : `${noun}s`;
+  const nounLabel = pluralNoun(totalItems, noun);
   const pastEnd = Boolean(onPageChange) && page > Math.max(totalPages, 1);
 
   useEffect(() => {

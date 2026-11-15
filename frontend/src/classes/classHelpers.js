@@ -11,6 +11,11 @@ export function copyText(text) {
   return navigator.clipboard?.writeText(text).catch(() => {});
 }
 
+export function pluralNoun(count, noun) {
+  if (count === 1) return noun;
+  return noun === "quiz" ? "quizzes" : `${noun}s`;
+}
+
 // Sort choices for a class's "My quizzes" list (GET /classes/{id}/quizzes).
 export const MY_QUIZ_SORTS = {
   recent: { label: "Recently edited", sort: "updated_at", order: "desc" },
