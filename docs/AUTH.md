@@ -132,12 +132,12 @@ Auth added two modules (`auth.py`, `accounts.py`), one route module (`routes/me.
 | File | Role |
 |---|---|
 | `main.jsx` | Wraps the app in `Auth0Provider` (domain, client id, redirect URI, audience). |
-| `App.jsx` | Reads login state from `useAuth0()`, session restore, logout, shows login page or lobby. |
-| `components/LandingPage.jsx` | Sign in and Create account (`screen_hint: 'signup'`), both sent to the email/password connection (`connection: 'Username-Password-Authentication'`), which also hides the Google button on Auth0's hosted page. |
+| `App.jsx` | Reads login state from `useAuth0()`, session restore, logout, shows login page or lobby. A "no session" error from the silent check stays hidden; after a Sign in / Create account click it shows a message. |
+| `components/LandingPage.jsx` | Sign in and Create account buttons in the header, hero and closing section. Each goes straight to Auth0 (Create account adds `screen_hint: 'signup'`), pinned to the email/password connection, which also hides the Google button on Auth0's hosted page. |
 | `components/AccountGate.jsx` | Calls `/me` once logged in (creating the account on first login), then shows the verify-email, deactivated or profile setup screen if needed before the lobby. |
 | `components/ProfileSetupScreen.jsx`, `components/ProfileForm.jsx` | The one-time "Make it yours" screen: first name, last name and a preset avatar, saved with `PATCH /me`. The same form backs Edit profile (`/app/profile`). |
 | `avatars/` | `Avatar` (preset tile or initials), `AvatarPicker`, and the figure/color catalog. |
-| `api.js` | `apiFetch(path, getToken, options)`: attaches the bearer token and throws `error.message` from the error body. |
+| `api.js` | `apiFetch(path, getToken, options)`: attaches the bearer token and throws `error.message` from the error body. Also `PASSWORD_CONNECTION` (`'Username-Password-Authentication'`), which every interactive `loginWithRedirect` passes as `connection`. |
 
 ## 6. Configuration
 
