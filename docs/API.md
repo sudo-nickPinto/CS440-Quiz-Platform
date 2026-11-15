@@ -212,7 +212,7 @@ The caller's own quizzes, across every class they're active in, newest first. In
 ### `GET /quizzes/{quiz_id}` → `200 QuizResponse`
 Full quiz, including correct answers. Same rule as above: only the owner or an organizer of the quiz's class, and anyone else gets 404.
 
-`QuizResponse`: `quiz_id, author_id, class_id, revision, status, visibility, created_at, updated_at, version`. `version` holds `quiz_version_id, version_number, title, description, created_at, published_at, questions[]`. Each question holds `question_id, question_order, question_type, question_text, explanation, time_limit_seconds, base_points, choices[]`. Each choice holds `choice_id, choice_order, choice_text, is_correct`.
+`QuizResponse`: `quiz_id, author_id, author_name, collaborators, class_id, revision, status, visibility, created_at, updated_at, version`. `author_name` and `collaborators` (the active editors, each `{ account_id, display_name }`, no email) credit the quiz for anyone allowed to read it; managing collaborators and seeing their emails stays owner-only. `version` holds `quiz_version_id, version_number, title, description, created_at, published_at, questions[]`. Each question holds `question_id, question_order, question_type, question_text, explanation, time_limit_seconds, base_points, choices[]`. Each choice holds `choice_id, choice_order, choice_text, is_correct`.
 
 Errors: `404 quiz_not_found`, `500 invalid_quiz`.
 
