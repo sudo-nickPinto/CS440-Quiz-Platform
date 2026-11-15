@@ -69,6 +69,20 @@ class QuestionUpdate(QuestionCreate):
     expected_revision: int = Field(ge=1, strict=True)
 
 
+class QuizDefaultTimeUpdate(QuizRequestModel):
+    time_limit_seconds: int = Field(ge=1, le=65_535)
+    question_ids: list[int] = Field(min_length=1, max_length=65_535)
+
+    @field_validator("question_ids")
+    @classmethod
+    def question_ids_must_be_unique(cls, value: list[int]) -> list[int]:
+        if any(question_id < 1 for question_id in value):
+            raise ValueError("Question IDs must be positive integers.")
+        if len(value) != len(set(value)):
+            raise ValueError("Question IDs must be unique.")
+        return value
+
+
 class QuizCreate(QuizRequestModel):
     title: str = Field(max_length=200)
     description: str | None = None
@@ -148,6 +162,13 @@ class QuestionUpdateResponse(BaseModel):
     quiz_id: int
     quiz_revision: int
     question: QuestionResponse
+
+
+class QuizDefaultTimeUpdateResponse(BaseModel):
+    quiz_id: int
+    quiz_revision: int
+    time_limit_seconds: int
+    questions: list[QuestionResponse]
 
 
 class QuizVersionResponse(BaseModel):

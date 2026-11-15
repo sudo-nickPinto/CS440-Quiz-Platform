@@ -31,6 +31,8 @@ from app.schemas.quiz import (
     QuizCollaboratorCreate,
     QuizCollaboratorResponse,
     QuizCreate,
+    QuizDefaultTimeUpdate,
+    QuizDefaultTimeUpdateResponse,
     QuizHosting,
     QuizListItem,
     QuizPublish,
@@ -972,6 +974,74 @@ def update_class_quiz_question(
             500,
             "question_update_failed",
             "Could not save the question changes.",
+        ) from exc
+
+
+def update_class_quiz_default_time(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    quiz_id: int,
+    payload: QuizDefaultTimeUpdate,
+) -> QuizDefaultTimeUpdateResponse:
+    """Atomically change the timer for questions following the quiz default.
+
+    The client sends the exact inherited-question IDs, so explicit per-question
+    overrides are left alone. Only timer and revision columns are changed; this
+    lets the caller preserve local text edits while accepting the new revision.
+    """
+    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
+    _require_quiz_editor(db, account, quiz, lock_access=True)
+    if quiz.status != QuizStatus.DRAFT:
+        raise APIError(
+            409,
+            "quiz_not_editable",
+            "Only a draft quiz's default time can be changed.",
+        )
+
+    editor_version = _latest_editor_version(quiz)
+    if editor_version.published_at is not None:
+        raise APIError(
+            409,
+            "quiz_not_editable",
+            "Only a draft quiz's default time can be changed.",
+        )
+
+    questions_by_id = {
+        question.question_id: question for question in editor_version.questions
+    }
+    requested_ids = set(payload.question_ids)
+    if not requested_ids.issubset(questions_by_id):
+        raise APIError(404, "question_not_found", "Question not found.")
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        questions = [
+            questions_by_id[question_id] for question_id in payload.question_ids
+        ]
+        for question in questions:
+            question.time_limit_seconds = payload.time_limit_seconds
+            question.revision += 1
+            question.updated_at = now
+        quiz.revision += 1
+        quiz.updated_at = now
+        db.flush()
+        response = QuizDefaultTimeUpdateResponse(
+            quiz_id=quiz_id,
+            quiz_revision=quiz.revision,
+            time_limit_seconds=payload.time_limit_seconds,
+            questions=[
+                QuestionResponse.model_validate(question) for question in questions
+            ],
+        )
+        db.commit()
+        return response
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(
+            500,
+            "default_time_update_failed",
+            "Could not save the quiz default time.",
         ) from exc
 
 
