@@ -51,7 +51,7 @@ test("organizer reviews the submitted version, not the newer draft, and approves
 }) => {
   const state = await openClass(page, { as: "organizer", submission: "PENDING" });
 
-  await page.getByRole("link", { name: "Original submitted quiz" }).click();
+  await page.getByRole("link", { name: "Original submitted quiz", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${PREVIEW}$`));
 
   await expect(page.getByText("Original submitted question")).toBeVisible();
