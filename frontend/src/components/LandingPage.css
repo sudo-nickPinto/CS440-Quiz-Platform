@@ -2,19 +2,6 @@
 
 /* Scoped to the landing page so dashboard styles remain separate. */
 .lp {
-  --navy: #043371;
-  --orange: #cc4e00;
-  --sky: #8fdbff;
-  --ink: #222222;
-  --sand: #ecdfd0;
-  --paper: #fcf9f4;
-  --sky-soft: #c2e6f8;
-  --apricot: #f6d2b6;
-  --orange-deep: #bf4c0c;
-  --gray: #666666;
-  --b: 3px solid var(--ink);
-  --b-thin: 2px solid var(--ink);
-  --shadow: 6px 6px 0 var(--ink);
   --head-h: 78px;
 
   min-height: 100vh;
@@ -132,7 +119,7 @@
 }
 
 .lp .lp-signin-top:hover:not(:disabled) {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .lp .lp-signup-top {
@@ -805,8 +792,8 @@
   place-items: center;
   min-height: 100vh;
   padding: 24px;
-  background: #ecdfd0;
-  color: #043371;
+  background: var(--sand);
+  color: var(--navy);
 }
 
 @media (max-width: 1150px) {

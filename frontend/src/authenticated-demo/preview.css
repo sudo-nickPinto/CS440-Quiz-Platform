@@ -55,7 +55,7 @@
 
 .qp button:hover:not(:disabled),
 .qp-button:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp button:disabled {

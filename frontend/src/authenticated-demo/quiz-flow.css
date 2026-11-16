@@ -242,7 +242,7 @@
    the buttons on the right (Edit quiz · Archive · Hosting history · next
    step). */
 .qp .qv > .qv-strip {
-  background: #e6eef7;
+  background: var(--sky-wash);
   display: grid;
   /* The facts (with the Created by / Editors credits) take what's left and
      wrap; the timeline and buttons keep their natural width so they never
@@ -326,7 +326,7 @@
 }
 
 .qp .qf-inline .qf-track li.is-current {
-  background: #c9dcef;
+  background: var(--sky-soft);
   color: var(--navy);
 }
 
@@ -402,7 +402,8 @@
 }
 
 .qp .qv-share:hover {
-  background: #2f5d93;
+  filter: none;
+  background: var(--ink);
 }
 
 .qp .qv-share:focus-visible {
@@ -487,8 +488,8 @@
   }
 }
 
-/* Editor: the sticky question strip uses the same light denim as the quiz
+/* Editor: the sticky question strip uses the same light blue wash as the quiz
    page's strip. */
 .qp .qe .qe-strip {
-  background: #e6eef7;
+  background: var(--sky-wash);
 }

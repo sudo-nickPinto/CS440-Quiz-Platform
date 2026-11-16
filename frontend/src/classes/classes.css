@@ -50,7 +50,7 @@
 }
 
 .qp .cl-button.cl-secondary:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .cl-page button:disabled {

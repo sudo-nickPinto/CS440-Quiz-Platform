@@ -8,8 +8,11 @@
   --orange-deep: #bf4c0c;
   --orange: #cc4e00;
   --ink: #222222;
-  --gray: #666666;
+  --gray: #595959; /* 4.5:1 or better on paper, sand, sky-soft and apricot */
   --sky: #8fdbff;
+  /* Very light blue for strips and sub-rows (quiz page strip, editor
+     question strip, a quiz’s presentation rows). */
+  --sky-wash: #e6eef7;
 
   --b: 3px solid var(--ink);
   --b-thin: 2px solid var(--ink);

@@ -57,7 +57,7 @@
 }
 
 .qp .qb-btn.qb-btn-paper:hover:not(:disabled) {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .qb-btn.qb-btn-navy {
@@ -188,7 +188,7 @@
 }
 
 .qb-confirm .qb-btn.qb-btn-paper:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qb-confirm .qb-btn:focus-visible {
@@ -469,7 +469,7 @@
 }
 
 .qp .ui-join-strip input::placeholder {
-  color: #b3a89b;
+  color: var(--gray);
 }
 
 .qp .ui-join-strip .qp-primary {
@@ -592,7 +592,7 @@
 }
 
 .qp .ui-opt:not([aria-pressed="true"]):hover:not(:disabled) {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .ui-filter-panel .ui-linkbtn {
@@ -699,7 +699,7 @@
 }
 
 .qp .ui-row-menu > summary:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .ui-row-menu[open] > summary {
@@ -783,7 +783,7 @@
 
 .qp .ui-row-options > a:hover,
 .qp .ui-row-options > button:hover:not(:disabled) {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .ui-row-options > .ui-danger:hover:not(:disabled) {
@@ -1244,7 +1244,7 @@
 }
 
 .qp .qe-tchip:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .qe-tchip.is-own {
@@ -1512,7 +1512,7 @@
 }
 
 .qp .qe-collaboration.is-open .qe-live-dot {
-  background: #54b76b;
+  background: var(--color-success);
 }
 
 .qp .qe-collaboration.is-connecting .qe-live-dot,
@@ -1542,7 +1542,7 @@
 }
 
 .qp .qe-live-message.is-success {
-  background: #e4f5e7;
+  background: var(--color-success-bg);
 }
 
 .qp .qe-live-message > span:first-child {
@@ -1575,28 +1575,28 @@
 }
 
 .qp .qe-question-save > span {
-  color: var(--ink-muted, #5d5968);
+  color: var(--gray);
   font-size: 0.8rem;
   font-weight: 700;
 }
 
 .qp .qe-question-save > span.is-saving,
 .qp .qe-question-save > span.is-pending {
-  color: #725b00;
+  color: var(--navy);
 }
 
 .qp .qe-question-save > span.is-saved {
-  color: #24733c;
+  color: var(--color-success);
 }
 
 .qp .qe-question-save > span.is-remote {
-  color: #0b4b8a;
+  color: var(--navy);
 }
 
 .qp .qe-question-save > span.is-error,
 .qp .qe-question-save > span.is-conflict,
 .qp .qe-question-save > span.is-invalid {
-  color: #a3182d;
+  color: var(--color-danger);
 }
 
 .qp .qe-top {
@@ -1756,8 +1756,7 @@
 }
 
 .qp .qe-mark:hover:not(:disabled) {
-  background: var(--sky-soft);
-  color: var(--navy);
+  filter: var(--hover-shade);
 }
 
 .qp .qe-mark:focus-visible {
@@ -2471,7 +2470,7 @@
   margin: -8px 0 0;
   padding: 8px 10px;
   border: var(--b-thin);
-  background: #e4f5e7;
+  background: var(--color-success-bg);
   font-weight: 700;
 }
 
@@ -2526,7 +2525,7 @@
 }
 
 .qp .qv-remove-collaborator {
-  color: var(--red, #a91f2f);
+  color: var(--color-danger);
 }
 
 .qp .qv-collaborator-empty {
@@ -2756,7 +2755,7 @@
 }
 
 .qp .qh-go:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .qh-go:active {
@@ -6067,7 +6066,7 @@
 }
 
 .qp .cl-toolbar > button:hover:not(:disabled) {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 /* Class cards */
@@ -6146,7 +6145,7 @@
 }
 
 .qp .cl-page .cl-code-chip:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .cl-classbar .cl-actions button {
@@ -6156,7 +6155,7 @@
 }
 
 .qp .cl-classbar .cl-actions button:hover:not(:disabled) {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .cl-section-note {
@@ -6236,7 +6235,7 @@
 
 .qp .cl-members-table .cl-actions button:hover:not(:disabled),
 .qp .cl-invitation button:hover:not(:disabled) {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .cl-members-table .cl-actions button:last-child:hover:not(:disabled) {
@@ -6417,7 +6416,7 @@
 }
 
 .qp input.ui-code-input::placeholder {
-  color: #b3a89b;
+  color: var(--gray);
 }
 
 .qp .ui-join-page > a {
@@ -6463,7 +6462,7 @@
 }
 
 .qp .qb-app-nav a:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 /* "You are here": solid deep orange, like the dashboard's selected tab. */

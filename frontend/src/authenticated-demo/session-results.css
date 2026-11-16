@@ -319,7 +319,7 @@
 .qp .rr .not_played,
 .qp .rr button.not_played:hover:not(:disabled) {
   background: var(--paper);
-  color: #666666;
+  color: var(--gray);
 }
 
 .qp .rr button.rr-tile,
@@ -358,7 +358,7 @@
 }
 
 .qp .rr-answer-line small {
-  color: #666666;
+  color: var(--gray);
 }
 
 .qp .rr-breakdown {
@@ -415,7 +415,7 @@
   margin: 12px 18px;
   padding: 12px;
   border: 2px solid var(--ink);
-  background: var(--sky-soft);
+  background: var(--color-success-bg);
   color: var(--color-success);
   font-weight: 700;
 }
@@ -530,7 +530,7 @@
 }
 
 .qp .rr-chips button span {
-  color: #666666;
+  color: var(--gray);
   font-size: 13px;
 }
 

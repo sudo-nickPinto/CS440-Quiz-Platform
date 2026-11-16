@@ -4,9 +4,8 @@
   gap: 6px;
   padding: 6px 12px;
   border: 2px solid currentColor;
-  border-radius: 8px;
-  background: #fff;
-  color: #1d2b53;
+  background: var(--paper);
+  color: var(--navy);
   font: 700 14px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.5px;
   text-transform: none;
@@ -14,11 +13,11 @@
 }
 
 .ui-copy-code:hover {
-  background: #eef3ff;
+  filter: var(--hover-shade);
 }
 
 .ui-copy-code:focus-visible {
-  outline: 3px solid #ff8a00;
+  outline: 3px solid var(--orange-deep);
   outline-offset: 2px;
 }
 
