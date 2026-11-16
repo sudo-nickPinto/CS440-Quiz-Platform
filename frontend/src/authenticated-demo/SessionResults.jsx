@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { readRemembered, writeRemembered } from "./remember";
+import QuestionWheel from "./QuestionWheel";
 import {
   Link,
   Navigate,
@@ -846,6 +847,18 @@ export function ParticipantResults({ report, backTo, backLabel }) {
     }
   }
 
+  // From the phone wheel: switch, then bring the question back into view if
+  // the reader had scrolled past its top.
+  function pickFromWheel(index) {
+    selectQuestion(index);
+    window.requestAnimationFrame(() => {
+      const detail = document.querySelector(".rr-me .rr-answer-detail");
+      if (detail && detail.getBoundingClientRect().top < 0) {
+        detail.scrollIntoView({ block: "start" });
+      }
+    });
+  }
+
   const last = report.questions.length - 1;
   const nav = (
     <span className="rr-tbtns">
@@ -1014,6 +1027,13 @@ export function ParticipantResults({ report, backTo, backLabel }) {
           </div>
         </div>
       </div>
+
+      <QuestionWheel
+        questions={report.questions}
+        answers={player.answers}
+        selected={selected}
+        onSelect={pickFromWheel}
+      />
     </div>
   );
 }
