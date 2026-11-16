@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
-import { charCount, TEXT_LIMIT } from "./model";
+import { charCount } from "./model";
 
 // Pieces of the quiz editor from quiz-editor-main.html. They only render
 // controls; QuizEditor owns the editor state and passes changes back.
@@ -139,15 +139,20 @@ export function TimePicker({
   );
 }
 
-// "87/120" next to a question or answer once it nears TEXT_LIMIT.
-export function CharCount({ value, limit = TEXT_LIMIT }) {
-  const count = charCount(value.length, limit);
+const SMALLER = "Long text shows smaller on the host’s screen.";
+
+// "135/200" next to a question or answer once it passes its soft limit
+// (see model.js). With `note`, also says why it matters.
+export function CharCount({ value, limit, soft, note = false }) {
+  const count = charCount(value.length, limit, soft);
   if (!count.visible) return null;
   return (
     <span
-      className={"qe-count" + (count.over ? " is-over" : "")}
+      className={"qe-count" + (count.over ? " is-over" : " is-long")}
+      title={count.over ? undefined : SMALLER}
       aria-live="polite"
     >
+      {note && !count.over && <span className="qe-count-note">{SMALLER} </span>}
       {count.label}
       <span className="ui-sr"> characters</span>
     </span>
