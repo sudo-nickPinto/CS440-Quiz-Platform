@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import RequestError from "../authenticated-demo/RequestError";
 import { useNotifications } from "../authenticated-demo/notifications";
+import { joinSession } from "../authenticated-demo/liveSessions";
 import { liveState } from "./classHelpers";
 
 const POLL_MS = 5000;
@@ -41,17 +42,10 @@ export default function ClassLiveButton({ classId }) {
       return;
     }
     if (!session.joined) {
-      const joined = await action.run(async () => {
-        try {
-          return await api(`/sessions/${session.session_id}/join`, {
-            method: "POST",
-          });
-        } catch (error) {
-          // Joined in another tab since the last poll: go straight in.
-          if (error.code === "session_already_joined") return true;
-          throw error;
-        }
-      });
+      // Joined in another tab since the last poll counts as joined.
+      const joined = await action.run(() =>
+        joinSession(api, session.session_id),
+      );
       if (!joined) return;
     }
     navigate(`/app/play/${session.session_id}`);

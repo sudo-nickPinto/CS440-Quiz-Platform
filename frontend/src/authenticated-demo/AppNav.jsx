@@ -1,5 +1,7 @@
 import { Link } from "react-router";
 
+import { isLiveGamePath } from "./liveSessions";
+
 // The app's main navigation, shown in the header on every page for faculty
 // and students alike. Quizzes, results and sessions all live under a class,
 // so Classes lights up for them too.
@@ -24,7 +26,7 @@ const LINKS = [
 export default function AppNav({ pathname }) {
   // Hidden during a live game, so nobody leaves a running session by
   // accident; the live screens have their own exits.
-  if (/^\/app\/(host|play)\//.test(pathname)) return null;
+  if (isLiveGamePath(pathname)) return null;
 
   return (
     <nav className="qb-app-nav" aria-label="Main">
