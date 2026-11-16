@@ -199,6 +199,49 @@
   line-height: 1.2;
 }
 
+/* A student's name links to their full report. Only the name itself is the
+   link, so the rest of the cell still opens the row. */
+.qp .cl-table td a.cl-stu-name {
+  width: fit-content;
+  color: var(--color-text);
+  text-decoration: none;
+  white-space: normal;
+}
+
+.qp .cl-table td a.cl-stu-name:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--color-info);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
+
+/* Report rows that open a page when clicked anywhere (rowLink in
+   classHelpers.js). Flat rows shade on hover rather than change color. */
+.qp .cl-click-row {
+  cursor: pointer;
+}
+
+/* Cells need a surface of their own for the shade to show; colored lead
+   cells keep their own background. */
+.qp .cl-click-row > td {
+  background-color: var(--color-surface);
+  transition: var(--hover-transition);
+}
+
+.qp .cl-rows tbody tr.cl-click-row:hover {
+  background: transparent;
+}
+
+.qp .cl-click-row:hover > td {
+  filter: var(--hover-shade);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp .cl-click-row > td {
+    transition: none;
+  }
+}
+
 .qp .cl-stu-strip {
   display: flex;
   gap: 5px;
@@ -418,9 +461,32 @@
   color: var(--paper);
 }
 
+.qp .cl-table td.cl-status.is-pending {
+  background: var(--apricot);
+  color: var(--ink);
+}
+
+.qp .cl-table td.cl-status.is-rejected,
+.qp .cl-table td.cl-status.is-withdrawn,
 .qp .cl-table td.cl-status.is-archived {
   background: var(--sand);
   color: var(--ink);
+}
+
+.qp .cl-page .cl-approval-rows tbody tr > td {
+  height: 72px;
+}
+
+/* On a phone the quiz name is the link to the review page, so the arrow
+   column goes and the status column narrows. */
+@media (max-width: 760px) {
+  .qp .cl-approval-rows .cl-go-cell {
+    display: none;
+  }
+
+  .qp .cl-approval-rows td.cl-status {
+    width: 84px;
+  }
 }
 
 .qp .cl-table tr:has(> td.cl-status) > td {
@@ -844,6 +910,114 @@
   box-shadow: none;
 }
 
+/* A quiz hosted more than once opens in place (ClassHistory): the quiz row
+   turns sand with a navy date, and its presentations follow as slimmer
+   light-blue rows, closed off by a navy edge. */
+.qp .cl-fold-row[data-open="true"] > td {
+  background-color: var(--sand);
+}
+
+.qp .cl-table .cl-fold-row[data-open="true"] > td.cl-date {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.qp .cl-page .cl-fold-row[data-open="true"] .cl-date-block small {
+  color: var(--paper);
+}
+
+.qp .cl-fold-count {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 1px 8px;
+  border: var(--b-thin);
+  background: #c9dcef;
+  color: var(--navy);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  line-height: 1.5;
+  text-transform: uppercase;
+  vertical-align: 3px;
+  white-space: nowrap;
+}
+
+.qp .cl-page .cl-rows tbody tr.cl-sess-row > td {
+  height: 58px;
+  border-top: var(--b-thin);
+  background-color: #e6eef7;
+}
+
+.qp .cl-page .cl-rows tbody tr.cl-sess-foot > td {
+  height: 52px;
+  padding-block: 8px;
+  border-bottom: 5px solid var(--navy);
+}
+
+.qp .cl-sess-foot-in {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.qp .cl-page .cl-sess-foot-error {
+  color: var(--color-danger);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.qp .cl-page button.cl-sess-export {
+  min-height: 34px;
+  padding: 4px 14px;
+  border: var(--b-thin);
+  box-shadow: 2px 2px 0 var(--ink);
+  background: var(--paper);
+  color: var(--navy);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-page button.cl-sess-export:hover:not(:disabled) {
+  background: var(--sky-soft);
+}
+
+.qp .cl-table td.cl-sess-lead {
+  text-align: center;
+}
+
+.qp .cl-sess-lead b {
+  display: inline-block;
+  padding: 3px 8px;
+  border: var(--b-thin);
+  background: var(--paper);
+  color: var(--navy);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.qp .cl-sess-row .cl-quiz-name {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.qp .cl-sess-row .cl-fraction b,
+.qp .cl-sess-row .cl-meter-num {
+  font-size: 16px;
+}
+
+.qp .cl-page .cl-table .cl-sess-row a.cl-go {
+  width: 40px;
+  height: 32px;
+  font-size: 16px;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
 @media (max-width: 760px) {
   .qp .cl-rows .cl-top-col {
     display: none;
@@ -1111,6 +1285,10 @@
 }
 
 @media (max-width: 1100px) {
+  .qp .cl-approval-rows .cl-wide {
+    display: none;
+  }
+
   .qp .cl-member-rows .cl-wide {
     display: none;
   }

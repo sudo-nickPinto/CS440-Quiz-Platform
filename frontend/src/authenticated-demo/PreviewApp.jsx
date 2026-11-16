@@ -16,7 +16,7 @@ import SubmissionPreviewPage from "../classes/SubmissionPreview";
 import QuizBurgLogo from "../classes/QuizBurgLogo";
 import {
   ClassSessionReportPage,
-  ClassQuizReportPage,
+  ClassQuizReportRedirect,
   ClassStudentReportPage,
 } from "../classes/ClassReports";
 
@@ -182,7 +182,7 @@ export default function PreviewApp({ onSignOut }) {
 
             <Route
               path="classes/:classId/quizzes/:quizId/report"
-              element={<ClassQuizReportPage key={pathname} />}
+              element={<ClassQuizReportRedirect />}
             />
 
             <Route

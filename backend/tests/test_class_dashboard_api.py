@@ -570,6 +570,15 @@ def test_students_and_dashboard_aggregate_class_results(dashboard_client) -> Non
     assert dashboard["attendance_rate"] == 0.5
     assert [quiz["session_count"] for quiz in quizzes] == [2]
     assert quizzes[0]["average_score"] == 566.7
+    # The Presentations tab shows each quiz by its latest presentation.
+    newest = client.get(f"/classes/{class_id}/sessions").json()["items"][0]
+    assert quizzes[0]["last_session_id"] == newest["session_id"]
+    assert quizzes[0]["last_host_name"] == newest["host_name"]
+    assert (
+        quizzes[0]["last_participant_count"],
+        quizzes[0]["last_average_score"],
+        quizzes[0]["last_top_score"],
+    ) == (1, 500.0, 500)
 
 
 def test_grade_export_is_a_gradebook_for_organizers_only(dashboard_client) -> None:

@@ -467,6 +467,9 @@
 }
 
 .qp .cl-table-wrap {
+  /* Holds the absolutely placed .cl-sr labels in headers, so they scroll
+     with the table instead of widening the page. */
+  position: relative;
   overflow-x: auto;
 }
 
@@ -946,12 +949,38 @@
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
-.qp .cl-approval button {
-  padding: 4px 10px;
-  font-size: 14px;
+/* Approve / Reject, on the Approvals tab and the submission preview: the
+   same size and type as the other buttons in report rows (cl-send). */
+.qp .cl-page button.cl-decide {
+  min-width: 112px;
+  min-height: 40px;
+  padding: 6px 16px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.qp .cl-page button.cl-decide:hover:not(:disabled) {
+  background: var(--apricot);
+}
+
+.qp .cl-page button.cl-decide.is-approve {
+  background: var(--orange-deep);
+  color: var(--paper);
+}
+
+.qp .cl-page button.cl-decide.is-approve:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.qp .cl-page button.cl-decide:disabled {
+  background: var(--sand);
+  color: var(--gray);
+  box-shadow: none;
 }
 
 /* V3 Task 6: read-only preview of a submitted quiz version */
