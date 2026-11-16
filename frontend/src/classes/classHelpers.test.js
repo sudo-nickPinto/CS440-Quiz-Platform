@@ -14,6 +14,7 @@ import {
   quizStatusLabel,
   submissionPreviewPath,
   membersWithStats,
+  liveState,
   opensRow,
   rowLink,
   initials,
@@ -298,6 +299,24 @@ describe("collaboratorTags", () => {
 
   it("folds the rest into one +N tag", () => {
     expect(collaboratorTags(["Ana", "Ben", "Cy", "Dee", "Eli"])).toEqual({ shown: ["Ana", "Ben", "Cy"], rest: 2 });
+  });
+});
+
+describe("liveState", () => {
+  const live = (extra) => ({ status: "LOBBY", current_question_order: null, question_count: 6, ...extra });
+
+  it("reads Lobby open before the first question", () => {
+    expect(liveState(live())).toBe("Lobby open");
+  });
+
+  it("names the current question out of the total", () => {
+    expect(liveState(live({ status: "ACTIVE", current_question_order: 3 }))).toBe("Question 3 of 6");
+    expect(liveState(live({ status: "ACTIVE", current_question_order: 3, question_count: 0 }))).toBe("Question 3");
+  });
+
+  it("puts the host and people who left first", () => {
+    expect(liveState(live({ is_host: true, status: "ACTIVE", current_question_order: 2 }))).toBe("You're hosting");
+    expect(liveState(live({ left: true }))).toBe("You left");
   });
 });
 
