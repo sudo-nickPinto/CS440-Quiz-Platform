@@ -540,9 +540,7 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
                 ? `Rank #${session.my_rank} of ${formatScore(session.participant_count)}`
                 : "Did not participate"
             }
-            linkLabel={classInfo.canManage ? "Session report" : "My results"}
             wholeCard
-            keepLink
           >
             <p>Hosted by {session.host_name}</p>
             <p>{formatDate(session.started_at)}</p>
