@@ -6,7 +6,14 @@ import {
   ParticipantResults,
 } from "../authenticated-demo/SessionResults";
 import { useFileDownload } from "../authenticated-demo/useFileDownload";
-import { rowLink } from "./classHelpers";
+import { formatScore, rowLink } from "./classHelpers";
+import {
+  DateBlock,
+  Fraction,
+  GoLink,
+  ReportTable,
+  ScoreMeter,
+} from "./ReportTable";
 
 function validId(value) {
   return (
@@ -181,8 +188,15 @@ export function ClassSessionReportPage() {
   );
 }
 
+const HISTORY_COLUMNS = ["", "", "cl-num", "", "cl-top-col", "cl-go-cell"];
+
+// Every completed presentation of one quiz, in the same rows as the class
+// page's Presentations tab. Each row opens that presentation's results.
 function QuizReport({ report, classId }) {
-  const navigate = useNavigate();
+  // For "attended / students"; read once, not polled.
+  const dashboard = useResource(`/classes/${classId}/dashboard`);
+  const studentCount = dashboard.data?.student_count ?? null;
+  const total = report.sessions.length;
 
   return (
     <>
@@ -194,59 +208,46 @@ function QuizReport({ report, classId }) {
         ]}
       />
 
-      <p className="cl-section-note">
-        Each row is a completed presentation in this class. Scores reflect the
-        saved results of that presentation.
-      </p>
-
-      <div className="cl-table-wrap">
-        <table className="cl-table">
-          <caption className="cl-sr">Quiz presentation history</caption>
-
-          <thead>
-            <tr>
-              <th scope="col">Date</th>
-              <th scope="col">Quiz title at presentation</th>
-              <th scope="col">Host</th>
-              <th scope="col">Participants</th>
-              <th scope="col">Average points</th>
-              <th scope="col">Report</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {report.sessions.map((session) => (
-              // The whole row opens the presentation's results; "Open
-              // report" stays the keyboard path.
-              <tr
-                key={session.session_id}
-                {...rowLink(navigate, sessionUrl(classId, session.session_id))}
-              >
-                <td>{date(session.started_at)}</td>
-                <td>{session.quiz_title}</td>
-                <td>{session.host_name}</td>
-                <td>{number(session.participant_count)}</td>
-                <td>{number(session.average_score)}</td>
-                <td>
-                  <Link to={sessionUrl(classId, session.session_id)}>
-                    Open report →
-                  </Link>
-                </td>
-              </tr>
-            ))}
-
-            {report.sessions.length === 0 && (
-              <tr>
-                <td colSpan={6}>
-                  <div className="cl-state">
-                    <p>No completed presentations are available.</p>
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <ReportTable
+        caption="Presentation history"
+        noun="presentation"
+        tableClass="cl-rows"
+        columnClasses={HISTORY_COLUMNS}
+        headers={["Date", "Presentation", "Attended", "Avg score", "Top score", ""]}
+        emptyTitle="No presentations yet"
+        emptyText="No completed presentations are available."
+        rows={report.sessions.map((session, index) => {
+          const to = sessionUrl(classId, session.session_id);
+          return {
+            key: session.session_id,
+            text: `${session.quiz_title} ${session.host_name}`,
+            to,
+            leadClass: "cl-date",
+            cells: [
+              <DateBlock value={session.started_at} />,
+              <span className="cl-quiz-cell">
+                <Link className="cl-quiz-name" to={to}>
+                  {session.quiz_title}
+                </Link>
+                <small>
+                  P{total - index} · hosted by {session.host_name}
+                </small>
+              </span>,
+              <Fraction value={session.participant_count} total={studentCount} />,
+              <ScoreMeter
+                value={session.average_score}
+                max={session.top_score}
+                label={`Average ${formatScore(session.average_score)} points`}
+              />,
+              <span className="cl-top-cell">
+                <b>{formatScore(session.top_score)}</b>
+                <small>top points</small>
+              </span>,
+              <GoLink to={to} label={`Results for ${session.quiz_title}`} />,
+            ],
+          };
+        })}
+      />
     </>
   );
 }

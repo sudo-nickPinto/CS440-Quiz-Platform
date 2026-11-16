@@ -887,6 +887,82 @@
   box-shadow: none;
 }
 
+/* A quiz hosted more than once opens in place (ClassHistory): the quiz row
+   turns sand with a navy date, and its presentations follow as slimmer
+   light-blue rows, closed off by a navy edge. */
+.qp .cl-fold-row[data-open="true"] > td {
+  background-color: var(--sand);
+}
+
+.qp .cl-table .cl-fold-row[data-open="true"] > td.cl-date {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.qp .cl-page .cl-fold-row[data-open="true"] .cl-date-block small {
+  color: var(--paper);
+}
+
+.qp .cl-fold-count {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 1px 8px;
+  border: var(--b-thin);
+  background: #c9dcef;
+  color: var(--navy);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  line-height: 1.5;
+  text-transform: uppercase;
+  vertical-align: 3px;
+  white-space: nowrap;
+}
+
+.qp .cl-page .cl-rows tbody tr.cl-sess-row > td {
+  height: 58px;
+  border-top: var(--b-thin);
+  background-color: #e6eef7;
+}
+
+.qp .cl-page .cl-rows tbody tr.cl-sess-row.is-last > td {
+  border-bottom: 5px solid var(--navy);
+}
+
+.qp .cl-table td.cl-sess-lead {
+  text-align: center;
+}
+
+.qp .cl-sess-lead b {
+  display: inline-block;
+  padding: 3px 8px;
+  border: var(--b-thin);
+  background: var(--paper);
+  color: var(--navy);
+  font-family: "Archivo Black", sans-serif;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.qp .cl-sess-row .cl-quiz-name {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.qp .cl-sess-row .cl-fraction b,
+.qp .cl-sess-row .cl-meter-num {
+  font-size: 16px;
+}
+
+.qp .cl-page .cl-table .cl-sess-row a.cl-go {
+  width: 40px;
+  height: 32px;
+  font-size: 16px;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
 @media (max-width: 760px) {
   .qp .cl-rows .cl-top-col {
     display: none;

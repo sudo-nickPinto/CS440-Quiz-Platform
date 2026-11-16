@@ -92,6 +92,13 @@ class ClassQuizSummary(BaseModel):
     session_count: int
     participant_count: int
     average_score: float | None
+    # The most recent completed presentation of this quiz, which the
+    # Presentations tab shows for the quiz. Scores are null for members.
+    last_session_id: int
+    last_host_name: str
+    last_participant_count: int
+    last_average_score: float | None
+    last_top_score: int | None
 
 
 class ClassSessionSummary(BaseModel):

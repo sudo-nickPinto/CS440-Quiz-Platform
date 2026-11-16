@@ -9,7 +9,7 @@ import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import RequestError from "../authenticated-demo/RequestError";
 import { useConfirm } from "../authenticated-demo/useConfirm";
 import { useFileDownload } from "../authenticated-demo/useFileDownload";
-import { useAction, useApi } from "../authenticated-demo/rest";
+import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import ClassLiveButton from "./ClassLiveButton";
 import {
   ADMIN_SECTIONS,
@@ -17,7 +17,7 @@ import {
   approvalButton,
   collaboratorTags,
   copyText,
-  HISTORY_VIEWS,
+  formatScore,
   MY_QUIZ_SORTS,
   pluralNoun,
   presentStatus,
@@ -30,6 +30,13 @@ import {
   USER_SECTIONS,
 } from "./classHelpers";
 import { ResourceMessage } from "./ClassUI";
+import {
+  DateBlock,
+  Fraction,
+  GoLink,
+  ReportTable,
+  ScoreMeter,
+} from "./ReportTable";
 import { AddMemberDialog, ClassStudents } from "./ClassManagement";
 import {
   useClassDashboard,
@@ -50,159 +57,9 @@ function formatDate(value) {
   return value ? DATE_FORMAT.format(new Date(value)) : "—";
 }
 
-function formatScore(value) {
-  return value === null || value === undefined
-    ? "—"
-    : Number(value).toLocaleString();
-}
-
 function reportResource(resource) {
   return resource.status === "ready" ? null : (
     <ResourceMessage resource={resource} />
-  );
-}
-
-// A searchable report table; `rows` are { key, text, cells, to? } where
-// `text` is what the search box matches and `to`, if set, is opened by a
-// click anywhere on the row (the row's own links stay the keyboard path).
-function ReportTable({
-  caption,
-  noun,
-  headers,
-  rows,
-  pagination,
-  onPageChange,
-  emptyTitle,
-  emptyText,
-  emptyAction = null,
-  controls = null,
-  columnClasses = [],
-  tableClass = "",
-  rememberAs = null,
-}) {
-  const navigate = useNavigate();
-  const [query, setQuery] = useRemembered(
-    rememberAs && `${rememberAs}:query`,
-    "",
-  );
-  const needle = query.trim().toLowerCase();
-  const visible = rows.filter((row) => row.text.toLowerCase().includes(needle));
-  const totalItems = pagination?.total_items ?? rows.length;
-  const page = pagination?.page ?? 1;
-  const totalPages = pagination?.total_pages ?? (totalItems ? 1 : 0);
-  const pageSize = pagination?.page_size ?? Math.max(rows.length, 1);
-  const firstItem = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
-  const lastItem = Math.min(firstItem + rows.length - 1, totalItems);
-  const nounLabel = pluralNoun(totalItems, noun);
-
-  // A remembered page can be past the end once rows are removed.
-  const pastEnd = Boolean(onPageChange) && page > Math.max(totalPages, 1);
-  useEffect(() => {
-    if (pastEnd) onPageChange(Math.max(totalPages, 1));
-  }, [pastEnd, totalPages, onPageChange]);
-
-  return (
-    <>
-      <div className="cl-toolbar">
-        <label className="cl-search">
-          <span className="cl-sr">
-            Search this page of {caption.toLowerCase()}
-          </span>
-          <input
-            type="search"
-            placeholder={`Search this page of ${caption.toLowerCase()}…`}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-
-        {controls}
-
-        <span className="cl-count" aria-live="polite">
-          {needle
-            ? `${visible.length} of ${rows.length} ${nounLabel} on this page`
-            : totalItems === 0
-              ? `0 ${nounLabel}`
-              : `${firstItem}–${lastItem} of ${totalItems} ${nounLabel}`}
-        </span>
-      </div>
-
-      <div className="cl-table-wrap">
-        <table className={`cl-table ${tableClass}`.trim()}>
-          <caption className="cl-sr">{caption}</caption>
-
-          <thead>
-            <tr>
-              {headers.map((heading, index) => (
-                <th
-                  key={heading || index}
-                  scope="col"
-                  className={columnClasses[index] || undefined}
-                >
-                  {heading || <span className="cl-sr">Actions</span>}
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {visible.length === 0 ? (
-              <tr>
-                <td colSpan={headers.length}>
-                  <div className="cl-state" role="status">
-                    <h2>{needle ? "No matches" : emptyTitle}</h2>
-                    <p>{needle ? "Try another search." : emptyText}</p>
-                    {!needle && emptyAction}
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              visible.map((row) => (
-                <tr
-                  key={row.key}
-                  {...(row.to ? rowLink(navigate, row.to) : null)}
-                >
-                  {row.cells.map((cell, index) => (
-                    <td
-                      key={headers[index] || index}
-                      className={
-                        [index === 0 ? row.leadClass : "", columnClasses[index]]
-                          .filter(Boolean)
-                          .join(" ") || undefined
-                      }
-                    >
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {onPageChange && totalPages > 1 && (
-        <nav className="cl-pagination" aria-label={`${caption} pages`}>
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-          >
-            ← Previous
-          </button>
-          <span>
-            Page {page} of {totalPages}
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => onPageChange(page + 1)}
-          >
-            Next →
-          </button>
-        </nav>
-      )}
-    </>
   );
 }
 
@@ -310,118 +167,184 @@ function CardCollection({
   );
 }
 
-const MONTH = new Intl.DateTimeFormat(undefined, { month: "short" });
-
-// The apricot date block that leads each presentation row.
-function DateBlock({ value }) {
-  if (!value) return "—";
-  const date = new Date(value);
-  return (
-    <span className="cl-date-block">
-      <small>{MONTH.format(date)}</small>
-      <b>{String(date.getDate()).padStart(2, "0")}</b>
-    </span>
-  );
-}
-
-// A navy bar for an average against the best score, with the number.
-function ScoreMeter({ value, max, label }) {
-  const share =
-    value === null || value === undefined || !max
-      ? 0
-      : Math.min(value / max, 1);
-  return (
-    <span className="cl-meter-cell">
-      <span className="cl-meter" aria-hidden="true">
-        <i style={{ width: `${Math.round(share * 100)}%` }} />
-      </span>
-      <b className="cl-meter-num" aria-label={label}>
-        {formatScore(value == null ? value : Math.round(value))}
-      </b>
-    </span>
-  );
-}
-
-function Fraction({ value, total }) {
-  return (
-    <span className="cl-fraction">
-      <b>{formatScore(value)}</b>
-      {total ? <small> / {formatScore(total)}</small> : null}
-    </span>
-  );
-}
-
-function GoLink({ to, label }) {
-  return (
-    <Link className="cl-go" to={to} aria-label={label} title={label}>
-      →
-    </Link>
-  );
-}
-
 const PRESENTATION_COLUMNS = ["", "", "cl-num", "", "cl-top-col", "cl-go-cell"];
 
-// Organizer view: every completed session of the class, styled after the
-// Presentations list in class-admin-main.html.
-function PresentationsTable({ classInfo, studentCount, controls }) {
+const SESSION_DAY = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+});
+const SESSION_TIME = new Intl.DateTimeFormat(undefined, {
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+function sessionWhen(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return `${SESSION_DAY.format(date)} · ${SESSION_TIME.format(date)}`;
+}
+
+// The presentations of one quiz, as rows under its opened Presentations row.
+// Each opens that presentation's results.
+function QuizSessionRows({ classId, quizId, studentCount }) {
+  const navigate = useNavigate();
+  const resource = useResource(`/classes/${classId}/quizzes/${quizId}/results`);
+
+  if (resource.loading || resource.error || !resource.data) {
+    return (
+      <tr className="cl-sess-row is-last">
+        <td colSpan={PRESENTATION_COLUMNS.length}>
+          {resource.error ? (
+            <RequestError error={resource.error} retry={resource.reload} />
+          ) : (
+            <span role="status">Loading presentations…</span>
+          )}
+        </td>
+      </tr>
+    );
+  }
+
+  const sessions = resource.data.sessions;
+  return sessions.map((session, index) => {
+    const to = `/app/classes/${classId}/sessions/${session.session_id}/report`;
+    const when = sessionWhen(session.started_at);
+    return (
+      <tr
+        key={session.session_id}
+        {...rowLink(navigate, to)}
+        className={`cl-click-row cl-sess-row${
+          index === sessions.length - 1 ? " is-last" : ""
+        }`}
+      >
+        <td className="cl-sess-lead">
+          <b>P{sessions.length - index}</b>
+        </td>
+        <td>
+          <span className="cl-quiz-cell">
+            <Link className="cl-quiz-name" to={to}>
+              {when}
+            </Link>
+            <small>Hosted by {session.host_name}</small>
+          </span>
+        </td>
+        <td className="cl-num">
+          <Fraction value={session.participant_count} total={studentCount} />
+        </td>
+        <td>
+          <ScoreMeter
+            value={session.average_score}
+            max={session.top_score}
+            label={`Average ${formatScore(session.average_score)} points`}
+          />
+        </td>
+        <td className="cl-top-col">
+          <span className="cl-top-cell">
+            <b>{formatScore(session.top_score)}</b>
+            <small>top points</small>
+          </span>
+        </td>
+        <td className="cl-go-cell">
+          <GoLink to={to} label={`Results for ${when}`} />
+        </td>
+      </tr>
+    );
+  });
+}
+
+// Organizer view of the Presentations tab: one row per presented quiz,
+// showing its most recent presentation. A quiz hosted once opens that
+// session; one hosted more often opens in place to list its presentations,
+// like a student's row on the Students tab.
+function ClassHistory({ classInfo, studentCount }) {
   const memory = `class:${classInfo.id}:presentations`;
   const [page, setPage] = useRemembered(`${memory}:page`, 1);
-  const resource = useClassSessions(classInfo.id, page);
+  const [openId, setOpenId] = useRemembered(`${memory}:open`, null);
+  const resource = useClassQuizzes(classInfo.id, page);
   const pending = reportResource(resource);
   if (pending) return pending;
 
   const { items, pagination } = resource.data;
-  const firstIndex = (pagination.page - 1) * pagination.page_size;
 
   return (
     <ReportTable
       caption="Presentations"
       rememberAs={memory}
-      noun="presentation"
+      noun="quiz"
       tableClass="cl-rows"
       columnClasses={PRESENTATION_COLUMNS}
-      headers={[
-        "Date",
-        "Presentation",
-        "Attended",
-        "Avg score",
-        "Top score",
-        "",
-      ]}
+      headers={["Last hosted", "Quiz", "Attended", "Avg score", "Top score", ""]}
       emptyTitle="No presentations yet"
       emptyText="Host a quiz in this class and it shows up here once it ends."
-      controls={controls}
       pagination={pagination}
       onPageChange={setPage}
-      rows={items.map((session, index) => {
-        const report = `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`;
+      rows={items.map((quiz) => {
+        const once = quiz.session_count === 1;
+        const open = !once && openId === quiz.quiz_id;
+        const toggle = () => setOpenId(open ? null : quiz.quiz_id);
+        const detailId = `cl-quiz-sessions-${quiz.quiz_id}`;
+        const latest = `/app/classes/${classInfo.id}/sessions/${quiz.last_session_id}/report`;
         return {
-          key: session.session_id,
-          text: `${session.quiz_title} ${session.host_name}`,
-          to: report,
+          key: quiz.quiz_id,
+          text: `${quiz.title} ${quiz.last_host_name}`,
+          ...(once
+            ? { to: latest }
+            : {
+                onToggle: toggle,
+                open,
+                after: open && (
+                  <QuizSessionRows
+                    key={detailId}
+                    classId={classInfo.id}
+                    quizId={quiz.quiz_id}
+                    studentCount={studentCount}
+                  />
+                ),
+              }),
           leadClass: "cl-date",
           cells: [
-            <DateBlock value={session.started_at} />,
+            <DateBlock value={quiz.presented_at} />,
             <span className="cl-quiz-cell">
-              <Link className="cl-quiz-name" to={report}>
-                {session.quiz_title}
-              </Link>
+              {once ? (
+                <Link className="cl-quiz-name" to={latest}>
+                  {quiz.title}
+                </Link>
+              ) : (
+                <span className="cl-quiz-name">
+                  {quiz.title}
+                  <span className="cl-fold-count">
+                    {quiz.session_count} presentations
+                  </span>
+                </span>
+              )}
               <small>
-                P{pagination.total_items - firstIndex - index} · hosted by{" "}
-                {session.host_name}
+                {once
+                  ? `Hosted once by ${quiz.last_host_name}`
+                  : `Latest shown · hosted by ${quiz.last_host_name}`}
               </small>
             </span>,
-            <Fraction value={session.participant_count} total={studentCount} />,
+            <Fraction value={quiz.last_participant_count} total={studentCount} />,
             <ScoreMeter
-              value={session.average_score}
-              max={session.top_score}
-              label={`Average ${formatScore(session.average_score)} points`}
+              value={quiz.last_average_score}
+              max={quiz.last_top_score}
+              label={`Average ${formatScore(quiz.last_average_score)} points`}
             />,
             <span className="cl-top-cell">
-              <b>{formatScore(session.top_score)}</b>
+              <b>{formatScore(quiz.last_top_score)}</b>
               <small>top points</small>
             </span>,
-            <GoLink to={report} label={`Results for ${session.quiz_title}`} />,
+            once ? (
+              <GoLink to={latest} label={`Results for ${quiz.title}`} />
+            ) : (
+              <button
+                type="button"
+                className="cl-stu-tog"
+                aria-expanded={open}
+                aria-controls={detailId}
+                aria-label={`${open ? "Hide" : "Show"} every presentation of ${quiz.title}`}
+                onClick={toggle}
+              />
+            ),
           ],
         };
       })}
@@ -990,98 +913,6 @@ function SubmissionsTable({ classInfo, onChange }) {
   );
 }
 
-// The same history grouped into browsable quiz cards: when each quiz was last
-// presented, how often, and how the class did across those presentations.
-function ClassQuizzesTable({ classInfo, controls }) {
-  const memory = `class:${classInfo.id}:by-quiz`;
-  const [page, setPage] = useRemembered(`${memory}:page`, 1);
-  const resource = useClassQuizzes(classInfo.id, page);
-  const pending = reportResource(resource);
-
-  if (pending) return pending;
-
-  const best = Math.max(
-    0,
-    ...resource.data.items.map((quiz) => quiz.average_score ?? 0),
-  );
-
-  return (
-    <CardCollection
-      caption="Presented quizzes"
-      rememberAs={memory}
-      noun="quiz"
-      emptyTitle="No presented quizzes yet"
-      emptyText="Quizzes appear here after a session in this class completes."
-      controls={controls}
-      pagination={resource.data.pagination}
-      onPageChange={setPage}
-      items={resource.data.items}
-      getText={(quiz) => quiz.title}
-      renderCard={(quiz) => {
-        const report = `/app/classes/${classInfo.id}/quizzes/${quiz.quiz_id}/report`;
-        const percentage =
-          quiz.average_score != null && best > 0
-            ? Math.min(100, Math.max(0, (quiz.average_score / best) * 100))
-            : 0;
-        return (
-          <QuizCard
-            key={quiz.quiz_id}
-            title={quiz.title}
-            to={report}
-            status="Presented"
-            headline={`${quiz.session_count} ${
-              quiz.session_count === 1 ? "presentation" : "presentations"
-            }`}
-            linkLabel="View report"
-            wholeCard
-            keepLink
-          >
-            <p>Last presented {formatDate(quiz.presented_at)}</p>
-            <p>{formatScore(quiz.participant_count)} total participations</p>
-            <p>
-              <strong>
-                Average score: {formatScore(quiz.average_score)} points
-              </strong>
-            </p>
-            <span className="qc-progress" aria-hidden="true">
-              <span style={{ width: `${percentage}%` }} />
-            </span>
-          </QuizCard>
-        );
-      }}
-    />
-  );
-}
-
-// Organizer view: completed presentations, listed one per session or
-// grouped by quiz.
-function ClassHistory({ classInfo, studentCount, view, onViewChange }) {
-  const controls = (
-    <div className="cl-toggle" role="group" aria-label="Group presentations">
-      {Object.entries(HISTORY_VIEWS).map(([key, label]) => (
-        <button
-          key={key}
-          type="button"
-          aria-pressed={view === key}
-          onClick={() => onViewChange(key)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-
-  return view === "quizzes" ? (
-    <ClassQuizzesTable classInfo={classInfo} controls={controls} />
-  ) : (
-    <PresentationsTable
-      classInfo={classInfo}
-      studentCount={studentCount}
-      controls={controls}
-    />
-  );
-}
-
 // The session-code strip under the tabs (made-dashboard-main.html): six
 // digits from the host's screen, then straight into the game.
 function JoinPanel() {
@@ -1188,14 +1019,6 @@ function ClassWorkspace({ classInfo, onChange }) {
   const [layout, setLayout] = useRemembered("class:member-layout-v2", "list", {
     isValid: (key) => key in LAYOUTS,
   });
-  const [historyView, setHistoryView] = useRemembered(
-    `${memory}:history-view`,
-    "sessions",
-    {
-      override: !urlTargetsUser && urlSection === "Quizzes" ? "quizzes" : null,
-      isValid: (value) => value in HISTORY_VIEWS,
-    },
-  );
   const [addOpen, setAddOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -1527,8 +1350,6 @@ function ClassWorkspace({ classInfo, onChange }) {
         <ClassHistory
           classInfo={classInfo}
           studentCount={studentCount}
-          view={historyView}
-          onViewChange={setHistoryView}
         />
       ) : (
         <ParticipateTable

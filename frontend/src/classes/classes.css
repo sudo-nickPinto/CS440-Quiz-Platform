@@ -467,6 +467,9 @@
 }
 
 .qp .cl-table-wrap {
+  /* Holds the absolutely placed .cl-sr labels in headers, so they scroll
+     with the table instead of widening the page. */
+  position: relative;
   overflow-x: auto;
 }
 
