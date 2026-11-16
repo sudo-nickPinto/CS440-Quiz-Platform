@@ -22,6 +22,8 @@ import {
 
 import { AccountContext } from "./account";
 import NotificationsProvider from "./NotificationsProvider";
+import LiveQuizPopup from "./LiveQuizPopup";
+import { isLiveGamePath } from "./liveSessions";
 import { useResource } from "./rest";
 import RequestError from "./RequestError";
 import { QuizEditor, QuizViewer } from "./QuizEditor";
@@ -139,7 +141,7 @@ export default function PreviewApp({ onSignOut }) {
             <div className="ui-user">
               {/* Type a six-digit code from anywhere. Hidden during a live
                   game so nobody leaves it by accident. */}
-              {!/^\/app\/(host|play)\//.test(pathname) && (
+              {!isLiveGamePath(pathname) && (
                 <Link
                   className="qb-join"
                   to="/app/join"
@@ -267,6 +269,9 @@ export default function PreviewApp({ onSignOut }) {
               />
             </Routes>
           </main>
+
+          {/* "A quiz is live" pop-up on any page when a class lobby opens. */}
+          <LiveQuizPopup />
         </div>
       </NotificationsProvider>
     </AccountContext.Provider>

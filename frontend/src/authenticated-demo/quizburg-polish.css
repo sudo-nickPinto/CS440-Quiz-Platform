@@ -153,6 +153,38 @@
   font-size: 15px;
 }
 
+/* Live-quiz popup (LiveQuizPopup.jsx): the quiz, class and host under the
+   title, and a failed join's error. */
+.qb-confirm-body .qb-live-popup {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: var(--b-thin);
+  background: var(--sand);
+}
+
+.qb-confirm-body .qb-live-popup p {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.qb-confirm-body .qb-live-popup .qb-live-popup-quiz {
+  margin-bottom: 4px;
+  font: 20px/1.25 "Archivo Black", sans-serif;
+}
+
+.qb-confirm-body .qb-live-popup p:last-child {
+  color: var(--gray);
+}
+
+.qb-confirm .qp-error {
+  margin-top: 16px;
+  padding: 12px 14px;
+}
+
+.qb-confirm .qp-error p {
+  color: var(--ink);
+}
+
 .qb-confirm-actions {
   display: flex;
   justify-content: flex-end;
@@ -177,7 +209,7 @@
   cursor: pointer;
 }
 
-.qb-confirm .qb-btn:hover {
+.qb-confirm .qb-btn:hover:not(:disabled) {
   background: var(--orange);
 }
 
@@ -187,8 +219,12 @@
   box-shadow: 3px 3px 0 var(--ink);
 }
 
-.qb-confirm .qb-btn.qb-btn-paper:hover {
+.qb-confirm .qb-btn.qb-btn-paper:hover:not(:disabled) {
   filter: var(--hover-shade);
+}
+
+.qb-confirm .qb-btn:disabled {
+  cursor: progress;
 }
 
 .qb-confirm .qb-btn:focus-visible {
