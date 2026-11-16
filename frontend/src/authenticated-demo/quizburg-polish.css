@@ -5062,7 +5062,7 @@
 }
 
 .qp .rr summary:hover .rr-tog {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .rr details[open] > summary .rr-tog {
@@ -5353,12 +5353,6 @@
   letter-spacing: 1px;
 }
 
-.qp .rr .rr-people h4 .rr-mark {
-  width: 22px;
-  height: 22px;
-  font-size: 12px;
-}
-
 .qp .rr .rr-people p {
   color: var(--gray);
   font-size: 14px;
@@ -5564,14 +5558,6 @@
   border-right: var(--b);
 }
 
-.qp .rr-me .rr-band-title small {
-  color: var(--navy);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
 .qp .rr-me .rr-band-title h1 {
   margin: 4px 0;
   font-size: clamp(24px, 3vw, 36px);
@@ -5656,27 +5642,6 @@
   text-transform: uppercase;
 }
 
-.qp .rr-me .rr-key {
-  display: flex;
-  gap: 10px;
-}
-
-.qp .rr-me .rr-key > span {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.qp .rr-me .rr-key i {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--paper);
-  font-size: 11px;
-  font-style: normal;
-}
-
 .qp .rr-me .rr-tiles {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -5704,14 +5669,44 @@
   gap: 6px;
 }
 
+/* On a narrow tile the tag drops under the question number. */
+.qp .rr-me .rr-tile-top {
+  flex-wrap: wrap;
+}
+
 .qp .rr-me .rr-tile-top strong {
   font: 20px "Archivo Black", sans-serif;
 }
 
-.qp .rr-me .rr-tile-top span {
-  font-size: 26px;
-  font-weight: 700;
-  line-height: 1;
+/* The result as a small word tag instead of a check or cross: the tile
+   color already carries it, the tag says it in words. */
+.qp .rr-me .rr-tile-top .rr-tile-tag {
+  padding: 3px 7px;
+  border: 2px solid currentColor;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qp .rr-me .rr-tile.correct .rr-tile-tag {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: var(--paper);
+}
+
+.qp .rr-me .rr-tile.wrong .rr-tile-tag {
+  background: var(--paper);
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.qp .rr-me .rr-tile.missed .rr-tile-tag,
+.qp .rr-me .rr-tile.not_played .rr-tile-tag {
+  border-style: dashed;
+  color: var(--gray);
 }
 
 .qp .rr-me .rr-tile-bottom small {
@@ -5725,13 +5720,6 @@
   box-shadow:
     0 0 0 3px var(--paper),
     0 0 0 6px var(--ink);
-}
-
-.qp .rr-me .rr-hint {
-  margin: 0;
-  padding: 0 14px 14px;
-  color: var(--gray);
-  font-size: 13px;
 }
 
 .qp .rr-me .rr-detail-tools {
@@ -5794,12 +5782,6 @@
 .qp .rr-me .rr-none {
   color: var(--gray);
   font-style: italic;
-}
-
-.qp .rr-me .rr-missed-note {
-  margin-top: 14px;
-  color: var(--gray);
-  font-weight: 700;
 }
 
 @media (max-width: 1150px) {
