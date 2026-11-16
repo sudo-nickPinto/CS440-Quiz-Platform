@@ -438,27 +438,24 @@ function QuestionScreen({
     >
       <div className="lv-pq-top">
         <div className="lv-q-label">
-          <span>
+          <span className="ui-sr">
             Question {question.question_order} of {question.total_questions}
           </span>
           <Marks
             total={question.total_questions}
             current={question.question_order}
           />
-          <small>The question is on the host’s screen.</small>
         </div>
 
-        <div
-          className={"lv-ptimer" + (seconds !== null && seconds <= 5 ? " is-urgent" : "")}
-          role="timer"
-          aria-label="Seconds remaining"
-        >
-          {seconds ?? "—"}
+        <div className="lv-pq-stats">
+          <span>
+            Score{" "}
+            <b>{standing ? standing.cumulative_score.toLocaleString() : "—"}</b>
+          </span>
+          <span>
+            Rank <b>{standing?.rank == null ? "—" : `#${standing.rank}`}</b>
+          </span>
         </div>
-      </div>
-
-      <div className="lv-tbar" aria-hidden="true">
-        <i style={{ width: `${progress}%` }} />
       </div>
 
       <div
@@ -480,34 +477,32 @@ function QuestionScreen({
         ))}
       </div>
 
-      <div className="lv-stat-row lv-pbottom">
-        <Stat
-          label="Score"
-          value={standing ? standing.cumulative_score.toLocaleString() : "—"}
-        />
-        <Stat
-          label="Rank"
-          value={standing?.rank == null ? "—" : `#${standing.rank}`}
-        />
+      {/* One fixed-height row under the tiles: the timer, or a short note
+          while answers are locked, so the tiles never change size. */}
+      <div className="lv-pq-foot">
+        {preview || busy || seconds === 0 ? (
+          <p className="lv-pq-msg" role="status">
+            {preview
+              ? "Read the question on the host’s screen. Answers open in a moment…"
+              : busy
+                ? "Submitting your answer…"
+                : "Time’s up. Waiting for the question to close…"}
+          </p>
+        ) : (
+          <>
+            <div className="lv-tbar" aria-hidden="true">
+              <i style={{ width: `${progress}%` }} />
+            </div>
+            <div
+              className={"lv-ptimer" + (seconds !== null && seconds <= 5 ? " is-urgent" : "")}
+              role="timer"
+              aria-label="Seconds remaining"
+            >
+              {seconds ?? "—"}
+            </div>
+          </>
+        )}
       </div>
-
-      {preview && (
-        <p className="lv-note" role="status">
-          Read the question on the host’s screen. Answers open in a moment…
-        </p>
-      )}
-
-      {busy && (
-        <p className="lv-note" role="status">
-          Submitting your answer…
-        </p>
-      )}
-
-      {seconds === 0 && (
-        <p className="lv-note" role="status">
-          Time’s up. Waiting for the server to close the question…
-        </p>
-      )}
     </section>
   );
 }
