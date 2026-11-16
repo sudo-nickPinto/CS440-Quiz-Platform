@@ -7,7 +7,6 @@ import {
   useSearchParams,
 } from "react-router";
 import { useAccount } from "./account";
-import QuizCollaborators from "./QuizCollaborators";
 
 import {
   ANSWER_LIMIT,
@@ -47,7 +46,10 @@ import { classPagePath } from "../classes/classPaths";
 import NewQuizClassPicker from "../classes/NewQuizClassPicker";
 import HostQuizButton from "./HostQuizButton";
 import { sendQuizForApproval, useQuizFlow } from "./quizFlow";
-import { QuizFlowPanel } from "./QuizFlowPanel";
+import QuizCollaboratorDialog, {
+  AddCollaboratorCell,
+} from "./QuizCollaboratorDialog";
+import { QuizFlowButton, QuizFlowTrack } from "./QuizFlowPanel";
 import "./quiz-flow.css";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -162,6 +164,7 @@ export function QuizEditor({
     !editing || existingQuiz.author_id === account.account_id;
   // Which save button was pressed, for its "Saving…" / "Sending…" label.
   const [savingKind, setSavingKind] = useState(null);
+  const [sharing, setSharing] = useState(false);
   // New quizzes belong to a class: the class page links here with ?class=ID.
   const classId = searchParams.get("class");
   const validClass = /^[1-9][0-9]*$/.test(classId ?? "");
@@ -968,14 +971,15 @@ export function QuizEditor({
 
     const savedId = quiz.quiz_id ?? existingQuiz?.quiz_id;
     const quizClassId = editing ? existingQuiz.class_id : Number(classId);
-    let notice = { tone: "success", text: "Draft saved." };
+    // Only a problem gets a message on the quiz page; a normal save or send
+    // shows in the page itself (the status pill and the timeline).
+    let notice = null;
 
     if (send) {
       // The draft is already saved, so a failure here must not send people
       // back into the editor (saving again would duplicate a new quiz).
       try {
         await sendQuizForApproval(api, quizClassId, savedId);
-        notice = { tone: "success", text: "Saved and sent for approval." };
       } catch (error) {
         notice = {
           tone: "warning",
@@ -1016,23 +1020,33 @@ export function QuizEditor({
             </span>
           </Link>
 
-          <div className="qe-titlebox">
-            <label className="qe-eyebrow" htmlFor="quiz-title">
+          <div className="qe-titlebox qv-titlebox">
+            <label className="ui-sr" htmlFor="quiz-title">
               Quiz title
             </label>
-            <input
-              id="quiz-title"
-              maxLength={200}
-              autoComplete="off"
-              placeholder="Untitled quiz"
-              value={editor.title}
-              onChange={(event) =>
-                edit({
-                  ...editor,
-                  title: event.target.value,
-                })
-              }
-            />
+            <div className="qv-titleline">
+              <input
+                id="quiz-title"
+                className="qe-title-input"
+                maxLength={200}
+                autoComplete="off"
+                placeholder="Untitled quiz"
+                value={editor.title}
+                onChange={(event) =>
+                  edit({
+                    ...editor,
+                    title: event.target.value,
+                  })
+                }
+              />
+              <span
+                className={"qe-pill qv-pill" + (editing ? " is-saved" : "")}
+              >
+                {editing
+                  ? `Editing · v${existingQuiz.version.version_number}`
+                  : "New quiz"}
+              </span>
+            </div>
 
             <textarea
               rows={1}
@@ -1049,18 +1063,10 @@ export function QuizEditor({
             />
           </div>
 
-          <div className="qe-state">
-            <span className={"qe-pill" + (editing ? " is-saved" : "")}>
-              {editing
-                ? `Editing · v${existingQuiz.version.version_number}`
-                : "New quiz"}
-            </span>
-          </div>
+          {ownsQuiz && existingQuiz.status !== "ARCHIVED" && (
+            <AddCollaboratorCell onOpen={() => setSharing(true)} />
+          )}
         </div>
-
-        {ownsQuiz && (
-          <QuizCollaborators quiz={existingQuiz} embedded />
-        )}
 
         <div className="qe-strip">
           <JumpChips ids={ids} current={current} />
@@ -1564,6 +1570,14 @@ export function QuizEditor({
       </fieldset>
     </form>
 
+    {/* Outside the editor's <form>, so its invite form isn't nested. */}
+    {sharing && (
+      <QuizCollaboratorDialog
+        quiz={existingQuiz}
+        onClose={() => setSharing(false)}
+      />
+    )}
+
     {/* Outside the editor's <form>: archive controls remain at the bottom. */}
     {ownsQuiz && (
       <section className="qe-settings" aria-label="Sharing and settings">
@@ -1601,11 +1615,13 @@ export function QuizViewer() {
   const flow = useQuizFlow(resource.data ?? null, account.account_id);
 
   // Opened from a class page (or straight after saving): the back link
-  // returns to that class. A save notice from the editor shows once.
+  // returns to that class. A warning from the editor (saved, but not sent)
+  // shows until the page is left.
   const location = useLocation();
   const navigate = useNavigate();
   const fromClass = location.state?.classId ?? null;
-  const [notice, setNotice] = useState(() => location.state?.notice ?? null);
+  const [notice] = useState(() => location.state?.notice ?? null);
+  const [sharing, setSharing] = useState(false);
   useEffect(() => {
     if (location.state?.notice) {
       navigate(location.pathname, {
@@ -1631,9 +1647,10 @@ export function QuizViewer() {
 
   const quiz = resource.data;
   const mine = quiz.author_id === account.account_id;
-  // Owners and organizers see the approval track below the strip, with the
-  // next step as its one button. Collaborators and other members keep the
-  // simple Draft / Approved pill and a link to the class page.
+  const canShare = mine && quiz.class_id && quiz.status !== "ARCHIVED";
+  // Owners and organizers see the approval timeline in the strip, with the
+  // next step as the last button. Collaborators and other members keep a
+  // Host button or a link to the class page.
   const approved = quiz.hosting?.can_host === true;
   const stateLabel =
     quiz.status === "ARCHIVED"
@@ -1659,22 +1676,30 @@ export function QuizViewer() {
           <span className="ui-sr">Back to class</span>
         </Link>
 
-        <div className="qe-titlebox">
-          <span className="qe-eyebrow">Quiz</span>
-          <h1 id="quiz-title" className="qv-title">
-            {quiz.version.title}
-          </h1>
+        <div className="qe-titlebox qv-titlebox">
+          <div className="qv-titleline">
+            <h1 id="quiz-title" className="qv-title">
+              {quiz.version.title}
+            </h1>
+            <span
+              className={"qe-pill qv-pill" + (approved ? " is-saved" : "")}
+            >
+              {stateLabel} · v{quiz.version.version_number}
+            </span>
+          </div>
           {quiz.version.description && (
             <p className="qv-description">{quiz.version.description}</p>
           )}
         </div>
 
-        <div className="qe-state">
-          <span className={"qe-pill" + (approved ? " is-saved" : "")}>
-            {stateLabel} · v{quiz.version.version_number}
-          </span>
-        </div>
+        {canShare && (
+          <AddCollaboratorCell onOpen={() => setSharing(true)} />
+        )}
       </div>
+
+      {sharing && (
+        <QuizCollaboratorDialog quiz={quiz} onClose={() => setSharing(false)} />
+      )}
 
       <div className="qv-strip">
         <p className="qv-facts">
@@ -1683,7 +1708,18 @@ export function QuizViewer() {
           <span>{quiz.visibility === "PUBLIC" ? "Public" : "Private"}</span>
         </p>
 
+        <QuizFlowTrack flow={flow} />
+
         <div className="qv-actions">
+          {quiz.can_edit && quiz.status !== "ARCHIVED" && (
+            <Link
+              className="qb-btn qb-btn-paper"
+              to={`/app/quizzes/${quiz.quiz_id}/edit`}
+            >
+              Edit quiz
+            </Link>
+          )}
+
           {mine && (
             <Link
               className="qb-btn qb-btn-paper"
@@ -1693,13 +1729,13 @@ export function QuizViewer() {
             </Link>
           )}
 
-          {quiz.can_edit && quiz.status !== "ARCHIVED" && (
-            <Link
-              className="qb-btn qb-btn-paper"
-              to={`/app/quizzes/${quiz.quiz_id}/edit`}
-            >
-              Edit quiz
-            </Link>
+          {quiz.status !== "ARCHIVED" && (
+            <QuizFlowButton
+              quiz={quiz}
+              flow={flow}
+              action={action}
+              onChange={() => resource.reload()}
+            />
           )}
 
           {/* Without the approval track (collaborators, other members),
@@ -1739,19 +1775,6 @@ export function QuizViewer() {
         <p className={`qf-notice is-${notice.tone}`} role="status">
           {notice.text}
         </p>
-      )}
-
-      <QuizFlowPanel
-        quiz={quiz}
-        flow={flow}
-        onChange={(text) => {
-          setNotice({ tone: "success", text });
-          resource.reload();
-        }}
-      />
-
-      {mine && quiz.class_id && quiz.status !== "ARCHIVED" && (
-        <QuizCollaborators quiz={quiz} />
       )}
 
       <div className="qe-stack">

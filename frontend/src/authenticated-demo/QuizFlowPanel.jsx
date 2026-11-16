@@ -1,10 +1,9 @@
-import { useId, useState } from "react";
 import { Link } from "react-router";
 
 import HostQuizButton from "./HostQuizButton";
 import { FLOW_STEPS, sendQuizForApproval } from "./quizFlow";
 import RequestError from "./RequestError";
-import { useAction, useApi } from "./rest";
+import { useApi } from "./rest";
 import "./quiz-flow.css";
 
 function Track({ step }) {
@@ -34,136 +33,125 @@ function Track({ step }) {
   );
 }
 
-// A compact status row with the one button for the next step. The full
-// Draft → Approval → Ready to host track stays folded behind the status
-// toggle until someone opens it.
-// onChange(message) runs after a successful action, so the page can show the
-// message and reload the quiz.
-export function QuizFlowPanel({ quiz, flow, onChange }) {
-  const api = useApi();
-  const action = useAction();
-  const [open, setOpen] = useState(false);
-  const trackId = useId();
-
+// The Draft → Approval → Ready to host timeline, shown in the quiz page's
+// strip between the quiz facts and the buttons as one bar split in three.
+// The note on what happens next is a tooltip (and read to screen readers).
+export function QuizFlowTrack({ flow }) {
   if (!flow.visible) return null;
 
   if (flow.error) {
     return (
-      <section className="qf" aria-label="Approval status">
+      <div className="qf-inline" aria-label="Approval status">
         <RequestError error={flow.error} retry={flow.reload} />
-      </section>
+      </div>
     );
   }
 
   if (flow.loading || !flow.state) {
     return (
-      <section className="qf" aria-label="Approval status">
+      <div className="qf-inline" aria-label="Approval status">
         <p className="qf-note" role="status">
           Checking approval status…
         </p>
-      </section>
+      </div>
     );
   }
 
-  const { step, action: next, note } = flow.state;
+  return (
+    <div
+      className="qf-inline"
+      aria-label="Approval status"
+      title={flow.state.note}
+    >
+      <Track step={flow.state.step} />
+      <p className="ui-sr">{flow.state.note}</p>
+    </div>
+  );
+}
 
-  async function run(work, done) {
+// The one button for the quiz's next approval step (send, withdraw, review
+// or host), at the right end of the quiz page's button row. `action` is the
+// page's useAction(), so errors show with the page's other errors.
+// onChange() runs after a successful action, so the page can reload the
+// quiz.
+export function QuizFlowButton({ quiz, flow, action, onChange }) {
+  const api = useApi();
+
+  if (!flow.visible || !flow.state) return null;
+  const next = flow.state.action;
+
+  async function run(work) {
     const ok = await action.run(async () => {
       await work();
       return true;
     });
     if (ok) {
       flow.reload();
-      onChange?.(done);
+      onChange?.();
     }
   }
 
-  const send = () =>
-    run(
-      () => sendQuizForApproval(api, quiz.class_id, quiz.quiz_id),
-      "Sent for approval.",
+  if (next === "send") {
+    return (
+      <button
+        type="button"
+        className="qf-go"
+        disabled={action.busy}
+        onClick={() =>
+          void run(() =>
+            sendQuizForApproval(api, quiz.class_id, quiz.quiz_id),
+          )
+        }
+      >
+        {action.busy ? "Sending…" : "Send for approval →"}
+      </button>
     );
+  }
 
-  const withdraw = () =>
-    run(
-      () =>
-        api(
-          `/classes/${quiz.class_id}/quiz-submissions/${flow.pending.submission_id}`,
-          { method: "DELETE" },
-        ),
-      "Request withdrawn.",
+  if (next === "withdraw") {
+    return (
+      <button
+        type="button"
+        className="qf-go is-quiet"
+        disabled={action.busy}
+        onClick={() =>
+          void run(
+            () =>
+              api(
+                `/classes/${quiz.class_id}/quiz-submissions/${flow.pending.submission_id}`,
+                { method: "DELETE" },
+              ),
+          )
+        }
+      >
+        {action.busy ? "Withdrawing…" : "Withdraw request"}
+      </button>
     );
+  }
 
-  return (
-    <section className="qf" aria-label="Approval status">
-      <div className="qf-next">
-        <button
-          type="button"
-          className="qf-toggle"
-          aria-expanded={open}
-          aria-controls={trackId}
-          onClick={() => setOpen((shown) => !shown)}
-        >
-          <span className="qf-toggle-label">Approval</span>
-          <b>{flow.state.label}</b>
-          <span className="qf-toggle-step">
-            Step {step} of {FLOW_STEPS.length}
-          </span>
-          <span className="qf-caret" aria-hidden="true">
-            ▾
-          </span>
-        </button>
+  if (next === "review") {
+    return (
+      <Link
+        className="qf-go"
+        to={`/app/classes/${quiz.class_id}/submissions/${flow.pending.submission_id}`}
+      >
+        Review request <span aria-hidden="true">→</span>
+      </Link>
+    );
+  }
 
-        <p className="qf-note">{note}</p>
+  if (next === "host") {
+    return (
+      <span className="qf-host">
+        <HostQuizButton
+          quiz={quiz}
+          classId={quiz.class_id}
+          action={action}
+          label="Host live →"
+        />
+      </span>
+    );
+  }
 
-        {next === "send" && (
-          <button
-            type="button"
-            className="qf-go"
-            disabled={action.busy}
-            onClick={() => void send()}
-          >
-            {action.busy ? "Sending…" : "Send for approval"}
-          </button>
-        )}
-
-        {next === "withdraw" && (
-          <button
-            type="button"
-            className="qf-go is-quiet"
-            disabled={action.busy}
-            onClick={() => void withdraw()}
-          >
-            {action.busy ? "Withdrawing…" : "Withdraw request"}
-          </button>
-        )}
-
-        {next === "review" && (
-          <Link
-            className="qf-go"
-            to={`/app/classes/${quiz.class_id}/submissions/${flow.pending.submission_id}`}
-          >
-            Review request <span aria-hidden="true">→</span>
-          </Link>
-        )}
-
-        {next === "host" && (
-          <span className="qf-host">
-            <HostQuizButton
-              quiz={quiz}
-              classId={quiz.class_id}
-              action={action}
-              label="Host live →"
-            />
-          </span>
-        )}
-      </div>
-
-      <div id={trackId} className="qf-steps" hidden={!open}>
-        <Track step={step} />
-      </div>
-
-      <RequestError error={action.error} />
-    </section>
-  );
+  return null;
 }

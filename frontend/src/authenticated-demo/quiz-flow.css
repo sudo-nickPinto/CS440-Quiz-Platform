@@ -170,9 +170,13 @@
   box-shadow: none;
 }
 
+/* Withdraw request: white with an orange border, text and shadow, so the
+   slot still stands out after sending but reads lighter than Send. */
 .qp .qf-go.is-quiet {
+  border-color: var(--orange-deep);
   background: var(--paper);
-  color: var(--ink);
+  box-shadow: 4px 4px 0 var(--orange-deep);
+  color: var(--orange-deep);
 }
 
 .qp .qf-go.is-quiet:hover:not(:disabled) {
@@ -278,4 +282,243 @@
   .qp .qe-archive .qe-archive-button {
     flex: 1 1 100%;
   }
+}
+
+/* Quiz page strip: facts on the left, the approval timeline in the middle,
+   the buttons on the right (Edit quiz · Hosting history · next step). */
+.qp .qv > .qv-strip {
+  background: #e6eef7;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "facts track actions";
+  align-items: center;
+  gap: 12px 24px;
+}
+
+.qp .qv > .qv-strip > .qv-facts {
+  grid-area: facts;
+}
+
+.qp .qv > .qv-strip > .qf-inline {
+  grid-area: track;
+}
+
+.qp .qv > .qv-strip > .qv-actions {
+  grid-area: actions;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* The timeline: one bar split in three, built like the facts chips on the
+   left. Done steps are navy, the current one faded denim, the next blank. */
+.qp .qf-inline {
+  justify-self: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.qp .qf-inline .qf-track {
+  display: flex;
+  border: var(--b-thin);
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.qp .qf-inline .qf-track li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  color: var(--gray);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qp .qf-inline .qf-track li + li {
+  flex: none;
+  padding-left: 14px;
+  border-left: var(--b-thin);
+}
+
+.qp .qf-inline .qf-track li + li::before {
+  content: none;
+}
+
+.qp .qf-inline .qf-mark {
+  display: none;
+}
+
+.qp .qf-inline .qf-track li.is-done {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.qp .qf-inline .qf-track li.is-done .qf-mark {
+  display: inline;
+  width: auto;
+  height: auto;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font-size: 12px;
+}
+
+.qp .qf-inline .qf-track li.is-current {
+  background: #c9dcef;
+  color: var(--navy);
+}
+
+/* The next-step button sits in the button row; same height as the others. */
+.qp .qv-actions .qf-go,
+.qp .qv-actions .qf-host > button {
+  min-height: 44px;
+  padding: 9px 18px;
+}
+
+/* Header: the title with the status pill beside it, the description
+   under them; kept slim so the Add collaborator cell stays small. */
+.qp .qv-titlebox {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.qp .qv-titleline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-width: 0;
+}
+
+.qp .qv-titleline .qv-title {
+  min-width: 0;
+  font-size: clamp(24px, 2.6vw, 32px);
+}
+
+/* Editor: the title is an input that takes the room left of the pill. */
+.qp .qv-titlebox .qv-titleline input.qe-title-input {
+  flex: 0 1 auto;
+  /* As wide as the title, so the pill sits right after it (Chrome, Edge);
+     other browsers keep a fixed width. */
+  field-sizing: content;
+  width: auto;
+  min-width: 6ch;
+  max-width: 100%;
+  font-size: clamp(24px, 2.6vw, 32px);
+}
+
+.qp .qv-pill {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+/* Add collaborator: the whole right cell of the header is the button,
+   mirroring the "← Class" cell on the left. */
+.qp .qe-state.qv-share-cell {
+  padding: 0;
+}
+
+.qp .qv-share {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0 22px;
+  border: 0;
+  box-shadow: none;
+  background: var(--navy);
+  color: var(--paper);
+  font: 700 15px "Space Grotesk", sans-serif;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.qp .qv-share:hover {
+  background: #2f5d93;
+}
+
+.qp .qv-share:focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: -6px;
+}
+
+.qp .qv-share-icon {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: square;
+}
+
+@media (max-width: 640px) {
+  .qp .qv-share {
+    min-height: 46px;
+    padding: 0 14px;
+  }
+}
+
+/* Narrower windows: the timeline gets its own row under facts and buttons. */
+@media (max-width: 1240px) {
+  .qp .qv > .qv-strip {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "facts actions"
+      "track track";
+  }
+}
+
+@media (max-width: 760px) {
+  .qp .qv > .qv-strip {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "facts"
+      "track"
+      "actions";
+  }
+
+  .qp .qf-inline {
+    width: 100%;
+  }
+
+  .qp .qf-inline .qf-track li {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 8px 8px;
+    letter-spacing: 0.5px;
+  }
+
+  .qp .qf-inline .qf-track li + li {
+    flex: 1 1 auto;
+    padding-left: 8px;
+  }
+
+  .qp .qv > .qv-strip > .qv-actions {
+    justify-content: stretch;
+  }
+}
+
+@media (max-width: 640px) {
+  .qp .qv-actions .qf-host,
+  .qp .qv-actions .qf-host > button {
+    display: flex;
+    flex: 1 1 140px;
+    justify-content: center;
+  }
+}
+
+/* Editor: the sticky question strip uses the same light denim as the quiz
+   page's strip. */
+.qp .qe .qe-strip {
+  background: #e6eef7;
 }

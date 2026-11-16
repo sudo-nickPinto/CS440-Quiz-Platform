@@ -666,11 +666,9 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
       status,
       archived,
       owner: quiz.my_access === "OWNER",
-      // Archived quizzes can't be edited, so those open the read-only page.
-      to:
-        quiz.my_access && !archived
-          ? `/app/quizzes/${quiz.quiz_id}/edit`
-          : `/app/quizzes/${quiz.quiz_id}`,
+      // Every quiz opens its page first; the Edit button there goes on to
+      // the editor.
+      to: `/app/quizzes/${quiz.quiz_id}`,
       hostable:
         status.key === "approved" &&
         !classInfo.archived &&
