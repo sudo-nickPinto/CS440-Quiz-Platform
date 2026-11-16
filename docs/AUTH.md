@@ -132,12 +132,12 @@ Auth added two modules (`auth.py`, `accounts.py`), one route module (`routes/me.
 | File | Role |
 |---|---|
 | `main.jsx` | Wraps the app in `Auth0Provider` (domain, client id, redirect URI, audience). |
-| `App.jsx` | Reads login state from `useAuth0()`, session restore, logout, shows login page or lobby. |
-| `components/LandingPage.jsx` | Sign in and Create account (`screen_hint: 'signup'`), both sent to the email/password connection (`connection: 'Username-Password-Authentication'`), which also hides the Google button on Auth0's hosted page. |
+| `App.jsx` | Reads login state from `useAuth0()`, session restore, logout, shows login page or lobby. A "no session" error from the silent check stays hidden; after a Sign in / Create account click it shows a message. |
+| `components/LandingPage.jsx` | Sign in and Create account buttons in the header, hero and closing section. Each goes straight to Auth0 (Create account adds `screen_hint: 'signup'`), pinned to the email/password connection. Google is also disabled for the app in Auth0, so email/password is the only connection and there is no Google button. |
 | `components/AccountGate.jsx` | Calls `/me` once logged in (creating the account on first login), then shows the verify-email, deactivated or profile setup screen if needed before the lobby. |
 | `components/ProfileSetupScreen.jsx`, `components/ProfileForm.jsx` | The one-time "Make it yours" screen: first name, last name and a preset avatar, saved with `PATCH /me`. The same form backs Edit profile (`/app/profile`). |
 | `avatars/` | `Avatar` (preset tile or initials), `AvatarPicker`, and the figure/color catalog. |
-| `api.js` | `apiFetch(path, getToken, options)`: attaches the bearer token and throws `error.message` from the error body. |
+| `api.js` | `apiFetch(path, getToken, options)`: attaches the bearer token and throws `error.message` from the error body. Also `PASSWORD_CONNECTION` (`'Username-Password-Authentication'`), which every interactive `loginWithRedirect` passes as `connection`. |
 
 ## 6. Configuration
 
@@ -220,6 +220,10 @@ Every error has the shape `{"error": {"code": "...", "message": "..."}}`; the fr
 
 **Forgot password.** Auth0's hosted login page has a "Forgot password?" link for the email/password connection and sends the reset email. There is no code for it in this repo.
 
+**Email sender.** Verification and password-reset emails use the same sender (`QuizBurg <gcbquizburg@gmail.com>`) and are customized templates in the Auth0 tenant (subjects "Verify your email for QuizBurg" and "Reset your QuizBurg password"). This is set in Auth0, not in this repo.
+- *If emails stop arriving:* check the Auth0 logs for failed-notification (`fn`) events. The usual cause is a revoked or changed Gmail app password; generate a new one and update the email provider in Auth0.
+- *Rollback:* deleting the custom email provider returns the tenant to Auth0's built-in test sender, which is rate-limited.
+
 ## 10. Adding a protected route
 
 ```python
@@ -251,9 +255,9 @@ Login, token verification, account creation and linking of login methods all wor
 
 **Auth0 tenant settings (dashboard only, nothing in the repo)**
 5. **Require email verification for email/password signups**, and test that an unverified signup gets 403 `email_not_verified`. Account linking trusts `email_verified`, so this is a security requirement, not a nicety.
-6. **Set up a real email sender** (Authentication, then Email Provider). Auth0's built-in sender is rate-limited and meant for development. Verification and password-reset emails both go through it.
+6. **Real email sender: done.** The tenant uses a custom SMTP email provider through the team Gmail account `gcbquizburg@gmail.com`, shown to recipients as "QuizBurg". The Gmail app password lives only in Auth0, never in this repo. Gmail's sending limit is roughly 500 recipients per day for a consumer account; that is the ceiling to watch. See "Email sender" in section 9.
 7. **Turn on refresh tokens and decide how often people must log in** (the "once a month" idea). APIs > (our API) > Settings: enable **Allow Offline Access**. Applications > (our SPA) > Settings > Refresh Token Rotation: enable **Rotation**, and set the absolute and inactivity lifetimes (e.g. 30 days absolute, 7 days inactivity). Those lifetimes are now what decides when users must log in again. Email verification itself only happens once and never repeats.
-8. **Test "Forgot password?"** once end to end with a real inbox. It is provided by Auth0 and has no code in this repo.
+8. **Test "Forgot password?": done.** Tested on 2026-11-15; the reset email arrived in the inbox in about a minute. It is provided by Auth0 and has no code in this repo.
 
 **Account authorization**
 9. **Faculty status.** `account_type = 'ADMINISTRATOR'` represents an approved faculty account; it is not a global-superuser role. New accounts continue to default to a non-faculty User. Existing faculty grant and remove it from the app's **Faculty access** page (account menu), after confirming the account belongs to an approved faculty member; every change is recorded in `faculty_access_event` (migration 0014, issue #116, routes in [API.md](API.md#faculty-access)). Only faculty can do this, faculty can't remove their own access, and there is still no self-service role chooser. A maintainer can still set `account_type` in the database, for example to create the very first faculty account. Faculty status permits class creation, but it does not grant access to unrelated classes: faculty must still hold an active `ORGANIZER` membership to manage a class.

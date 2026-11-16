@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
-import { apiFetch, NEEDS_INTERACTION, returnToState } from '../api'
+import {
+  apiFetch,
+  NEEDS_INTERACTION,
+  PASSWORD_CONNECTION,
+  returnToState,
+} from '../api'
 import './VerifyEmailScreen.css'
 
 // Shown when the backend refuses to create/link the account because the
@@ -38,6 +43,7 @@ export default function VerifyEmailScreen({ onVerified }) {
           await loginWithRedirect({
             appState: returnToState(),
             authorizationParams: {
+              connection: PASSWORD_CONNECTION,
               prompt: 'login',
               ...(user?.email ? { login_hint: user.email } : {}),
             },
