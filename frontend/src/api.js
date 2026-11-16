@@ -7,6 +7,38 @@ export const NEEDS_INTERACTION = [
   'invalid_grant',
 ]
 
+// The Auth0 email/password connection. Pinning it on interactive logins also
+// hides Google on Auth0's hosted page.
+export const PASSWORD_CONNECTION = 'Username-Password-Authentication'
+
+// Set just before a user-started Auth0 redirect, so App can tell a failed
+// sign-in apart from the silent session check (which should fail quietly).
+const EXPLICIT_LOGIN = 'quiz-explicit-login'
+
+export function markExplicitLogin() {
+  try {
+    sessionStorage.setItem(EXPLICIT_LOGIN, '1')
+  } catch {
+    // Without storage a failed sign-in just isn't explained.
+  }
+}
+
+export function clearExplicitLogin() {
+  try {
+    sessionStorage.removeItem(EXPLICIT_LOGIN)
+  } catch {
+    // Nothing to clear without storage.
+  }
+}
+
+export function wasExplicitLogin() {
+  try {
+    return sessionStorage.getItem(EXPLICIT_LOGIN) === '1'
+  } catch {
+    return false
+  }
+}
+
 // Auth0 appState that brings the user back to the page they were on after a
 // redirect sign-in. The root path needs no state; the app routes it already.
 export function returnToState() {
