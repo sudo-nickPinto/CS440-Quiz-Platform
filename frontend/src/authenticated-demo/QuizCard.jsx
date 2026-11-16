@@ -4,7 +4,7 @@ import "./quiz-cards.css";
 // wholeCard: the title link is stretched over the card (see .qc-card-link in
 // quiz-cards.css), so a click anywhere opens `to`. Buttons and menus on the
 // card sit above that link and keep working. There's no separate footer link
-// unless keepLink is set (report cards keep their "View report" button).
+// unless keepLink is explicitly set.
 export default function QuizCard({
   title,
   to,
