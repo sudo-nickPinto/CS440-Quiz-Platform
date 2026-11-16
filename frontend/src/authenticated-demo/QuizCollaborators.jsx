@@ -5,6 +5,31 @@ import RequestError from "./RequestError";
 import { useAction, useApi, useResource } from "./rest";
 import { useConfirm } from "./useConfirm";
 
+// Who made the quiz and who can edit it, as qv-facts chips. Uses the names
+// GET /quizzes/{id} returns to anyone allowed to read the quiz (owner, class
+// organizer, active collaborator); emails stay in the owner-only panel below.
+export function QuizCredits({ quiz, accountId }) {
+  if (!quiz.author_name) return null;
+  const name = (person) =>
+    person.account_id === accountId ? "you" : person.display_name;
+  const editors = quiz.collaborators ?? [];
+
+  return (
+    <>
+      <span>
+        Created by{" "}
+        {name({ account_id: quiz.author_id, display_name: quiz.author_name })}
+      </span>
+      {editors.length > 0 && (
+        <span>
+          {editors.length === 1 ? "Editor" : "Editors"}:{" "}
+          {editors.map(name).join(", ")}
+        </span>
+      )}
+    </>
+  );
+}
+
 export default function QuizCollaborators({ quiz, embedded = false }) {
   const api = useApi();
   const action = useAction();

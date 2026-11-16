@@ -7,6 +7,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { useAccount } from "./account";
+import { QuizCredits } from "./QuizCollaborators";
 
 import {
   ANSWER_LIMIT,
@@ -1036,6 +1037,14 @@ export function QuizEditor({
           )}
         </div>
 
+        {/* Collaborators don't get the owner's sharing panel, so credit the
+            owner and the other editors here instead. */}
+        {editing && !ownsQuiz && existingQuiz.author_name && (
+          <p className="qv-facts">
+            <QuizCredits quiz={existingQuiz} accountId={account.account_id} />
+          </p>
+        )}
+
         <div className="qe-strip">
           <JumpChips ids={ids} current={current} />
 
@@ -1668,6 +1677,7 @@ export function QuizViewer() {
         <p className="qv-facts">
           <b>{plural(questions.length, "question")}</b>
           <span>{clock(totalTime)} total</span>
+          <QuizCredits quiz={quiz} accountId={account.account_id} />
         </p>
 
         <QuizFlowTrack flow={flow} />
