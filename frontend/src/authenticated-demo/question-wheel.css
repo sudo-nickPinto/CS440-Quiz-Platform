@@ -147,8 +147,7 @@
 
   /* The wheel replaces the question tiles and the Prev/Next buttons. */
   .qp .rr.rr-me .rr-answer-map,
-  .qp .rr.rr-me .rr-tbtns,
-  .qp .rr.rr-me .rr-missed-note {
+  .qp .rr.rr-me .rr-tbtns {
     display: none;
   }
 
