@@ -1,62 +1,62 @@
 import { describe, expect, it } from 'vitest'
 
-import { fitSteps } from './fitText'
+import { ANSWER_STEPS, QUESTION_STEPS, fitSteps } from './fitText'
 
-// A fake page: the question fits at step `qFits` or smaller, the answers at
-// step `aFits` or smaller (relative to how far the question has shrunk).
-function run({ qFits, aFits, qSteps = 7, aSteps = 6 }) {
+// A fake page. `questionFits(size)` and `answersFit(qSize, aSize)` say
+// whether text at those pixel sizes fits.
+function run({ questionFits = () => true, answersFit = () => true, answerSteps = ANSWER_STEPS }) {
   const applied = []
   let q = 0
   let a = 0
   const result = fitSteps({
-    questionSteps: Array.from({ length: qSteps }, (_, i) => i),
-    answerSteps: Array.from({ length: aSteps }, (_, i) => i),
+    questionSteps: QUESTION_STEPS,
+    answerSteps,
     apply(nextQ, nextA) {
       q = nextQ
       a = nextA
-      applied.push([q, a])
+      applied.push([QUESTION_STEPS[q], answerSteps[a]])
     },
-    measure: () => ({ question: q < qFits, answers: q + a < aFits }),
+    measure: () => ({
+      question: !questionFits(QUESTION_STEPS[q]),
+      answers: answerSteps.length > 0 && !answersFit(QUESTION_STEPS[q], answerSteps[a]),
+    }),
   })
-  return { result, applied }
+  return { result, applied, sizes: applied.at(-1) }
 }
 
 describe('fitSteps', () => {
   it('keeps the biggest sizes when everything fits', () => {
-    const { result, applied } = run({ qFits: 0, aFits: 0 })
+    const { result, applied } = run({})
     expect(result).toEqual({ q: 0, a: 0, fits: true })
-    expect(applied).toEqual([[0, 0]])
+    expect(applied).toEqual([[80, 34]])
   })
 
   it('shrinks only the question while the question overflows', () => {
-    const { result } = run({ qFits: 3, aFits: 0 })
-    expect(result).toEqual({ q: 3, a: 0, fits: true })
+    const { sizes } = run({ questionFits: (q) => q <= 56 })
+    expect(sizes).toEqual([56, 34])
   })
 
-  it('takes turns, question first, when the answers overflow', () => {
-    const { applied, result } = run({ qFits: 0, aFits: 4 })
-    expect(applied).toEqual([
-      [0, 0],
-      [1, 0],
-      [1, 1],
-      [2, 1],
-      [2, 2],
-    ])
+  it('keeps the question about 1.8 times the answers while shrinking both', () => {
+    // Fits once the two sizes add up to 70px or less.
+    const { sizes, result } = run({ answersFit: (q, a) => q + a <= 70 })
     expect(result.fits).toBe(true)
+    expect(sizes).toEqual([42, 24])
   })
 
-  it('keeps shrinking the other one once one reaches its smallest step', () => {
-    const { result } = run({ qFits: 0, aFits: 6, qSteps: 2, aSteps: 6 })
-    expect(result).toEqual({ q: 1, a: 5, fits: true })
+  it('keeps shrinking the answers once the question is at its smallest', () => {
+    const { sizes } = run({ questionFits: (q) => q <= 28, answersFit: (q, a) => a <= 22 })
+    expect(sizes).toEqual([28, 22])
   })
 
   it('reports overflow when even the smallest steps do not fit', () => {
-    const { result } = run({ qFits: 0, aFits: 99, qSteps: 3, aSteps: 3 })
-    expect(result).toEqual({ q: 2, a: 2, fits: false })
+    const { result, sizes } = run({ answersFit: () => false })
+    expect(result.fits).toBe(false)
+    expect(sizes).toEqual([28, 22])
   })
 
   it('works with no answers (the question preview)', () => {
-    const { result } = run({ qFits: 2, aFits: 0, aSteps: 0 })
-    expect(result).toEqual({ q: 2, a: 0, fits: true })
+    const { sizes, result } = run({ questionFits: (q) => q <= 48, answerSteps: [] })
+    expect(result.fits).toBe(true)
+    expect(sizes[0]).toBe(48)
   })
 })

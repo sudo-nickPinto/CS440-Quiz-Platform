@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router";
 
 import { useLiveSession } from "../live/useLiveSession";
@@ -218,6 +218,77 @@ function ParticipantLobby({ state, title, actions }) {
   );
 }
 
+const EASE_OUT = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+// When the host's question preview ends, the big centred question glides
+// up and shrinks into its place in the top bar, then the timer, the answer
+// count and the four answers pop in. Runs after useFitText has sized the new
+// screen (layout effects run in order), and not at all with reduced motion.
+function usePreviewHandoff(rootRef, preview, questionId) {
+  const from = useRef(null);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const heading = root?.querySelector("h1");
+    if (!heading) return;
+
+    if (preview) {
+      // Remember where the preview question sits, every render, so the last
+      // position before the switch is the one we start from.
+      const box = heading.getBoundingClientRect();
+      from.current = {
+        questionId,
+        x: box.left + box.width / 2,
+        y: box.top + box.height / 2,
+        font: parseFloat(getComputedStyle(heading).fontSize),
+      };
+      return;
+    }
+
+    const start = from.current;
+    from.current = null;
+    if (!start || start.questionId !== questionId) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!heading.animate) return;
+
+    const box = heading.getBoundingClientRect();
+    const scale = start.font / parseFloat(getComputedStyle(heading).fontSize);
+    const dx = start.x - (box.left + box.width / 2);
+    const dy = start.y - (box.top + box.height / 2);
+    // The question's box scrolls, which would clip the big heading on its
+    // way in; let it overflow until the move ends.
+    const holder = heading.parentElement;
+    holder.style.overflow = "visible";
+    const move = heading.animate(
+      [
+        { transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
+        { transform: "none" },
+      ],
+      { duration: 900, easing: EASE_OUT },
+    );
+    const settle = () => holder.style.removeProperty("overflow");
+    move.finished.then(settle, settle);
+
+    const pop = (element, delay) =>
+      element?.animate(
+        [
+          { opacity: 0, transform: "translateY(24px) scale(0.9)" },
+          { opacity: 1, transform: "none" },
+        ],
+        { duration: 420, delay, easing: EASE_OUT, fill: "backwards" },
+      );
+    pop(root.querySelector(".lv-timer"), 450);
+    pop(root.querySelector(".lv-answer-count"), 520);
+    root
+      .querySelectorAll(".lv-host-answer")
+      .forEach((answer, index) => pop(answer, 600 + index * 90));
+    root.querySelector(".lv-track")?.animate(
+      [{ opacity: 0 }, { opacity: 1 }],
+      { duration: 300, delay: 450, fill: "backwards" },
+    );
+  });
+}
+
 function QuestionScreen({
   state,
   host,
@@ -254,6 +325,7 @@ function QuestionScreen({
     `${question.question_id}:${preview}`,
     preview ? PREVIEW_STEPS : QUESTION_STEPS,
   );
+  usePreviewHandoff(fitRef, preview, question.question_id);
 
   const submittedIndex = question.choices.findIndex(
     (choice) => choice.choice_id === state.myAnswer?.choice_id,
