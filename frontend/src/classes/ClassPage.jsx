@@ -424,7 +424,7 @@ function PresentationsTable({ classInfo, studentCount, controls }) {
 
 // The member tabs can show quizzes as cards or as list rows; the choice is
 // remembered across classes.
-const LAYOUTS = { cards: "Cards", list: "Rows" };
+const LAYOUTS = { list: "Rows", cards: "Cards" };
 
 function LayoutToggle({ layout, onChange }) {
   return (
@@ -698,7 +698,6 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
               label="▶ Host live"
             />
           </span>
-          <small className="cl-approval-note">Approved</small>
         </div>
       );
     }
@@ -710,14 +709,13 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
           className={`cl-send is-${button.kind}`}
           disabled={!clickable}
           aria-disabled={button.kind === "approved" || undefined}
-          title={button.title}
+          // The status ("Rejected", "Edited since approval") is a tooltip
+          // now instead of a line under the button.
+          title={button.title ?? button.note ?? undefined}
           onClick={press}
         >
           {button.label}
         </button>
-        {button.note && (
-          <small className="cl-approval-note">{button.note}</small>
-        )}
       </div>
     );
   }
@@ -1173,8 +1171,9 @@ function ClassWorkspace({ classInfo, onChange }) {
       isValid: (value) => USER_SECTIONS.includes(value),
     },
   );
-  // Cards or rows on the member tabs, shared by every class.
-  const [layout, setLayout] = useRemembered("class:member-layout", "cards", {
+  // Rows or cards on the member tabs, shared by every class. Rows is the
+  // default; the key changed when it did, so earlier choices start over.
+  const [layout, setLayout] = useRemembered("class:member-layout-v2", "list", {
     isValid: (key) => key in LAYOUTS,
   });
   const [historyView, setHistoryView] = useRemembered(
