@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
-import { returnToState } from "../api";
+import {
+  PASSWORD_CONNECTION,
+  clearExplicitLogin,
+  markExplicitLogin,
+  returnToState,
+} from "../api";
 import QuizBurgLogo from "../classes/QuizBurgLogo";
 import "./LandingPage.css";
 
@@ -189,41 +194,96 @@ function ChapterPreview({ chapter }) {
   );
 }
 
+const AUTH_LABELS = {
+  login: { idle: "Sign in", busy: "Opening sign-in…" },
+  signup: { idle: "Create account", busy: "Opening sign-up…" },
+};
+
+// One Sign in / Create account button. Every button is disabled while any
+// redirect is pending; only the clicked one says what is happening.
+function AuthButton({
+  action,
+  source,
+  pending,
+  onStart,
+  className,
+  shortLabel,
+  arrow = false,
+}) {
+  const isPending = pending?.action === action && pending.source === source;
+  const label = AUTH_LABELS[action][isPending ? "busy" : "idle"];
+
+  return (
+    <button
+      className={className}
+      type="button"
+      disabled={pending !== null}
+      onClick={() => onStart(action, source)}
+    >
+      {shortLabel ? (
+        <>
+          <span className="lp-label-long">{label}</span>
+          <span className="lp-label-short">
+            {isPending ? "Opening…" : shortLabel}
+          </span>
+        </>
+      ) : (
+        label
+      )}
+      {arrow && <span aria-hidden="true">→</span>}
+    </button>
+  );
+}
+
 export default function LandingPage({ authError = "" }) {
   const { loginWithRedirect } = useAuth0();
 
-  const [signInOpen, setSignInOpen] = useState(false);
-  const [pending, setPending] = useState("");
-  const [loginError, setLoginError] = useState("");
+  // { action: "login" | "signup", source: "header" | "hero" | "cta" }
+  const [pending, setPending] = useState(null);
+  // { source, message }: shown next to the group that was clicked.
+  const [loginError, setLoginError] = useState(null);
   const [activeChapter, setActiveChapter] = useState(0);
 
-  const heroRef = useRef(null);
-  const loginTitleRef = useRef(null);
-  const triggerRef = useRef(null);
+  const heroErrorRef = useRef(null);
+  const ctaErrorRef = useRef(null);
   const chapterRefs = useRef([]);
 
-  const busy = pending !== "";
-  const visibleError = loginError || authError;
+  const heroError =
+    loginError && loginError.source !== "cta" ? loginError.message : authError;
+  const ctaError = loginError?.source === "cta" ? loginError.message : "";
 
-  // Move keyboard focus into the inline card when it opens.
+  // Coming back with the browser's Back button can restore this page from
+  // the back/forward cache with a redirect still marked as pending.
   useEffect(() => {
-    if (!signInOpen) return;
+    function handlePageShow(event) {
+      if (!event.persisted) return;
 
-    loginTitleRef.current?.focus({ preventScroll: true });
-
-    function handleEscape(event) {
-      if (event.key === "Escape" && !busy) {
-        setSignInOpen(false);
-        triggerRef.current?.focus({ preventScroll: true });
-      }
+      clearExplicitLogin();
+      setPending(null);
     }
 
-    document.addEventListener("keydown", handleEscape);
+    window.addEventListener("pageshow", handlePageShow);
 
     return () => {
-      document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("pageshow", handlePageShow);
     };
-  }, [signInOpen, busy]);
+  }, []);
+
+  // Bring a sign-in error into view, e.g. when the header button was used
+  // after scrolling away from the hero.
+  useEffect(() => {
+    if (!loginError) return;
+
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const target = loginError.source === "cta" ? ctaErrorRef : heroErrorRef;
+
+    target.current?.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "nearest",
+    });
+  }, [loginError]);
 
   // Track the chapter closest to the middle of the viewport.
   useEffect(() => {
@@ -258,46 +318,25 @@ export default function LandingPage({ authError = "" }) {
     };
   }, []);
 
-  function openSignIn(event) {
-    triggerRef.current = event.currentTarget;
-    setLoginError("");
-    setSignInOpen(true);
+  async function startLogin(action, source) {
+    if (pending) return;
 
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-
-    heroRef.current?.scrollIntoView({
-      behavior: reduceMotion ? "auto" : "smooth",
-      block: "start",
-    });
-  }
-
-  function closeSignIn() {
-    if (busy) return;
-
-    setSignInOpen(false);
-    setLoginError("");
-    triggerRef.current?.focus({ preventScroll: true });
-  }
-
-  async function startLogin(action) {
-    if (busy) return;
-
-    setLoginError("");
-    setPending(action);
+    setLoginError(null);
+    setPending({ action, source });
 
     // Email/password only, so Auth0's hosted page hides its Google button too.
     // Always show the login screen so an existing Auth0 session for a
     // different account isn't reused silently.
     const authorizationParams = {
-      connection: "Username-Password-Authentication",
+      connection: PASSWORD_CONNECTION,
       prompt: "login",
     };
 
     if (action === "signup") {
       authorizationParams.screen_hint = "signup";
     }
+
+    markExplicitLogin();
 
     try {
       await loginWithRedirect({
@@ -306,12 +345,19 @@ export default function LandingPage({ authError = "" }) {
         // Keep the existing application's back-button behavior.
         openUrl: (url) => window.location.replace(url),
       });
+      // The browser is now leaving for Auth0. Keep the buttons disabled so a
+      // second click can't start another redirect.
     } catch {
-      setLoginError("We could not open sign-in. Please try again.");
-    } finally {
-      setPending("");
+      clearExplicitLogin();
+      setPending(null);
+      setLoginError({
+        source,
+        message: "We could not open sign-in. Please try again.",
+      });
     }
   }
+
+  const authProps = { pending, onStart: startLogin };
 
   return (
     <div className="lp">
@@ -333,26 +379,34 @@ export default function LandingPage({ authError = "" }) {
           <a href="#who">Who it&apos;s for</a>
         </nav>
 
-        <button
-          className="lp-signin-top"
-          type="button"
-          onClick={openSignIn}
-          aria-controls="landing-signin"
-          aria-expanded={signInOpen}
+        <div
+          className="lp-header-actions"
+          aria-busy={pending?.source === "header"}
         >
-          Sign in
-        </button>
+          <AuthButton
+            {...authProps}
+            action="login"
+            source="header"
+            className="lp-signin-top"
+            shortLabel="Sign in"
+          />
+          <AuthButton
+            {...authProps}
+            action="signup"
+            source="header"
+            className="lp-signup-top"
+            shortLabel="Sign up"
+          />
+        </div>
       </header>
 
       <main className="lp-frame" id="landing-main">
-        <section className="lp-hero" ref={heroRef}>
+        <section className="lp-hero">
           <div className="lp-wrap">
-            <div className={`lp-hero-top ${signInOpen ? "lp-open" : ""}`}>
+            <div className="lp-hero-top">
               <div className="lp-hero-copy">
                 <p className="lp-eyebrow">
-                  {signInOpen
-                    ? "Sign in · Your classroom starts here"
-                    : "Gettysburg College · Live class quizzes"}
+                  Gettysburg College · Live class quizzes
                 </p>
 
                 <h1>
@@ -362,102 +416,41 @@ export default function LandingPage({ authError = "" }) {
                 </h1>
               </div>
 
-              {!signInOpen && (
-                <div className="lp-hero-side">
-                  <p className="lp-lede">
-                    The question goes up on the big screen. Everyone answers on
-                    their phone. Results land the second it&apos;s over.
-                  </p>
+              <div className="lp-hero-side">
+                <p className="lp-lede">
+                  The question goes up on the big screen. Everyone answers on
+                  their phone. Results land the second it&apos;s over.
+                </p>
 
-                  <button
+                <div
+                  className="lp-auth-actions"
+                  aria-busy={pending?.source === "hero"}
+                >
+                  <AuthButton
+                    {...authProps}
+                    action="login"
+                    source="hero"
                     className="lp-button"
-                    type="button"
-                    onClick={openSignIn}
-                    aria-controls="landing-signin"
-                    aria-expanded={false}
-                  >
-                    Sign in <span aria-hidden="true">→</span>
-                  </button>
-
-                  <p className="lp-fine">
-                    Log in with your email and password, or create an account.
-                  </p>
-                </div>
-              )}
-
-              <section
-                className="lp-login-card"
-                id="landing-signin"
-                aria-labelledby="landing-signin-title"
-                hidden={!signInOpen}
-              >
-                <div className="lp-login-top">
-                  <span>Sign in</span>
-                  <span>Secure access</span>
-
-                  <button
-                    type="button"
-                    aria-label="Close sign-in"
-                    onClick={closeSignIn}
-                    disabled={busy}
-                  >
-                    ×
-                  </button>
+                    arrow
+                  />
+                  <AuthButton
+                    {...authProps}
+                    action="signup"
+                    source="hero"
+                    className="lp-button lp-button-secondary"
+                  />
                 </div>
 
-                <div className="lp-login-body">
-                  <h2
-                    id="landing-signin-title"
-                    ref={loginTitleRef}
-                    tabIndex={-1}
-                  >
-                    Pull up a <span>seat.</span>
-                  </h2>
-
-                  <p>
-                    Sign in to access your quizzes and classroom activities.
-                  </p>
-
-                  <div className="lp-login-actions" aria-busy={busy}>
-                    <button
-                      className="lp-button"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => startLogin("login")}
-                    >
-                      {pending === "login" ? "Opening sign-in…" : "Sign in"}
-                      <span aria-hidden="true">→</span>
-                    </button>
-
-                    <p className="lp-fine">
-                      New here?{" "}
-                      <button
-                        className="lp-text-button"
-                        type="button"
-                        disabled={busy}
-                        onClick={() => startLogin("signup")}
-                      >
-                        {pending === "signup"
-                          ? "Opening registration…"
-                          : "Create an account"}
-                      </button>
-                    </p>
-
-                    <p className="lp-fine">
-                      Passwords need 8+ characters, including a symbol.
-                    </p>
-                  </div>
-
-                  <p className="lp-login-status" role="status">
-                    {busy ? "Opening the secure sign-in page…" : ""}
-                  </p>
-                </div>
-              </section>
+                <p className="lp-fine">
+                  Email and password. New passwords need 8+ characters,
+                  including a symbol.
+                </p>
+              </div>
             </div>
 
-            {visibleError && (
-              <p className="lp-error" role="alert">
-                {visibleError}
+            {heroError && (
+              <p className="lp-error" role="alert" ref={heroErrorRef}>
+                {heroError}
               </p>
             )}
           </div>
@@ -601,19 +594,34 @@ export default function LandingPage({ authError = "" }) {
             <h2>Start with one question. See what the room thinks.</h2>
 
             <div className="lp-cta-box">
-              <button
-                className="lp-button"
-                type="button"
-                onClick={openSignIn}
-                aria-controls="landing-signin"
-                aria-expanded={signInOpen}
+              <div
+                className="lp-auth-actions"
+                aria-busy={pending?.source === "cta"}
               >
-                Sign in <span aria-hidden="true">→</span>
-              </button>
+                <AuthButton
+                  {...authProps}
+                  action="login"
+                  source="cta"
+                  className="lp-button"
+                  arrow
+                />
+                <AuthButton
+                  {...authProps}
+                  action="signup"
+                  source="cta"
+                  className="lp-button lp-button-secondary"
+                />
+              </div>
 
               <p className="lp-fine">
                 One account for participating and presenting.
               </p>
+
+              {ctaError && (
+                <p className="lp-error" role="alert" ref={ctaErrorRef}>
+                  {ctaError}
+                </p>
+              )}
             </div>
           </div>
         </section>

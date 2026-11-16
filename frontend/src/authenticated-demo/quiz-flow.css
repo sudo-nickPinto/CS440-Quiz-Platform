@@ -244,7 +244,10 @@
 .qp .qv > .qv-strip {
   background: #e6eef7;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* The facts (with the Created by / Editors credits) take what's left and
+     wrap; the timeline and buttons keep their natural width so they never
+     overlap. */
+  grid-template-columns: minmax(0, 1fr) auto auto;
   grid-template-areas: "facts track actions";
   align-items: center;
   gap: 12px 24px;
@@ -423,17 +426,19 @@
   }
 }
 
-/* Narrower windows: the timeline gets its own row under facts and buttons. */
-@media (max-width: 1240px) {
+/* Narrower windows: the timeline gets its own row under facts and buttons.
+   The facts wrap; the buttons keep their natural width. */
+@media (max-width: 1400px) {
   .qp .qv > .qv-strip {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "facts actions"
       "track track";
   }
 }
 
-@media (max-width: 760px) {
+/* Too narrow for the facts beside all the buttons: stack them. */
+@media (max-width: 1000px) {
   .qp .qv > .qv-strip {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
@@ -442,6 +447,16 @@
       "actions";
   }
 
+  .qp .qv > .qv-strip > .qf-inline {
+    justify-self: start;
+  }
+
+  .qp .qv > .qv-strip > .qv-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
   .qp .qf-inline {
     width: 100%;
   }
