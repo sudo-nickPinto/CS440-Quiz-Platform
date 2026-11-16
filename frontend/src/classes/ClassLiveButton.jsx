@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import RequestError from "../authenticated-demo/RequestError";
+import { useNotifications } from "../authenticated-demo/notifications";
 import { liveState } from "./classHelpers";
 
 const POLL_MS = 5000;
@@ -19,7 +20,13 @@ export default function ClassLiveButton({ classId }) {
   const api = useApi();
   const action = useAction();
   const navigate = useNavigate();
-  const { reload } = sessions;
+  const { reload, refresh } = sessions;
+
+  // A lobby opening in this class shows its button right away; the poll
+  // still covers sessions ending and moving to the next question.
+  useNotifications("session_live", (event) => {
+    if (Number(event?.class_id) === Number(classId)) refresh();
+  });
 
   // Check again as soon as the tab comes back, instead of waiting for a poll.
   useEffect(() => {

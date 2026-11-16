@@ -2,6 +2,10 @@ import { Link, useParams } from "react-router";
 
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import RequestError from "../authenticated-demo/RequestError";
+import {
+  useNotifications,
+  useNotificationsReconnect,
+} from "../authenticated-demo/notifications";
 import { approvalLabel, submissionPreviewPath } from "./classHelpers";
 import { useClassResource } from "./classResources";
 
@@ -12,6 +16,16 @@ export default function SubmissionPreviewPage() {
   const { classId, submissionId } = useParams();
   const path = submissionPreviewPath(classId, submissionId);
   const preview = useResource(path);
+  const { refresh } = preview;
+
+  // Another organizer deciding, or the member withdrawing, updates the
+  // status here without a reload.
+  useNotifications("submission_changed", (event) => {
+    if (path && Number(event?.submission_id) === Number(submissionId)) refresh();
+  });
+  useNotificationsReconnect(() => {
+    if (path) refresh();
+  });
   const classInfo = useClassResource(classId);
   const api = useApi();
   const action = useAction();

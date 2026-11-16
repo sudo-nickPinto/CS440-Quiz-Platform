@@ -151,24 +151,38 @@ export function useQuizFlow(quiz, accountId) {
   const visible = showsQuizFlow(quiz);
   const classId = quiz?.class_id;
   const quizId = quiz?.quiz_id;
-  const [revision, setRevision] = useState(0);
-  const key = visible ? `${classId}:${quizId}:${revision}` : null;
-  const [result, setResult] = useState({ key: null, pending: null, error: null });
+  const [request, setRequest] = useState({ revision: 0, keep: false });
+  const base = visible ? `${classId}:${quizId}` : null;
+  const key = base ? `${base}:${request.revision}` : null;
+  const [result, setResult] = useState({
+    key: null,
+    base: null,
+    pending: null,
+    error: null,
+  });
 
   useEffect(() => {
     if (!key) return undefined;
     const controller = new AbortController();
     findPendingSubmission(api, classId, quizId, { signal: controller.signal })
       .then((pending) => {
-        if (!controller.signal.aborted) setResult({ key, pending, error: null });
+        if (!controller.signal.aborted) {
+          setResult({ key, base, pending, error: null });
+        }
       })
       .catch((error) => {
-        if (!controller.signal.aborted) setResult({ key, pending: null, error });
+        if (!controller.signal.aborted) {
+          setResult({ key, base, pending: null, error });
+        }
       });
     return () => controller.abort();
-  }, [api, key, classId, quizId]);
+  }, [api, key, base, classId, quizId]);
 
-  const current = result.key === key;
+  // refresh() keeps showing the last answer for this quiz while the new one
+  // loads; reload() shows the loading state.
+  const current =
+    result.key === key ||
+    (request.keep && base !== null && result.base === base && !result.error);
   const loading = visible && !current;
   const error = visible && current ? result.error : null;
   const pending = visible && current ? result.pending : null;
@@ -184,6 +198,9 @@ export function useQuizFlow(quiz, accountId) {
       visible && current && !error
         ? quizFlowState({ quiz, accountId, pending })
         : null,
-    reload: () => setRevision((value) => value + 1),
+    reload: () =>
+      setRequest((value) => ({ revision: value.revision + 1, keep: false })),
+    refresh: () =>
+      setRequest((value) => ({ revision: value.revision + 1, keep: true })),
   };
 }

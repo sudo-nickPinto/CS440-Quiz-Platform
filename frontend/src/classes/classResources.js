@@ -2,6 +2,10 @@ import { useAccount } from "../authenticated-demo/account";
 import { useEffect, useState } from "react";
 import { useApi, useResource } from "../authenticated-demo/rest";
 import {
+  useCatchUp,
+  useNotifications,
+} from "../authenticated-demo/notifications";
+import {
   approvedQuizzesPath,
   myQuizzesPath,
   submissionsPath,
@@ -45,6 +49,8 @@ function resourceState(result, transform) {
     data: null,
     error: result.error,
     reload: result.reload,
+    // Refetch while still showing the current data (no loading state).
+    refresh: result.refresh,
   };
 
   if (result.loading) {
@@ -114,8 +120,8 @@ export function useClassResource(classId) {
 
 export const REPORT_PAGE_SIZE = 25;
 
-function useClassReport(classId, path, pollMs = 0) {
-  const result = useResource(`/classes/${classId}/${path}`, pollMs);
+function useClassReport(classId, path) {
+  const result = useResource(`/classes/${classId}/${path}`);
 
   return resourceState(result, (data) => {
     if (!data || typeof data !== "object") {
@@ -126,12 +132,27 @@ function useClassReport(classId, path, pollMs = 0) {
   });
 }
 
-// Polled so counts such as the pending-approval badge pick up changes
-// other people make (a student sending a quiz for approval).
-export const DASHBOARD_POLL_MS = 30000;
-
+// Counts such as the pending-approval badge follow other people's changes
+// through useClassUpdates (pushed events, plus a refetch on reconnect and
+// when the tab comes back), not polling.
 export function useClassDashboard(classId) {
-  return useClassReport(classId, "dashboard", DASHBOARD_POLL_MS);
+  return useClassReport(classId, "dashboard");
+}
+
+// Pushed events (docs/LIVE_PROTOCOL.md §11) that change what class pages show.
+export const SUBMISSION_EVENTS = ["submission_changed"];
+export const CLASS_EVENTS = ["submission_changed", "session_live"];
+
+/**
+ * Keeps one class resource current: calls refresh() when the server pushes
+ * one of `events` for this class, and when the page may have missed some
+ * (the notification socket reconnected, or the tab came back into view).
+ */
+export function useClassUpdates(classId, events, refresh) {
+  useNotifications(events, (event) => {
+    if (Number(event?.class_id) === Number(classId)) refresh?.();
+  });
+  useCatchUp(() => refresh?.());
 }
 
 export function useClassSessions(classId, page = 1) {
