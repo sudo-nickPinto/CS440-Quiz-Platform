@@ -183,15 +183,27 @@ def _attribution(db: Session, quiz: Quiz) -> dict:
     author_name = db.scalar(
         select(Account.display_name).where(Account.account_id == quiz.author_id)
     )
-    rows = db.execute(
-        select(Account.account_id, Account.display_name)
-        .join(QuizCollaborator, QuizCollaborator.account_id == Account.account_id)
-        .where(
-            QuizCollaborator.quiz_id == quiz.quiz_id,
-            QuizCollaborator.revoked_at.is_(None),
-        )
-        .order_by(Account.display_name, Account.account_id)
-    ).all()
+    # Only editors who still have access: an unrevoked share, an active
+    # account, and an ACTIVE membership in the quiz's class. Someone removed
+    # from the class or deactivated keeps an unrevoked row but isn't credited.
+    rows = []
+    if quiz.class_id is not None:
+        rows = db.execute(
+            select(Account.account_id, Account.display_name)
+            .join(QuizCollaborator, QuizCollaborator.account_id == Account.account_id)
+            .join(
+                ClassMembership,
+                (ClassMembership.account_id == Account.account_id)
+                & (ClassMembership.class_id == quiz.class_id),
+            )
+            .where(
+                QuizCollaborator.quiz_id == quiz.quiz_id,
+                QuizCollaborator.revoked_at.is_(None),
+                Account.is_active.is_(True),
+                ClassMembership.status == MembershipStatus.ACTIVE,
+            )
+            .order_by(Account.display_name, Account.account_id)
+        ).all()
     return {
         "author_name": author_name,
         "collaborators": [
