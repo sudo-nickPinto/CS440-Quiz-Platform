@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   canApplyRemoteQuestion,
   nextAggregateRevision,
+  reconcileAutosavedQuestion,
   remoteStructureDecision,
   saveAggregateQuiz,
   saveDraftQuestions,
@@ -53,6 +54,58 @@ function response(questionId, text, quizRevision) {
 }
 
 describe("collaborative draft saves", () => {
+  it("preserves a trailing space after an autosave response", () => {
+    const submittedQuestion = question(
+      "saved-12",
+      12,
+      "What is next? ",
+    );
+    const savedQuestion = {
+      ...submittedQuestion,
+      revision: 2,
+      text: "What is next?",
+    };
+
+    expect(
+      reconcileAutosavedQuestion({
+        submittedQuestion,
+        currentQuestion: submittedQuestion,
+        savedQuestion,
+      }),
+    ).toEqual({
+      baselineQuestion: { ...submittedQuestion, revision: 2 },
+      editorQuestion: { ...submittedQuestion, revision: 2 },
+    });
+  });
+
+  it("preserves newer keystrokes while an autosave request is in flight", () => {
+    const submittedQuestion = question(
+      "saved-12",
+      12,
+      "What is next? ",
+    );
+    const currentQuestion = {
+      ...submittedQuestion,
+      text: "What is next? word",
+    };
+    const savedQuestion = {
+      ...submittedQuestion,
+      revision: 2,
+      text: "What is next?",
+    };
+
+    expect(
+      reconcileAutosavedQuestion({
+        submittedQuestion,
+        currentQuestion,
+        savedQuestion,
+      }),
+    ).toEqual({
+      baselineQuestion: { ...submittedQuestion, revision: 2 },
+      editorQuestion: { ...currentQuestion, revision: 2 },
+    });
+  });
+
   it("keeps aggregate saves stale after an ignored question update and unrelated event", async () => {
     const baseline = question("saved-1", 1, "Original");
     const locallyEdited = question("saved-1", 1, "Local edit");
