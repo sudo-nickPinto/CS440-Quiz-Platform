@@ -1439,3 +1439,42 @@
 .qp .cl-section-tabs > [role="group"] button[data-section="Approvals"][aria-pressed="true"] {
   background: var(--ink);
 }
+
+/* Phones: search on its own line, then the sort menu and layout toggle
+   share one row (they each took a line before). The "1–2 of 2" count chip
+   is left out there; the list itself shows how many there are. */
+@media (max-width: 640px) {
+  .qp .cl-page .cl-toolbar {
+    gap: 10px 8px;
+  }
+
+  .qp .cl-page .cl-toolbar > label.cl-search {
+    flex: 1 1 100%;
+  }
+
+  .qp .cl-page .cl-toolbar > label.cl-sort {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .qp .cl-page .cl-toolbar > label.cl-sort > select {
+    width: 100%;
+    min-width: 0;
+    padding-left: 10px;
+    font-size: 12px;
+  }
+
+  .qp .cl-page .cl-toolbar > .cl-toggle {
+    height: 46px;
+  }
+
+  .qp .cl-page .cl-toolbar > .cl-toggle button {
+    min-height: 46px;
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+
+  .qp .cl-page .cl-toolbar > .cl-count {
+    display: none;
+  }
+}

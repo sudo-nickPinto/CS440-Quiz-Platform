@@ -135,6 +135,17 @@ export default function PreviewApp({ onSignOut }) {
           </Link>
 
           <div className="ui-user">
+            {/* Type a six-digit code from anywhere. Hidden during a live
+                game so nobody leaves it by accident. */}
+            {!/^\/app\/(host|play)\//.test(pathname) && (
+              <Link
+                className="qb-join"
+                to="/app/join"
+                aria-current={pathname === "/app/join" ? "page" : undefined}
+              >
+                Join game
+              </Link>
+            )}
             <span className="ui-user-name">{me.display_name}</span>
 
             <details className="qb-account">

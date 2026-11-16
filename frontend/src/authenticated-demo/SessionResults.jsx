@@ -883,7 +883,6 @@ export function ParticipantResults({ report, backTo, backLabel }) {
           <span>Results /</span>
           <b>{report.quiz_title}</b>
         </div>
-        <div className="rr-private">You, the host &amp; admins</div>
       </nav>
 
       <RescoreNotice report={report} />
