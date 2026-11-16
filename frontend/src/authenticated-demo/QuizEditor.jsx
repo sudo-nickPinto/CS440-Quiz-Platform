@@ -1668,7 +1668,6 @@ export function QuizViewer() {
         <p className="qv-facts">
           <b>{plural(questions.length, "question")}</b>
           <span>{clock(totalTime)} total</span>
-          <span>{quiz.visibility === "PUBLIC" ? "Public" : "Private"}</span>
         </p>
 
         <QuizFlowTrack flow={flow} />
