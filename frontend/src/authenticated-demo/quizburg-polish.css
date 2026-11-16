@@ -3436,10 +3436,11 @@
   padding-bottom: clamp(6px, 1.2vh, 12px);
 }
 
-/* On laptops and projectors the question and results screens fill the
-   window under the header, with no page scroll (same idea as the dashboard
-   in taha-ui.css). */
+/* On laptops and projectors the lobby, question and results screens fill
+   the window under the header, with no page scroll (same idea as the
+   dashboard in taha-ui.css). */
 @media (min-width: 641px) {
+  .qp:has(.lv-lobby),
   .qp:has(.lv-hq),
   .qp:has(.lv-results) {
     display: flex;
@@ -3449,15 +3450,19 @@
     padding-bottom: clamp(12px, 2.4vh, 36px);
   }
 
+  .qp:has(.lv-lobby) .qp-header,
   .qp:has(.lv-hq) .qp-header,
   .qp:has(.lv-results) .qp-header {
     flex-shrink: 0;
   }
 
+  .qp:has(.lv-lobby) .qp-frame,
   .qp:has(.lv-hq) .qp-frame,
   .qp:has(.lv-results) .qp-frame,
+  .qp .ui-live:has(.lv-lobby),
   .qp .ui-live:has(.lv-hq),
   .qp .ui-live:has(.lv-results),
+  .qp .lv-body:has(.lv-lobby),
   .qp .lv-body:has(.lv-hq),
   .qp .lv-body:has(.lv-results) {
     flex: 1 1 auto;
@@ -3472,6 +3477,66 @@
 
   .qp .lv-host-answers {
     flex-basis: 0;
+  }
+
+  /* Lobby: the card takes the space left over and the player list scrolls
+     inside it once it fills up; sizes shrink with the window height. */
+  .qp .lv-lobby {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin-top: clamp(10px, 2.4vh, 28px);
+    margin-bottom: clamp(10px, 2vh, 24px);
+  }
+
+  .qp .lv-lobby .lv-card {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .qp .lv-lobby-top {
+    flex-shrink: 0;
+    padding: clamp(10px, 2.4vh, 26px) 32px clamp(12px, 2.8vh, 30px);
+  }
+
+  .qp .lv-lobby-top h1 {
+    margin: 4px 0 clamp(8px, 1.8vh, 20px);
+    font-size: clamp(24px, min(4vw, 5vh), 42px);
+  }
+
+  .qp .lv-join-code {
+    font-size: clamp(36px, min(7.5vw, 11vh), 96px);
+  }
+
+  .qp .lv-count {
+    min-height: clamp(76px, 11vh, 104px);
+  }
+
+  .qp .lv-count strong {
+    font-size: clamp(28px, 4.4vh, 40px);
+  }
+
+  .qp .lv-lobby .qb-panel-top {
+    flex-shrink: 0;
+  }
+
+  .qp .lv-lobby .lv-players {
+    flex: 1 1 auto;
+    min-height: 72px;
+    overflow-y: auto;
+  }
+
+  .qp .lv-lobby .lv-players-empty {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .qp .lv-lobby .lv-actions {
+    flex-shrink: 0;
+    margin-top: clamp(10px, 2vh, 22px);
   }
 }
 
