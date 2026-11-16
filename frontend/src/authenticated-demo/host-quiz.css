@@ -6,7 +6,7 @@
   padding: 4px 10px;
   border: 1px dashed currentColor;
   border-radius: 999px;
-  color: #6b6b6b;
+  color: var(--gray);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;

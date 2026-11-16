@@ -91,7 +91,8 @@
 }
 .qp .qc-approval .qc-host > button:hover:not(:disabled),
 .qp .cl-approval-cell .qc-host > button:hover:not(:disabled) {
-  background: #a8420a;
+  background: var(--orange-deep);
+  filter: var(--hover-shade);
 }
 .qp .qc-approval button.cl-send:disabled:not(.is-approved) {
   background: var(--sand);
@@ -125,7 +126,10 @@
   font-size: 20px;
   line-height: 1;
 }
-.qp .qc-footer button.cl-kebab:hover,
+.qp .qc-footer button.cl-kebab:hover {
+  filter: var(--hover-shade);
+}
+
 .qp .qc-footer button.cl-kebab[aria-expanded="true"] {
   background: var(--sky-soft);
 }

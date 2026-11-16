@@ -24,7 +24,7 @@
 }
 
 .qp .cl-page button.cl-edit-name:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 /* Editing the class name keeps the heading's place, font and size: the
@@ -302,7 +302,7 @@
 }
 
 .qp .cl-page button.cl-stu-tog:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .cl-page button.cl-stu-tog[aria-expanded="true"] {
@@ -419,7 +419,7 @@
 }
 
 .qp .cl-table .cl-lnk:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .cl-panel-foot {
@@ -600,7 +600,7 @@
 }
 
 .qp .cl-dlg-head .cl-dlg-error {
-  color: var(--orange-deep);
+  color: var(--color-danger);
 }
 
 .qp .cl-dlg-row {
@@ -902,7 +902,7 @@
 
 .qp .cl-rows tbody tr:hover a.cl-go,
 .qp .cl-page .cl-table a.cl-go:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .cl-page .cl-table a.cl-go:active {
@@ -931,7 +931,7 @@
   margin-left: 10px;
   padding: 1px 8px;
   border: var(--b-thin);
-  background: #c9dcef;
+  background: var(--sky-soft);
   color: var(--navy);
   font-family: "Space Grotesk", sans-serif;
   font-size: 11px;
@@ -946,7 +946,7 @@
 .qp .cl-page .cl-rows tbody tr.cl-sess-row > td {
   height: 58px;
   border-top: var(--b-thin);
-  background-color: #e6eef7;
+  background-color: var(--sky-wash);
 }
 
 .qp .cl-page .cl-rows tbody tr.cl-sess-foot > td {
@@ -982,7 +982,7 @@
 }
 
 .qp .cl-page button.cl-sess-export:hover:not(:disabled) {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .cl-table td.cl-sess-lead {
@@ -1220,7 +1220,10 @@
   line-height: 1;
 }
 
-.qp .cl-page .cl-table button.cl-kebab:hover,
+.qp .cl-page .cl-table button.cl-kebab:hover {
+  filter: var(--hover-shade);
+}
+
 .qp .cl-page .cl-table button.cl-kebab[aria-expanded="true"] {
   background: var(--sky-soft);
 }
@@ -1267,11 +1270,11 @@
 
 .qp .cl-page .cl-menu > a:hover,
 .qp .cl-page .cl-menu > button:hover:not(:disabled) {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .cl-page .cl-menu > button.is-danger {
-  color: #9b1c1c;
+  color: var(--color-danger);
 }
 
 .qp .cl-page .cl-menu > button.is-danger:hover:not(:disabled) {

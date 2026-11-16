@@ -730,7 +730,7 @@
 
 /* Keep the host's letter badges readable on their paper background. */
 .qp .ui-answer .ui-letter {
-  color: #222222;
+  color: var(--ink);
 }
 
 .qp .ui-letter {
