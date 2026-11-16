@@ -51,6 +51,7 @@ import QuizCollaboratorDialog, {
   AddCollaboratorCell,
 } from "./QuizCollaboratorDialog";
 import { QuizFlowButton, QuizFlowTrack } from "./QuizFlowPanel";
+import QuestionBankDialog from "./QuestionBankDialog";
 import "./quiz-flow.css";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -165,6 +166,7 @@ export function QuizEditor({
   // Which save button was pressed, for its "Saving…" / "Sending…" label.
   const [savingKind, setSavingKind] = useState(null);
   const [sharing, setSharing] = useState(false);
+  const [questionBankOpen, setQuestionBankOpen] = useState(false);
   // New quizzes belong to a class: the class page links here with ?class=ID.
   const classId = searchParams.get("class");
   const validClass = /^[1-9][0-9]*$/.test(classId ?? "");
@@ -1444,6 +1446,9 @@ export function QuizEditor({
           >
             <span aria-hidden="true">+</span> Add question
           </button>
+          <button type="button" className="qe-addq qe-bank-button" onClick={() => setQuestionBankOpen(true)}>
+            Question bank
+          </button>
 
           <RequestError error={requestError} />
 
@@ -1544,6 +1549,14 @@ export function QuizEditor({
         </div>
       </fieldset>
     </form>
+    <QuestionBankDialog
+      open={questionBankOpen}
+      classId={editing ? existingQuiz.class_id : Number(classId)}
+      quizId={editing ? existingQuiz.quiz_id : null}
+      onClose={() => setQuestionBankOpen(false)}
+      onReload={onReload}
+      onAdd={(questions) => edit({ ...editorRef.current, questions: [...editorRef.current.questions, ...questions] })}
+    />
 
     {/* Outside the editor's <form>, so its invite form isn't nested. */}
     {sharing && (
@@ -1635,6 +1648,19 @@ export function QuizViewer() {
     if (done) navigate(classPagePath(quiz.class_id), { replace: true });
   }
 
+  async function duplicateQuiz() {
+    const copied = await action.run(() =>
+      api(`/classes/${quiz.class_id}/quizzes/${quiz.quiz_id}/duplicate`, {
+        method: "POST",
+      }),
+    );
+    if (copied?.quiz) {
+      navigate(`/app/quizzes/${copied.quiz.quiz_id}/edit`, {
+        state: { classId: copied.quiz.class_id },
+      });
+    }
+  }
+
   return (
     <section className="qv" aria-labelledby="quiz-title">
       <ConfirmDialog confirmer={confirmer} />
@@ -1683,6 +1709,17 @@ export function QuizViewer() {
         <QuizFlowTrack flow={flow} />
 
         <div className="qv-actions">
+          {quiz.class_id && (
+            <button
+              type="button"
+              className="qb-btn qb-btn-paper"
+              disabled={action.busy}
+              onClick={() => void duplicateQuiz()}
+            >
+              {action.busy ? "Copying…" : "Duplicate quiz"}
+            </button>
+          )}
+
           {quiz.can_edit && quiz.status !== "ARCHIVED" && (
             <Link
               className="qb-btn qb-btn-paper"
