@@ -6666,6 +6666,43 @@
   }
 }
 
+/* Short phones: tighten the answer feedback so two 120-character answers
+   still fit above Leave (e.g. 390x640, iPhone SE in Safari). */
+@media (max-width: 640px) and (max-height: 720px) {
+  .qp .lv-fit .lv-feedback {
+    gap: 2px;
+  }
+
+  .qp .lv-fit .lv-feedback-mark {
+    width: 44px;
+    height: 44px;
+    margin-bottom: 4px;
+    font-size: 26px;
+  }
+
+  .qp .lv-fit .lv-feedback h1 {
+    font-size: 24px;
+  }
+
+  .qp .lv-fit .lv-picked {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .qp .lv-fit .lv-feedback .lv-points {
+    margin: 2px 0 8px;
+    font-size: 26px;
+  }
+
+  .qp .lv-fit .lv-feedback .lv-stat {
+    padding: 6px 10px;
+  }
+
+  .qp .lv-fit .lv-feedback .lv-sub {
+    margin: 8px 0 4px !important;
+  }
+}
+
 
 /* Host final results fill the window too: the podium takes the height left
    over, so the frame always ends at the bottom of the window. */
