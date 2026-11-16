@@ -3223,29 +3223,23 @@
   padding: clamp(10px, 2.4vh, 30px) clamp(16px, 2.6vw, 44px);
 }
 
+/* The question may take up to 40% of the window height; useFitText
+   (live/fitText.js) picks --lv-q-size / --lv-a-size so the question and
+   the answers fit their boxes. */
 .qp .lv-hq-text {
   min-height: 0;
-  max-height: 36vh;
+  max-height: 40vh;
   overflow-y: auto;
 }
 
 .qp .lv-hq-text h1 {
   max-width: 1100px;
   margin: 0 auto;
-  font-size: clamp(22px, min(3.6vw, 6vh), 60px);
+  font-size: var(--lv-q-size, clamp(22px, min(3.6vw, 6vh), 60px));
   line-height: 1.15;
   text-align: center;
+  text-wrap: balance;
   overflow-wrap: anywhere;
-}
-
-/* Longer questions (data-size from questionTextSize) step down in size */
-.qp .lv-hq-text h1[data-size="medium"] {
-  font-size: clamp(20px, min(3vw, 4.8vh), 50px);
-}
-
-.qp .lv-hq-text h1[data-size="long"] {
-  font-size: clamp(18px, min(2.4vw, 3.9vh), 42px);
-  line-height: 1.2;
 }
 
 /* Question alone, before the timer and answers appear */
@@ -3265,14 +3259,11 @@
 .qp .lv-hq-preview h1 {
   max-width: 1200px;
   margin: 0;
-  font-size: clamp(28px, min(4.8vw, 8.5vh), 80px);
+  font-size: var(--lv-q-size, clamp(28px, min(4.8vw, 8.5vh), 80px));
   line-height: 1.12;
+  text-wrap: balance;
   overflow-wrap: anywhere;
   animation: lv-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.qp .lv-hq-preview h1[data-size="long"] {
-  font-size: clamp(24px, min(3.8vw, 6.6vh), 64px);
 }
 
 .qp .lv-hq-ready {
@@ -3379,21 +3370,11 @@
   border: var(--b);
   background: var(--paper);
   box-shadow: 4px 4px 0 var(--ink);
-  font-size: clamp(16px, min(2.3vw, 4vh), 40px);
+  font-size: var(--lv-a-size, clamp(16px, min(2.3vw, 4vh), 40px));
   font-weight: 700;
   line-height: 1.15;
   overflow-wrap: anywhere;
   overflow-y: auto;
-}
-
-/* Longer answers (data-size from answerTextSize) step down together */
-.qp .lv-host-answers[data-size="medium"] .lv-host-answer {
-  font-size: clamp(15px, min(1.9vw, 3.3vh), 34px);
-}
-
-.qp .lv-host-answers[data-size="long"] .lv-host-answer {
-  font-size: clamp(14px, min(1.55vw, 2.7vh), 28px);
-  line-height: 1.2;
 }
 
 .qp .lv-host-answer .lv-index {

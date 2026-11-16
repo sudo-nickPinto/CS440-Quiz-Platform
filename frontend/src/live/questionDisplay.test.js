@@ -4,7 +4,6 @@ import {
   PREVIEW_MS,
   answerSuit,
   answerTextSize,
-  questionTextSize,
   inPreview,
   previewEndsAt,
 } from './questionDisplay.js'
@@ -36,13 +35,6 @@ describe('answerSuit', () => {
 })
 
 describe('text size steps', () => {
-  it('steps the question size down as it gets longer', () => {
-    expect(questionTextSize('What is 2 + 2?')).toBe('short')
-    expect(questionTextSize('x'.repeat(60))).toBe('medium')
-    expect(questionTextSize('x'.repeat(120))).toBe('long')
-    expect(questionTextSize(undefined)).toBe('short')
-  })
-
   it('sizes every answer from the longest one', () => {
     const choices = (...lengths) => lengths.map((n) => ({ choice_text: 'x'.repeat(n) }))
     expect(answerTextSize(choices(4, 12))).toBe('short')

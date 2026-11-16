@@ -15,8 +15,8 @@ import {
   answerSuit,
   answerTextSize,
   inPreview,
-  questionTextSize,
 } from "../live/questionDisplay";
+import { PREVIEW_STEPS, QUESTION_STEPS, useFitText } from "../live/fitText";
 import AnswerSuit from "./AnswerSuit";
 
 const CONNECTION_ERRORS = {
@@ -250,6 +250,10 @@ function QuestionScreen({
       : 0;
 
   const preview = inPreview(question, seenAt, now);
+  const fitRef = useFitText(
+    `${question.question_id}:${preview}`,
+    preview ? PREVIEW_STEPS : QUESTION_STEPS,
+  );
 
   const submittedIndex = question.choices.findIndex(
     (choice) => choice.choice_id === state.myAnswer?.choice_id,
@@ -274,16 +278,15 @@ function QuestionScreen({
   if (host && preview) {
     return (
       <section
+        ref={fitRef}
         className="lv-hq is-preview"
         aria-label={`Question ${question.question_order}`}
       >
-        <div className="lv-hq-preview">
+        <div className="lv-hq-preview" data-fit-question>
           <p className="lv-eyebrow">
             Question {question.question_order} of {question.total_questions}
           </p>
-          <h1 data-size={questionTextSize(question.question_text)}>
-            {question.question_text}
-          </h1>
+          <h1>{question.question_text}</h1>
           <p className="lv-hq-ready" role="status">
             <Dots />
             Answers in a moment…
@@ -302,6 +305,7 @@ function QuestionScreen({
 
     return (
       <section
+        ref={fitRef}
         className="lv-hq"
         aria-label={`Question ${question.question_order}`}
       >
@@ -314,10 +318,8 @@ function QuestionScreen({
             {seconds ?? "—"}
           </div>
 
-          <div className="lv-hq-text">
-            <h1 data-size={questionTextSize(question.question_text)}>
-              {question.question_text}
-            </h1>
+          <div className="lv-hq-text" data-fit-question>
+            <h1>{question.question_text}</h1>
           </div>
 
           <div className="lv-answer-count" aria-live="polite">
@@ -333,14 +335,12 @@ function QuestionScreen({
           <div style={{ width: `${progress}%` }} />
         </div>
 
-        <div
-          className="lv-host-answers"
-          data-size={answerTextSize(question.choices)}
-        >
+        <div className="lv-host-answers">
           {question.choices.map((choice, index) => (
             <div
               key={choice.choice_id}
               className={`lv-host-answer ui-tone-${index % 4}`}
+              data-fit-answer
             >
               <AnswerSuit index={index} />
               <span className="lv-answer-text">{choice.choice_text}</span>

@@ -10,14 +10,9 @@ export function answerSuit(index) {
   return ANSWER_SUITS[position % ANSWER_SUITS.length]
 }
 
-// Size step for projector text, so long questions and answers (up to the
-// editor's 120 characters) fit without scrolling while short ones stay big.
-// Answers share one step, from the longest, so the boxes match.
-export function questionTextSize(text) {
-  const length = String(text ?? '').length
-  return length > 80 ? 'long' : length > 45 ? 'medium' : 'short'
-}
-
+// Size step for the answer labels on the results screen, from the longest
+// answer so all four match. (The question screen measures instead; see
+// fitText.js.)
 export function answerTextSize(choices) {
   const longest = Math.max(
     0,
