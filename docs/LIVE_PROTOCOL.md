@@ -246,4 +246,36 @@ One socket a signed-in user keeps open anywhere in the app, so the server can pu
 - **Events are hints, not data.** The server sends one after the change commits; the client refetches over HTTP. Missed events are not replayed, so a client refetches what it shows after every (re)connect.
 - **One process:** the registry is in memory, so only sockets on the same uvicorn worker are reached (§8.3).
 
-Event types (server → client): events are added in the next change.
+### Event types (server → client)
+
+Built in `backend/app/notifications/events.py`. Payloads carry ids, titles and status only, nothing the recipient can't already fetch over HTTP. The actor is never left out: their other tabs update too, and `actor_account_id` lets a client skip the toast for its own action.
+
+| `type` | Sent when | Fields | Who receives it |
+|---|---|---|---|
+| `submission_changed` | A quiz submission is created, approved, rejected or withdrawn (`routes/quiz_submissions.py`) | `action` (`submitted` \| `approved` \| `rejected` \| `withdrawn`), `submission_id`, `class_id`, `quiz_id`, `quiz_title` (the submitted version's title), `class_name`, `status` (the submission's status after the change: `PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`), `actor_account_id` | `submitted`, `withdrawn`: the class's organizers. `approved`, `rejected`: the organizers plus the submitter and the quiz's author, if they are still active members of the class. "Organizers" means the people who may decide submissions: an `ACTIVE` `ORGANIZER` membership held by an active faculty account. |
+| `session_live` | A host opens a lobby (`POST /classes/{class_id}/quizzes/{quiz_id}/sessions`) | `session_id`, `class_id`, `class_name`, `quiz_title`, `host_name`, `join_code` | Every active account with an `ACTIVE` membership in the session's class, except the host. A session with no class sends nothing. Join the same way the class page's Live button does: `POST /sessions/{session_id}/join`, then open `/app/play/{session_id}`. `join_code` is the code members already see in `GET /classes/{class_id}/active-sessions`. |
+
+Example:
+
+```json
+{"type": "submission_changed", "action": "approved", "submission_id": 12, "class_id": 3, "quiz_id": 7, "quiz_title": "Week 4", "class_name": "CS 440", "status": "APPROVED", "actor_account_id": 2}
+```
+
+### Sending a notification from a new action
+
+Do the database work and commit first, then await the matching `notify_*` function from `app/notifications/events.py`. It resolves recipients in its own DB session and never raises, so a failed push can't fail the request. For example, a route that withdraws a submission as a side effect:
+
+```python
+from app.notifications.events import notify_submission_changed
+
+hub = request.app.state.notification_hub
+await hub.run_db(some_service_that_withdraws_and_commits, account, class_id, quiz_id)
+await notify_submission_changed(
+    hub,  # i.e. request.app.state.notification_hub
+    submission_id=withdrawn_submission_id,
+    action="withdrawn",
+    actor_account_id=account.account_id,
+)
+```
+
+Known gap: only the three submission routes and lobby creation send events today, so the planned automatic withdrawal of a pending submission when its quiz is edited sends no notification until its route makes this call. A new event type gets a resolver plus a `notify_*` entry point in the same file, and a row in the table above.
