@@ -4621,39 +4621,6 @@
   width: min(100%, 520px);
 }
 
-/* Slim score/rank line under the tiles: label and value side by side */
-.qp .lv-pq .lv-stat {
-  flex-direction: row;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 5px 12px;
-}
-
-.qp .lv-pq .lv-stat strong {
-  margin: 0;
-  font-size: 17px;
-}
-
-/* The black bar above already says "Question N of M"; keep the progress
-   marks and the timer on one short row. */
-.qp .lv-pq .lv-q-label > span:first-child {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.qp .lv-pq .lv-q-label {
-  gap: 4px;
-}
-
-.qp .lv-pq .lv-tbar {
-  margin-top: 8px;
-}
-
 /* While a student answers, the title bar stays slim. */
 .qp .lv:has(.lv-pq) .lv-bar {
   flex-shrink: 0;
@@ -4662,9 +4629,9 @@
   padding-bottom: 8px;
 }
 
+/* Short windows: the app header (logo, name) steps aside while a question
+   is open so the tiles get the room; it's back on every other screen. */
 @media (max-height: 760px) {
-  /* Short windows: the app header (logo, name) steps aside while a question
-     is open so the tiles get the room; it's back on every other screen. */
   .qp:has(.lv-pq) .qp-header {
     display: none;
   }
@@ -4672,16 +4639,106 @@
   .qp:has(.lv-pq) {
     padding-top: 8px;
   }
+}
 
-  .qp .lv-pq .lv-q-label small {
-    display: none;
-  }
+/* Top row: progress marks on the left, score and rank on the right. */
+.qp .lv-pq-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 
-  .qp .lv-pq .lv-ptimer {
-    width: 44px;
-    height: 44px;
-    font-size: 18px;
-  }
+.qp .lv-pq-stats {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.qp .lv-pq-stats span {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 10px;
+  border: var(--b-thin);
+  background: var(--paper);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.qp .lv-pq-stats b {
+  color: var(--ink);
+  font: 16px "Archivo Black", sans-serif;
+  letter-spacing: 0;
+}
+
+/* Bottom row, always the same height: timer bar and seconds, or a note. */
+.qp .lv-pq-foot {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+}
+
+.qp .lv-pq-foot .lv-tbar {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.qp .lv-pq-foot .lv-ptimer {
+  width: 46px;
+  height: 46px;
+  font-size: 19px;
+}
+
+.qp .lv-pq-msg {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+
+/* Locked tiles (preview, after time is up) keep their colour under dark
+   stripes, like the app's striped footers, instead of fading out. */
+.qp .lv-ptiles .ui-answer:disabled {
+  position: relative;
+  opacity: 1;
+  cursor: default;
+}
+
+.qp .lv-ptiles .ui-answer:disabled::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    135deg,
+    rgb(34 34 34 / 0.3) 0 14px,
+    transparent 14px 28px
+  );
+  pointer-events: none;
+}
+
+.qp .lv-ptiles .ui-answer:disabled .lv-suit {
+  opacity: 0.55;
+}
+
+/* Results: the bars and the labels share two grid rows across all columns
+   (subgrid), so every label is as tall as the tallest one. */
+.qp .lv-dist {
+  grid-template-rows: minmax(0, 1fr) auto;
+  row-gap: 0;
+}
+
+.qp .lv-dist-col {
+  display: grid;
+  grid-row: 1 / span 2;
+  grid-template-rows: subgrid;
 }
 
 @media (max-width: 640px) {
