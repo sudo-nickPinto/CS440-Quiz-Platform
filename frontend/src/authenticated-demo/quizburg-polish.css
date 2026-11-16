@@ -1764,8 +1764,16 @@
   white-space: nowrap;
 }
 
+.qp .qe-count.is-long {
+  color: var(--orange-deep);
+}
+
 .qp .qe-count.is-over {
   color: var(--color-danger);
+}
+
+.qp .qe-count-note {
+  font-weight: 500;
 }
 
 .qp .qe-qtext-box .qe-count {

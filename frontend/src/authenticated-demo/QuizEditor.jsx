@@ -9,7 +9,15 @@ import {
 import { useAccount } from "./account";
 import QuizCollaborators from "./QuizCollaborators";
 
-import { blankEditor, LETTERS, newQuestion, TEXT_LIMIT } from "./model";
+import {
+  ANSWER_LIMIT,
+  ANSWER_SOFT_LIMIT,
+  blankEditor,
+  LETTERS,
+  newQuestion,
+  QUESTION_LIMIT,
+  QUESTION_SOFT_LIMIT,
+} from "./model";
 import {
   normalizeEditorDefaultTime,
   quizQuestionToEditor,
@@ -1192,7 +1200,7 @@ export function QuizEditor({
                         id={`question-text-${question.id}`}
                         className="qe-qtext"
                         rows={1}
-                        maxLength={TEXT_LIMIT}
+                        maxLength={QUESTION_LIMIT}
                         aria-label={`Question ${index + 1} text`}
                         placeholder="Type your question"
                         value={question.text}
@@ -1202,7 +1210,12 @@ export function QuizEditor({
                           })
                         }
                       />
-                      <CharCount value={question.text} />
+                      <CharCount
+                        value={question.text}
+                        limit={QUESTION_LIMIT}
+                        soft={QUESTION_SOFT_LIMIT}
+                        note
+                      />
                     </div>
 
                     <div
@@ -1239,7 +1252,7 @@ export function QuizEditor({
                             </button>
 
                             <input
-                              maxLength={TEXT_LIMIT}
+                              maxLength={ANSWER_LIMIT}
                               value={option}
                               placeholder={`Choice ${LETTERS[choiceIndex]}`}
                               aria-label={
@@ -1258,7 +1271,11 @@ export function QuizEditor({
                             />
 
                             <span className="qe-choice-end">
-                              <CharCount value={option} />
+                              <CharCount
+                                value={option}
+                                limit={ANSWER_LIMIT}
+                                soft={ANSWER_SOFT_LIMIT}
+                              />
 
                               {correct && (
                                 <span className="qe-tag" aria-hidden="true">
