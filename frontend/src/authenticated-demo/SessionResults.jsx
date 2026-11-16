@@ -847,16 +847,27 @@ export function ParticipantResults({ report, backTo, backLabel }) {
     }
   }
 
-  // From the phone wheel: switch, then bring the question back into view if
-  // the reader had scrolled past its top.
-  function pickFromWheel(index) {
-    selectQuestion(index);
+  // Phone wheel: keep the question card, from its heading to the last
+  // option, fully on screen above the wheel bar, centered when it fits.
+  function frameQuestion({ smooth = false } = {}) {
     window.requestAnimationFrame(() => {
       const detail = document.querySelector(".rr-me .rr-answer-detail");
-      if (detail && detail.getBoundingClientRect().top < 0) {
-        detail.scrollIntoView({ block: "start" });
-      }
+      if (!detail) return;
+      const end = detail.querySelector(".rr-choices") ?? detail;
+      const bar = document.querySelector(".qw-bar");
+      const room = window.innerHeight - (bar ? bar.offsetHeight : 0);
+      const top = detail.getBoundingClientRect().top;
+      const height = end.getBoundingClientRect().bottom - top;
+      const delta = top - Math.max(8, (room - height) / 2);
+      if (Math.abs(delta) < 2) return;
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      window.scrollBy({ top: delta, behavior: smooth && !reduce ? "smooth" : "auto" });
     });
+  }
+
+  function pickFromWheel(index, { live = false } = {}) {
+    selectQuestion(index);
+    frameQuestion({ smooth: !live });
   }
 
   const last = report.questions.length - 1;
@@ -1033,6 +1044,7 @@ export function ParticipantResults({ report, backTo, backLabel }) {
         answers={player.answers}
         selected={selected}
         onSelect={pickFromWheel}
+        onEngage={frameQuestion}
       />
     </div>
   );

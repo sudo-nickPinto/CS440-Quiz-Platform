@@ -4,18 +4,19 @@ import { WHEEL_SPACING, wheelPosition, wheelTarget } from "./wheelMath";
 import "./question-wheel.css";
 
 const RESULT = {
-  correct: "✓ Correct",
-  wrong: "✗ Wrong",
-  missed: "— No answer",
-  not_played: "· Not played",
+  correct: "Correct",
+  wrong: "Wrong",
+  missed: "No answer",
+  not_played: "Not played",
 };
 
 // Phones only (see question-wheel.css): a dark bar pinned to the bottom of
 // the report card. The question numbers slide under a fixed orange lens;
 // drag the strip or tap a number to switch questions without scrolling
-// back up. While dragging, the page dims and a card shows the question
-// you would land on.
-export default function QuestionWheel({ questions, answers, selected, onSelect }) {
+// back up. The page's own question card follows the lens live while
+// dragging (onSelect), and onEngage brings that card fully into view as
+// soon as a drag starts.
+export default function QuestionWheel({ questions, answers, selected, onSelect, onEngage }) {
   const [drag, setDrag] = useState(null);
   const dragged = useRef(false);
   const count = questions.length;
@@ -23,11 +24,16 @@ export default function QuestionWheel({ questions, answers, selected, onSelect }
   if (count < 2) return null;
 
   const position = drag?.moved ? drag.position : selected;
-  const landing = wheelTarget(position, count);
 
   function onPointerDown(event) {
     dragged.current = false;
-    setDrag({ id: event.pointerId, startX: event.clientX, position: selected, moved: false });
+    setDrag({
+      id: event.pointerId,
+      startX: event.clientX,
+      startIndex: selected,
+      position: selected,
+      moved: false,
+    });
   }
 
   function onPointerMove(event) {
@@ -39,32 +45,22 @@ export default function QuestionWheel({ questions, answers, selected, onSelect }
       // over a number doesn't also tap it.
       event.currentTarget.setPointerCapture?.(event.pointerId);
       dragged.current = true;
+      onEngage?.({ smooth: true });
     }
-    setDrag({ ...drag, moved: true, position: wheelPosition(selected, dx, count) });
+    const next = wheelPosition(drag.startIndex, dx, count);
+    const landing = wheelTarget(next, count);
+    if (landing !== selected) onSelect(landing, { live: true });
+    setDrag({ ...drag, moved: true, position: next });
   }
 
   function onPointerEnd() {
     if (!drag) return;
-    if (drag.moved) onSelect(wheelTarget(drag.position, count));
+    if (drag.moved) onSelect(wheelTarget(drag.position, count), { live: true });
     setDrag(null);
   }
 
-  const peek = questions[landing];
-
   return (
     <div className="qw" data-dragging={drag?.moved ? "true" : undefined}>
-      {drag?.moved && (
-        <>
-          <div className="qw-shade" aria-hidden="true" />
-          <div className="qw-peek" aria-hidden="true">
-            <b data-state={answers[landing].state}>
-              Q{peek.order} · {RESULT[answers[landing].state]}
-            </b>
-            <span>{peek.text}</span>
-          </div>
-        </>
-      )}
-
       <nav className="qw-bar" aria-label="Switch question">
         <div
           className="qw-track"
@@ -84,7 +80,7 @@ export default function QuestionWheel({ questions, answers, selected, onSelect }
                 className="qw-num"
                 data-state={state}
                 aria-current={index === selected ? "true" : undefined}
-                aria-label={`Question ${question.order}: ${RESULT[state].slice(2)}`}
+                aria-label={`Question ${question.order}: ${RESULT[state]}`}
                 style={{
                   transform: `translateX(${offset * WHEEL_SPACING}px) scale(${
                     Math.abs(offset) < 0.5 ? 1.18 - Math.abs(offset) * 0.36 : 1
@@ -92,7 +88,7 @@ export default function QuestionWheel({ questions, answers, selected, onSelect }
                   opacity: Math.max(0.25, 1 - Math.abs(offset) * 0.14),
                 }}
                 onClick={() => {
-                  if (!dragged.current) onSelect(index);
+                  if (!dragged.current) onSelect(index, { live: false });
                 }}
               >
                 {question.order}
@@ -102,7 +98,7 @@ export default function QuestionWheel({ questions, answers, selected, onSelect }
           <span className="qw-lens" aria-hidden="true" />
         </div>
         <span className="qw-count" aria-hidden="true">
-          {landing + 1}/{count}
+          {selected + 1}/{count}
         </span>
       </nav>
     </div>
