@@ -51,7 +51,7 @@ test("organizer reviews the submitted version, not the newer draft, and approves
 }) => {
   const state = await openClass(page, { as: "organizer", submission: "PENDING" });
 
-  await page.getByRole("link", { name: "Original submitted quiz" }).click();
+  await page.getByRole("link", { name: "Original submitted quiz", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${PREVIEW}$`));
 
   await expect(page.getByText("Original submitted question")).toBeVisible();
@@ -74,7 +74,7 @@ test("organizer reviews the submitted version, not the newer draft, and approves
 test("approving from the queue removes the row from Pending", async ({ page }) => {
   await openClass(page, { as: "organizer", submission: "PENDING" });
 
-  await expect(page.getByRole("link", { name: "Original submitted quiz" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Original submitted quiz", exact: true })).toBeVisible();
   await button(page, "Approve").click();
 
   await expect(page.getByText("Nothing to review")).toBeVisible();
@@ -154,6 +154,11 @@ test("class page and preview fit a phone screen", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
 
   await openClass(page, { as: "member", submission: "PENDING" });
+  // Rows is the default; on a phone it drops the Approval column.
+  await expect(page.getByRole("link", { name: "Original submitted quiz", exact: true })).toBeVisible();
+  await noHorizontalScroll(page);
+
+  await button(page, "Cards").click();
   await expect(button(page, "Withdraw request")).toBeVisible();
   await noHorizontalScroll(page);
 
