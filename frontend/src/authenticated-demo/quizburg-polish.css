@@ -2807,7 +2807,19 @@
   color: var(--paper);
 }
 
-.qp .lv-bar > strong {
+.qp .lv-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px 18px;
+  min-width: 0;
+}
+
+.qp .lv-bar-left .lv-bar-label {
+  flex-shrink: 0;
+}
+
+.qp .lv-bar > strong,
+.qp .lv-bar-left > strong {
   min-width: 0;
   overflow: hidden;
   font: 20px "Archivo Black", sans-serif;
@@ -2938,22 +2950,24 @@
 }
 
 .qp .lv-lobby-top {
+  position: relative;
   padding: 26px 32px 30px;
   text-align: center;
 }
 
 .qp .lv-lobby-top h1 {
   margin: 6px 0 20px;
+  /* Room for the player count in the top right corner. */
+  padding: 0 150px;
   font-size: clamp(30px, 4vw, 42px);
   overflow-wrap: anywhere;
 }
 
 .qp .lv-join-row {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 22px 26px;
+  gap: clamp(10px, 2vh, 20px);
 }
 
 .qp .lv-join-step {
@@ -2961,7 +2975,7 @@
   font-size: 20px;
   font-weight: 700;
   line-height: 1.35;
-  text-align: right;
+  text-align: center;
 }
 
 .qp .lv-join-step b {
@@ -2991,6 +3005,9 @@
 }
 
 .qp .lv-count {
+  position: absolute;
+  top: clamp(12px, 2.4vh, 24px);
+  right: clamp(14px, 2vw, 28px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3169,32 +3186,32 @@
 .qp .lv .ui-tone-0 .lv-index,
 .qp .lv-index.ui-tone-0,
 .qp .lv-my-pick.ui-tone-0 {
-  background: #043371;
-  color: #ffffff;
+  background: var(--answer-0);
+  color: var(--color-on-answer);
 }
 
 .qp .lv-host-answer.ui-tone-1,
 .qp .lv .ui-tone-1 .lv-index,
 .qp .lv-index.ui-tone-1,
 .qp .lv-my-pick.ui-tone-1 {
-  background: #bf4c0c;
-  color: #ffffff;
+  background: var(--answer-1);
+  color: var(--color-on-answer);
 }
 
 .qp .lv-host-answer.ui-tone-2,
 .qp .lv .ui-tone-2 .lv-index,
 .qp .lv-index.ui-tone-2,
 .qp .lv-my-pick.ui-tone-2 {
-  background: #c9ddbf;
-  color: #222222;
+  background: var(--answer-2);
+  color: var(--color-on-answer);
 }
 
 .qp .lv-host-answer.ui-tone-3,
 .qp .lv .ui-tone-3 .lv-index,
 .qp .lv-index.ui-tone-3,
 .qp .lv-my-pick.ui-tone-3 {
-  background: #f3d477;
-  color: #222222;
+  background: var(--answer-3);
+  color: var(--color-on-answer);
 }
 
 .qp .lv-index {
@@ -3209,43 +3226,105 @@
   font: 0.62em "Archivo Black", sans-serif;
 }
 
-/* Question (projector) */
+/* Question (projector). Sizes follow the window (vh/vw) so the question,
+   timer, counts and answers fit 1280x720 to 1920x1080 without zooming. */
 .qp .lv-hq {
+  --lv-dial: clamp(76px, 15vh, 136px);
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - 190px);
+  min-height: 0;
 }
 
 .qp .lv-hq-top {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   display: grid;
-  grid-template-columns: 144px minmax(0, 1fr) 144px;
+  grid-template-columns: calc(var(--lv-dial) * 1.2) minmax(0, 1fr) calc(var(--lv-dial) * 1.2);
   align-items: center;
-  gap: clamp(18px, 2.5vw, 40px);
-  min-height: 240px;
-  padding: clamp(18px, 3vh, 34px) clamp(20px, 3vw, 44px);
+  gap: clamp(14px, 2.2vw, 40px);
+  min-height: 0;
+  padding: clamp(10px, 2.4vh, 30px) clamp(16px, 2.6vw, 44px);
 }
 
+/* The question may take up to 40% of the window height; useFitText
+   (live/fitText.js) picks --lv-q-size / --lv-a-size so the question and
+   the answers fit their boxes. */
+/* position: relative on the measured boxes: see overflows() in fitText.js */
+.qp .lv-hq-text,
+.qp .lv-hq-preview,
+.qp .lv-host-answer {
+  position: relative;
+}
+
+.qp .lv-hq-text {
+  min-height: 0;
+  max-height: 46vh;
+  overflow-y: auto;
+  /* Display letters reach a little past their line; never show a scrollbar
+     for that (the text is sized to fit, see useFitText). */
+  scrollbar-width: none;
+}
+
+.qp .lv-hq-text::-webkit-scrollbar,
+.qp .lv-hq-preview::-webkit-scrollbar,
+.qp .lv-host-answer::-webkit-scrollbar {
+  display: none;
+}
+
+/* Full width of the column, so wide and tall windows alike fill the lines
+   instead of leaving empty space at the sides. */
 .qp .lv-hq-text h1 {
-  max-width: 1100px;
   margin: 0 auto;
-  font-size: clamp(30px, min(4.4vw, 7.2vh), 64px);
-  line-height: 1.15;
+  font-size: var(--lv-q-size, clamp(22px, min(3.6vw, 6vh), 60px));
+  line-height: 1.12;
   text-align: center;
+  text-wrap: pretty;
   overflow-wrap: anywhere;
+}
+
+/* Question alone, before the timer and answers appear */
+.qp .lv-hq-preview {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 2.4vh, 24px);
+  min-height: 0;
+  padding: clamp(16px, 4vh, 48px) clamp(16px, 4vw, 64px);
+  overflow-y: auto;
+  scrollbar-width: none;
+  text-align: center;
+}
+
+.qp .lv-hq-preview h1 {
+  margin: 0;
+  font-size: var(--lv-q-size, clamp(28px, min(4.8vw, 8.5vh), 80px));
+  line-height: 1.12;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+  animation: lv-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.qp .lv-hq-ready {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-weight: 700;
 }
 
 .qp .lv-timer {
   display: grid;
   place-items: center;
   justify-self: center;
-  width: 124px;
-  height: 124px;
+  width: var(--lv-dial);
+  height: var(--lv-dial);
   border: var(--b);
   background: var(--orange-deep);
   box-shadow: 4px 4px 0 var(--ink);
   color: var(--paper);
-  font: 52px "Archivo Black", sans-serif;
+  font: calc(var(--lv-dial) * 0.42) "Archivo Black", sans-serif;
 }
 
 .qp .lv-timer.is-urgent,
@@ -3269,8 +3348,8 @@
   align-items: center;
   justify-content: center;
   justify-self: center;
-  width: 144px;
-  height: 124px;
+  width: calc(var(--lv-dial) * 1.16);
+  height: var(--lv-dial);
   border: var(--b);
   background: var(--sky-soft);
   box-shadow: 4px 4px 0 var(--ink);
@@ -3278,23 +3357,24 @@
 }
 
 .qp .lv-answer-count strong {
-  font: 44px/1.1 "Archivo Black", sans-serif;
+  font: calc(var(--lv-dial) * 0.34) / 1.1 "Archivo Black", sans-serif;
   white-space: nowrap;
 }
 
 .qp .lv-answer-count small {
-  font-size: 22px;
+  font-size: 0.5em;
 }
 
 .qp .lv-answer-count span {
-  font-size: 12px;
+  font-size: clamp(10px, 1.6vh, 13px);
   font-weight: 700;
   letter-spacing: 1px;
   text-transform: uppercase;
 }
 
 .qp .lv-track {
-  height: 12px;
+  flex: 0 0 auto;
+  height: clamp(8px, 1.4vh, 12px);
   border-top: var(--b);
   border-bottom: var(--b);
   background: var(--paper);
@@ -3307,32 +3387,178 @@
 }
 
 .qp .lv-host-answers {
-  flex: 1.2 1 auto;
+  flex: 1 1 auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(12px, 2vh, 22px);
-  padding: clamp(12px, 2vh, 22px);
+  grid-auto-rows: minmax(0, 1fr);
+  gap: clamp(10px, 2vh, 22px);
+  min-height: 0;
+  padding: clamp(10px, 2vh, 22px);
   background: var(--sand);
 }
 
 .qp .lv-host-answer {
   display: flex;
   align-items: center;
-  gap: clamp(14px, 1.6vw, 26px);
+  /* If text ever overflows, start at the top so no line is cut off above */
+  align-items: safe center;
+  gap: clamp(10px, 1.4vw, 24px);
   min-width: 0;
-  min-height: 112px;
-  padding: 12px clamp(18px, 2.4vw, 36px);
+  min-height: 0;
+  padding: clamp(8px, 1.4vh, 16px) clamp(14px, 2vw, 32px);
   border: var(--b);
   background: var(--paper);
   box-shadow: 4px 4px 0 var(--ink);
-  font-size: clamp(20px, min(2.6vw, 4.4vh), 40px);
+  font-size: var(--lv-a-size, clamp(16px, min(2.3vw, 4vh), 40px));
   font-weight: 700;
   line-height: 1.15;
   overflow-wrap: anywhere;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
 
 .qp .lv-host-answer .lv-index {
   border-width: 3px;
+}
+
+.qp .lv-answer-text {
+  min-width: 0;
+}
+
+/* White card suit on each coloured answer (AnswerSuit.jsx) */
+.qp .lv-suit {
+  flex: 0 0 auto;
+  width: 1.5em;
+  height: 1.5em;
+  color: var(--color-on-answer);
+}
+
+/* The suit is the whole label on the phone tiles, the picked answer and
+   the results badges. */
+.qp .lv-ptiles .ui-answer .lv-suit {
+  width: min(45%, 96px);
+  height: min(45%, 96px);
+}
+
+.qp .lv-my-pick .lv-suit {
+  width: 56%;
+  height: 56%;
+}
+
+.qp .lv-index .lv-suit {
+  width: 62%;
+  height: 62%;
+}
+
+.qp .lv-hq .lv-strip {
+  flex: 0 0 auto;
+  min-height: 0;
+  padding-top: clamp(6px, 1.2vh, 12px);
+  padding-bottom: clamp(6px, 1.2vh, 12px);
+}
+
+/* On laptops and projectors the lobby, question and results screens fill
+   the window under the header, with no page scroll (same idea as the
+   dashboard in taha-ui.css). */
+@media (min-width: 641px) {
+  .qp:has(.lv-lobby),
+  .qp:has(.lv-hq),
+  .qp:has(.lv-results) {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 0;
+    padding-bottom: clamp(12px, 2.4vh, 36px);
+  }
+
+  .qp:has(.lv-lobby) .qp-header,
+  .qp:has(.lv-hq) .qp-header,
+  .qp:has(.lv-results) .qp-header {
+    flex-shrink: 0;
+  }
+
+  .qp:has(.lv-lobby) .qp-frame,
+  .qp:has(.lv-hq) .qp-frame,
+  .qp:has(.lv-results) .qp-frame,
+  .qp .ui-live:has(.lv-lobby),
+  .qp .ui-live:has(.lv-hq),
+  .qp .ui-live:has(.lv-results),
+  .qp .lv-body:has(.lv-lobby),
+  .qp .lv-body:has(.lv-hq),
+  .qp .lv-body:has(.lv-results) {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .qp .lv-hq {
+    flex: 1 1 auto;
+  }
+
+  .qp .lv-host-answers {
+    flex-basis: 0;
+  }
+
+  /* Lobby: the card takes the space left over and the player list scrolls
+     inside it once it fills up; sizes shrink with the window height. */
+  .qp .lv-lobby {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin-top: clamp(10px, 2.4vh, 28px);
+    margin-bottom: clamp(10px, 2vh, 24px);
+  }
+
+  .qp .lv-lobby .lv-card {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .qp .lv-lobby-top {
+    flex-shrink: 0;
+    padding: clamp(10px, 2.4vh, 26px) 32px clamp(12px, 2.8vh, 30px);
+  }
+
+  .qp .lv-lobby-top h1 {
+    margin: 4px 0 clamp(8px, 1.8vh, 20px);
+    font-size: clamp(24px, min(4vw, 5vh), 42px);
+  }
+
+  .qp .lv-join-code {
+    font-size: clamp(36px, min(7.5vw, 11vh), 96px);
+  }
+
+  .qp .lv-count {
+    min-height: clamp(76px, 11vh, 104px);
+  }
+
+  .qp .lv-count strong {
+    font-size: clamp(28px, 4.4vh, 40px);
+  }
+
+  .qp .lv-lobby .qb-panel-top {
+    flex-shrink: 0;
+  }
+
+  .qp .lv-lobby .lv-players {
+    flex: 1 1 auto;
+    min-height: 72px;
+    overflow-y: auto;
+  }
+
+  .qp .lv-lobby .lv-players-empty {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .qp .lv-lobby .lv-actions {
+    flex-shrink: 0;
+    margin-top: clamp(10px, 2vh, 22px);
+  }
 }
 
 /* Control strip at the bottom of a projector screen */
@@ -3352,6 +3578,19 @@
     var(--sand) 10px,
     var(--sand) 20px
   );
+}
+
+/* "Question 7 of 15" / "Question 7 results" on the host's bottom strip */
+.qp .lv-stage {
+  margin: 0;
+  padding: 6px 14px;
+  border: var(--b);
+  background: var(--ink);
+  box-shadow: 3px 3px 0 var(--apricot);
+  color: var(--paper);
+  font: 18px/1.2 "Archivo Black", sans-serif;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .qp .lv-meta {
@@ -3394,10 +3633,15 @@
 }
 
 .qp .lv-r-q {
+  display: -webkit-box;
   margin: 0;
+  overflow: hidden;
   font-size: clamp(17px, min(1.9vw, 3vh), 24px);
   font-weight: 700;
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .qp .lv-dist {
@@ -3451,8 +3695,8 @@
 .qp .lv-bar-num {
   position: absolute;
   bottom: calc(100% + 8px);
-  left: -40%;
-  right: -40%;
+  left: 0;
+  right: 0;
   color: var(--navy);
   font: clamp(24px, min(3vw, 5vh), 44px) / 1.1 "Archivo Black", sans-serif;
   text-align: center;
@@ -3483,9 +3727,25 @@
   font-size: 0.7em;
 }
 
+/* Long answers: at most 3 lines (full text in the title), sized like the
+   answer boxes from the longest answer (data-size from answerTextSize) */
 .qp .lv-dl-text {
+  display: -webkit-box;
   min-width: 0;
+  overflow: hidden;
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.qp .lv-dist[data-size="medium"] .lv-dist-label {
+  font-size: clamp(14px, min(1.5vw, 2.6vh), 22px);
+}
+
+.qp .lv-dist[data-size="long"] .lv-dist-label {
+  font-size: clamp(13px, min(1.25vw, 2.2vh), 19px);
+  line-height: 1.2;
 }
 
 .qp .lv-check {
@@ -3667,7 +3927,9 @@
 
 .qp .lv-ptiles .ui-answer {
   aspect-ratio: 1;
+  flex-direction: column;
   justify-content: center;
+  gap: 6px;
   min-height: 0;
   padding: 12px;
   box-shadow: 3px 3px 0 var(--ink);
@@ -4035,22 +4297,17 @@
 }
 
 @media (max-width: 900px) {
-  .qp .lv-hq-top {
-    grid-template-columns: 112px minmax(0, 1fr) 112px;
-  }
-
-  .qp .lv-timer,
-  .qp .lv-answer-count {
-    width: 104px;
-    height: 104px;
-  }
-
-  .qp .lv-answer-count strong {
-    font-size: 32px;
-  }
-
   .qp .lv-join-step {
     text-align: center;
+  }
+
+  .qp .lv-lobby-top h1 {
+    padding: 0;
+  }
+
+  .qp .lv-count {
+    position: static;
+    margin: 0 auto clamp(10px, 2vh, 18px);
   }
 
   .qp .lv-plobby {
@@ -4065,7 +4322,8 @@
     padding: 10px 14px;
   }
 
-  .qp .lv-bar > strong {
+  .qp .lv-bar > strong,
+  .qp .lv-bar-left > strong {
     font-size: 16px;
   }
 
@@ -4237,6 +4495,7 @@
   .qp .lv-dbar,
   .qp .lv-board li,
   .qp .lv-my-pick,
+  .qp .lv-hq-preview h1,
   .qp .lv-feedback-mark,
   .qp .lv-trophy,
   .qp .lv-timer.is-urgent,
@@ -4259,24 +4518,348 @@
 
 /* Keep each answer colour on hover/tap (touch keeps :hover after a tap) */
 .qp .lv-ptiles .ui-answer.ui-tone-0:hover:not(:disabled) {
-  background: #043371;
+  background: var(--answer-0);
 }
 
 .qp .lv-ptiles .ui-answer.ui-tone-1:hover:not(:disabled) {
-  background: #bf4c0c;
+  background: var(--answer-1);
 }
 
 .qp .lv-ptiles .ui-answer.ui-tone-2:hover:not(:disabled) {
-  background: #c9ddbf;
+  background: var(--answer-2);
 }
 
 .qp .lv-ptiles .ui-answer.ui-tone-3:hover:not(:disabled) {
-  background: #f3d477;
+  background: var(--answer-3);
 }
 
 /* Leave room above the tallest bar for its count */
 .qp .lv-bar-area {
   margin-top: 46px;
+}
+
+/* Results labels look like the answer boxes: the answer's colour, white
+   text and a bare suit. Bigger text, up to four lines. */
+.qp .lv-dist-label {
+  justify-content: flex-start;
+  gap: 0.6em;
+  padding: 12px 16px;
+  font-size: clamp(18px, min(2.2vw, 3.4vh), 30px);
+  line-height: 1.2;
+}
+
+.qp .lv-dist[data-size="medium"] .lv-dist-label {
+  font-size: clamp(17px, min(1.9vw, 3.1vh), 26px);
+}
+
+.qp .lv-dist[data-size="long"] .lv-dist-label {
+  font-size: clamp(16px, min(1.6vw, 2.8vh), 23px);
+}
+
+.qp .lv-dist-label.ui-tone-0,
+.qp .is-correct .lv-dist-label.ui-tone-0 {
+  background: var(--answer-0);
+  color: var(--color-on-answer);
+}
+
+.qp .lv-dist-label.ui-tone-1,
+.qp .is-correct .lv-dist-label.ui-tone-1 {
+  background: var(--answer-1);
+  color: var(--color-on-answer);
+}
+
+.qp .lv-dist-label.ui-tone-2,
+.qp .is-correct .lv-dist-label.ui-tone-2 {
+  background: var(--answer-2);
+  color: var(--color-on-answer);
+}
+
+.qp .lv-dist-label.ui-tone-3,
+.qp .is-correct .lv-dist-label.ui-tone-3 {
+  background: var(--answer-3);
+  color: var(--color-on-answer);
+}
+
+.qp .lv-dist-label .lv-suit {
+  width: 1.3em;
+  height: 1.3em;
+}
+
+.qp .lv-dl-text {
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.qp .lv-dist-label .lv-check {
+  margin-left: auto;
+  border-color: var(--color-on-answer);
+  background: transparent;
+  color: var(--color-on-answer);
+}
+
+/* Student answering: the tiles fill the screen under the header at every
+   size, so a short window never needs scrolling (like the host screens). */
+.qp:has(.lv-pq) {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  padding-bottom: clamp(10px, 2vh, 28px);
+}
+
+.qp:has(.lv-pq) .qp-header {
+  flex-shrink: 0;
+}
+
+.qp:has(.lv-pq) .qp-frame,
+.qp .ui-live:has(.lv-pq),
+.qp .lv-body:has(.lv-pq) {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.qp .lv-pq {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  padding: clamp(10px, 2vh, 24px) clamp(10px, 2vw, 28px);
+}
+
+.qp .lv-pq-top,
+.qp .lv-tbar {
+  flex-shrink: 0;
+}
+
+.qp .lv-pq-top {
+  min-height: 0;
+}
+
+.qp .lv-ptiles {
+  flex: 1 1 auto;
+  grid-auto-rows: minmax(0, 1fr);
+  gap: clamp(8px, 1.6vh, 18px);
+  width: 100%;
+  min-height: 0;
+  padding: clamp(10px, 2vh, 18px) 0;
+}
+
+.qp .lv-ptiles .ui-answer {
+  aspect-ratio: auto;
+  height: 100%;
+  min-height: 0;
+  padding: 8px;
+}
+
+.qp .lv-ptiles .ui-answer .lv-suit {
+  width: auto;
+  height: min(55%, 150px);
+  aspect-ratio: 1;
+}
+
+.qp .lv-pq .lv-stat-row {
+  flex-shrink: 0;
+  width: min(100%, 520px);
+}
+
+/* While a student answers, the title bar stays slim. */
+.qp .lv:has(.lv-pq) .lv-bar {
+  flex-shrink: 0;
+  min-height: 0;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* Short windows: the app header (logo, name) steps aside while a question
+   is open so the tiles get the room; it's back on every other screen. */
+@media (max-height: 760px) {
+  .qp:has(.lv-pq) .qp-header {
+    display: none;
+  }
+
+  .qp:has(.lv-pq) {
+    padding-top: 8px;
+  }
+}
+
+/* Top row: progress marks on the left, score and rank on the right. */
+.qp .lv-pq-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+}
+
+.qp .lv-pq-stats {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.qp .lv-pq-stats span {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 10px;
+  border: var(--b-thin);
+  background: var(--paper);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.qp .lv-pq-stats b {
+  color: var(--ink);
+  font: 16px "Archivo Black", sans-serif;
+  letter-spacing: 0;
+}
+
+/* Bottom row, always the same height: timer bar and seconds, or a note. */
+.qp .lv-pq-foot {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+}
+
+.qp .lv-pq-foot .lv-tbar {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.qp .lv-pq-foot .lv-ptimer {
+  width: 46px;
+  height: 46px;
+  font-size: 19px;
+}
+
+.qp .lv-pq-msg {
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+
+/* Leave sits after score and rank, sized like them. */
+.qp .lv-pq-stats .lv-leave {
+  min-height: 0;
+  padding: 4px 12px;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-size: 12px;
+}
+
+/* Note floating over the locked tiles (preview, submitting, time's up). */
+.qp .lv-ptiles {
+  position: relative;
+}
+
+.qp .lv-ptiles .lv-pq-msg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: max-content;
+  max-width: min(90%, 520px);
+  padding: 10px 16px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--ink);
+  transform: translate(-50%, -50%);
+}
+
+/* Numbered progress squares, like the quiz editor's question list. */
+.qp .lv-marks i {
+  display: grid;
+  place-items: center;
+  width: auto;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 3px;
+  color: var(--ink);
+  font: 700 11px/1 "Space Grotesk", sans-serif;
+}
+
+.qp .lv-marks i.done,
+.qp .lv-marks i.cur {
+  color: var(--paper);
+}
+
+/* Results: the bars and the labels share two grid rows across all columns
+   (subgrid), so every label is as tall as the tallest one. */
+.qp .lv-dist {
+  grid-template-rows: minmax(0, 1fr) auto;
+  row-gap: 0;
+}
+
+.qp .lv-dist-col {
+  display: grid;
+  grid-row: 1 / span 2;
+  grid-template-rows: subgrid;
+}
+
+@media (max-width: 640px) {
+  .qp .lv-dist-label {
+    justify-content: center;
+    padding: 6px 4px;
+    font-size: 13px;
+  }
+
+  .qp .lv-dist[data-size] .lv-dist-label {
+    font-size: 12px;
+  }
+}
+
+/* Results screen filling the window (see the question screen above). Placed
+   after the base results rules so it overrides their minimum heights. */
+@media (min-width: 641px) {
+  .qp .lv-results {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .qp .lv-results .lv-strip {
+    flex: 0 0 auto;
+    min-height: 0;
+    padding-top: clamp(6px, 1.2vh, 12px);
+    padding-bottom: clamp(6px, 1.2vh, 12px);
+  }
+
+  .qp .lv-r-head {
+    flex: 0 0 auto;
+  }
+
+  .qp .lv-r-head h1 {
+    font-size: clamp(24px, min(3vw, 4.4vh), 46px);
+  }
+
+  .qp .lv-dist {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .qp .lv-bar-area {
+    min-height: 0;
+    margin-top: clamp(30px, 6vh, 46px);
+  }
+
+  .qp .lv-board-wrap {
+    min-height: 0;
+    margin: clamp(12px, 3vh, 28px) auto;
+    /* room for the board's shadow inside the scroll box */
+    padding: 0 8px 8px 0;
+    overflow-y: auto;
+  }
 }
 
 /* ---------- Session results (host-results-main.html, participant-results-main.html) ---------- */
@@ -5940,5 +6523,258 @@
 @media (prefers-reduced-motion: reduce) {
   .qp .qb-app-nav a:active {
     transform: none;
+  }
+}
+
+
+/* Every student screen (lobby, countdown, question, feedback, final) fills
+   the window under the header like the answer screen: the frame never runs
+   past the bottom and the page never scrolls. Content is centred; if a very
+   short window still can't hold it, it scrolls inside with no scrollbar. */
+.qp:has(.lv-fit) {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  padding-bottom: clamp(10px, 2vh, 28px);
+}
+
+.qp:has(.lv-fit) .qp-header {
+  flex-shrink: 0;
+}
+
+.qp:has(.lv-fit) .qp-frame,
+.qp .ui-live.lv-fit {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.qp .lv-fit > .lv-bar {
+  flex-shrink: 0;
+}
+
+.qp .lv-fit > .lv-body,
+.qp .lv-fit > .lv-complete {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.qp .lv-fit > .lv-body::-webkit-scrollbar,
+.qp .lv-fit > .lv-complete::-webkit-scrollbar {
+  display: none;
+}
+
+.qp .lv-fit .lv-body > :is(.lv-centered, .lv-start-countdown, .lv-plobby) {
+  flex: 1 0 auto;
+  min-height: 0;
+  align-content: safe center;
+}
+
+.qp .lv-fit .lv-body > .lv-plobby {
+  width: 100%;
+}
+
+.qp .lv-fit .lv-body > .lv-centered,
+.qp .lv-fit > .lv-complete {
+  justify-content: safe center;
+  padding-top: clamp(12px, 3vh, 40px);
+  padding-bottom: clamp(12px, 3vh, 40px);
+}
+
+.qp .lv-fit > .lv-complete {
+  max-width: none;
+  width: 100%;
+}
+
+.qp .lv-fit > .lv-complete > * {
+  flex-shrink: 0;
+}
+
+.qp .lv-fit > .lv-complete .lv-stack-actions {
+  width: min(100%, 460px);
+}
+
+/* Sizes follow the window height so the screens fit short laptops too. */
+.qp .lv-fit .lv-feedback-mark,
+.qp .lv-fit .lv-trophy {
+  width: clamp(56px, 9vh, 88px);
+  height: clamp(56px, 9vh, 88px);
+  font-size: clamp(30px, 5vh, 52px);
+}
+
+.qp .lv-fit .lv-trophy {
+  margin-bottom: clamp(6px, 1.4vh, 14px);
+}
+
+.qp .lv-fit .lv-complete h1 {
+  margin: clamp(2px, 0.8vh, 8px) 0;
+}
+
+.qp .lv-fit .lv-big-score {
+  margin: clamp(4px, 1vh, 10px) 0 clamp(8px, 1.8vh, 18px);
+  padding: clamp(8px, 1.6vh, 16px) 34px;
+}
+
+.qp .lv-fit .lv-big-score strong {
+  font-size: clamp(34px, 6vh, 52px);
+}
+
+.qp .lv-fit .lv-points {
+  margin: clamp(2px, 0.6vh, 6px) 0 clamp(8px, 1.6vh, 16px);
+  font-size: clamp(28px, 4.4vh, 40px);
+}
+
+.qp .lv-fit .lv-sub {
+  margin: clamp(8px, 1.8vh, 18px) 0 6px !important;
+}
+
+.qp .lv-fit .lv-stack-actions {
+  margin-top: clamp(8px, 1.8vh, 18px);
+}
+
+.qp .lv-fit .lv-actions {
+  margin-top: clamp(10px, 2.2vh, 22px);
+}
+
+.qp .lv-fit .lv-start-countdown {
+  gap: clamp(8px, 2vh, 20px);
+  padding: clamp(12px, 3vh, 32px) 16px;
+}
+
+.qp .lv-fit .lv-start-number {
+  font-size: clamp(90px, min(24vw, 30vh), 240px);
+}
+
+.qp .lv-fit .lv-ready .lv-marks {
+  margin: clamp(10px, 2.2vh, 22px) 0;
+}
+
+/* Short windows: the app header steps aside on every student screen. */
+@media (max-height: 760px) {
+  .qp:has(.lv-fit) .qp-header {
+    display: none;
+  }
+
+  .qp:has(.lv-fit) {
+    padding-top: 8px;
+  }
+}
+
+/* Short phones: tighten the answer feedback so two 120-character answers
+   still fit above Leave (e.g. 390x640, iPhone SE in Safari). */
+@media (max-width: 640px) and (max-height: 720px) {
+  .qp .lv-fit .lv-feedback {
+    gap: 2px;
+  }
+
+  .qp .lv-fit .lv-feedback-mark {
+    width: 44px;
+    height: 44px;
+    margin-bottom: 4px;
+    font-size: 26px;
+  }
+
+  .qp .lv-fit .lv-feedback h1 {
+    font-size: 24px;
+  }
+
+  .qp .lv-fit .lv-picked {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .qp .lv-fit .lv-feedback .lv-points {
+    margin: 2px 0 8px;
+    font-size: 26px;
+  }
+
+  .qp .lv-fit .lv-feedback .lv-stat {
+    padding: 6px 10px;
+  }
+
+  .qp .lv-fit .lv-feedback .lv-sub {
+    margin: 8px 0 4px !important;
+  }
+}
+
+
+/* Host final results fill the window too: the podium takes the height left
+   over, so the frame always ends at the bottom of the window. */
+.qp .lv-fit > .lv-final {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0 auto;
+  padding: clamp(10px, 2.4vh, 26px) 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.qp .lv-fit > .lv-final::-webkit-scrollbar {
+  display: none;
+}
+
+.qp .lv-fit > .lv-final > * {
+  flex-shrink: 0;
+}
+
+.qp .lv-fit .lv-final h1 {
+  margin: 4px 0 clamp(8px, 2vh, 24px);
+  font-size: clamp(28px, min(5vw, 6vh), 48px);
+}
+
+.qp .lv-fit .lv-final .lv-actions {
+  margin-top: clamp(10px, 2.4vh, 30px);
+}
+
+.qp .lv-fit .lv-podium-avatar {
+  --avatar-size: clamp(30px, 5vh, 48px);
+  margin-bottom: clamp(4px, 0.8vh, 8px);
+}
+
+.qp .lv-fit .lv-podium-name {
+  margin-bottom: clamp(6px, 1.2vh, 12px);
+  padding: clamp(6px, 1vh, 10px) 8px;
+}
+
+.qp .lv-fit .lv-podium-rank {
+  width: clamp(40px, 6.5vh, 62px);
+  height: clamp(40px, 6.5vh, 62px);
+  font-size: clamp(20px, 3.2vh, 30px);
+}
+
+.qp .lv-fit .lv-podium-block {
+  padding-top: clamp(8px, 1.6vh, 16px);
+}
+
+@media (min-width: 1101px) {
+  .qp .lv-fit > .lv-final > .lv-final-grid {
+    flex: 1 1 auto;
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 220px;
+  }
+
+  .qp .lv-fit .lv-podium {
+    height: 100%;
+    max-height: 460px;
+  }
+
+  .qp .lv-fit .lv-final-board {
+    max-height: 100%;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .qp .lv-fit .lv-podium {
+    height: clamp(180px, 34vh, 380px);
   }
 }
