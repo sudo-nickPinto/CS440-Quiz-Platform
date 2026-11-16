@@ -657,6 +657,12 @@ def test_class_quiz_list_names_active_collaborators(collaboration_client) -> Non
     )
     assert names() == ["Editor"]
 
+    # The editor sees the quiz too, but not their own name in the list.
+    owner = client.app.dependency_overrides[get_active_account]()
+    client.app.dependency_overrides[get_active_account] = lambda: editor
+    assert names() == []
+    client.app.dependency_overrides[get_active_account] = lambda: owner
+
     client.delete(f"{path}/collaborators/{editor.account_id}")
     assert names() == []
 

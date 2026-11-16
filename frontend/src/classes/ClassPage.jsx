@@ -15,7 +15,7 @@ import {
   ADMIN_SECTIONS,
   approvalLabel,
   approvalButton,
-  collaboratorSummary,
+  collaboratorTags,
   copyText,
   HISTORY_VIEWS,
   MY_QUIZ_SORTS,
@@ -761,7 +761,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
           {...shared}
           tableClass="cl-rows cl-member-rows"
           columnClasses={PRESENT_COLUMNS}
-          headers={["Status", "Quiz", "Approval", "Owner", "Qs", "Edited", ""]}
+          headers={["Status", "Quiz", "Approval", "People", "Qs", "Edited", ""]}
           rows={resource.data.items.map((quiz) => {
             const info = describe(quiz);
             return {
@@ -788,11 +788,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
                 approvalControl(quiz, info, "cl-approval-cell") ?? (
                   <span className="cl-dim">—</span>
                 ),
-                info.owner ? (
-                  <span className="cl-tag is-me">Me</span>
-                ) : (
-                  <span className="cl-tag">Shared · {quiz.author_name}</span>
-                ),
+                <PeopleTags quiz={quiz} owner={info.owner} />,
                 <span className="cl-dim">{formatScore(quiz.question_count)}</span>,
                 <span className="cl-dim">{formatDate(quiz.updated_at)}</span>,
                 <GoLink to={info.to} label={`Open ${quiz.title}`} />,
@@ -828,21 +824,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
                 quiz.question_count === 1 ? "question" : "questions"
               }`}
             >
-              <p>
-                {owner ? (
-                  <span className="cl-tag is-me">Owned by me</span>
-                ) : (
-                  <span className="cl-tag">Shared by {quiz.author_name}</span>
-                )}
-              </p>
-              {quiz.collaborator_names?.length > 0 && (
-                <p
-                  className="qc-collaborators"
-                  title={quiz.collaborator_names.join(", ")}
-                >
-                  With {collaboratorSummary(quiz.collaborator_names)}
-                </p>
-              )}
+              <PeopleTags quiz={quiz} owner={owner} long />
               <p>Edited {formatDate(quiz.updated_at)}</p>
               {approvalControl(quiz, info, "qc-approval")}
             </QuizCard>
@@ -1545,6 +1527,35 @@ function ClassWorkspace({ classInfo, onChange }) {
         />
       )}
     </section>
+  );
+}
+
+// Who has the quiz: the owner tag ("Me" or "Shared · owner"), then one tag
+// per other editor, up to three, and "+N" for the rest. `long` uses the
+// card wording ("Owned by me", "Shared by ...").
+function PeopleTags({ quiz, owner, long = false }) {
+  const { shown, rest } = collaboratorTags(quiz.collaborator_names);
+  const all = quiz.collaborator_names ?? [];
+  return (
+    <span className="cl-people-tags">
+      {owner ? (
+        <span className="cl-tag is-owner">{long ? "Owned by me" : "Me"}</span>
+      ) : (
+        <span className="cl-tag is-owner" title="Owner">
+          {long ? `Shared by ${quiz.author_name}` : `Shared · ${quiz.author_name}`}
+        </span>
+      )}
+      {shown.map((name) => (
+        <span className="cl-tag is-editor" key={name} title="Editor">
+          {name}
+        </span>
+      ))}
+      {rest > 0 && (
+        <span className="cl-tag is-editor" title={all.slice(3).join(", ")}>
+          +{rest}
+        </span>
+      )}
+    </span>
   );
 }
 

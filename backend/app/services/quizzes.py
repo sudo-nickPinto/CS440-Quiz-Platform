@@ -602,6 +602,9 @@ def list_class_quizzes(
         .where(
             QuizCollaborator.quiz_id.in_(page_ids),
             QuizCollaborator.revoked_at.is_(None),
+            # A collaborator sees the owner ("Shared by ...") and the other
+            # editors, not their own name.
+            QuizCollaborator.account_id != account.account_id,
         )
         .order_by(Account.display_name, Account.account_id)
     ).all():

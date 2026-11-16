@@ -152,14 +152,11 @@ export function presentStatus(quiz) {
   return { key: "draft", label: "Draft" };
 }
 
-// Collaborator names for a quiz card: the first `max` names, then
-// "+N more" for the rest. Returns "" when nobody else edits the quiz.
-export function collaboratorSummary(names, max = 3) {
+// Editor tags for a quiz card or row: the first `max` names get their own
+// tag, the rest fold into one "+N" tag.
+export function collaboratorTags(names, max = 3) {
   const list = (names ?? []).filter(Boolean);
-  if (list.length === 0) return "";
-  const shown = list.slice(0, max).join(", ");
-  const rest = list.length - max;
-  return rest > 0 ? `${shown} +${rest} more` : shown;
+  return { shown: list.slice(0, max), rest: Math.max(0, list.length - max) };
 }
 
 // The one approval button on a My quizzes row and the short note under it.

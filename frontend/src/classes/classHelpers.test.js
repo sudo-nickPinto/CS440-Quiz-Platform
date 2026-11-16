@@ -4,7 +4,7 @@ import {
   approvalLabel,
   approvedQuizzesPath,
   approvalButton,
-  collaboratorSummary,
+  collaboratorTags,
   presentStatus,
   sendForApproval,
   resolveUserSection,
@@ -283,19 +283,18 @@ describe("sendForApproval", () => {
   });
 });
 
-describe("collaboratorSummary", () => {
+describe("collaboratorTags", () => {
   it("is empty when nobody else edits the quiz", () => {
-    expect(collaboratorSummary([])).toBe("");
-    expect(collaboratorSummary(undefined)).toBe("");
+    expect(collaboratorTags([])).toEqual({ shown: [], rest: 0 });
+    expect(collaboratorTags(undefined)).toEqual({ shown: [], rest: 0 });
   });
 
-  it("lists up to three names", () => {
-    expect(collaboratorSummary(["Ana"])).toBe("Ana");
-    expect(collaboratorSummary(["Ana", "Ben", "Cy"])).toBe("Ana, Ben, Cy");
+  it("gives up to three names their own tag", () => {
+    expect(collaboratorTags(["Ana"])).toEqual({ shown: ["Ana"], rest: 0 });
+    expect(collaboratorTags(["Ana", "Ben", "Cy"])).toEqual({ shown: ["Ana", "Ben", "Cy"], rest: 0 });
   });
 
-  it("folds the rest into +N more", () => {
-    expect(collaboratorSummary(["Ana", "Ben", "Cy", "Dee"])).toBe("Ana, Ben, Cy +1 more");
-    expect(collaboratorSummary(["Ana", "Ben", "Cy", "Dee", "Eli", "Fay"])).toBe("Ana, Ben, Cy +3 more");
+  it("folds the rest into one +N tag", () => {
+    expect(collaboratorTags(["Ana", "Ben", "Cy", "Dee", "Eli"])).toEqual({ shown: ["Ana", "Ben", "Cy"], rest: 2 });
   });
 });

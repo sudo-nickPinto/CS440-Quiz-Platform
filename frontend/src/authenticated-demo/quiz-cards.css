@@ -49,7 +49,6 @@
 .qp .qc-meta { display: grid; gap: 8px; font-size: 14px; overflow-wrap: anywhere; }
 .qp .qc-meta p { margin: 0; }
 .qp .qc-meta .cl-tag { width: fit-content; }
-.qp .qc-meta .qc-collaborators { color: var(--color-text-muted); font-weight: 700; }
 .qp .qc-approval {
   display: grid;
   justify-items: start;
