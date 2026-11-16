@@ -21,6 +21,7 @@ import {
 } from "../classes/ClassReports";
 
 import { AccountContext } from "./account";
+import NotificationsProvider from "./NotificationsProvider";
 import { useResource } from "./rest";
 import RequestError from "./RequestError";
 import { QuizEditor, QuizViewer } from "./QuizEditor";
@@ -120,152 +121,154 @@ export default function PreviewApp({ onSignOut }) {
 
   return (
     <AccountContext.Provider value={me}>
-      <div className="qp">
-        <a className="qp-skip" href="#app-main">
-          Skip to content
-        </a>
+      <NotificationsProvider>
+        <div className="qp">
+          <a className="qp-skip" href="#app-main">
+            Skip to content
+          </a>
 
-        <header className="qp-header">
-          <Link
-            className="qb-brand-link"
-            to="/app/classes"
-            aria-label="QuizBurg — Classes"
-          >
-            <QuizBurgLogo />
-          </Link>
+          <header className="qp-header">
+            <Link
+              className="qb-brand-link"
+              to="/app/classes"
+              aria-label="QuizBurg — Classes"
+            >
+              <QuizBurgLogo />
+            </Link>
 
-          <div className="ui-user">
-            {/* Type a six-digit code from anywhere. Hidden during a live
-                game so nobody leaves it by accident. */}
-            {!/^\/app\/(host|play)\//.test(pathname) && (
-              <Link
-                className="qb-join"
-                to="/app/join"
-                aria-current={pathname === "/app/join" ? "page" : undefined}
-              >
-                Join game
-              </Link>
-            )}
-            <span className="ui-user-name">{me.display_name}</span>
+            <div className="ui-user">
+              {/* Type a six-digit code from anywhere. Hidden during a live
+                  game so nobody leaves it by accident. */}
+              {!/^\/app\/(host|play)\//.test(pathname) && (
+                <Link
+                  className="qb-join"
+                  to="/app/join"
+                  aria-current={pathname === "/app/join" ? "page" : undefined}
+                >
+                  Join game
+                </Link>
+              )}
+              <span className="ui-user-name">{me.display_name}</span>
 
-            <details className="qb-account">
-              <summary
-                className="ui-avatar"
-                aria-label={`Account menu for ${me.display_name}`}
-              >
-                <Avatar avatarKey={me.avatar_key} name={me.display_name} />
-              </summary>
+              <details className="qb-account">
+                <summary
+                  className="ui-avatar"
+                  aria-label={`Account menu for ${me.display_name}`}
+                >
+                  <Avatar avatarKey={me.avatar_key} name={me.display_name} />
+                </summary>
 
-              <div className="qb-account-menu">
-                <p>
-                  <small>Signed in as</small>
-                  <strong>{me.display_name}</strong>
-                </p>
-                <button type="button" onClick={() => navigate("/app/profile")}>
-                  Edit profile
-                </button>
-                {isFaculty(me) && (
-                  <button type="button" onClick={() => navigate("/app/faculty")}>
-                    Faculty access
+                <div className="qb-account-menu">
+                  <p>
+                    <small>Signed in as</small>
+                    <strong>{me.display_name}</strong>
+                  </p>
+                  <button type="button" onClick={() => navigate("/app/profile")}>
+                    Edit profile
                   </button>
-                )}
-                <button type="button" onClick={onSignOut}>
-                  Sign out
-                </button>
-              </div>
-            </details>
-          </div>
-        </header>
+                  {isFaculty(me) && (
+                    <button type="button" onClick={() => navigate("/app/faculty")}>
+                      Faculty access
+                    </button>
+                  )}
+                  <button type="button" onClick={onSignOut}>
+                    Sign out
+                  </button>
+                </div>
+              </details>
+            </div>
+          </header>
 
-        <main id="app-main" className="qp-frame" ref={main} tabIndex={-1}>
-          <Routes>
-            <Route path="classes" element={<ClassesPage />} />
+          <main id="app-main" className="qp-frame" ref={main} tabIndex={-1}>
+            <Routes>
+              <Route path="classes" element={<ClassesPage />} />
 
-            <Route
-              path="classes/:classId"
-              element={<ClassPage key={pathname} />}
-            />
+              <Route
+                path="classes/:classId"
+                element={<ClassPage key={pathname} />}
+              />
 
-            <Route
-              path="classes/:classId/sessions/:sessionId/report"
-              element={<ClassSessionReportPage key={pathname} />}
-            />
+              <Route
+                path="classes/:classId/sessions/:sessionId/report"
+                element={<ClassSessionReportPage key={pathname} />}
+              />
 
-            <Route
-              path="classes/:classId/quizzes/:quizId/report"
-              element={<ClassQuizReportRedirect />}
-            />
+              <Route
+                path="classes/:classId/quizzes/:quizId/report"
+                element={<ClassQuizReportRedirect />}
+              />
 
-            <Route
-              path="classes/:classId/submissions/:submissionId"
-              element={<SubmissionPreviewPage key={pathname} />}
-            />
+              <Route
+                path="classes/:classId/submissions/:submissionId"
+                element={<SubmissionPreviewPage key={pathname} />}
+              />
 
-            <Route
-              path="classes/:classId/students/:accountId/report"
-              element={<ClassStudentReportPage key={pathname} />}
-            />
+              <Route
+                path="classes/:classId/students/:accountId/report"
+                element={<ClassStudentReportPage key={pathname} />}
+              />
 
-            {/* The global dashboard was folded into the class pages; old links
-                land on the class list. */}
-            <Route
-              path="dashboard/*"
-              element={<Navigate to="/app/classes" replace />}
-            />
+              {/* The global dashboard was folded into the class pages; old links
+                  land on the class list. */}
+              <Route
+                path="dashboard/*"
+                element={<Navigate to="/app/classes" replace />}
+              />
 
-            <Route path="quizzes/new" element={<QuizEditor />} />
+              <Route path="quizzes/new" element={<QuizEditor />} />
 
-            <Route
-              path="quizzes/:quizId/reports"
-              element={<QuizHostingHistory key={pathname} />}
-            />
+              <Route
+                path="quizzes/:quizId/reports"
+                element={<QuizHostingHistory key={pathname} />}
+              />
 
-            <Route
-              path="quizzes/:quizId/edit"
-              element={<EditQuizPage key={pathname} />}
-            />
+              <Route
+                path="quizzes/:quizId/edit"
+                element={<EditQuizPage key={pathname} />}
+              />
 
-            <Route
-              path="quizzes/:quizId"
-              element={<QuizViewer key={pathname} />}
-            />
+              <Route
+                path="quizzes/:quizId"
+                element={<QuizViewer key={pathname} />}
+              />
 
-            <Route path="join" element={<JoinSessionPage />} />
+              <Route path="join" element={<JoinSessionPage />} />
 
-            <Route
-              path="profile"
-              element={<ProfilePage onSaved={setSavedAccount} />}
-            />
+              <Route
+                path="profile"
+                element={<ProfilePage onSaved={setSavedAccount} />}
+              />
 
-            <Route path="faculty" element={<FacultyAccessPage />} />
+              <Route path="faculty" element={<FacultyAccessPage />} />
 
-            <Route
-              path="join/class/:code"
-              element={<JoinClassPage key={pathname} />}
-            />
+              <Route
+                path="join/class/:code"
+                element={<JoinClassPage key={pathname} />}
+              />
 
-            <Route
-              path="host/:sessionId"
-              element={<LiveSessionPage key={pathname} />}
-            />
+              <Route
+                path="host/:sessionId"
+                element={<LiveSessionPage key={pathname} />}
+              />
 
-            <Route
-              path="play/:sessionId"
-              element={<LiveSessionPage key={pathname} />}
-            />
+              <Route
+                path="play/:sessionId"
+                element={<LiveSessionPage key={pathname} />}
+              />
 
-            <Route
-              path="results/:view/:sessionId"
-              element={<SessionResults key={pathname} />}
-            />
+              <Route
+                path="results/:view/:sessionId"
+                element={<SessionResults key={pathname} />}
+              />
 
-            <Route
-              path="*"
-              element={<Navigate to="/app/classes" replace />}
-            />
-          </Routes>
-        </main>
-      </div>
+              <Route
+                path="*"
+                element={<Navigate to="/app/classes" replace />}
+              />
+            </Routes>
+          </main>
+        </div>
+      </NotificationsProvider>
     </AccountContext.Provider>
   );
 }
