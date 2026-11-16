@@ -5669,14 +5669,44 @@
   gap: 6px;
 }
 
+/* On a narrow tile the tag drops under the question number. */
+.qp .rr-me .rr-tile-top {
+  flex-wrap: wrap;
+}
+
 .qp .rr-me .rr-tile-top strong {
   font: 20px "Archivo Black", sans-serif;
 }
 
-.qp .rr-me .rr-tile-top span {
-  font-size: 26px;
-  font-weight: 700;
-  line-height: 1;
+/* The result as a small word tag instead of a check or cross: the tile
+   color already carries it, the tag says it in words. */
+.qp .rr-me .rr-tile-top .rr-tile-tag {
+  padding: 3px 7px;
+  border: 2px solid currentColor;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qp .rr-me .rr-tile.correct .rr-tile-tag {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: var(--paper);
+}
+
+.qp .rr-me .rr-tile.wrong .rr-tile-tag {
+  background: var(--paper);
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.qp .rr-me .rr-tile.missed .rr-tile-tag,
+.qp .rr-me .rr-tile.not_played .rr-tile-tag {
+  border-style: dashed;
+  color: var(--gray);
 }
 
 .qp .rr-me .rr-tile-bottom small {

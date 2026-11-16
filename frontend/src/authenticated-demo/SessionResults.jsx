@@ -27,6 +27,14 @@ const LABEL = {
   not_played: "Not played",
 };
 
+// Shorter words for the tags on the report card tiles.
+const TAG = {
+  correct: "Correct",
+  wrong: "Wrong",
+  missed: "Missed",
+  not_played: "Skipped",
+};
+
 const GLYPH = {
   correct: "✓",
   wrong: "✗",
@@ -969,19 +977,17 @@ export function ParticipantResults({ report, backTo, backLabel }) {
                 >
                   <span className="rr-tile-top">
                     <strong>Q{q.order}</strong>
-                    <span>{GLYPH[player.answers[i].state]}</span>
+                    <span className="rr-tile-tag">
+                      {TAG[player.answers[i].state]}
+                    </span>
                   </span>
                   <span className="rr-tile-bottom">
                     <small>
                       {player.answers[i].points
                         ? "+" + fmt(player.answers[i].points)
-                        : "0"}
+                        : "0 pts"}
                     </small>
-                    <small>
-                      {player.answers[i].time_ms == null
-                        ? LABEL[player.answers[i].state]
-                        : seconds(player.answers[i].time_ms)}
-                    </small>
+                    <small>{seconds(player.answers[i].time_ms)}</small>
                   </span>
                 </button>
               ))}

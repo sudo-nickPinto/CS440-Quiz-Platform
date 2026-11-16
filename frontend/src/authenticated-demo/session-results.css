@@ -144,8 +144,25 @@
   border-left: 3px solid var(--ink);
 }
 
+/* Hover like the class page tabs: sand, never the sky blue of the stats
+   band right above. */
+.qp .rr-tabs button:not([aria-pressed="true"]):hover:not(:disabled) {
+  background: var(--sand);
+}
+
+/* Open tab colors match the class page: Leaderboard navy, Questions
+   orange. They keep their color on hover. */
+.qp .rr-tabs button[aria-pressed="true"],
+.qp .rr-tabs button[aria-pressed="true"]:hover {
+  background: var(--navy);
+}
+
+.qp .rr-tabs button + button[aria-pressed="true"],
+.qp .rr-tabs button + button[aria-pressed="true"]:hover {
+  background: var(--orange-deep);
+}
+
 .qp .rr-tabs button[aria-pressed="true"] {
-  background: var(--orange);
   color: #ffffff;
   text-decoration: underline;
   text-decoration-thickness: 4px;
@@ -398,11 +415,11 @@
   font-weight: 700;
 }
 
+/* The question on top, then one row of same-size buttons on the right,
+   the main action last. */
 .qp .rr-correction-prompt {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  display: grid;
+  gap: 16px;
   margin: 18px;
   padding: 18px;
   border: 3px solid var(--ink);
@@ -412,6 +429,31 @@
 
 .qp .rr-correction-prompt p {
   margin: 0;
+}
+
+.qp .rr-correction-prompt .rr-correction-actions {
+  justify-content: flex-end;
+}
+
+.qp .rr .rr-correction-prompt .rr-correction-actions .rr-button {
+  min-height: 44px;
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 1px;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .qp .rr-correction-prompt .rr-correction-actions {
+    display: grid;
+  }
+
+  .qp .rr .rr-correction-prompt .rr-correction-actions .rr-button {
+    width: 100%;
+    white-space: normal;
+  }
 }
 
 .qp .rr-padding {
