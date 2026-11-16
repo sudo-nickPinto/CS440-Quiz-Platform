@@ -291,6 +291,11 @@
   font-weight: 700;
 }
 
+.qp .rr-mark.not_played {
+  border-style: dashed;
+  border-color: var(--gray);
+}
+
 /* Result buttons keep their state color on hover; the global sky button
    hover would make any answer look correct. */
 .qp .rr .correct,

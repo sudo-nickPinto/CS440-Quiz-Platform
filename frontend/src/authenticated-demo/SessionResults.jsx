@@ -35,13 +35,6 @@ const TAG = {
   not_played: "Skipped",
 };
 
-const GLYPH = {
-  correct: "✓",
-  wrong: "✗",
-  missed: "—",
-  not_played: "·",
-};
-
 const fmt = (value) => Number(value).toLocaleString();
 
 const seconds = (value) =>
@@ -49,15 +42,17 @@ const seconds = (value) =>
 
 const letterOf = (index) => String.fromCharCode(65 + index);
 
+// A result square that shows the result by color only (sky correct,
+// apricot wrong, sand missed, dashed paper not played); the label is in
+// the tooltip and for screen readers.
 function Mark({ answer, order }) {
   return (
     <span
       className={"rr-mark " + answer.state}
+      role="img"
       title={"Q" + order + ": " + LABEL[answer.state]}
       aria-label={"Q" + order + ": " + LABEL[answer.state]}
-    >
-      {GLYPH[answer.state]}
-    </span>
+    />
   );
 }
 
