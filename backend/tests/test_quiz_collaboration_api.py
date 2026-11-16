@@ -1016,3 +1016,26 @@ def test_deactivated_collaborator_is_not_credited(collaboration_client) -> None:
         db.commit()
 
     assert client.get(path).json()["collaborators"] == []
+
+
+@pytest.mark.parametrize("change", ["removed", "left", "deactivated"])
+def test_class_quiz_list_skips_collaborators_without_access(
+    collaboration_client, change
+) -> None:
+    client, class_id, _, editor, _ = collaboration_client
+    quiz = _create(client, class_id)
+    _share(client, f"/classes/{class_id}/quizzes/{quiz['quiz_id']}")
+    with client.app.state.database.session_factory() as db:
+        if change == "deactivated":
+            db.get(Account, editor.account_id).is_active = False
+        else:
+            db.query(ClassMembership).filter_by(
+                class_id=class_id, account_id=editor.account_id
+            ).one().status = (
+                MembershipStatus.REMOVED if change == "removed" else MembershipStatus.LEFT
+            )
+        db.commit()
+
+    listed = client.get(f"/classes/{class_id}/quizzes?mine=true")
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["collaborator_names"] == []

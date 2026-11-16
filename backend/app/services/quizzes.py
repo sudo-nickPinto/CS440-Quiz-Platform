@@ -641,9 +641,18 @@ def list_class_quizzes(
     for quiz_id, name in db.execute(
         select(QuizCollaborator.quiz_id, Account.display_name)
         .join(Account, Account.account_id == QuizCollaborator.account_id)
+        .join(
+            ClassMembership,
+            (ClassMembership.account_id == Account.account_id)
+            & (ClassMembership.class_id == class_id),
+        )
         .where(
             QuizCollaborator.quiz_id.in_(page_ids),
             QuizCollaborator.revoked_at.is_(None),
+            # Only editors who still have access, as on the quiz page: an
+            # active account with an ACTIVE membership in this class.
+            Account.is_active.is_(True),
+            ClassMembership.status == MembershipStatus.ACTIVE,
             # A collaborator sees the owner ("Shared by ...") and the other
             # editors, not their own name.
             QuizCollaborator.account_id != account.account_id,
