@@ -4644,15 +4644,18 @@
 /* Top row: progress marks on the left, score and rank on the right. */
 .qp .lv-pq-top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px 12px;
 }
 
 .qp .lv-pq-stats {
   display: flex;
   flex-shrink: 0;
+  align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 
 .qp .lv-pq-stats span {
@@ -4696,36 +4699,55 @@
 }
 
 .qp .lv-pq-msg {
-  flex: 1 1 auto;
   margin: 0;
-  color: var(--color-text-muted);
   font-weight: 700;
   line-height: 1.3;
   text-align: center;
 }
 
-/* Locked tiles (preview, after time is up) keep their colour under dark
-   stripes, like the app's striped footers, instead of fading out. */
-.qp .lv-ptiles .ui-answer:disabled {
+/* Leave sits after score and rank, sized like them. */
+.qp .lv-pq-stats .lv-leave {
+  min-height: 0;
+  padding: 4px 12px;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-size: 12px;
+}
+
+/* Note floating over the locked tiles (preview, submitting, time's up). */
+.qp .lv-ptiles {
   position: relative;
-  opacity: 1;
-  cursor: default;
 }
 
-.qp .lv-ptiles .ui-answer:disabled::after {
-  content: "";
+.qp .lv-ptiles .lv-pq-msg {
   position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    135deg,
-    rgb(34 34 34 / 0.3) 0 14px,
-    transparent 14px 28px
-  );
-  pointer-events: none;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: max-content;
+  max-width: min(90%, 520px);
+  padding: 10px 16px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--ink);
+  transform: translate(-50%, -50%);
 }
 
-.qp .lv-ptiles .ui-answer:disabled .lv-suit {
-  opacity: 0.55;
+/* Numbered progress squares, like the quiz editor's question list. */
+.qp .lv-marks i {
+  display: grid;
+  place-items: center;
+  width: auto;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 3px;
+  color: var(--ink);
+  font: 700 11px/1 "Space Grotesk", sans-serif;
+}
+
+.qp .lv-marks i.done,
+.qp .lv-marks i.cur {
+  color: var(--paper);
 }
 
 /* Results: the bars and the labels share two grid rows across all columns
