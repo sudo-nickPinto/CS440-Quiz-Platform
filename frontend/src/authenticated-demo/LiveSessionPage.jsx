@@ -752,7 +752,7 @@ function ConnectedSession({ sessionId }) {
 
     if (completed && host && Array.isArray(state.final.standings)) {
       return (
-        <section className="ui-live">
+        <section className="ui-live lv-fit">
           <div className="lv-bar">
             <strong>{title}</strong>
             <span className="lv-bar-label">Final results</span>
@@ -874,7 +874,7 @@ function ConnectedSession({ sessionId }) {
   );
 
   return (
-    <section className={"ui-live lv" + (host ? " is-host" : " is-player lv-fit")}>
+    <section className={"ui-live lv" + (host ? " is-host" : " is-player") + " lv-fit"}>
       <ConfirmDialog confirmer={confirmer} />
 
       <div className="lv-bar">
