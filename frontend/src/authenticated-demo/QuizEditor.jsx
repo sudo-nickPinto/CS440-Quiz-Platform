@@ -11,12 +11,11 @@ import QuizCollaborators from "./QuizCollaborators";
 
 import {
   ANSWER_LIMIT,
-  ANSWER_SOFT_LIMIT,
+  EXPLANATION_LIMIT,
   blankEditor,
   LETTERS,
   newQuestion,
   QUESTION_LIMIT,
-  QUESTION_SOFT_LIMIT,
 } from "./model";
 import {
   normalizeEditorDefaultTime,
@@ -1213,7 +1212,6 @@ export function QuizEditor({
                       <CharCount
                         value={question.text}
                         limit={QUESTION_LIMIT}
-                        soft={QUESTION_SOFT_LIMIT}
                         note
                       />
                     </div>
@@ -1274,7 +1272,6 @@ export function QuizEditor({
                               <CharCount
                                 value={option}
                                 limit={ANSWER_LIMIT}
-                                soft={ANSWER_SOFT_LIMIT}
                               />
 
                               {correct && (
@@ -1356,7 +1353,7 @@ export function QuizEditor({
                         <textarea
                           id={`explanation-${question.id}`}
                           rows={2}
-                          maxLength={5000}
+                          maxLength={EXPLANATION_LIMIT}
                           value={question.explanation ?? ""}
                           placeholder="Why is this the right answer? Shown in the results review."
                           onChange={(event) =>
@@ -1365,10 +1362,10 @@ export function QuizEditor({
                             })
                           }
                         />
-                        <small>
-                          {(question.explanation ?? "").length.toLocaleString()}
-                          /5,000
-                        </small>
+                        <CharCount
+                          value={question.explanation ?? ""}
+                          limit={EXPLANATION_LIMIT}
+                        />
                       </label>
                     )}
                   </div>

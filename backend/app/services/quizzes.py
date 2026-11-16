@@ -52,6 +52,7 @@ from app.services.hosting import quiz_hosting, quiz_hosting_many
 # QUESTION_LIMIT / ANSWER_LIMIT in frontend/src/authenticated-demo/model.js).
 QUESTION_TEXT_LIMIT = 200
 CHOICE_TEXT_LIMIT = 120
+EXPLANATION_LIMIT = 1000
 
 
 def _check_text_limits(
@@ -65,10 +66,12 @@ def _check_text_limits(
     """
     known_questions = set()
     known_choices = set()
+    known_explanations = set()
     if version is not None:
         for question in version.questions:
             known_questions.add(question.question_text)
             known_choices.update(choice.choice_text for choice in question.choices)
+            known_explanations.add(getattr(question, "explanation", None))
 
     for number, question in enumerate(questions, start=1):
         which = f"Question {number}" if numbered else "This question"
@@ -94,6 +97,18 @@ def _check_text_limits(
                     f"{CHOICE_TEXT_LIMIT} characters.",
                     details={"limit": CHOICE_TEXT_LIMIT},
                 )
+        explanation = getattr(question, "explanation", None) or ""
+        if (
+            len(explanation) > EXPLANATION_LIMIT
+            and explanation not in known_explanations
+        ):
+            raise APIError(
+                422,
+                "explanation_too_long",
+                f"The explanation for {which.lower()} is longer than "
+                f"{EXPLANATION_LIMIT:,} characters.",
+                details={"limit": EXPLANATION_LIMIT},
+            )
 
 
 def _quiz_query(quiz_id: int):

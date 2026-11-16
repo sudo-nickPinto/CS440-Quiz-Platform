@@ -424,10 +424,13 @@ def test_only_the_owner_can_archive(classes) -> None:
 # 120-character answers)
 
 
-def _payload_with(question_text: str, choice_text: str = "2") -> dict:
+def _payload_with(
+    question_text: str, choice_text: str = "2", explanation: str | None = None
+) -> dict:
     question = {
         **QUIZ_PAYLOAD["questions"][0],
         "question_text": question_text,
+        "explanation": explanation,
         "choices": [
             {"choice_text": choice_text, "is_correct": True},
             {"choice_text": "3", "is_correct": False},
@@ -441,25 +444,28 @@ def test_text_at_the_limits_is_accepted(classes) -> None:
     act_as(client, identities["prof"])
 
     response = client.post(
-        f"/classes/{data['main']}/quizzes", json=_payload_with("q" * 200, "a" * 120)
+        f"/classes/{data['main']}/quizzes", json=_payload_with("q" * 200, "a" * 120, "e" * 1000)
     )
 
     assert response.status_code == 201, response.json()
 
 
 @pytest.mark.parametrize(
-    ("question", "choice", "code"),
+    ("question", "choice", "explanation", "code"),
     [
-        ("q" * 201, "2", "question_text_too_long"),
-        ("Which number is even?", "a" * 121, "choice_text_too_long"),
+        ("q" * 201, "2", None, "question_text_too_long"),
+        ("Which number is even?", "a" * 121, None, "choice_text_too_long"),
+        ("Which number is even?", "2", "e" * 1001, "explanation_too_long"),
     ],
 )
-def test_text_over_the_limits_is_rejected(classes, question, choice, code) -> None:
+def test_text_over_the_limits_is_rejected(
+    classes, question, choice, explanation, code
+) -> None:
     client, identities, data = classes
     act_as(client, identities["prof"])
 
     response = client.post(
-        f"/classes/{data['main']}/quizzes", json=_payload_with(question, choice)
+        f"/classes/{data['main']}/quizzes", json=_payload_with(question, choice, explanation)
     )
 
     assert response.status_code == 422

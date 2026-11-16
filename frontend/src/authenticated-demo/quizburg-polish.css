@@ -1764,14 +1764,6 @@
   white-space: nowrap;
 }
 
-.qp .qe-count.is-long {
-  color: var(--orange-deep);
-}
-
-.qp .qe-count.is-over {
-  color: var(--color-danger);
-}
-
 .qp .qe-count-note {
   font-weight: 500;
 }
@@ -1850,9 +1842,8 @@
   font-weight: 500;
 }
 
-.qp .qe-explanation small {
+.qp .qe-explanation .qe-count {
   justify-self: end;
-  font-size: 12px;
 }
 
 /* Card footer: the time chip */

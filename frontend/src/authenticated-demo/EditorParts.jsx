@@ -141,18 +141,14 @@ export function TimePicker({
 
 const SMALLER = "Long text shows smaller on the host’s screen.";
 
-// "135/200" next to a question or answer once it passes its soft limit
-// (see model.js). With `note`, also says why it matters.
-export function CharCount({ value, limit, soft, note = false }) {
-  const count = charCount(value.length, limit, soft);
+// The gray "185/200" counter next to a field, shown from 20 characters
+// before its limit (see model.js). With `note`, also says why it matters.
+export function CharCount({ value, limit, note = false }) {
+  const count = charCount(value.length, limit);
   if (!count.visible) return null;
   return (
-    <span
-      className={"qe-count" + (count.over ? " is-over" : " is-long")}
-      title={count.over ? undefined : SMALLER}
-      aria-live="polite"
-    >
-      {note && !count.over && <span className="qe-count-note">{SMALLER} </span>}
+    <span className="qe-count" aria-live="polite">
+      {note && <span className="qe-count-note">{SMALLER} </span>}
       {count.label}
       <span className="ui-sr"> characters</span>
     </span>
