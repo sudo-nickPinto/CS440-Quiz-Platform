@@ -461,9 +461,32 @@
   color: var(--paper);
 }
 
+.qp .cl-table td.cl-status.is-pending {
+  background: var(--apricot);
+  color: var(--ink);
+}
+
+.qp .cl-table td.cl-status.is-rejected,
+.qp .cl-table td.cl-status.is-withdrawn,
 .qp .cl-table td.cl-status.is-archived {
   background: var(--sand);
   color: var(--ink);
+}
+
+.qp .cl-page .cl-approval-rows tbody tr > td {
+  height: 72px;
+}
+
+/* On a phone the quiz name is the link to the review page, so the arrow
+   column goes and the status column narrows. */
+@media (max-width: 760px) {
+  .qp .cl-approval-rows .cl-go-cell {
+    display: none;
+  }
+
+  .qp .cl-approval-rows td.cl-status {
+    width: 84px;
+  }
 }
 
 .qp .cl-table tr:has(> td.cl-status) > td {
@@ -1230,6 +1253,10 @@
 }
 
 @media (max-width: 1100px) {
+  .qp .cl-approval-rows .cl-wide {
+    display: none;
+  }
+
   .qp .cl-member-rows .cl-wide {
     display: none;
   }

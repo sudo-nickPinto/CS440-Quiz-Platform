@@ -768,6 +768,8 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
 
 // The organizer's approval queue (Admin view): every submission in the class,
 // pending first by default. Members follow their own requests in My quizzes.
+const APPROVAL_COLUMNS = ["", "", "cl-wide", "cl-wide", "", "cl-go-cell"];
+
 function SubmissionsTable({ classInfo, onChange }) {
   const api = useApi();
   const action = useAction();
@@ -811,14 +813,9 @@ function SubmissionsTable({ classInfo, onChange }) {
         caption="Approvals"
         rememberAs={memory}
         noun="submission"
-        headers={[
-          "Quiz",
-          "Version",
-          "Submitted by",
-          "Submitted",
-          "Status",
-          "Decision",
-        ]}
+        tableClass="cl-rows cl-approval-rows"
+        columnClasses={APPROVAL_COLUMNS}
+        headers={["Status", "Quiz", "Submitted by", "Submitted", "Decision", ""]}
         emptyTitle={
           status === "PENDING" ? "Nothing to review" : "No submissions"
         }
@@ -851,20 +848,19 @@ function SubmissionsTable({ classInfo, onChange }) {
           const version = `v${item.version_number} · ${item.question_count} ${
             item.question_count === 1 ? "question" : "questions"
           }${item.is_current_version ? "" : " · outdated"}`;
-          const decided = item.decided_by_name
-            ? ` by ${item.decided_by_name}`
-            : "";
-          const statusCell =
-            item.status === "PENDING"
-              ? approvalLabel(item.status)
-              : `${approvalLabel(item.status)}${decided}`;
-          const actions =
-            item.status !== "PENDING" ? (
-              "—"
-            ) : (
+          const preview = `/app/classes/${classInfo.id}/submissions/${item.submission_id}`;
+          const pending = item.status === "PENDING";
+          const actions = !pending ? (
+            <span className="cl-approval-note">
+              {item.decided_by_name
+                ? `${approvalLabel(item.status)} by ${item.decided_by_name}`
+                : "—"}
+            </span>
+          ) : (
               <span className="cl-approval">
                 <button
                   type="button"
+                  className="cl-decide is-approve"
                   disabled={
                     action.busy ||
                     classInfo.archived ||
@@ -881,7 +877,7 @@ function SubmissionsTable({ classInfo, onChange }) {
                 </button>
                 <button
                   type="button"
-                  className="cl-secondary"
+                  className="cl-decide"
                   disabled={action.busy}
                   onClick={() => void decide(item, "REJECTED")}
                 >
@@ -893,18 +889,23 @@ function SubmissionsTable({ classInfo, onChange }) {
           return {
             key: item.submission_id,
             text: `${item.quiz_title} ${item.submitter_name}`,
+            leadClass: `cl-status is-${item.status.toLowerCase()}`,
             cells: [
-              <Link
-                to={`/app/classes/${classInfo.id}/submissions/${item.submission_id}`}
-                title="See exactly the version that was submitted"
-              >
-                {item.quiz_title}
-              </Link>,
-              version,
+              pending ? "Waiting" : approvalLabel(item.status),
+              <span className="cl-quiz-cell">
+                <Link
+                  className="cl-quiz-name"
+                  to={preview}
+                  title="See exactly the version that was submitted"
+                >
+                  {item.quiz_title}
+                </Link>
+                <small>{version}</small>
+              </span>,
               item.submitter_name,
               formatDate(item.submitted_at),
-              statusCell,
               actions,
+              <GoLink to={preview} label={`Review ${item.quiz_title}`} />,
             ],
           };
         })}

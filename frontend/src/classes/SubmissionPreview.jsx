@@ -109,6 +109,7 @@ function SubmissionBody({ data, organizer, action, archived, onDecide }) {
         <div className="cl-approval cl-preview-actions">
           <button
             type="button"
+            className="cl-decide is-approve"
             disabled={action.busy || archived || !submission.is_current_version}
             title={
               submission.is_current_version
@@ -121,7 +122,7 @@ function SubmissionBody({ data, organizer, action, archived, onDecide }) {
           </button>
           <button
             type="button"
-            className="cl-secondary"
+            className="cl-decide"
             disabled={action.busy}
             onClick={() => onDecide("REJECTED")}
           >
