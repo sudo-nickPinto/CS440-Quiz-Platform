@@ -1014,3 +1014,22 @@
   background: var(--ink);
   color: var(--paper);
 }
+
+/* Cards and rows: the owner tag, then one tag per other editor. */
+.qp .cl-people-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Owner in navy, editors in light blue. */
+.qp .cl-tag.is-owner {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.qp .cl-tag.is-editor {
+  background: var(--sky-soft);
+  color: var(--navy);
+}

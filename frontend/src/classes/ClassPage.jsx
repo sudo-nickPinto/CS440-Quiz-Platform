@@ -15,6 +15,7 @@ import {
   ADMIN_SECTIONS,
   approvalLabel,
   approvalButton,
+  collaboratorTags,
   copyText,
   HISTORY_VIEWS,
   MY_QUIZ_SORTS,
@@ -423,7 +424,7 @@ function PresentationsTable({ classInfo, studentCount, controls }) {
 
 // The member tabs can show quizzes as cards or as list rows; the choice is
 // remembered across classes.
-const LAYOUTS = { cards: "Cards", list: "Rows" };
+const LAYOUTS = { list: "Rows", cards: "Cards" };
 
 function LayoutToggle({ layout, onChange }) {
   return (
@@ -665,11 +666,9 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
       status,
       archived,
       owner: quiz.my_access === "OWNER",
-      // Archived quizzes can't be edited, so those open the read-only page.
-      to:
-        quiz.my_access && !archived
-          ? `/app/quizzes/${quiz.quiz_id}/edit`
-          : `/app/quizzes/${quiz.quiz_id}`,
+      // Every quiz opens its page first; the Edit button there goes on to
+      // the editor.
+      to: `/app/quizzes/${quiz.quiz_id}`,
       hostable:
         status.key === "approved" &&
         !classInfo.archived &&
@@ -699,7 +698,6 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
               label="▶ Host live"
             />
           </span>
-          <small className="cl-approval-note">Approved</small>
         </div>
       );
     }
@@ -711,14 +709,13 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
           className={`cl-send is-${button.kind}`}
           disabled={!clickable}
           aria-disabled={button.kind === "approved" || undefined}
-          title={button.title}
+          // The status ("Rejected", "Edited since approval") is a tooltip
+          // now instead of a line under the button.
+          title={button.title ?? button.note ?? undefined}
           onClick={press}
         >
           {button.label}
         </button>
-        {button.note && (
-          <small className="cl-approval-note">{button.note}</small>
-        )}
       </div>
     );
   }
@@ -762,7 +759,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
           {...shared}
           tableClass="cl-rows cl-member-rows"
           columnClasses={PRESENT_COLUMNS}
-          headers={["Status", "Quiz", "Approval", "Owner", "Qs", "Edited", ""]}
+          headers={["Status", "Quiz", "Approval", "People", "Qs", "Edited", ""]}
           rows={resource.data.items.map((quiz) => {
             const info = describe(quiz);
             return {
@@ -789,11 +786,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
                 approvalControl(quiz, info, "cl-approval-cell") ?? (
                   <span className="cl-dim">—</span>
                 ),
-                info.owner ? (
-                  <span className="cl-tag is-me">Me</span>
-                ) : (
-                  <span className="cl-tag">Shared · {quiz.author_name}</span>
-                ),
+                <PeopleTags quiz={quiz} owner={info.owner} />,
                 <span className="cl-dim">{formatScore(quiz.question_count)}</span>,
                 <span className="cl-dim">{formatDate(quiz.updated_at)}</span>,
                 <GoLink to={info.to} label={`Open ${quiz.title}`} />,
@@ -829,13 +822,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
                 quiz.question_count === 1 ? "question" : "questions"
               }`}
             >
-              <p>
-                {owner ? (
-                  <span className="cl-tag is-me">Owned by me</span>
-                ) : (
-                  <span className="cl-tag">Shared by {quiz.author_name}</span>
-                )}
-              </p>
+              <PeopleTags quiz={quiz} owner={owner} long />
               <p>Edited {formatDate(quiz.updated_at)}</p>
               {approvalControl(quiz, info, "qc-approval")}
             </QuizCard>
@@ -1184,8 +1171,9 @@ function ClassWorkspace({ classInfo, onChange }) {
       isValid: (value) => USER_SECTIONS.includes(value),
     },
   );
-  // Cards or rows on the member tabs, shared by every class.
-  const [layout, setLayout] = useRemembered("class:member-layout", "cards", {
+  // Rows or cards on the member tabs, shared by every class. Rows is the
+  // default; the key changed when it did, so earlier choices start over.
+  const [layout, setLayout] = useRemembered("class:member-layout-v2", "list", {
     isValid: (key) => key in LAYOUTS,
   });
   const [historyView, setHistoryView] = useRemembered(
@@ -1538,6 +1526,35 @@ function ClassWorkspace({ classInfo, onChange }) {
         />
       )}
     </section>
+  );
+}
+
+// Who has the quiz: the owner tag ("Me" or "Shared · owner"), then one tag
+// per other editor, up to three, and "+N" for the rest. `long` uses the
+// card wording ("Owned by me", "Shared by ...").
+function PeopleTags({ quiz, owner, long = false }) {
+  const { shown, rest } = collaboratorTags(quiz.collaborator_names);
+  const all = quiz.collaborator_names ?? [];
+  return (
+    <span className="cl-people-tags">
+      {owner ? (
+        <span className="cl-tag is-owner">{long ? "Owned by me" : "Me"}</span>
+      ) : (
+        <span className="cl-tag is-owner" title="Owner">
+          {long ? `Shared by ${quiz.author_name}` : `Shared · ${quiz.author_name}`}
+        </span>
+      )}
+      {shown.map((name) => (
+        <span className="cl-tag is-editor" key={name} title="Editor">
+          {name}
+        </span>
+      ))}
+      {rest > 0 && (
+        <span className="cl-tag is-editor" title={all.slice(3).join(", ")}>
+          +{rest}
+        </span>
+      )}
+    </span>
   );
 }
 

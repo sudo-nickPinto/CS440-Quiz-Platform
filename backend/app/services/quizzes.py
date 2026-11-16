@@ -49,6 +49,69 @@ from app.services.class_authorization import get_class, get_class_membership
 from app.services.hosting import quiz_hosting, quiz_hosting_many
 
 
+# Longest question and answer text a host screen can show (see the editor's
+# QUESTION_LIMIT / ANSWER_LIMIT in frontend/src/authenticated-demo/model.js).
+QUESTION_TEXT_LIMIT = 200
+CHOICE_TEXT_LIMIT = 120
+EXPLANATION_LIMIT = 1000
+
+
+def _check_text_limits(
+    questions, version: QuizVersion | None = None, *, numbered: bool = True
+) -> None:
+    """Reject new or edited text over the limits.
+
+    Text already saved in ``version`` (the quiz's current editor version) is
+    let through unchanged, so quizzes written before the limits still save
+    until someone edits that text.
+    """
+    known_questions = set()
+    known_choices = set()
+    known_explanations = set()
+    if version is not None:
+        for question in version.questions:
+            known_questions.add(question.question_text)
+            known_choices.update(choice.choice_text for choice in question.choices)
+            known_explanations.add(getattr(question, "explanation", None))
+
+    for number, question in enumerate(questions, start=1):
+        which = f"Question {number}" if numbered else "This question"
+        if (
+            len(question.question_text) > QUESTION_TEXT_LIMIT
+            and question.question_text not in known_questions
+        ):
+            raise APIError(
+                422,
+                "question_text_too_long",
+                f"{which} is longer than {QUESTION_TEXT_LIMIT} characters.",
+                details={"limit": QUESTION_TEXT_LIMIT},
+            )
+        for choice in question.choices:
+            if (
+                len(choice.choice_text) > CHOICE_TEXT_LIMIT
+                and choice.choice_text not in known_choices
+            ):
+                raise APIError(
+                    422,
+                    "choice_text_too_long",
+                    f"An answer in {which.lower()} is longer than "
+                    f"{CHOICE_TEXT_LIMIT} characters.",
+                    details={"limit": CHOICE_TEXT_LIMIT},
+                )
+        explanation = getattr(question, "explanation", None) or ""
+        if (
+            len(explanation) > EXPLANATION_LIMIT
+            and explanation not in known_explanations
+        ):
+            raise APIError(
+                422,
+                "explanation_too_long",
+                f"The explanation for {which.lower()} is longer than "
+                f"{EXPLANATION_LIMIT:,} characters.",
+                details={"limit": EXPLANATION_LIMIT},
+            )
+
+
 def _quiz_query(quiz_id: int):
     return (
         select(Quiz)
@@ -371,6 +434,7 @@ def create_quiz(
         raise APIError(
             409, "class_archived", "An archived class cannot get new quizzes."
         )
+    _check_text_limits(payload.questions)
 
     version = QuizVersion(
         version_number=1,
@@ -573,6 +637,29 @@ def list_class_quizzes(
     }
     rows = [loaded[quiz_id] for quiz_id in page_ids]
     editing = set(db.scalars(collaborating))
+    collaborator_names: dict[int, list[str]] = {}
+    for quiz_id, name in db.execute(
+        select(QuizCollaborator.quiz_id, Account.display_name)
+        .join(Account, Account.account_id == QuizCollaborator.account_id)
+        .join(
+            ClassMembership,
+            (ClassMembership.account_id == Account.account_id)
+            & (ClassMembership.class_id == class_id),
+        )
+        .where(
+            QuizCollaborator.quiz_id.in_(page_ids),
+            QuizCollaborator.revoked_at.is_(None),
+            # Only editors who still have access, as on the quiz page: an
+            # active account with an ACTIVE membership in this class.
+            Account.is_active.is_(True),
+            ClassMembership.status == MembershipStatus.ACTIVE,
+            # A collaborator sees the owner ("Shared by ...") and the other
+            # editors, not their own name.
+            QuizCollaborator.account_id != account.account_id,
+        )
+        .order_by(Account.display_name, Account.account_id)
+    ).all():
+        collaborator_names.setdefault(quiz_id, []).append(name)
     newest_published = {
         quiz.quiz_id: max(published, key=lambda v: v.version_number)
         for quiz, _ in rows
@@ -617,6 +704,7 @@ def list_class_quizzes(
                     submission
                     and submission.submitted_by_id == account.account_id
                 ),
+                collaborator_names=collaborator_names.get(quiz.quiz_id, []),
             )
         )
 
@@ -835,6 +923,7 @@ def update_class_quiz_question(
         )
 
     editor_version = _latest_editor_version(quiz)
+    _check_text_limits([payload], editor_version, numbered=False)
     source = next(
         (question for question in editor_version.questions if question.question_id == question_id),
         None,
@@ -1117,6 +1206,7 @@ def add_class_quiz_question(
         raise APIError(409, "quiz_not_editable", "An archived quiz cannot be edited.")
 
     editor_version = _latest_editor_version(quiz)
+    _check_text_limits([payload], numbered=False)
     if editor_version.published_at is not None:
         editor_version = QuizVersion(
             quiz_id=quiz_id,
@@ -1181,6 +1271,7 @@ def update_class_quiz(
             "Reload the latest version before saving again.",
             details={"current_revision": quiz.revision},
         )
+    _check_text_limits(payload.questions, _latest_editor_version(quiz))
 
     now = datetime.now(UTC).replace(tzinfo=None)
     changed = db.execute(

@@ -1673,9 +1673,16 @@
   padding: 20px 20px 18px;
 }
 
+.qp .qe-qtext-box {
+  display: grid;
+  gap: 4px;
+}
+
+/* AutoGrowTextarea sets the height, so the box never scrolls inside. */
 .qp textarea.qe-qtext {
   min-height: 0;
   padding: 10px 12px;
+  overflow: hidden;
   resize: none;
   field-sizing: content;
   font: clamp(18px, 1.8vw, 21px) / 1.35 "Archivo Black", sans-serif;
@@ -1728,17 +1735,24 @@
   outline-offset: -5px;
 }
 
-.qp .qe-choice input:not([type="radio"]) {
+/* Answer text grows to more lines like the question box (AutoGrowTextarea
+   sets the height); one line fills the 46px row. */
+.qp .qe-choice textarea.qe-choice-text {
+  align-self: center;
   min-height: 0;
-  padding: 0 12px;
+  padding: 12px;
   border: 0;
   outline: none;
+  overflow: hidden;
+  resize: none;
   background: transparent;
+  box-shadow: none;
   font-size: 16px;
   font-weight: 700;
+  line-height: 1.35;
 }
 
-.qp .qe-choice input::placeholder {
+.qp .qe-choice textarea.qe-choice-text::placeholder {
   color: var(--gray);
   font-weight: 500;
 }
@@ -1746,6 +1760,27 @@
 .qp .qe-choice-end {
   display: flex;
   align-items: center;
+}
+
+/* "87/120" once a question or answer nears the character limit. */
+.qp .qe-count {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.qp .qe-count-note {
+  font-weight: 500;
+}
+
+.qp .qe-qtext-box .qe-count {
+  justify-self: end;
+}
+
+.qp .qe-choice-end .qe-count {
+  margin-right: 10px;
 }
 
 .qp .qe-tag {
@@ -1814,9 +1849,8 @@
   font-weight: 500;
 }
 
-.qp .qe-explanation small {
+.qp .qe-explanation .qe-count {
   justify-self: end;
-  font-size: 12px;
 }
 
 /* Card footer: the time chip */

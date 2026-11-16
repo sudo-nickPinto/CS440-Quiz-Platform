@@ -259,6 +259,8 @@ class ClassQuizListItem(QuizListItem):
     approval_status: SubmissionStatus | None = None
     approval_submission_id: int | None = None
     approval_sent_by_me: bool = False
+    # Display names of the quiz's active collaborators, A to Z.
+    collaborator_names: list[str] = Field(default_factory=list)
 
 
 class ClassQuizListPage(BaseModel):

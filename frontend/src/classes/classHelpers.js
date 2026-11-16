@@ -152,8 +152,15 @@ export function presentStatus(quiz) {
   return { key: "draft", label: "Draft" };
 }
 
+// Editor tags for a quiz card or row: the first `max` names get their own
+// tag, the rest fold into one "+N" tag.
+export function collaboratorTags(names, max = 3) {
+  const list = (names ?? []).filter(Boolean);
+  return { shown: list.slice(0, max), rest: Math.max(0, list.length - max) };
+}
+
 // The one approval button on a My quizzes row and the short note under it.
-//   send      Send for approval / Send again (orange)
+//   send      Send for approval (orange; also after a rejection)
 //   withdraw  Withdraw request (while waiting, for whoever sent it)
 //   waiting   Waiting for approval (sent by a co-editor; not clickable)
 //   approved  ✓ Approved (blue; not clickable)
@@ -184,7 +191,7 @@ export function approvalButton(quiz) {
         : null;
   return {
     kind: "send",
-    label: status === "REJECTED" ? "Send again" : "Send for approval",
+    label: "Send for approval",
     disabled: ownerOnly,
     title: ownerOnly ? "Only the quiz owner can send a new version" : undefined,
     note,

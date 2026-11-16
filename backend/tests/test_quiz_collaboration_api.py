@@ -640,6 +640,33 @@ def test_owner_publishes_draft_and_a_later_edit_creates_a_new_version(
     assert edited.json()["version"]["published_at"] is None
 
 
+def test_class_quiz_list_names_active_collaborators(collaboration_client) -> None:
+    client, class_id, _, editor, _ = collaboration_client
+    quiz = _create(client, class_id)
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+
+    def names() -> list[str]:
+        listed = client.get(f"/classes/{class_id}/quizzes?mine=true")
+        assert listed.status_code == 200
+        return listed.json()["items"][0]["collaborator_names"]
+
+    assert names() == []
+    client.post(
+        f"{path}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+    assert names() == ["Editor"]
+
+    # The editor sees the quiz too, but not their own name in the list.
+    owner = client.app.dependency_overrides[get_active_account]()
+    client.app.dependency_overrides[get_active_account] = lambda: editor
+    assert names() == []
+    client.app.dependency_overrides[get_active_account] = lambda: owner
+
+    client.delete(f"{path}/collaborators/{editor.account_id}")
+    assert names() == []
+
+
 def test_collaborator_can_edit_but_cannot_publish(collaboration_client) -> None:
     client, class_id, _, editor, _ = collaboration_client
     quiz = _create(client, class_id)
@@ -989,3 +1016,26 @@ def test_deactivated_collaborator_is_not_credited(collaboration_client) -> None:
         db.commit()
 
     assert client.get(path).json()["collaborators"] == []
+
+
+@pytest.mark.parametrize("change", ["removed", "left", "deactivated"])
+def test_class_quiz_list_skips_collaborators_without_access(
+    collaboration_client, change
+) -> None:
+    client, class_id, _, editor, _ = collaboration_client
+    quiz = _create(client, class_id)
+    _share(client, f"/classes/{class_id}/quizzes/{quiz['quiz_id']}")
+    with client.app.state.database.session_factory() as db:
+        if change == "deactivated":
+            db.get(Account, editor.account_id).is_active = False
+        else:
+            db.query(ClassMembership).filter_by(
+                class_id=class_id, account_id=editor.account_id
+            ).one().status = (
+                MembershipStatus.REMOVED if change == "removed" else MembershipStatus.LEFT
+            )
+        db.commit()
+
+    listed = client.get(f"/classes/{class_id}/quizzes?mine=true")
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["collaborator_names"] == []
