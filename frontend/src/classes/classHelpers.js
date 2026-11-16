@@ -16,6 +16,20 @@ export function pluralNoun(count, noun) {
   return noun === "quiz" ? "quizzes" : `${noun}s`;
 }
 
+// Where a class's live session is, for the Live bar on the class page, so
+// members know what they're walking into (docs/CLASS_APPROVAL.md §5).
+export function liveState(session) {
+  if (session.is_host) return "You're hosting";
+  if (session.left) return "You left";
+  const at = session.current_question_order;
+  if (session.status === "ACTIVE" && at) {
+    return session.question_count
+      ? `Question ${at} of ${session.question_count}`
+      : `Question ${at}`;
+  }
+  return "Lobby open";
+}
+
 // Whole numbers with separators; "—" when there is no value.
 export function formatScore(value) {
   return value === null || value === undefined

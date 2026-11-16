@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { readRemembered, writeRemembered } from "./remember";
+import QuestionWheel from "./QuestionWheel";
 import {
   Link,
   Navigate,
@@ -846,6 +847,24 @@ export function ParticipantResults({ report, backTo, backLabel }) {
     }
   }
 
+  // Phone wheel: scroll so the top of the question card sits at the top of
+  // the screen; the question and its options then fit above the wheel bar.
+  function frameQuestion({ smooth = false } = {}) {
+    window.requestAnimationFrame(() => {
+      const detail = document.querySelector(".rr-me .rr-answer-detail");
+      if (!detail) return;
+      const delta = detail.getBoundingClientRect().top - 8;
+      if (Math.abs(delta) < 2) return;
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      window.scrollBy({ top: delta, behavior: smooth && !reduce ? "smooth" : "auto" });
+    });
+  }
+
+  function pickFromWheel(index, { live = false } = {}) {
+    selectQuestion(index);
+    frameQuestion({ smooth: !live });
+  }
+
   const last = report.questions.length - 1;
   const nav = (
     <span className="rr-tbtns">
@@ -883,7 +902,6 @@ export function ParticipantResults({ report, backTo, backLabel }) {
           <span>Results /</span>
           <b>{report.quiz_title}</b>
         </div>
-        <div className="rr-private">You, the host &amp; admins</div>
       </nav>
 
       <RescoreNotice report={report} />
@@ -1015,6 +1033,14 @@ export function ParticipantResults({ report, backTo, backLabel }) {
           </div>
         </div>
       </div>
+
+      <QuestionWheel
+        questions={report.questions}
+        answers={player.answers}
+        selected={selected}
+        onSelect={pickFromWheel}
+        onEngage={frameQuestion}
+      />
     </div>
   );
 }

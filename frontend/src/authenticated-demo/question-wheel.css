@@ -1,0 +1,242 @@
+/* Question wheel on the student report card (QuestionWheel.jsx), plus the
+   simpler phone layout of the report card that goes with it. Phones only:
+   on wider screens the tiles and Prev/Next are close enough. */
+.qp .qw {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .qp .qw {
+    display: block;
+  }
+
+  /* Room at the bottom of the page so the bar never covers the last lines. */
+  .qp .rr.rr-me {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .qp .qw-bar {
+    position: fixed;
+    z-index: 40;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: stretch;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-top: 3px solid var(--ink);
+    background: var(--ink);
+    box-shadow: 0 -6px 0 rgba(34, 34, 34, 0.18);
+  }
+
+  .qp .qw-track {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    height: 72px;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: pan-y;
+    user-select: none;
+  }
+
+  .qp .qw[data-dragging] .qw-track {
+    cursor: grabbing;
+  }
+
+  /* The ends of the strip fade into the bar. */
+  .qp .qw-track::before,
+  .qp .qw-track::after {
+    content: "";
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    bottom: 0;
+    width: 56px;
+    pointer-events: none;
+  }
+
+  .qp .qw-track::before {
+    left: 0;
+    background: linear-gradient(90deg, var(--ink), rgba(34, 34, 34, 0));
+  }
+
+  .qp .qw-track::after {
+    right: 0;
+    background: linear-gradient(270deg, var(--ink), rgba(34, 34, 34, 0));
+  }
+
+  .qp .qw button.qw-num {
+    position: absolute;
+    top: 17px;
+    left: calc(50% - 28px);
+    display: grid;
+    place-items: center;
+    width: 56px;
+    min-width: 0;
+    height: 38px;
+    min-height: 0;
+    padding: 0;
+    border: 2px solid var(--paper);
+    box-shadow: none;
+    background: var(--sand);
+    color: var(--ink);
+    font-family: "Archivo Black", sans-serif;
+    font-size: 14px;
+    transition: transform 0.22s ease, opacity 0.22s ease;
+  }
+
+  .qp .qw[data-dragging] button.qw-num {
+    transition: none;
+  }
+
+  .qp .qw button.qw-num[data-state="correct"] {
+    background: var(--sky-soft);
+    color: var(--navy);
+  }
+
+  .qp .qw button.qw-num[data-state="wrong"] {
+    background: var(--apricot);
+  }
+
+  .qp .qw button.qw-num[data-state="missed"],
+  .qp .qw button.qw-num[data-state="not_played"] {
+    background: var(--sand);
+    color: var(--gray);
+  }
+
+  .qp .qw button.qw-num:hover {
+    filter: none;
+  }
+
+  /* The fixed frame: whatever sits in it is the current question. */
+  .qp .qw-lens {
+    position: absolute;
+    z-index: 3;
+    top: 7px;
+    left: calc(50% - 38px);
+    width: 76px;
+    height: 58px;
+    border: 3px solid var(--orange-deep);
+    pointer-events: none;
+  }
+
+  .qp .qw-lens::after {
+    content: "";
+    position: absolute;
+    top: -3px;
+    left: calc(50% - 7px);
+    border-top: 9px solid var(--orange-deep);
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+  }
+
+  .qp .qw-count {
+    display: grid;
+    place-items: center;
+    min-width: 58px;
+    padding: 0 10px;
+    border-left: 2px solid rgba(252, 249, 244, 0.35);
+    color: var(--paper);
+    font-family: "Archivo Black", sans-serif;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Report card on phones: stats first, then one plain card ---------- */
+
+  /* The wheel replaces the question tiles and the Prev/Next buttons. */
+  .qp .rr.rr-me .rr-answer-map,
+  .qp .rr.rr-me .rr-tbtns,
+  .qp .rr.rr-me .rr-missed-note {
+    display: none;
+  }
+
+  /* Tall enough that the question card can always scroll to the top of
+     the screen, even on a short quiz. */
+  .qp .rr.rr-me .rr-reader {
+    display: block;
+    min-height: calc(100dvh - 84px - env(safe-area-inset-bottom, 0px));
+    margin-top: 16px;
+  }
+
+  .qp .rr.rr-me .rr-answer-detail > .rr-panel-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    font-size: 11px;
+  }
+
+  .qp .rr.rr-me .rr-detail-tools {
+    gap: 0;
+  }
+
+  .qp .rr.rr-me .rr-detail-body {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .qp .rr.rr-me .rr-detail-body h3 {
+    margin: 0 0 4px;
+    font-size: 17px;
+    line-height: 1.3;
+  }
+
+  .qp .rr.rr-me .rr-choices {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .qp .rr.rr-me .rr-choice {
+    align-items: center;
+    gap: 10px;
+    min-height: 0;
+    padding: 9px 10px;
+    font-size: 14px;
+  }
+
+  .qp .rr.rr-me .rr-choice > b {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    font-size: 12px;
+  }
+
+  .qp .rr.rr-me .rr-choice strong {
+    font-size: 14px;
+    overflow-wrap: anywhere;
+  }
+
+  .qp .rr.rr-me .rr-choice small {
+    font-size: 11.5px;
+  }
+
+  /* Time and points side by side; the explanation only when there is one. */
+  .qp .rr.rr-me .rr-facts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin: 4px 0 0;
+  }
+
+  .qp .rr.rr-me .rr-facts > * {
+    padding: 8px 10px;
+  }
+
+  .qp .rr.rr-me .rr-facts .rr-explanation {
+    grid-column: 1 / -1;
+  }
+
+  .qp .rr.rr-me .rr-facts .rr-explanation:has(.rr-none) {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
+  .qp .qw button.qw-num {
+    transition: none;
+  }
+}

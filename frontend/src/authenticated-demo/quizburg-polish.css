@@ -224,6 +224,35 @@
   min-width: 0;
 }
 
+/* Header "Join game": the app's play action, so deep orange. */
+.qp .qb-join {
+  flex: none;
+  padding: 7px 14px;
+  border: var(--b);
+  background: var(--orange-deep);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--paper);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-decoration: none;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qp .qb-join:hover {
+  background: var(--orange);
+}
+
+.qp .qb-join:active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+.qp .qb-join[aria-current="page"] {
+  background: var(--ink);
+}
+
 .qp .ui-user-name {
   min-width: 0;
   overflow: hidden;
@@ -5474,7 +5503,7 @@
 /* Participant report card */
 .qp .rr-me .rr-crumbs {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: stretch;
   border-bottom: var(--b);
 }
@@ -5516,18 +5545,6 @@
   text-overflow: ellipsis;
 }
 
-.qp .rr-me .rr-private {
-  display: flex;
-  align-items: center;
-  padding: 0 18px;
-  border-left: var(--b);
-  color: var(--navy);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
 
 .qp .rr-me .rr-me-content {
   padding: 24px 24px 28px;
@@ -5808,8 +5825,9 @@
 }
 
 @media (max-width: 640px) {
+  /* Phones: the back button is the whole bar. */
   .qp .rr-me .rr-crumbs {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .qp .rr-me .rr-trail {
@@ -5819,12 +5837,8 @@
   .qp .rr-me .rr-crumb-back {
     min-height: 46px;
     padding: 0 16px;
+    border-right: 0;
     font-size: 15px;
-  }
-
-  .qp .rr-me .rr-private {
-    justify-content: flex-end;
-    font-size: 10px;
   }
 
   .qp .rr-me .rr-me-content {
@@ -6188,7 +6202,7 @@
   border-right: 0;
 }
 
-/* User view: "+" and JOIN are full-height cells, not floating buttons */
+/* User view: "+ New quiz" is a full-height cell, not a floating button */
 .qp .cl-section-tabs > .cl-actions {
   align-items: stretch;
   gap: 0;
@@ -6196,8 +6210,7 @@
   border-left: var(--b);
 }
 
-.qp .cl-section-tabs > .cl-actions > a,
-.qp .cl-section-tabs > .cl-actions > button {
+.qp .cl-section-tabs > .cl-actions > a {
   min-height: 0;
   margin: 0;
   border: 0;
@@ -6215,19 +6228,6 @@
 
 .qp .cl-section-tabs > .cl-actions > a:hover {
   background: var(--sand);
-}
-
-.qp .cl-section-tabs > .cl-actions > button {
-  padding: 0 36px;
-  border-left: var(--b);
-  background: var(--navy);
-  color: var(--paper);
-  font-size: clamp(16px, 2vw, 26px);
-}
-
-.qp .cl-section-tabs > .cl-actions > button:hover:not(:disabled),
-.qp .cl-section-tabs > .cl-actions > button[aria-expanded="true"] {
-  background: var(--ink);
 }
 
 /* Members */
@@ -6372,8 +6372,7 @@
     border-top: var(--b);
   }
 
-  .qp .cl-section-tabs > .cl-actions > a,
-  .qp .cl-section-tabs > .cl-actions > button {
+  .qp .cl-section-tabs > .cl-actions > a {
     flex: 1;
     min-height: 48px;
     display: grid;
