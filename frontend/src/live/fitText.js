@@ -4,22 +4,27 @@ import { useLayoutEffect, useRef } from 'react'
 // lands on one of these, so questions look alike from one to the next.
 // The last step is the smallest size that still reads from the back of a
 // classroom; the character limits keep text from needing anything smaller.
-export const QUESTION_STEPS = [64, 56, 48, 42, 36, 32, 28]
+export const QUESTION_STEPS = [80, 72, 64, 56, 48, 42, 36, 32, 28]
 export const PREVIEW_STEPS = [88, 76, 64, 56, 48, 42, 36, 32, 28]
-export const ANSWER_STEPS = [40, 36, 32, 28, 25, 22]
+export const ANSWER_STEPS = [34, 30, 27, 24, 22]
+
+// The question stays about this many times the answers' size, so it is
+// always the biggest thing on screen.
+export const QUESTION_TO_ANSWER = 1.8
 
 // Step both sizes down until nothing overflows. `apply(q, a)` sets the step
 // indexes on the page; `measure()` then reports { question, answers }: true
 // when that text still overflows its box. An overflowing question shrinks
-// first; when the answers overflow, the question and the answers take turns
-// (question first) so neither drops to its smallest size while the other
-// stays big. All four answers always share one size.
+// first. When the answers overflow, the answers shrink while they are more
+// than 1/QUESTION_TO_ANSWER of the question's size, otherwise the question
+// does, so the two come down together and keep their proportion. Either one
+// keeps shrinking once the other has reached its smallest step. All four
+// answers always share one size.
 export function fitSteps({ questionSteps, answerSteps, apply, measure }) {
   const lastQ = questionSteps.length - 1
   const lastA = answerSteps.length - 1
   let q = 0
   let a = 0
-  let turn = 'question'
 
   apply(q, a)
   for (;;) {
@@ -30,30 +35,27 @@ export function fitSteps({ questionSteps, answerSteps, apply, measure }) {
     if (over.question && q < lastQ) {
       shrink = 'question'
     } else if (over.answers) {
-      if (turn === 'question' && q < lastQ) shrink = 'question'
-      else if (a < lastA) shrink = 'answers'
+      const answersBig =
+        answerSteps[a] * QUESTION_TO_ANSWER > questionSteps[q]
+      if (a < lastA && (answersBig || q === lastQ)) shrink = 'answers'
       else if (q < lastQ) shrink = 'question'
+      else if (a < lastA) shrink = 'answers'
     }
     if (!shrink) return { q, a, fits: false }
 
-    if (shrink === 'question') {
-      q += 1
-      turn = 'answers'
-    } else {
-      a += 1
-      turn = 'question'
-    }
+    if (shrink === 'question') q += 1
+    else a += 1
     apply(q, a)
   }
 }
 
 // True when a box's content is taller than the space inside it. Compares the
-// children's laid-out boxes instead of scrollHeight, which also counts the
-// bits of display letters that reach past their line (Archivo Black does)
-// and would make even a two-word question look like it overflows.
+// children's layout boxes (offsetTop/offsetHeight, which ignore animations'
+// transforms) instead of scrollHeight, which also counts the bits of display
+// letters that reach past their line (Archivo Black does) and would make even
+// a two-word question look like it overflows. Boxes are position: relative so
+// they are their children's offsetParent; SVG suits are skipped.
 function overflows(element) {
-  const children = [...element.children]
-  if (!children.length) return false
   const style = getComputedStyle(element)
   const space =
     element.clientHeight -
@@ -61,11 +63,10 @@ function overflows(element) {
     parseFloat(style.paddingBottom)
   let top = Infinity
   let bottom = -Infinity
-  for (const child of children) {
-    const box = child.getBoundingClientRect()
-    if (!box.height) continue
-    top = Math.min(top, box.top)
-    bottom = Math.max(bottom, box.bottom)
+  for (const child of element.children) {
+    if (!(child instanceof HTMLElement) || !child.offsetHeight) continue
+    top = Math.min(top, child.offsetTop)
+    bottom = Math.max(bottom, child.offsetTop + child.offsetHeight)
   }
   return bottom - top > space + 1
 }
