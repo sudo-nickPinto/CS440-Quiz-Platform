@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
-import { NEEDS_INTERACTION, returnToState } from '../api'
+import { NEEDS_INTERACTION, PASSWORD_CONNECTION, returnToState } from '../api'
 
 export default function RequestError({ error, retry }) {
   const { loginWithRedirect, logout } = useAuth0()
@@ -53,7 +53,10 @@ export default function RequestError({ error, retry }) {
           type="button"
           onClick={() => {
             setSignInFailed(false)
-            void loginWithRedirect({ appState: returnToState() }).catch(() => {
+            void loginWithRedirect({
+              appState: returnToState(),
+              authorizationParams: { connection: PASSWORD_CONNECTION },
+            }).catch(() => {
               setSignInFailed(true)
             })
           }}

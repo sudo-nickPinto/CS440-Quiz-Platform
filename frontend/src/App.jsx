@@ -1,11 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { Navigate, Route, Routes } from "react-router";
 
 import LandingPage from "./components/LandingPage";
 import AuthenticatedDemo from "./authenticated-demo/PreviewApp";
 import AccountGate from "./components/AccountGate";
-import { returnToState } from "./api";
+import { clearExplicitLogin, returnToState, wasExplicitLogin } from "./api";
 import "./App.css";
 
 const WAS_SIGNED_IN = "quiz-was-signed-in";
@@ -29,9 +29,16 @@ export default function App() {
     logout,
   } = useAuth0();
 
+  // True when this page load is the return from a Sign in / Create account
+  // click (not the silent check), read once before the flag is cleared.
+  const [afterExplicitLogin] = useState(wasExplicitLogin);
+
   // Manage session restoration. Do not return JSX from this effect.
   useEffect(() => {
     if (isLoading) return;
+
+    // The flag only describes the redirect that led to this page load.
+    clearExplicitLogin();
 
     try {
       if (isAuthenticated) {
@@ -117,8 +124,10 @@ export default function App() {
     );
   }
 
+  // A "no session" error from the silent check is expected and stays hidden;
+  // after a user-started sign-in it means the sign-in failed, so say so.
   const realError =
-    error && !NO_SESSION.includes(error.error)
+    error && (afterExplicitLogin || !NO_SESSION.includes(error.error))
       ? "Sign-in could not be completed. Please select Sign in and try again."
       : "";
 
