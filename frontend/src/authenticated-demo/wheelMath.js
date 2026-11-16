@@ -2,7 +2,7 @@
 // question numbers dragged sideways under a fixed lens.
 
 // Pixels between two numbers on the strip.
-export const WHEEL_SPACING = 46;
+export const WHEEL_SPACING = 66;
 
 // Where the strip sits while dragging: the index under the lens, as a
 // fraction. Dragging left moves to later questions. It can overshoot each

@@ -847,18 +847,13 @@ export function ParticipantResults({ report, backTo, backLabel }) {
     }
   }
 
-  // Phone wheel: keep the question card, from its heading to the last
-  // option, fully on screen above the wheel bar, centered when it fits.
+  // Phone wheel: scroll so the top of the question card sits at the top of
+  // the screen; the question and its options then fit above the wheel bar.
   function frameQuestion({ smooth = false } = {}) {
     window.requestAnimationFrame(() => {
       const detail = document.querySelector(".rr-me .rr-answer-detail");
       if (!detail) return;
-      const end = detail.querySelector(".rr-choices") ?? detail;
-      const bar = document.querySelector(".qw-bar");
-      const room = window.innerHeight - (bar ? bar.offsetHeight : 0);
-      const top = detail.getBoundingClientRect().top;
-      const height = end.getBoundingClientRect().bottom - top;
-      const delta = top - Math.max(8, (room - height) / 2);
+      const delta = detail.getBoundingClientRect().top - 8;
       if (Math.abs(delta) < 2) return;
       const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       window.scrollBy({ top: delta, behavior: smooth && !reduce ? "smooth" : "auto" });
