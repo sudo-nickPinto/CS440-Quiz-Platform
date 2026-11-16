@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useRemembered } from "../authenticated-demo/remember";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
@@ -11,6 +11,7 @@ import {
   initials,
   MEMBER_SORTS,
   membersWithStats,
+  rowLink,
   scoreMark,
   studentRanks,
 } from "./classHelpers";
@@ -36,6 +37,18 @@ const SHORT_DATE = new Intl.DateTimeFormat(undefined, {
 
 function shortDate(value) {
   return value ? SHORT_DATE.format(new Date(value)) : "—";
+}
+
+// An email that, on a narrow screen, wraps after the "@" or before a dot
+// instead of in the middle of a word.
+function EmailText({ email }) {
+  const parts = email.split(/(?<=@)|(?=[.])/);
+  return parts.map((part, index) => (
+    <Fragment key={index}>
+      {index > 0 && <wbr />}
+      {part}
+    </Fragment>
+  ));
 }
 
 function personName(person) {
@@ -263,10 +276,25 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
                       {organizer ? "Org" : (rank ?? "—")}
                     </td>
                     <td className="cl-stu-who">
-                      <strong className="cl-stu-name">{personName(member)}</strong>
+                      {/* A student's name opens their full report, like
+                          "Full report" in the opened row; the rest of the
+                          row still opens the row. */}
+                      {organizer ? (
+                        <strong className="cl-stu-name">{personName(member)}</strong>
+                      ) : (
+                        <Link
+                          className="cl-stu-name"
+                          to={`/app/classes/${classInfo.id}/students/${id}/report`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {personName(member)}
+                        </Link>
+                      )}
                       {member.display_name &&
                         member.display_name !== member.email && (
-                          <small>{member.email}</small>
+                          <small>
+                            <EmailText email={member.email} />
+                          </small>
                         )}
                     </td>
                     <td className="cl-stu-recent">
@@ -390,6 +418,7 @@ function StudentDetail({
       ? null
       : `/classes/${classInfo.id}/students/${member.account_id}/results`,
   );
+  const navigate = useNavigate();
   const reportPath = `/app/classes/${classInfo.id}/students/${member.account_id}/report`;
 
   return (
@@ -445,7 +474,14 @@ function StudentDetail({
               {report.data.sessions.map((session) => (
                 <tr
                   key={session.session_id}
-                  className={session.played ? "" : "is-missed"}
+                  // A played presentation opens its results from anywhere
+                  // on the row; "Results →" stays the keyboard path.
+                  {...(session.played
+                    ? rowLink(
+                        navigate,
+                        `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`,
+                      )
+                    : { className: "is-missed" })}
                 >
                   <td className={`cl-mk ${session.played ? "hi" : "miss"}`}>
                     {session.played ? "✓" : "–"}

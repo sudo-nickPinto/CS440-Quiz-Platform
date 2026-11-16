@@ -16,7 +16,7 @@ import SubmissionPreviewPage from "../classes/SubmissionPreview";
 import QuizBurgLogo from "../classes/QuizBurgLogo";
 import {
   ClassSessionReportPage,
-  ClassQuizReportPage,
+  ClassQuizReportRedirect,
   ClassStudentReportPage,
 } from "../classes/ClassReports";
 
@@ -135,6 +135,17 @@ export default function PreviewApp({ onSignOut }) {
           </Link>
 
           <div className="ui-user">
+            {/* Type a six-digit code from anywhere. Hidden during a live
+                game so nobody leaves it by accident. */}
+            {!/^\/app\/(host|play)\//.test(pathname) && (
+              <Link
+                className="qb-join"
+                to="/app/join"
+                aria-current={pathname === "/app/join" ? "page" : undefined}
+              >
+                Join game
+              </Link>
+            )}
             <span className="ui-user-name">{me.display_name}</span>
 
             <details className="qb-account">
@@ -182,7 +193,7 @@ export default function PreviewApp({ onSignOut }) {
 
             <Route
               path="classes/:classId/quizzes/:quizId/report"
-              element={<ClassQuizReportPage key={pathname} />}
+              element={<ClassQuizReportRedirect />}
             />
 
             <Route

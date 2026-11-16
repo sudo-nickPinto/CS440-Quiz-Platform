@@ -16,6 +16,54 @@ export function pluralNoun(count, noun) {
   return noun === "quiz" ? "quizzes" : `${noun}s`;
 }
 
+// Where a class's live session is, for the Live bar on the class page, so
+// members know what they're walking into (docs/CLASS_APPROVAL.md §5).
+export function liveState(session) {
+  if (session.is_host) return "You're hosting";
+  if (session.left) return "You left";
+  const at = session.current_question_order;
+  if (session.status === "ACTIVE" && at) {
+    return session.question_count
+      ? `Question ${at} of ${session.question_count}`
+      : `Question ${at}`;
+  }
+  return "Lobby open";
+}
+
+// Whole numbers with separators; "—" when there is no value.
+export function formatScore(value) {
+  return value === null || value === undefined
+    ? "—"
+    : Number(value).toLocaleString();
+}
+
+// Report rows that open a page when clicked anywhere. Links and buttons in
+// the row keep their own click, so nothing fires twice; modified clicks and
+// text selection are left alone. Keyboard users use the row's own link.
+const ROW_CONTROLS = "a, button, input, select, textarea, summary, label";
+
+export function opensRow(event, selection = "") {
+  return (
+    !event.defaultPrevented &&
+    event.button === 0 &&
+    !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) &&
+    !event.target?.closest?.(ROW_CONTROLS) &&
+    !selection
+  );
+}
+
+// Props for a <tr> that opens `to` (see .cl-click-row in class-admin.css).
+export function rowLink(navigate, to) {
+  return {
+    className: "cl-click-row",
+    onClick: (event) => {
+      if (opensRow(event, globalThis.getSelection?.()?.toString() ?? "")) {
+        navigate(to);
+      }
+    },
+  };
+}
+
 // Sort choices for a class's "My quizzes" list (GET /classes/{id}/quizzes).
 export const MY_QUIZ_SORTS = {
   recent: { label: "Recently edited", sort: "updated_at", order: "desc" },
@@ -109,8 +157,6 @@ export function approvalLabel(status) {
 // their scores, plus co-organizers); "Presentations" shows class history by
 // session or by quiz. Members are added from the header's "+ Add member".
 export const ADMIN_SECTIONS = ["Students", "Presentations", "Approvals"];
-export const HISTORY_VIEWS = { sessions: "By session", quizzes: "By quiz" };
-
 // Maps a ?section= value onto the admin tabs, including the names of the
 // tabs that were merged or removed (Quizzes, Members, Settings).
 export function resolveAdminSection(requested) {
@@ -152,8 +198,15 @@ export function presentStatus(quiz) {
   return { key: "draft", label: "Draft" };
 }
 
+// Editor tags for a quiz card or row: the first `max` names get their own
+// tag, the rest fold into one "+N" tag.
+export function collaboratorTags(names, max = 3) {
+  const list = (names ?? []).filter(Boolean);
+  return { shown: list.slice(0, max), rest: Math.max(0, list.length - max) };
+}
+
 // The one approval button on a My quizzes row and the short note under it.
-//   send      Send for approval / Send again (orange)
+//   send      Send for approval (orange; also after a rejection)
 //   withdraw  Withdraw request (while waiting, for whoever sent it)
 //   waiting   Waiting for approval (sent by a co-editor; not clickable)
 //   approved  ✓ Approved (blue; not clickable)
@@ -184,7 +237,7 @@ export function approvalButton(quiz) {
         : null;
   return {
     kind: "send",
-    label: status === "REJECTED" ? "Send again" : "Send for approval",
+    label: "Send for approval",
     disabled: ownerOnly,
     title: ownerOnly ? "Only the quiz owner can send a new version" : undefined,
     note,

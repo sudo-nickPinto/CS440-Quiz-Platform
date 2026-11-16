@@ -227,6 +227,7 @@ def _quiz_summaries(
     summaries = []
     for quiz_id, quiz_sessions in grouped.items():
         score_sum, result_count = totals[quiz_id]
+        latest = quiz_sessions[0]
         summaries.append(
             ClassQuizSummary(
                 quiz_id=quiz_id,
@@ -240,6 +241,11 @@ def _quiz_summaries(
                     if organizer and result_count
                     else None
                 ),
+                last_session_id=latest.session_id,
+                last_host_name=latest.host_name,
+                last_participant_count=latest.participant_count,
+                last_average_score=latest.average_score,
+                last_top_score=latest.top_score,
             )
         )
     summaries.sort(key=lambda item: item.presented_at, reverse=True)

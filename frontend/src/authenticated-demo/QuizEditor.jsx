@@ -7,9 +7,16 @@ import {
   useSearchParams,
 } from "react-router";
 import { useAccount } from "./account";
-import QuizCollaborators from "./QuizCollaborators";
+import { QuizCredits } from "./QuizCollaborators";
 
-import { blankEditor, LETTERS, newQuestion } from "./model";
+import {
+  ANSWER_LIMIT,
+  EXPLANATION_LIMIT,
+  blankEditor,
+  LETTERS,
+  newQuestion,
+  QUESTION_LIMIT,
+} from "./model";
 import {
   normalizeEditorDefaultTime,
   quizQuestionToEditor,
@@ -20,6 +27,7 @@ import {
   canApplyRemoteQuestion,
   canSaveDraftIndependently,
   nextAggregateRevision,
+  reconcileAutosavedQuestion,
   remoteStructureDecision,
   saveAggregateQuiz,
   saveDraftQuestions,
@@ -28,13 +36,21 @@ import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 import ConfirmDialog from "./ConfirmDialog";
 import { useConfirm } from "./useConfirm";
-import { QuestionMenu, TimePicker } from "./EditorParts";
+import {
+  AutoGrowTextarea,
+  CharCount,
+  QuestionMenu,
+  TimePicker,
+} from "./EditorParts";
 import { useQuizCollaboration } from "./useQuizCollaboration";
 import { classPagePath } from "../classes/classPaths";
 import NewQuizClassPicker from "../classes/NewQuizClassPicker";
 import HostQuizButton from "./HostQuizButton";
 import { sendQuizForApproval, useQuizFlow } from "./quizFlow";
-import { QuizFlowPanel } from "./QuizFlowPanel";
+import QuizCollaboratorDialog, {
+  AddCollaboratorCell,
+} from "./QuizCollaboratorDialog";
+import { QuizFlowButton, QuizFlowTrack } from "./QuizFlowPanel";
 import "./quiz-flow.css";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -135,7 +151,6 @@ export function QuizEditor({
   const account = useAccount();
   const navigate = useNavigate();
   const confirmer = useConfirm();
-  const archiveAction = useAction();
   const [searchParams] = useSearchParams();
 
   const editing = existingQuiz !== null;
@@ -149,6 +164,7 @@ export function QuizEditor({
     !editing || existingQuiz.author_id === account.account_id;
   // Which save button was pressed, for its "Saving…" / "Sending…" label.
   const [savingKind, setSavingKind] = useState(null);
+  const [sharing, setSharing] = useState(false);
   // New quizzes belong to a class: the class page links here with ?class=ID.
   const classId = searchParams.get("class");
   const validClass = /^[1-9][0-9]*$/.test(classId ?? "");
@@ -479,36 +495,6 @@ export function QuizEditor({
     }
   }
 
-  // Archive and save can't overlap in either direction: archiving waits for
-  // a save (including the publish and submit of "Save and send"), and saving
-  // waits for an archive. Otherwise a send could land on an archived quiz.
-  const archiveBlocked =
-    archiveAction.busy || action.busy || Boolean(savingKind) || questionSaving;
-
-  async function archiveQuiz() {
-    if (archiveBlocked) return;
-    const sure = await confirmer.confirm({
-      label: "Archive quiz",
-      title: `Archive “${editor.title.trim() || "this quiz"}”?`,
-      message:
-        (dirty ? "Your unsaved changes will be lost. " : "") +
-        "It will no longer be available to edit or host. Past results stay saved.",
-      confirmLabel: "Archive quiz",
-      cancelLabel: "Keep it",
-    });
-    if (!sure) return;
-
-    const done = await archiveAction.run(async () => {
-      await api(`/quizzes/${existingQuiz.quiz_id}/archive`, {
-        method: "PATCH",
-      });
-      return true;
-    });
-    if (done) {
-      navigate(classPagePath(existingQuiz.class_id), { replace: true });
-    }
-  }
-
   function edit(next) {
     editorRef.current = next;
     setEditor(next);
@@ -756,7 +742,18 @@ export function QuizEditor({
     setQuestionStatus(question.questionId, "pending");
     const timer = window.setTimeout(() => {
       autosaveTimers.current.delete(question.questionId);
-      void autosaveQuestion(question, index);
+      // Read the latest editor snapshot when the debounce expires. A previous
+      // request may have advanced this question's revision while this timer
+      // was waiting, and sending the older captured object would create a
+      // false edit conflict on the user's next keystroke.
+      const latestIndex = editorRef.current.questions.findIndex(
+        (item) => item.questionId === question.questionId,
+      );
+      const latestQuestion = editorRef.current.questions[latestIndex];
+      void autosaveQuestion(
+        latestQuestion ?? question,
+        latestIndex >= 0 ? latestIndex : index,
+      );
     }, delay);
     autosaveTimers.current.set(question.questionId, timer);
   }
@@ -798,23 +795,29 @@ export function QuizEditor({
         index,
         editorRef.current.defaultTime,
       );
+      const currentEditor = editorRef.current;
+      const currentQuestion = currentEditor.questions.find(
+        (item) => item.questionId === questionId,
+      );
+      const { baselineQuestion, editorQuestion } =
+        reconcileAutosavedQuestion({
+          submittedQuestion: question,
+          currentQuestion: currentQuestion ?? question,
+          savedQuestion: saved,
+        });
       const nextBaseline = {
         ...baselineEditorRef.current,
         questions: baselineEditorRef.current.questions.map((item) =>
-          item.questionId === questionId ? saved : item,
+          item.questionId === questionId ? baselineQuestion : item,
         ),
       };
       baselineEditorRef.current = nextBaseline;
       setBaselineEditor(nextBaseline);
-      const currentEditor = editorRef.current;
       const nextEditor = {
         ...currentEditor,
         questions: currentEditor.questions.map((currentQuestion) => {
           if (currentQuestion.questionId !== questionId) return currentQuestion;
-          // Do not replace keystrokes entered while this request was running.
-          return JSON.stringify(currentQuestion) === JSON.stringify(question)
-            ? saved
-            : { ...currentQuestion, revision: saved.revision };
+          return editorQuestion;
         }),
       };
       editorRef.current = nextEditor;
@@ -867,8 +870,7 @@ export function QuizEditor({
     if (
       conflict ||
       savingQuestions.current.size > 0 ||
-      savingKind ||
-      archiveAction.busy
+      savingKind
     ) {
       return;
     }
@@ -938,14 +940,15 @@ export function QuizEditor({
 
     const savedId = quiz.quiz_id ?? existingQuiz?.quiz_id;
     const quizClassId = editing ? existingQuiz.class_id : Number(classId);
-    let notice = { tone: "success", text: "Draft saved." };
+    // Only a problem gets a message on the quiz page; a normal save or send
+    // shows in the page itself (the status pill and the timeline).
+    let notice = null;
 
     if (send) {
       // The draft is already saved, so a failure here must not send people
       // back into the editor (saving again would duplicate a new quiz).
       try {
         await sendQuizForApproval(api, quizClassId, savedId);
-        notice = { tone: "success", text: "Saved and sent for approval." };
       } catch (error) {
         notice = {
           tone: "warning",
@@ -974,7 +977,7 @@ export function QuizEditor({
       <ConfirmDialog confirmer={confirmer} />
 
       <fieldset
-        disabled={action.busy || archiveAction.busy}
+        disabled={action.busy}
         className="qp-form-fields"
       >
         <div className="qe-bar">
@@ -986,23 +989,33 @@ export function QuizEditor({
             </span>
           </Link>
 
-          <div className="qe-titlebox">
-            <label className="qe-eyebrow" htmlFor="quiz-title">
+          <div className="qe-titlebox qv-titlebox">
+            <label className="ui-sr" htmlFor="quiz-title">
               Quiz title
             </label>
-            <input
-              id="quiz-title"
-              maxLength={200}
-              autoComplete="off"
-              placeholder="Untitled quiz"
-              value={editor.title}
-              onChange={(event) =>
-                edit({
-                  ...editor,
-                  title: event.target.value,
-                })
-              }
-            />
+            <div className="qv-titleline">
+              <input
+                id="quiz-title"
+                className="qe-title-input"
+                maxLength={200}
+                autoComplete="off"
+                placeholder="Untitled quiz"
+                value={editor.title}
+                onChange={(event) =>
+                  edit({
+                    ...editor,
+                    title: event.target.value,
+                  })
+                }
+              />
+              <span
+                className={"qe-pill qv-pill" + (editing ? " is-saved" : "")}
+              >
+                {editing
+                  ? `Editing · v${existingQuiz.version.version_number}`
+                  : "New quiz"}
+              </span>
+            </div>
 
             <textarea
               rows={1}
@@ -1019,17 +1032,17 @@ export function QuizEditor({
             />
           </div>
 
-          <div className="qe-state">
-            <span className={"qe-pill" + (editing ? " is-saved" : "")}>
-              {editing
-                ? `Editing · v${existingQuiz.version.version_number}`
-                : "New quiz"}
-            </span>
-          </div>
+          {ownsQuiz && existingQuiz.status !== "ARCHIVED" && (
+            <AddCollaboratorCell onOpen={() => setSharing(true)} />
+          )}
         </div>
 
-        {ownsQuiz && (
-          <QuizCollaborators quiz={existingQuiz} embedded />
+        {/* Collaborators don't get the owner's sharing panel, so credit the
+            owner and the other editors here instead. */}
+        {editing && !ownsQuiz && existingQuiz.author_name && (
+          <p className="qv-facts">
+            <QuizCredits quiz={existingQuiz} accountId={account.account_id} />
+          </p>
         )}
 
         <div className="qe-strip">
@@ -1164,19 +1177,27 @@ export function QuizEditor({
                   </div>
 
                   <div className="qe-body">
-                    <textarea
-                      id={`question-text-${question.id}`}
-                      className="qe-qtext"
-                      rows={1}
-                      aria-label={`Question ${index + 1} text`}
-                      placeholder="Type your question"
-                      value={question.text}
-                      onChange={(event) =>
-                        changeQuestion(question.id, {
-                          text: event.target.value,
-                        })
-                      }
-                    />
+                    <div className="qe-qtext-box">
+                      <AutoGrowTextarea
+                        id={`question-text-${question.id}`}
+                        className="qe-qtext"
+                        rows={1}
+                        maxLength={QUESTION_LIMIT}
+                        aria-label={`Question ${index + 1} text`}
+                        placeholder="Type your question"
+                        value={question.text}
+                        onChange={(event) =>
+                          changeQuestion(question.id, {
+                            text: event.target.value,
+                          })
+                        }
+                      />
+                      <CharCount
+                        value={question.text}
+                        limit={QUESTION_LIMIT}
+                        note
+                      />
+                    </div>
 
                     <div
                       className="qe-choices"
@@ -1211,19 +1232,26 @@ export function QuizEditor({
                               </span>
                             </button>
 
-                            <input
-                              maxLength={500}
+                            <AutoGrowTextarea
+                              className="qe-choice-text"
+                              rows={1}
+                              maxLength={ANSWER_LIMIT}
                               value={option}
                               placeholder={`Choice ${LETTERS[choiceIndex]}`}
                               aria-label={
                                 `Question ${index + 1}, ` +
                                 `choice ${LETTERS[choiceIndex]}`
                               }
+                              // Answers stay one paragraph: Enter does not add
+                              // a line and pasted line breaks become spaces.
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") event.preventDefault();
+                              }}
                               onChange={(event) =>
                                 changeQuestion(question.id, {
                                   options: question.options.map((text, i) =>
                                     i === choiceIndex
-                                      ? event.target.value
+                                      ? event.target.value.replace(/\s*[\r\n]+\s*/g, " ")
                                       : text,
                                   ),
                                 })
@@ -1231,6 +1259,11 @@ export function QuizEditor({
                             />
 
                             <span className="qe-choice-end">
+                              <CharCount
+                                value={option}
+                                limit={ANSWER_LIMIT}
+                              />
+
                               {correct && (
                                 <span className="qe-tag" aria-hidden="true">
                                   Correct
@@ -1310,7 +1343,7 @@ export function QuizEditor({
                         <textarea
                           id={`explanation-${question.id}`}
                           rows={2}
-                          maxLength={5000}
+                          maxLength={EXPLANATION_LIMIT}
                           value={question.explanation ?? ""}
                           placeholder="Why is this the right answer? Shown in the results review."
                           onChange={(event) =>
@@ -1319,10 +1352,10 @@ export function QuizEditor({
                             })
                           }
                         />
-                        <small>
-                          {(question.explanation ?? "").length.toLocaleString()}
-                          /5,000
-                        </small>
+                        <CharCount
+                          value={question.explanation ?? ""}
+                          limit={EXPLANATION_LIMIT}
+                        />
                       </label>
                     )}
                   </div>
@@ -1478,8 +1511,7 @@ export function QuizEditor({
                 disabled={
                   conflict ||
                   questionSaving ||
-                  Boolean(savingKind) ||
-                  archiveAction.busy
+                  Boolean(savingKind)
                 }
                 onClick={() => void save()}
               >
@@ -1499,8 +1531,7 @@ export function QuizEditor({
                   disabled={
                   conflict ||
                   questionSaving ||
-                  Boolean(savingKind) ||
-                  archiveAction.busy
+                  Boolean(savingKind)
                 }
                   title="Saves your quiz and sends it to the class organizers. You can host it once they approve it."
                   onClick={() => void save({ send: true })}
@@ -1514,29 +1545,14 @@ export function QuizEditor({
       </fieldset>
     </form>
 
-    {/* Outside the editor's <form>: archive controls remain at the bottom. */}
-    {ownsQuiz && (
-      <section className="qe-settings" aria-label="Sharing and settings">
-        <div className="qe-archive">
-          <div>
-            <h2>Archive quiz</h2>
-            <p>
-              Archived quizzes can&apos;t be edited or hosted. Past sessions
-              and results stay saved.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="qb-btn qb-btn-paper qe-archive-button"
-            disabled={archiveBlocked}
-            onClick={() => void archiveQuiz()}
-          >
-            {archiveAction.busy ? "Archiving…" : "Archive quiz"}
-          </button>
-          <RequestError error={archiveAction.error} />
-        </div>
-      </section>
+    {/* Outside the editor's <form>, so its invite form isn't nested. */}
+    {sharing && (
+      <QuizCollaboratorDialog
+        quiz={existingQuiz}
+        onClose={() => setSharing(false)}
+      />
     )}
+
     </>
   );
 }
@@ -1544,18 +1560,22 @@ export function QuizEditor({
 export function QuizViewer() {
   const { quizId } = useParams();
   const account = useAccount();
+  const api = useApi();
   const action = useAction();
+  const confirmer = useConfirm();
   const validId = /^[1-9][0-9]*$/.test(quizId);
 
   const resource = useResource(validId ? `/quizzes/${quizId}` : null);
   const flow = useQuizFlow(resource.data ?? null, account.account_id);
 
   // Opened from a class page (or straight after saving): the back link
-  // returns to that class. A save notice from the editor shows once.
+  // returns to that class. A warning from the editor (saved, but not sent)
+  // shows until the page is left.
   const location = useLocation();
   const navigate = useNavigate();
   const fromClass = location.state?.classId ?? null;
-  const [notice, setNotice] = useState(() => location.state?.notice ?? null);
+  const [notice] = useState(() => location.state?.notice ?? null);
+  const [sharing, setSharing] = useState(false);
   useEffect(() => {
     if (location.state?.notice) {
       navigate(location.pathname, {
@@ -1581,9 +1601,10 @@ export function QuizViewer() {
 
   const quiz = resource.data;
   const mine = quiz.author_id === account.account_id;
-  // Owners and organizers see the approval track below the strip, with the
-  // next step as its one button. Collaborators and other members keep the
-  // simple Draft / Approved pill and a link to the class page.
+  const canShare = mine && quiz.class_id && quiz.status !== "ARCHIVED";
+  // Owners and organizers see the approval timeline in the strip, with the
+  // next step as the last button. Collaborators and other members keep a
+  // Host button or a link to the class page.
   const approved = quiz.hosting?.can_host === true;
   const stateLabel =
     quiz.status === "ARCHIVED"
@@ -1597,8 +1618,26 @@ export function QuizViewer() {
     0,
   );
 
+  async function archiveQuiz() {
+    const sure = await confirmer.confirm({
+      label: "Archive quiz",
+      title: `Archive “${quiz.version.title}”?`,
+      message:
+        "It will no longer be available to edit or host. Past sessions and results stay saved.",
+      confirmLabel: "Archive quiz",
+      cancelLabel: "Keep it",
+    });
+    if (!sure) return;
+    const done = await action.run(async () => {
+      await api(`/quizzes/${quiz.quiz_id}/archive`, { method: "PATCH" });
+      return true;
+    });
+    if (done) navigate(classPagePath(quiz.class_id), { replace: true });
+  }
+
   return (
     <section className="qv" aria-labelledby="quiz-title">
+      <ConfirmDialog confirmer={confirmer} />
       <div className="qe-bar">
         <Link
           className="qe-back"
@@ -1609,31 +1648,61 @@ export function QuizViewer() {
           <span className="ui-sr">Back to class</span>
         </Link>
 
-        <div className="qe-titlebox">
-          <span className="qe-eyebrow">Quiz</span>
-          <h1 id="quiz-title" className="qv-title">
-            {quiz.version.title}
-          </h1>
+        <div className="qe-titlebox qv-titlebox">
+          <div className="qv-titleline">
+            <h1 id="quiz-title" className="qv-title">
+              {quiz.version.title}
+            </h1>
+            <span
+              className={"qe-pill qv-pill" + (approved ? " is-saved" : "")}
+            >
+              {stateLabel} · v{quiz.version.version_number}
+            </span>
+          </div>
           {quiz.version.description && (
             <p className="qv-description">{quiz.version.description}</p>
           )}
         </div>
 
-        <div className="qe-state">
-          <span className={"qe-pill" + (approved ? " is-saved" : "")}>
-            {stateLabel} · v{quiz.version.version_number}
-          </span>
-        </div>
+        {canShare && (
+          <AddCollaboratorCell onOpen={() => setSharing(true)} />
+        )}
       </div>
+
+      {sharing && (
+        <QuizCollaboratorDialog quiz={quiz} onClose={() => setSharing(false)} />
+      )}
 
       <div className="qv-strip">
         <p className="qv-facts">
           <b>{plural(questions.length, "question")}</b>
           <span>{clock(totalTime)} total</span>
-          <span>{quiz.visibility === "PUBLIC" ? "Public" : "Private"}</span>
+          <QuizCredits quiz={quiz} accountId={account.account_id} />
         </p>
 
+        <QuizFlowTrack flow={flow} />
+
         <div className="qv-actions">
+          {quiz.can_edit && quiz.status !== "ARCHIVED" && (
+            <Link
+              className="qb-btn qb-btn-paper"
+              to={`/app/quizzes/${quiz.quiz_id}/edit`}
+            >
+              Edit quiz
+            </Link>
+          )}
+
+          {canShare && (
+            <button
+              type="button"
+              className="qb-btn qb-btn-paper"
+              disabled={action.busy}
+              onClick={() => void archiveQuiz()}
+            >
+              Archive
+            </button>
+          )}
+
           {mine && (
             <Link
               className="qb-btn qb-btn-paper"
@@ -1643,13 +1712,13 @@ export function QuizViewer() {
             </Link>
           )}
 
-          {quiz.can_edit && quiz.status !== "ARCHIVED" && (
-            <Link
-              className="qb-btn qb-btn-paper"
-              to={`/app/quizzes/${quiz.quiz_id}/edit`}
-            >
-              Edit quiz
-            </Link>
+          {quiz.status !== "ARCHIVED" && (
+            <QuizFlowButton
+              quiz={quiz}
+              flow={flow}
+              action={action}
+              onChange={() => resource.reload()}
+            />
           )}
 
           {/* Without the approval track (collaborators, other members),
@@ -1689,19 +1758,6 @@ export function QuizViewer() {
         <p className={`qf-notice is-${notice.tone}`} role="status">
           {notice.text}
         </p>
-      )}
-
-      <QuizFlowPanel
-        quiz={quiz}
-        flow={flow}
-        onChange={(text) => {
-          setNotice({ tone: "success", text });
-          resource.reload();
-        }}
-      />
-
-      {mine && quiz.class_id && quiz.status !== "ARCHIVED" && (
-        <QuizCollaborators quiz={quiz} />
       )}
 
       <div className="qe-stack">

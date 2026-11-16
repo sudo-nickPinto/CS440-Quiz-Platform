@@ -1,14 +1,6 @@
 .qp .rr {
-  --rr-paper: #fcf9f4;
-  --rr-sand: #ecdfd0;
-  --rr-sky: #c2e6f8;
-  --rr-wrong: #f6d2b6;
-  --rr-ink: #222222;
-  --rr-navy: #043371;
-  --rr-orange: #cc4e00;
-  --rr-success: #187239;
-  background: var(--rr-paper);
-  color: var(--rr-ink);
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .qp .rr h1,
@@ -43,11 +35,11 @@
   align-items: center;
   gap: 20px;
   padding: 20px;
-  border-bottom: 3px solid var(--rr-ink);
+  border-bottom: 3px solid var(--ink);
 }
 
 .qp .rr-title small {
-  color: var(--rr-navy);
+  color: var(--navy);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -62,9 +54,9 @@
   align-items: center;
   gap: 14px;
   padding: 12px 20px;
-  border-bottom: 3px solid var(--rr-ink);
-  background: var(--rr-sky);
-  color: var(--rr-navy);
+  border-bottom: 3px solid var(--ink);
+  background: var(--sky-soft);
+  color: var(--navy);
 }
 
 .qp .rr-rescore-notice strong {
@@ -79,25 +71,25 @@
   justify-content: center;
   min-height: 44px;
   padding: 10px 14px;
-  border: 3px solid var(--rr-ink);
-  box-shadow: 3px 3px 0 var(--rr-ink);
-  background: var(--rr-paper);
-  color: var(--rr-navy);
+  border: 3px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  background: var(--paper);
+  color: var(--navy);
   text-decoration: none;
   font-weight: 700;
 }
 
 .qp .rr-button.orange {
-  background: var(--rr-orange);
-  color: var(--rr-paper);
+  background: var(--orange);
+  color: var(--paper);
 }
 
 .qp .rr-summary,
 .qp .rr-report-band {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  background: var(--rr-sky);
-  border-bottom: 3px solid var(--rr-ink);
+  background: var(--sky-soft);
+  border-bottom: 3px solid var(--ink);
 }
 
 .qp .rr-report-band {
@@ -113,12 +105,12 @@
 }
 
 .qp .rr-stat + .rr-stat {
-  border-left: 2px solid var(--rr-ink);
+  border-left: 2px solid var(--ink);
 }
 
 .qp .rr-stat small,
 .qp .rr-explanation > small {
-  color: var(--rr-navy);
+  color: var(--navy);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -135,7 +127,7 @@
 .qp .rr-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  border-bottom: 3px solid var(--rr-ink);
+  border-bottom: 3px solid var(--ink);
 }
 
 /* Same size as the class page's section tabs (Students / Presentations /
@@ -149,11 +141,28 @@
 }
 
 .qp .rr-tabs button + button {
-  border-left: 3px solid var(--rr-ink);
+  border-left: 3px solid var(--ink);
+}
+
+/* Hover like the class page tabs: sand, never the sky blue of the stats
+   band right above. */
+.qp .rr-tabs button:not([aria-pressed="true"]):hover:not(:disabled) {
+  background: var(--sand);
+}
+
+/* Open tab colors match the class page: Leaderboard navy, Questions
+   orange. They keep their color on hover. */
+.qp .rr-tabs button[aria-pressed="true"],
+.qp .rr-tabs button[aria-pressed="true"]:hover {
+  background: var(--navy);
+}
+
+.qp .rr-tabs button + button[aria-pressed="true"],
+.qp .rr-tabs button + button[aria-pressed="true"]:hover {
+  background: var(--orange-deep);
 }
 
 .qp .rr-tabs button[aria-pressed="true"] {
-  background: var(--rr-orange);
   color: #ffffff;
   text-decoration: underline;
   text-decoration-thickness: 4px;
@@ -165,13 +174,13 @@
   align-items: center;
   gap: 16px;
   padding: 14px 16px;
-  border-bottom: 3px solid var(--rr-ink);
+  border-bottom: 3px solid var(--ink);
   background: repeating-linear-gradient(
     45deg,
-    var(--rr-paper),
-    var(--rr-paper) 10px,
-    var(--rr-sand) 10px,
-    var(--rr-sand) 20px
+    var(--paper),
+    var(--paper) 10px,
+    var(--sand) 10px,
+    var(--sand) 20px
   );
 }
 
@@ -179,9 +188,9 @@
   flex: 1;
   min-width: 0;
   padding: 12px;
-  border: 3px solid var(--rr-ink);
-  background: var(--rr-paper);
-  color: var(--rr-ink);
+  border: 3px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .qp .rr-toolbar > strong {
@@ -190,7 +199,7 @@
 
 .qp .rr-list-heading,
 .qp .rr-panel-heading {
-  background: var(--rr-ink);
+  background: var(--ink);
   color: #ffffff;
   padding: 12px 16px;
   font-weight: 700;
@@ -205,7 +214,7 @@
 
 .qp .rr-player,
 .qp .rr-question {
-  border-bottom: 2px solid var(--rr-ink);
+  border-bottom: 2px solid var(--ink);
 }
 
 .qp .rr-player > summary,
@@ -240,7 +249,7 @@
 .qp .rr-player[open] > summary,
 .qp .rr-question > summary:hover,
 .qp .rr-question[open] > summary {
-  background: var(--rr-sand);
+  background: var(--sand);
 }
 
 .qp .rr-rank {
@@ -248,16 +257,16 @@
   align-self: stretch;
   place-items: center;
   min-height: 82px;
-  border-right: 2px solid var(--rr-ink);
-  background: var(--rr-orange);
+  border-right: 2px solid var(--ink);
+  background: var(--orange);
   color: #ffffff;
   font-family: 'Archivo Black', sans-serif;
   font-size: 23px;
 }
 
 .qp .rr-rank.pale {
-  background: var(--rr-wrong);
-  color: var(--rr-ink);
+  background: var(--apricot);
+  color: var(--ink);
 }
 
 .qp .rr-name {
@@ -278,33 +287,59 @@
   place-items: center;
   width: 28px;
   height: 30px;
-  border: 2px solid var(--rr-ink);
+  border: 2px solid var(--ink);
   font-weight: 700;
 }
 
-.qp .rr .correct {
-  background: var(--rr-sky);
-  color: var(--rr-navy);
+.qp .rr-mark.not_played {
+  border-style: dashed;
+  border-color: var(--gray);
 }
 
-.qp .rr .wrong {
-  background: var(--rr-wrong);
-  color: var(--rr-ink);
+/* Result buttons keep their state color on hover; the global sky button
+   hover would make any answer look correct. */
+.qp .rr .correct,
+.qp .rr button.correct:hover:not(:disabled) {
+  background: var(--sky-soft);
+  color: var(--navy);
 }
 
-.qp .rr .missed {
-  background: var(--rr-sand);
-  color: var(--rr-ink);
+.qp .rr .wrong,
+.qp .rr button.wrong:hover:not(:disabled) {
+  background: var(--apricot);
+  color: var(--ink);
 }
 
-.qp .rr .not_played {
-  background: var(--rr-paper);
-  color: #666666;
+.qp .rr .missed,
+.qp .rr button.missed:hover:not(:disabled) {
+  background: var(--sand);
+  color: var(--ink);
+}
+
+.qp .rr .not_played,
+.qp .rr button.not_played:hover:not(:disabled) {
+  background: var(--paper);
+  color: var(--gray);
+}
+
+.qp .rr button.rr-tile,
+.qp .rr .rr-chips button,
+.qp .rr .rr-let-button {
+  transition: var(--hover-transition);
+}
+
+.qp .rr button.rr-tile:hover:not(:disabled) {
+  filter: var(--hover-shade);
+}
+
+.qp .rr .rr-chips button:hover:not(:disabled) {
+  background: var(--paper);
+  filter: var(--hover-shade);
 }
 
 .qp .rr-expanded {
   padding: 18px;
-  background: var(--rr-sand);
+  background: var(--sand);
 }
 
 .qp .rr-answer-line {
@@ -313,8 +348,8 @@
   align-items: start;
   gap: 12px;
   padding: 15px;
-  background: var(--rr-paper);
-  border: 2px solid var(--rr-ink);
+  background: var(--paper);
+  border: 2px solid var(--ink);
   border-top: 0;
 }
 
@@ -323,17 +358,17 @@
 }
 
 .qp .rr-answer-line small {
-  color: #666666;
+  color: var(--gray);
 }
 
 .qp .rr-breakdown {
   display: grid;
   grid-template-columns: 1fr 1.1fr;
-  border-top: 2px solid var(--rr-ink);
+  border-top: 2px solid var(--ink);
 }
 
 .qp .rr-breakdown > div + div {
-  border-left: 2px solid var(--rr-ink);
+  border-left: 2px solid var(--ink);
 }
 
 .qp .rr-correction-tools,
@@ -358,8 +393,8 @@
 
 .qp .rr-edit-answer-button:hover,
 .qp .rr-edit-answer-button:focus-visible {
-  background: var(--rr-paper);
-  color: var(--rr-ink);
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .qp .rr-edit-answer-button:disabled {
@@ -370,35 +405,60 @@
 .qp .rr-correction-hint {
   margin: 0;
   padding: 12px 18px;
-  border-bottom: 2px solid var(--rr-ink);
-  background: var(--rr-sky);
-  color: var(--rr-navy);
+  border-bottom: 2px solid var(--ink);
+  background: var(--sky-soft);
+  color: var(--navy);
   font-weight: 700;
 }
 
 .qp .rr-correction-success {
   margin: 12px 18px;
   padding: 12px;
-  border: 2px solid var(--rr-ink);
-  background: var(--rr-sky);
-  color: var(--rr-success);
+  border: 2px solid var(--ink);
+  background: var(--color-success-bg);
+  color: var(--color-success);
   font-weight: 700;
 }
 
+/* The question on top, then one row of same-size buttons on the right,
+   the main action last. */
 .qp .rr-correction-prompt {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  display: grid;
+  gap: 16px;
   margin: 18px;
   padding: 18px;
-  border: 3px solid var(--rr-ink);
-  box-shadow: 5px 5px 0 var(--rr-ink);
-  background: var(--rr-sky);
+  border: 3px solid var(--ink);
+  box-shadow: 5px 5px 0 var(--ink);
+  background: var(--sky-soft);
 }
 
 .qp .rr-correction-prompt p {
   margin: 0;
+}
+
+.qp .rr-correction-prompt .rr-correction-actions {
+  justify-content: flex-end;
+}
+
+.qp .rr .rr-correction-prompt .rr-correction-actions .rr-button {
+  min-height: 44px;
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 1px;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .qp .rr-correction-prompt .rr-correction-actions {
+    display: grid;
+  }
+
+  .qp .rr .rr-correction-prompt .rr-correction-actions .rr-button {
+    width: 100%;
+    white-space: normal;
+  }
 }
 
 .qp .rr-padding {
@@ -417,7 +477,7 @@
   grid-column: 1 / -1;
   width: 100%;
   height: 20px;
-  accent-color: var(--rr-navy);
+  accent-color: var(--navy);
 }
 
 .qp .rr-let-button {
@@ -434,13 +494,23 @@
   cursor: pointer;
 }
 
-.qp .rr-let-button:hover,
+/* Hovering an answer letter only darkens it; sky stays reserved for the
+   selected (and focused) letter. */
+.qp .rr .rr-bar-row:not(.is-selected) .rr-let-button:hover:not(:disabled) {
+  background: var(--sand);
+  filter: var(--hover-shade);
+}
+
+.qp .rr .rr-bar-row.correct:not(.is-selected) .rr-let-button:hover:not(:disabled) {
+  background: var(--navy);
+}
+
 .qp .rr-let-button:focus-visible,
 .qp .rr-bar-row.is-selected .rr-let {
-  border-color: var(--rr-navy) !important;
-  background: var(--rr-sky);
+  border-color: var(--navy) !important;
+  background: var(--sky-soft);
   outline: none !important;
-  box-shadow: inset 0 0 0 1px var(--rr-navy);
+  box-shadow: inset 0 0 0 1px var(--navy);
 }
 
 .qp .rr-let-button:disabled {
@@ -451,7 +521,7 @@
 
 .qp .rr-people {
   padding: 18px;
-  border-bottom: 2px solid var(--rr-ink);
+  border-bottom: 2px solid var(--ink);
 }
 
 .qp .rr-chips button {
@@ -460,7 +530,7 @@
 }
 
 .qp .rr-chips button span {
-  color: #666666;
+  color: var(--gray);
   font-size: 13px;
 }
 
@@ -475,9 +545,9 @@
 .qp .rr-answer-map,
 .qp .rr-answer-detail {
   min-width: 0;
-  border: 3px solid var(--rr-ink);
-  box-shadow: 5px 5px 0 var(--rr-ink);
-  background: var(--rr-paper);
+  border: 3px solid var(--ink);
+  box-shadow: 5px 5px 0 var(--ink);
+  background: var(--paper);
 }
 
 .qp .rr-tiles {
@@ -493,7 +563,7 @@
   gap: 4px;
   min-height: 90px;
   padding: 8px 3px;
-  border: 2px solid var(--rr-ink);
+  border: 2px solid var(--ink);
 }
 
 .qp .rr-tile > span {
@@ -506,9 +576,9 @@
 }
 
 .qp .rr-tile[aria-pressed="true"] {
-  outline: 3px solid var(--rr-navy);
+  outline: 3px solid var(--navy);
   outline-offset: 2px;
-  box-shadow: 3px 3px 0 var(--rr-ink);
+  box-shadow: 3px 3px 0 var(--ink);
 }
 
 .qp .rr-detail-body {
@@ -527,7 +597,7 @@
   align-items: flex-start;
   gap: 12px;
   padding: 14px;
-  border: 2px solid var(--rr-ink);
+  border: 2px solid var(--ink);
   overflow-wrap: anywhere;
 }
 
@@ -537,7 +607,7 @@
   flex-shrink: 0;
   width: 32px;
   height: 32px;
-  border: 2px solid var(--rr-ink);
+  border: 2px solid var(--ink);
 }
 
 .qp .rr-choice small {
@@ -549,7 +619,7 @@
 .qp .rr-facts {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  border: 2px solid var(--rr-ink);
+  border: 2px solid var(--ink);
 }
 
 .qp .rr-facts .rr-stat {
@@ -559,7 +629,7 @@
 .qp .rr-explanation {
   grid-column: 1 / -1;
   padding: 14px;
-  border-top: 2px solid var(--rr-ink);
+  border-top: 2px solid var(--ink);
 }
 
 .qp .rr-explanation p {
@@ -601,7 +671,7 @@
 
   .qp .rr-breakdown > div + div {
     border-left: 0;
-    border-top: 2px solid var(--rr-ink);
+    border-top: 2px solid var(--ink);
   }
 
   .qp .rr-reader {

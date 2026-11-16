@@ -22,7 +22,7 @@
 }
 
 .qp .nq-picker-list a:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .nq-picker-list span {

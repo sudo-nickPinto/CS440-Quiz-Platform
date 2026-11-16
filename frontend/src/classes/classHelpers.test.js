@@ -4,6 +4,7 @@ import {
   approvalLabel,
   approvedQuizzesPath,
   approvalButton,
+  collaboratorTags,
   presentStatus,
   sendForApproval,
   resolveUserSection,
@@ -13,6 +14,9 @@ import {
   quizStatusLabel,
   submissionPreviewPath,
   membersWithStats,
+  liveState,
+  opensRow,
+  rowLink,
   initials,
   resolveAdminSection,
   scoreMark,
@@ -242,7 +246,7 @@ describe("approvalButton", () => {
     const edited = quiz({ published_version_id: 3, approval_status: "APPROVED" });
     expect(approvalButton(edited)).toMatchObject({ kind: "send", note: "Edited since approval" });
     const rejected = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "REJECTED" });
-    expect(approvalButton(rejected)).toMatchObject({ kind: "send", label: "Send again", note: "Rejected" });
+    expect(approvalButton(rejected)).toMatchObject({ kind: "send", label: "Send for approval", note: "Rejected" });
     const withdrawn = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "WITHDRAWN" });
     expect(approvalButton(withdrawn)).toMatchObject({ kind: "send", label: "Send for approval", note: null });
   });
@@ -279,5 +283,77 @@ describe("sendForApproval", () => {
     };
     await sendForApproval(api, 4, { quiz_id: 9, status: "DRAFT", published_version_id: 12 });
     expect(calls).toEqual(["/quizzes/9", "/classes/4/quizzes/9/publish", "/classes/4/quiz-submissions"]);
+  });
+});
+
+describe("collaboratorTags", () => {
+  it("is empty when nobody else edits the quiz", () => {
+    expect(collaboratorTags([])).toEqual({ shown: [], rest: 0 });
+    expect(collaboratorTags(undefined)).toEqual({ shown: [], rest: 0 });
+  });
+
+  it("gives up to three names their own tag", () => {
+    expect(collaboratorTags(["Ana"])).toEqual({ shown: ["Ana"], rest: 0 });
+    expect(collaboratorTags(["Ana", "Ben", "Cy"])).toEqual({ shown: ["Ana", "Ben", "Cy"], rest: 0 });
+  });
+
+  it("folds the rest into one +N tag", () => {
+    expect(collaboratorTags(["Ana", "Ben", "Cy", "Dee", "Eli"])).toEqual({ shown: ["Ana", "Ben", "Cy"], rest: 2 });
+  });
+});
+
+describe("liveState", () => {
+  const live = (extra) => ({ status: "LOBBY", current_question_order: null, question_count: 6, ...extra });
+
+  it("reads Lobby open before the first question", () => {
+    expect(liveState(live())).toBe("Lobby open");
+  });
+
+  it("names the current question out of the total", () => {
+    expect(liveState(live({ status: "ACTIVE", current_question_order: 3 }))).toBe("Question 3 of 6");
+    expect(liveState(live({ status: "ACTIVE", current_question_order: 3, question_count: 0 }))).toBe("Question 3");
+  });
+
+  it("puts the host and people who left first", () => {
+    expect(liveState(live({ is_host: true, status: "ACTIVE", current_question_order: 2 }))).toBe("You're hosting");
+    expect(liveState(live({ left: true }))).toBe("You left");
+  });
+});
+
+describe("opensRow / rowLink", () => {
+  // A click on plain row text; `inside` is what closest() finds.
+  const click = (overrides = {}, inside = null) => ({
+    button: 0,
+    defaultPrevented: false,
+    target: { closest: () => inside },
+    ...overrides,
+  });
+
+  it("opens on a plain primary click", () => {
+    expect(opensRow(click())).toBe(true);
+  });
+
+  it("leaves clicks on links and buttons in the row to them", () => {
+    expect(opensRow(click({}, { tagName: "A" }))).toBe(false);
+  });
+
+  it("ignores modified, secondary and already-handled clicks", () => {
+    expect(opensRow(click({ ctrlKey: true }))).toBe(false);
+    expect(opensRow(click({ metaKey: true }))).toBe(false);
+    expect(opensRow(click({ button: 1 }))).toBe(false);
+    expect(opensRow(click({ defaultPrevented: true }))).toBe(false);
+  });
+
+  it("ignores a click that ends a text selection", () => {
+    expect(opensRow(click(), "Quiz 1")).toBe(false);
+  });
+
+  it("navigates once, and only for row clicks", () => {
+    const to = [];
+    const row = rowLink((path) => to.push(path), "/app/classes/4/sessions/7/report");
+    expect(row.className).toBe("cl-click-row");
+    row.onClick(click());
+    row.onClick(click({}, { tagName: "BUTTON" }));
+    expect(to).toEqual(["/app/classes/4/sessions/7/report"]);
   });
 });

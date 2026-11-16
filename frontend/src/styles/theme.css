@@ -1,4 +1,5 @@
 :root {
+  /* Base palette. Prefer the role tokens below in new CSS. */
   --paper: #fcf9f4;
   --sand: #ecdfd0;
   --sky-soft: #c2e6f8;
@@ -7,10 +8,64 @@
   --orange-deep: #bf4c0c;
   --orange: #cc4e00;
   --ink: #222222;
-  --gray: #666666;
+  --gray: #595959; /* 4.5:1 or better on paper, sand, sky-soft and apricot */
   --sky: #8fdbff;
+  /* Very light blue for strips and sub-rows (quiz page strip, editor
+     question strip, a quiz’s presentation rows). */
+  --sky-wash: #e6eef7;
 
   --b: 3px solid var(--ink);
   --b-thin: 2px solid var(--ink);
   --shadow: 6px 6px 0 var(--ink);
+
+  /*
+   * Color roles. What each color means:
+   *   orange = the main action on a screen (create, save, host, submit). One per area.
+   *   navy   = navigation, links, selected tabs, informational state.
+   *   ink    = text, borders, shadows.
+   *   paper/sand = page and card surfaces.
+   *   success/danger = results and destructive actions only.
+   * Do not add new hex colors in feature CSS; use these.
+   */
+  --color-primary: var(--orange);
+  --color-primary-hover: var(--orange-deep);
+  --color-on-primary: #ffffff;
+  --color-info: var(--navy);
+  --color-on-info: #ffffff;
+  --color-selected-bg: var(--sky-soft);
+  --color-text: var(--ink);
+  --color-text-muted: var(--gray);
+  --color-surface: var(--paper);
+  --color-surface-alt: var(--sand);
+  --color-border: var(--ink);
+  --color-success: #187239;
+  --color-success-bg: #e4f5e7;
+  --color-danger: #a31a32;
+  --color-danger-bg: #ffedf0;
+
+  /*
+   * Hover and press. A hover never changes a button's color to a
+   * different hue (beige/sand hovers read as "inactive"):
+   *   - Bordered buttons/cards lift: transform var(--hover-lift) + box-shadow var(--hover-shadow).
+   *   - Primary buttons may also switch to --color-primary-hover.
+   *   - Flat rows, chips and answer/result tiles darken: filter var(--hover-shade).
+   *   - Active/pressed: transform var(--press) + box-shadow var(--press-shadow).
+   */
+  --hover-lift: translate(-2px, -2px);
+  --hover-shadow: 8px 8px 0 var(--ink);
+  --hover-shade: brightness(0.93);
+  --press: translate(2px, 2px);
+  --press-shadow: 2px 2px 0 var(--ink);
+  --hover-transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease, background-color 0.12s ease;
+
+  /*
+   * Live answer colors, one per answer position (ui-tone-0..3), each with its
+   * card suit. Text and suits on them are always --color-on-answer (white);
+   * every shade keeps at least 4.5:1 contrast with white.
+   */
+  --answer-0: var(--navy); /* spade, top left */
+  --answer-1: var(--orange-deep); /* heart, top right */
+  --answer-2: #c41e3a; /* diamond, bottom left: cherry red */
+  --answer-3: #1b6e3a; /* club, bottom right: kelly green */
+  --color-on-answer: #ffffff;
 }

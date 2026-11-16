@@ -79,16 +79,20 @@
   cursor: default;
   opacity: 1;
 }
-.qp .qc-approval .qc-host > button {
+/* Host live is orange on cards and rows, like on the quiz page. */
+.qp .qc-approval .qc-host > button,
+.qp .cl-approval-cell .qc-host > button {
   min-width: 172px;
   padding: 6px 12px;
-  background: var(--navy);
+  background: var(--orange-deep);
   color: var(--paper);
   font-size: 14px;
   white-space: nowrap;
 }
-.qp .qc-approval .qc-host > button:hover:not(:disabled) {
+.qp .qc-approval .qc-host > button:hover:not(:disabled),
+.qp .cl-approval-cell .qc-host > button:hover:not(:disabled) {
   background: var(--orange-deep);
+  filter: var(--hover-shade);
 }
 .qp .qc-approval button.cl-send:disabled:not(.is-approved) {
   background: var(--sand);
@@ -122,7 +126,10 @@
   font-size: 20px;
   line-height: 1;
 }
-.qp .qc-footer button.cl-kebab:hover,
+.qp .qc-footer button.cl-kebab:hover {
+  filter: var(--hover-shade);
+}
+
 .qp .qc-footer button.cl-kebab[aria-expanded="true"] {
   background: var(--sky-soft);
 }

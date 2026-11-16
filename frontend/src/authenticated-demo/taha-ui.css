@@ -706,31 +706,31 @@
 
 /* A: navy blue */
 .qp .ui-answer.ui-tone-0 {
-  background: #043371;
-  color: #ffffff;
+  background: var(--answer-0);
+  color: var(--color-on-answer);
 }
 
 /* B: burnt orange */
 .qp .ui-answer.ui-tone-1 {
-  background: #bf4c0c;
-  color: #ffffff;
+  background: var(--answer-1);
+  color: var(--color-on-answer);
 }
 
-/* C: muted sage green */
+/* C: green */
 .qp .ui-answer.ui-tone-2 {
-  background: #c9ddbf;
-  color: #222222;
+  background: var(--answer-2);
+  color: var(--color-on-answer);
 }
 
-/* D: warm golden yellow */
+/* D: gold */
 .qp .ui-answer.ui-tone-3 {
-  background: #f3d477;
-  color: #222222;
+  background: var(--answer-3);
+  color: var(--color-on-answer);
 }
 
 /* Keep the host's letter badges readable on their paper background. */
 .qp .ui-answer .ui-letter {
-  color: #222222;
+  color: var(--ink);
 }
 
 .qp .ui-letter {

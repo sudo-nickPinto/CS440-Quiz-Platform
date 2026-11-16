@@ -3,7 +3,8 @@ import "./quiz-cards.css";
 
 // wholeCard: the title link is stretched over the card (see .qc-card-link in
 // quiz-cards.css), so a click anywhere opens `to`. Buttons and menus on the
-// card sit above that link and keep working. There's no separate footer link.
+// card sit above that link and keep working. There's no separate footer link
+// unless keepLink is explicitly set.
 export default function QuizCard({
   title,
   to,
@@ -15,9 +16,10 @@ export default function QuizCard({
   actions,
   linkLabel = "View quiz",
   wholeCard = false,
+  keepLink = false,
 }) {
   const clickable = Boolean(to) && wholeCard;
-  const footerLink = Boolean(to) && !wholeCard;
+  const footerLink = Boolean(to) && (!wholeCard || keepLink);
 
   return (
     <article
