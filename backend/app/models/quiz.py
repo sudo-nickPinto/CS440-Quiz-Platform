@@ -8,6 +8,8 @@ from sqlalchemy import (
     CheckConstraint,
     Enum as SqlEnum,
     ForeignKey,
+    Index,
+    JSON,
     SmallInteger,
     String,
     Text,
@@ -213,6 +215,11 @@ class Question(Base):
     question_id: Mapped[int] = mapped_column(
         INTEGER(unsigned=True), primary_key=True
     )
+    bank_question_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("question_bank_item.bank_question_id", ondelete="SET NULL"),
+        nullable=True,
+    )
     quiz_version_id: Mapped[int] = mapped_column(
         INTEGER(unsigned=True),
         ForeignKey("quiz_version.quiz_version_id", ondelete="CASCADE"),
@@ -253,6 +260,60 @@ class Question(Base):
         cascade="all, delete-orphan",
         order_by="AnswerChoice.choice_order",
         passive_deletes=True,
+    )
+
+
+class QuestionBankItem(Base):
+    """A reusable snapshot; quiz questions never point at mutable content."""
+
+    __tablename__ = "question_bank_item"
+    __table_args__ = (
+        UniqueConstraint("source_question_id", name="uq_bank_source_question"),
+        Index("idx_bank_owner_current", "owner_id", "is_current", "updated_at"),
+        Index("idx_bank_class_current", "source_class_id", "is_current", "updated_at"),
+    )
+
+    bank_question_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True), primary_key=True
+    )
+    owner_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    source_class_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("class.class_id", ondelete="SET NULL"),
+    )
+    source_quiz_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("quiz.quiz_id", ondelete="SET NULL"),
+    )
+    source_question_id: Mapped[int | None] = mapped_column(INTEGER(unsigned=True))
+    is_current: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("TRUE")
+    )
+    question_type: Mapped[QuestionType] = mapped_column(
+        SqlEnum(QuestionType, values_callable=enum_values),
+        nullable=False,
+        default=QuestionType.MULTIPLE_CHOICE,
+        server_default=QuestionType.MULTIPLE_CHOICE.value,
+    )
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    explanation: Mapped[str | None] = mapped_column(Text)
+    time_limit_seconds: Mapped[int] = mapped_column(
+        SMALLINT(unsigned=True), nullable=False, default=20, server_default="20"
+    )
+    base_points: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True), nullable=False, default=1000, server_default="1000"
+    )
+    choices_json: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DATETIME(fsp=3), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DATETIME(fsp=3), nullable=False, server_default=func.now(),
+        server_onupdate=func.now(),
     )
 
 

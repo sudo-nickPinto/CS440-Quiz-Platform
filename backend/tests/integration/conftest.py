@@ -69,6 +69,7 @@ def cleanup_database(app) -> None:
         "live_session",
         "answer_choice",
         "question",
+        "question_bank_item",
         "quiz_submission",
         "quiz_version",
         "quiz_collaborator_event",

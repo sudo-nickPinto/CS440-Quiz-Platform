@@ -4,7 +4,7 @@ from threading import Barrier, Event
 from sqlalchemy import select, text
 
 from app.errors import APIError
-from app.models.quiz import Question, Quiz, QuizStatus, QuizVersion
+from app.models.quiz import Question, QuestionBankItem, Quiz, QuizStatus, QuizVersion
 from app.schemas.quiz import QuestionCreate, QuestionUpdate, QuizPublish
 from app.services import quizzes as quiz_service
 from app.services.quizzes import (
@@ -163,6 +163,19 @@ def test_different_questions_commit_concurrently_on_mysql(
             .order_by(Question.question_order)
         ).all()
         assert [question.question_text for question in stored] == [
+            "Owner changed first",
+            "Editor changed second",
+        ]
+        banked = db.scalars(
+            select(QuestionBankItem)
+            .where(
+                QuestionBankItem.bank_question_id.in_(
+                    [question.bank_question_id for question in stored]
+                )
+            )
+            .order_by(QuestionBankItem.source_question_id)
+        ).all()
+        assert [item.question_text for item in banked] == [
             "Owner changed first",
             "Editor changed second",
         ]

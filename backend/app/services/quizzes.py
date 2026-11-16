@@ -47,6 +47,7 @@ from app.schemas.quiz import (
 )
 from app.services.class_authorization import get_class, get_class_membership
 from app.services.hosting import quiz_hosting, quiz_hosting_many
+from app.services.question_bank import snapshot_question
 
 
 # Longest question and answer text a host screen can show (see the editor's
@@ -454,6 +455,12 @@ def create_quiz(
     )
     db.add(quiz)
     try:
+        db.flush()
+        for question in version.questions:
+            snapshot_question(
+                db, question, owner_id=account.account_id, class_id=class_id,
+                quiz_id=quiz.quiz_id,
+            )
         db.commit()
     except SQLAlchemyError as exc:
         db.rollback()
@@ -1088,6 +1095,10 @@ def update_class_quiz_question(
             for choice_order, choice in enumerate(payload.choices, start=1)
         ]
         db.flush()
+        snapshot_question(
+            db, question, owner_id=quiz.author_id, class_id=class_id,
+            quiz_id=quiz_id,
+        )
         db.expire(question)
         quiz_revision = db.scalar(
             select(Quiz.revision).where(Quiz.quiz_id == quiz_id)
@@ -1154,6 +1165,10 @@ def update_class_quiz_default_time(
             question.time_limit_seconds = payload.time_limit_seconds
             question.revision += 1
             question.updated_at = now
+            snapshot_question(
+                db, question, owner_id=quiz.author_id, class_id=class_id,
+                quiz_id=quiz_id,
+            )
         quiz.revision += 1
         quiz.updated_at = now
         db.flush()
@@ -1234,6 +1249,10 @@ def add_class_quiz_question(
         quiz.status = QuizStatus.DRAFT
         quiz.updated_at = now
         db.flush()
+        snapshot_question(
+            db, question, owner_id=quiz.author_id, class_id=class_id,
+            quiz_id=quiz_id,
+        )
         response = QuestionUpdateResponse(
             quiz_id=quiz_id,
             quiz_revision=quiz.revision,
@@ -1322,6 +1341,11 @@ def update_class_quiz(
     quiz.status = QuizStatus.DRAFT
     try:
         db.flush()
+        for question in draft.questions:
+            snapshot_question(
+                db, question, owner_id=quiz.author_id, class_id=class_id,
+                quiz_id=quiz_id,
+            )
         response = QuizResponse(
             quiz_id=quiz.quiz_id,
             author_id=quiz.author_id,
