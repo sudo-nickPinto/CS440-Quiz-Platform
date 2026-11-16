@@ -230,3 +230,20 @@ Problems with the connection itself close the socket:
 3. **Missing services:** `end_session()` (writes `result` rows using `RANK()`, as `0003` requires), `cancel_session()`, `leave_session()`, `close_question_now()`.
 4. **Participant-view filter** for `question_results` (§4).
 5. **Frontend:** a `useLiveSession(sessionId)` hook that owns the socket, reconnects with backoff and keeps the latest `session_state`; the screens render from it.
+
+## 11. Notification socket
+
+```
+ws(s)://<api-host>/ws/notifications
+```
+
+One socket a signed-in user keeps open anywhere in the app, so the server can push small events to specific accounts (`backend/app/notifications/hub.py`, route `api/routes/notifications_live.py`). It is not tied to a session or quiz. An account may hold several at once (tabs, devices); a new one never replaces an older one, so there is no `4409` here.
+
+- **Auth:** same as §2. The first message must be `{"type": "auth", "token": "<Auth0 access token>"}` within 5 seconds, verified by the same `authenticate_token()`.
+- **Ready:** on success the server sends `{"type": "notifications_ready"}` before anything else.
+- **Keep-alive:** `{"type": "ping"}` → `{"type": "pong"}`; 60 s of silence closes with `1001` `idle_timeout`. Each ping also rechecks that the account is still active. Any other client message closes with `4400`.
+- **Close codes** (§7): `4400` first message wasn't `auth` / bad JSON / unknown message; `4401` missing, invalid or expired token, or auth timeout; `4403` inactive or unknown account; `1001` idle timeout or server shutdown (reconnect); `1011` server error (reconnect with backoff).
+- **Events are hints, not data.** The server sends one after the change commits; the client refetches over HTTP. Missed events are not replayed, so a client refetches what it shows after every (re)connect.
+- **One process:** the registry is in memory, so only sockets on the same uvicorn worker are reached (§8.3).
+
+Event types (server → client): events are added in the next change.
