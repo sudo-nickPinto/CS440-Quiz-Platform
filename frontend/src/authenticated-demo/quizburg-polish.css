@@ -3412,9 +3412,21 @@
   color: var(--color-on-answer);
 }
 
+/* The suit is the whole label on the phone tiles, the picked answer and
+   the results badges. */
 .qp .lv-ptiles .ui-answer .lv-suit {
-  width: 0.62em;
-  height: 0.62em;
+  width: min(45%, 96px);
+  height: min(45%, 96px);
+}
+
+.qp .lv-my-pick .lv-suit {
+  width: 56%;
+  height: 56%;
+}
+
+.qp .lv-index .lv-suit {
+  width: 62%;
+  height: 62%;
 }
 
 .qp .lv-hq .lv-strip {

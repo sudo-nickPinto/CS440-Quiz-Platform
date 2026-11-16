@@ -15,6 +15,8 @@ const SHAPES = {
       <circle cx="12" cy="7" r="4.4" />
       <circle cx="6.7" cy="13.6" r="4.4" />
       <circle cx="17.3" cy="13.6" r="4.4" />
+      {/* Fills the gap where the three leaves meet. */}
+      <circle cx="12" cy="12.2" r="3.2" />
       <path d="M10.7 12h2.6l1.4 10H9.3Z" />
     </>
   ),
