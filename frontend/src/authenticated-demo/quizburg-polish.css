@@ -4493,6 +4493,209 @@
   margin-top: 46px;
 }
 
+/* Results labels look like the answer boxes: the answer's colour, white
+   text and a bare suit. Bigger text, up to four lines. */
+.qp .lv-dist-label {
+  justify-content: flex-start;
+  gap: 0.6em;
+  padding: 12px 16px;
+  font-size: clamp(18px, min(2.2vw, 3.4vh), 30px);
+  line-height: 1.2;
+}
+
+.qp .lv-dist[data-size="medium"] .lv-dist-label {
+  font-size: clamp(17px, min(1.9vw, 3.1vh), 26px);
+}
+
+.qp .lv-dist[data-size="long"] .lv-dist-label {
+  font-size: clamp(16px, min(1.6vw, 2.8vh), 23px);
+}
+
+.qp .lv-dist-label.ui-tone-0,
+.qp .is-correct .lv-dist-label.ui-tone-0 {
+  background: var(--answer-0);
+  color: var(--color-on-answer);
+}
+
+.qp .lv-dist-label.ui-tone-1,
+.qp .is-correct .lv-dist-label.ui-tone-1 {
+  background: var(--answer-1);
+  color: var(--color-on-answer);
+}
+
+.qp .lv-dist-label.ui-tone-2,
+.qp .is-correct .lv-dist-label.ui-tone-2 {
+  background: var(--answer-2);
+  color: var(--color-on-answer);
+}
+
+.qp .lv-dist-label.ui-tone-3,
+.qp .is-correct .lv-dist-label.ui-tone-3 {
+  background: var(--answer-3);
+  color: var(--color-on-answer);
+}
+
+.qp .lv-dist-label .lv-suit {
+  width: 1.3em;
+  height: 1.3em;
+}
+
+.qp .lv-dl-text {
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.qp .lv-dist-label .lv-check {
+  margin-left: auto;
+  border-color: var(--color-on-answer);
+  background: transparent;
+  color: var(--color-on-answer);
+}
+
+/* Student answering: the tiles fill the screen under the header at every
+   size, so a short window never needs scrolling (like the host screens). */
+.qp:has(.lv-pq) {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  padding-bottom: clamp(10px, 2vh, 28px);
+}
+
+.qp:has(.lv-pq) .qp-header {
+  flex-shrink: 0;
+}
+
+.qp:has(.lv-pq) .qp-frame,
+.qp .ui-live:has(.lv-pq),
+.qp .lv-body:has(.lv-pq) {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.qp .lv-pq {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  padding: clamp(10px, 2vh, 24px) clamp(10px, 2vw, 28px);
+}
+
+.qp .lv-pq-top,
+.qp .lv-tbar {
+  flex-shrink: 0;
+}
+
+.qp .lv-pq-top {
+  min-height: 0;
+}
+
+.qp .lv-ptiles {
+  flex: 1 1 auto;
+  grid-auto-rows: minmax(0, 1fr);
+  gap: clamp(8px, 1.6vh, 18px);
+  width: 100%;
+  min-height: 0;
+  padding: clamp(10px, 2vh, 18px) 0;
+}
+
+.qp .lv-ptiles .ui-answer {
+  aspect-ratio: auto;
+  height: 100%;
+  min-height: 0;
+  padding: 8px;
+}
+
+.qp .lv-ptiles .ui-answer .lv-suit {
+  width: auto;
+  height: min(55%, 150px);
+  aspect-ratio: 1;
+}
+
+.qp .lv-pq .lv-stat-row {
+  flex-shrink: 0;
+  width: min(100%, 520px);
+}
+
+/* Slim score/rank line under the tiles: label and value side by side */
+.qp .lv-pq .lv-stat {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 12px;
+}
+
+.qp .lv-pq .lv-stat strong {
+  margin: 0;
+  font-size: 17px;
+}
+
+/* The black bar above already says "Question N of M"; keep the progress
+   marks and the timer on one short row. */
+.qp .lv-pq .lv-q-label > span:first-child {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.qp .lv-pq .lv-q-label {
+  gap: 4px;
+}
+
+.qp .lv-pq .lv-tbar {
+  margin-top: 8px;
+}
+
+/* While a student answers, the title bar stays slim. */
+.qp .lv:has(.lv-pq) .lv-bar {
+  flex-shrink: 0;
+  min-height: 0;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+@media (max-height: 760px) {
+  /* Short windows: the app header (logo, name) steps aside while a question
+     is open so the tiles get the room; it's back on every other screen. */
+  .qp:has(.lv-pq) .qp-header {
+    display: none;
+  }
+
+  .qp:has(.lv-pq) {
+    padding-top: 8px;
+  }
+
+  .qp .lv-pq .lv-q-label small {
+    display: none;
+  }
+
+  .qp .lv-pq .lv-ptimer {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 640px) {
+  .qp .lv-dist-label {
+    justify-content: center;
+    padding: 6px 4px;
+    font-size: 13px;
+  }
+
+  .qp .lv-dist[data-size] .lv-dist-label {
+    font-size: 12px;
+  }
+}
+
 /* Results screen filling the window (see the question screen above). Placed
    after the base results rules so it overrides their minimum heights. */
 @media (min-width: 641px) {

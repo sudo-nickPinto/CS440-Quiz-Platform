@@ -584,13 +584,9 @@ function HostQuestionResults({ question, results, controls }) {
                 </div>
               </div>
 
-              <div className="lv-dist-label">
-                <span
-                  className={`lv-index ui-tone-${index % 4}`}
-                  aria-label={suitName(index)}
-                >
-                  <AnswerSuit index={index} />
-                </span>
+              <div className={`lv-dist-label ui-tone-${index % 4}`}>
+                <AnswerSuit index={index} />
+                <span className="ui-sr">{suitName(index)}: </span>
                 <span className="lv-dl-text" title={choice.choice_text}>
                   {choice.choice_text}
                 </span>
