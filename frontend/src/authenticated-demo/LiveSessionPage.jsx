@@ -62,7 +62,9 @@ function Marks({ total, current }) {
           className={
             index + 1 < current ? "done" : index + 1 === current ? "cur" : ""
           }
-        />
+        >
+          {index + 1}
+        </i>
       ))}
     </span>
   );
@@ -297,6 +299,7 @@ function QuestionScreen({
   submit,
   controls,
   standing,
+  leave,
 }) {
   const question = state.currentQuestion;
   const [now, setNow] = useState(() => Date.now());
@@ -455,6 +458,7 @@ function QuestionScreen({
           <span>
             Rank <b>{standing?.rank == null ? "—" : `#${standing.rank}`}</b>
           </span>
+          {leave}
         </div>
       </div>
 
@@ -475,12 +479,9 @@ function QuestionScreen({
             <AnswerSuit index={index} />
           </button>
         ))}
-      </div>
 
-      {/* One fixed-height row under the tiles: the timer, or a short note
-          while answers are locked, so the tiles never change size. */}
-      <div className="lv-pq-foot">
-        {preview || busy || seconds === 0 ? (
+        {/* Floats over the tiles while they are locked, so nothing moves. */}
+        {(preview || busy || seconds === 0) && (
           <p className="lv-pq-msg" role="status">
             {preview
               ? "Read the question on the host’s screen. Answers open in a moment…"
@@ -488,20 +489,22 @@ function QuestionScreen({
                 ? "Submitting your answer…"
                 : "Time’s up. Waiting for the question to close…"}
           </p>
-        ) : (
-          <>
-            <div className="lv-tbar" aria-hidden="true">
-              <i style={{ width: `${progress}%` }} />
-            </div>
-            <div
-              className={"lv-ptimer" + (seconds !== null && seconds <= 5 ? " is-urgent" : "")}
-              role="timer"
-              aria-label="Seconds remaining"
-            >
-              {seconds ?? "—"}
-            </div>
-          </>
         )}
+      </div>
+
+      {/* The timer row under the tiles is always there, so the tiles never
+          change size. */}
+      <div className="lv-pq-foot">
+        <div className="lv-tbar" aria-hidden="true">
+          <i style={{ width: `${progress}%` }} />
+        </div>
+        <div
+          className={"lv-ptimer" + (seconds !== null && seconds <= 5 ? " is-urgent" : "")}
+          role="timer"
+          aria-label="Seconds remaining"
+        >
+          {seconds ?? "—"}
+        </div>
       </div>
     </section>
   );
@@ -1020,6 +1023,7 @@ function ConnectedSession({ sessionId }) {
                 state={state}
                 standing={standing}
                 host={host}
+                leave={leave}
                 busy={action.busy}
                 canAct={canAct}
                 submit={(choiceId) =>
@@ -1075,9 +1079,11 @@ function ConnectedSession({ sessionId }) {
               </div>
             )}
 
+            {/* While answering, Leave sits in the top row of the question. */}
             {!host &&
               state.session &&
-              !["left", "connecting", "lobby"].includes(phase) && (
+              !["left", "connecting", "lobby"].includes(phase) &&
+              !(phase === "question" && state.currentQuestion && !state.myAnswer) && (
                 <div className="lv-foot">{leave}</div>
               )}
 
