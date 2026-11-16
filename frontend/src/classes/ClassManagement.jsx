@@ -39,6 +39,18 @@ function shortDate(value) {
   return value ? SHORT_DATE.format(new Date(value)) : "—";
 }
 
+// An email that, on a narrow screen, wraps after the "@" or before a dot
+// instead of in the middle of a word.
+function EmailText({ email }) {
+  const parts = email.split(/(?<=@)|(?=[.])/);
+  return parts.map((part, index) => (
+    <Fragment key={index}>
+      {index > 0 && <wbr />}
+      {part}
+    </Fragment>
+  ));
+}
+
 function personName(person) {
   return person.display_name || person.email;
 }
@@ -280,7 +292,9 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
                       )}
                       {member.display_name &&
                         member.display_name !== member.email && (
-                          <small>{member.email}</small>
+                          <small>
+                            <EmailText email={member.email} />
+                          </small>
                         )}
                     </td>
                     <td className="cl-stu-recent">

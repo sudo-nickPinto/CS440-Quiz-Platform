@@ -764,7 +764,7 @@
 
   .qp .cl-stu-who {
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
 }
 
