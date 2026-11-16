@@ -418,3 +418,70 @@ def test_only_the_owner_can_archive(classes) -> None:
     assert denied.json()["error"]["code"] == "quiz_access_denied"
     assert archived.status_code == 200
     assert archived.json()["status"] == "ARCHIVED"
+
+
+# Text limits (the host screen fits a 200-character question with four
+# 120-character answers)
+
+
+def _payload_with(question_text: str, choice_text: str = "2") -> dict:
+    question = {
+        **QUIZ_PAYLOAD["questions"][0],
+        "question_text": question_text,
+        "choices": [
+            {"choice_text": choice_text, "is_correct": True},
+            {"choice_text": "3", "is_correct": False},
+        ],
+    }
+    return {**QUIZ_PAYLOAD, "questions": [question]}
+
+
+def test_text_at_the_limits_is_accepted(classes) -> None:
+    client, identities, data = classes
+    act_as(client, identities["prof"])
+
+    response = client.post(
+        f"/classes/{data['main']}/quizzes", json=_payload_with("q" * 200, "a" * 120)
+    )
+
+    assert response.status_code == 201, response.json()
+
+
+@pytest.mark.parametrize(
+    ("question", "choice", "code"),
+    [
+        ("q" * 201, "2", "question_text_too_long"),
+        ("Which number is even?", "a" * 121, "choice_text_too_long"),
+    ],
+)
+def test_text_over_the_limits_is_rejected(classes, question, choice, code) -> None:
+    client, identities, data = classes
+    act_as(client, identities["prof"])
+
+    response = client.post(
+        f"/classes/{data['main']}/quizzes", json=_payload_with(question, choice)
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == code
+
+
+def test_text_saved_before_the_limits_still_saves() -> None:
+    from types import SimpleNamespace
+
+    from app.errors import APIError
+    from app.services.quizzes import _check_text_limits
+
+    def question(text, choice):
+        return SimpleNamespace(
+            question_text=text, choices=[SimpleNamespace(choice_text=choice)]
+        )
+
+    old = SimpleNamespace(questions=[question("q" * 300, "a" * 200)])
+
+    # Unchanged long text from the saved version passes...
+    _check_text_limits([question("q" * 300, "a" * 200)], old)
+    # ...but editing it (or adding new long text) does not.
+    with pytest.raises(APIError) as error:
+        _check_text_limits([question("q" * 299, "a" * 200)], old)
+    assert error.value.code == "question_text_too_long"
