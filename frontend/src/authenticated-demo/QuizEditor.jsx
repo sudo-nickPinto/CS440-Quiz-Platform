@@ -20,6 +20,7 @@ import {
   canApplyRemoteQuestion,
   canSaveDraftIndependently,
   nextAggregateRevision,
+  reconcileAutosavedQuestion,
   remoteStructureDecision,
   saveAggregateQuiz,
   saveDraftQuestions,
@@ -756,7 +757,18 @@ export function QuizEditor({
     setQuestionStatus(question.questionId, "pending");
     const timer = window.setTimeout(() => {
       autosaveTimers.current.delete(question.questionId);
-      void autosaveQuestion(question, index);
+      // Read the latest editor snapshot when the debounce expires. A previous
+      // request may have advanced this question's revision while this timer
+      // was waiting, and sending the older captured object would create a
+      // false edit conflict on the user's next keystroke.
+      const latestIndex = editorRef.current.questions.findIndex(
+        (item) => item.questionId === question.questionId,
+      );
+      const latestQuestion = editorRef.current.questions[latestIndex];
+      void autosaveQuestion(
+        latestQuestion ?? question,
+        latestIndex >= 0 ? latestIndex : index,
+      );
     }, delay);
     autosaveTimers.current.set(question.questionId, timer);
   }
@@ -798,23 +810,29 @@ export function QuizEditor({
         index,
         editorRef.current.defaultTime,
       );
+      const currentEditor = editorRef.current;
+      const currentQuestion = currentEditor.questions.find(
+        (item) => item.questionId === questionId,
+      );
+      const { baselineQuestion, editorQuestion } =
+        reconcileAutosavedQuestion({
+          submittedQuestion: question,
+          currentQuestion: currentQuestion ?? question,
+          savedQuestion: saved,
+        });
       const nextBaseline = {
         ...baselineEditorRef.current,
         questions: baselineEditorRef.current.questions.map((item) =>
-          item.questionId === questionId ? saved : item,
+          item.questionId === questionId ? baselineQuestion : item,
         ),
       };
       baselineEditorRef.current = nextBaseline;
       setBaselineEditor(nextBaseline);
-      const currentEditor = editorRef.current;
       const nextEditor = {
         ...currentEditor,
         questions: currentEditor.questions.map((currentQuestion) => {
           if (currentQuestion.questionId !== questionId) return currentQuestion;
-          // Do not replace keystrokes entered while this request was running.
-          return JSON.stringify(currentQuestion) === JSON.stringify(question)
-            ? saved
-            : { ...currentQuestion, revision: saved.revision };
+          return editorQuestion;
         }),
       };
       editorRef.current = nextEditor;

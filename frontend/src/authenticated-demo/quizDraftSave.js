@@ -34,6 +34,29 @@ export function nextAggregateRevision(
   return aggregateStale ? currentRevision : incomingRevision;
 }
 
+export function reconcileAutosavedQuestion({
+  submittedQuestion,
+  currentQuestion,
+  savedQuestion,
+}) {
+  // The API canonicalizes strings (for example, by trimming whitespace).
+  // That representation is correct for persistence, but replacing an active
+  // input with it can eat a trailing space between keystrokes. Treat the
+  // submitted client snapshot as the new baseline and only take the revision
+  // assigned by the server. Any keystrokes entered while the request was in
+  // flight remain in the current editor question.
+  return {
+    baselineQuestion: {
+      ...submittedQuestion,
+      revision: savedQuestion.revision,
+    },
+    editorQuestion: {
+      ...currentQuestion,
+      revision: savedQuestion.revision,
+    },
+  };
+}
+
 export function canSaveDraftIndependently(editor, baselineEditor) {
   const appendOnlyStructure =
     editor.questions.length >= baselineEditor.questions.length &&
