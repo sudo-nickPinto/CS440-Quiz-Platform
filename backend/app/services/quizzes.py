@@ -30,6 +30,7 @@ from app.schemas.quiz import (
     QuizAccess,
     QuizCollaboratorCreate,
     QuizCollaboratorResponse,
+    QuizContributor,
     QuizCreate,
     QuizDefaultTimeUpdate,
     QuizDefaultTimeUpdateResponse,
@@ -173,6 +174,45 @@ def _latest_editor_version(quiz: Quiz) -> QuizVersion:
     return _latest_published_version(quiz)
 
 
+def _attribution(db: Session, quiz: Quiz) -> dict:
+    """Who to credit on the quiz page: the owner and its active editors.
+
+    Only display names, for callers who may already read the quiz. The same
+    people the owner sees in the collaborators panel, without emails.
+    """
+    author_name = db.scalar(
+        select(Account.display_name).where(Account.account_id == quiz.author_id)
+    )
+    # Only editors who still have access: an unrevoked share, an active
+    # account, and an ACTIVE membership in the quiz's class. Someone removed
+    # from the class or deactivated keeps an unrevoked row but isn't credited.
+    rows = []
+    if quiz.class_id is not None:
+        rows = db.execute(
+            select(Account.account_id, Account.display_name)
+            .join(QuizCollaborator, QuizCollaborator.account_id == Account.account_id)
+            .join(
+                ClassMembership,
+                (ClassMembership.account_id == Account.account_id)
+                & (ClassMembership.class_id == quiz.class_id),
+            )
+            .where(
+                QuizCollaborator.quiz_id == quiz.quiz_id,
+                QuizCollaborator.revoked_at.is_(None),
+                Account.is_active.is_(True),
+                ClassMembership.status == MembershipStatus.ACTIVE,
+            )
+            .order_by(Account.display_name, Account.account_id)
+        ).all()
+    return {
+        "author_name": author_name,
+        "collaborators": [
+            QuizContributor(account_id=account_id, display_name=display_name)
+            for account_id, display_name in rows
+        ],
+    }
+
+
 def _to_response(
     db: Session,
     account: CurrentAccount,
@@ -184,6 +224,8 @@ def _to_response(
         can_edit=_can_edit(db, account, quiz),
     )
     response.hosting = quiz_hosting(db, account, quiz)
+    for field, value in _attribution(db, quiz).items():
+        setattr(response, field, value)
     return response
 
 
@@ -1201,6 +1243,7 @@ def update_class_quiz(
             can_edit=True,
             version=QuizVersionResponse.model_validate(draft),
             hosting=quiz_hosting(db, account, quiz),
+            **_attribution(db, quiz),
         )
         db.commit()
         return response
@@ -1305,6 +1348,7 @@ def publish_class_quiz(
             can_edit=True,
             version=QuizVersionResponse.model_validate(draft),
             hosting=quiz_hosting(db, account, quiz),
+            **_attribution(db, quiz),
         )
         db.commit()
         return response

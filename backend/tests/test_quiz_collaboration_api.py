@@ -854,3 +854,138 @@ def test_duplicate_and_owner_collaborators_are_rejected(
     )
     assert owner.status_code == 409
     assert owner.json()["error"]["code"] == "quiz_owner_cannot_collaborate"
+
+
+# --- Attribution: creator and editor names on the quiz response ---------------
+
+
+def _share(client: TestClient, path: str) -> None:
+    shared = client.post(
+        f"{path}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+    assert shared.status_code == 201
+
+
+def _add_organizer(client: TestClient, class_id: int) -> CurrentAccount:
+    with client.app.state.database.session_factory() as db:
+        organizer = Account(
+            auth0_sub="auth0|organizer",
+            email="organizer@example.com",
+            display_name="Organizer",
+            is_active=True,
+        )
+        db.add(organizer)
+        db.flush()
+        db.add(
+            ClassMembership(
+                class_id=class_id,
+                account_id=organizer.account_id,
+                role=ClassRole.ORGANIZER,
+                status=MembershipStatus.ACTIVE,
+                joined_via=JoinedVia.CODE,
+            )
+        )
+        db.commit()
+        return CurrentAccount(organizer.account_id, AccountRole.USER, True)
+
+
+def _assert_no_emails(body: dict) -> None:
+    assert "@" not in str(
+        {"author_name": body["author_name"], "collaborators": body["collaborators"]}
+    )
+    for collaborator in body["collaborators"]:
+        assert set(collaborator) == {"account_id", "display_name"}
+
+
+def test_attribution_is_shown_to_owner_collaborator_and_organizer(
+    collaboration_client,
+) -> None:
+    client, class_id, owner, editor, _ = collaboration_client
+    organizer = _add_organizer(client, class_id)
+    quiz = _create(client, class_id)
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    _share(client, path)
+
+    expected = [{"account_id": editor.account_id, "display_name": "Editor"}]
+    for viewer in (owner, editor, organizer):
+        client.app.dependency_overrides[get_active_account] = lambda v=viewer: v
+        response = client.get(path)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["author_name"] == "Owner"
+        assert body["collaborators"] == expected
+        _assert_no_emails(body)
+
+
+def test_attribution_is_on_create_save_and_publish_responses(
+    collaboration_client,
+) -> None:
+    client, class_id, _, editor, _ = collaboration_client
+    created = _create(client, class_id)
+    assert created["author_name"] == "Owner"
+    assert created["collaborators"] == []
+    path = f"/classes/{class_id}/quizzes/{created['quiz_id']}"
+    _share(client, path)
+
+    saved = client.put(path, json=_edit_payload(created["revision"]))
+    assert saved.status_code == 200
+    assert saved.json()["collaborators"] == [
+        {"account_id": editor.account_id, "display_name": "Editor"}
+    ]
+    _assert_no_emails(saved.json())
+
+
+def test_outsider_gets_404_and_no_attribution(collaboration_client) -> None:
+    client, class_id, _, _, outsider = collaboration_client
+    quiz = _create(client, class_id)
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    _share(client, path)
+
+    client.app.dependency_overrides[get_active_account] = lambda: outsider
+    response = client.get(path)
+    assert response.status_code == 404
+    assert "Owner" not in response.text
+    assert "Editor" not in response.text
+
+
+def test_revoked_collaborator_is_not_credited(collaboration_client) -> None:
+    client, class_id, _, editor, _ = collaboration_client
+    quiz = _create(client, class_id)
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    _share(client, path)
+    assert client.delete(f"{path}/collaborators/{editor.account_id}").status_code == 204
+
+    assert client.get(path).json()["collaborators"] == []
+
+
+@pytest.mark.parametrize("status", [MembershipStatus.REMOVED, MembershipStatus.LEFT])
+def test_collaborator_no_longer_in_class_is_not_credited(
+    collaboration_client, status
+) -> None:
+    client, class_id, _, editor, _ = collaboration_client
+    quiz = _create(client, class_id)
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    _share(client, path)
+    with client.app.state.database.session_factory() as db:
+        membership = db.query(ClassMembership).filter_by(
+            class_id=class_id, account_id=editor.account_id
+        ).one()
+        membership.status = status
+        db.commit()
+
+    body = client.get(path).json()
+    assert body["author_name"] == "Owner"
+    assert body["collaborators"] == []
+
+
+def test_deactivated_collaborator_is_not_credited(collaboration_client) -> None:
+    client, class_id, _, editor, _ = collaboration_client
+    quiz = _create(client, class_id)
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    _share(client, path)
+    with client.app.state.database.session_factory() as db:
+        db.get(Account, editor.account_id).is_active = False
+        db.commit()
+
+    assert client.get(path).json()["collaborators"] == []
