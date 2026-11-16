@@ -121,22 +121,20 @@ function HostLobby({ state, title, actions }) {
           <p className="lv-eyebrow">Live session · Waiting room</p>
           <h1>{title}</h1>
 
-          <div className="lv-join-row">
-            <p className="lv-join-step">
-              Go to <b>{window.location.host}/app/join</b>
-              <br />
-              and enter the code
-            </p>
+          <div className="lv-count">
+            <strong>{count}</strong>
+            <span>{count === 1 ? "Player" : "Players"}</span>
+          </div>
 
+          <div className="lv-join-row">
             <div className="lv-join-code">
               <small>Join code</small>
               {code || "Loading…"}
             </div>
 
-            <div className="lv-count">
-              <strong>{count}</strong>
-              <span>{count === 1 ? "Player" : "Players"}</span>
-            </div>
+            <p className="lv-join-step">
+              Go to <b>{window.location.host}/app/join</b> and enter the code
+            </p>
           </div>
         </div>
 
@@ -510,7 +508,7 @@ function QuestionScreen({
   );
 }
 
-function HostQuestionResults({ question, results, controls }) {
+function HostQuestionResults({ question, results, stage, controls }) {
   const [showBoard, setShowBoard] = useState(false);
 
   if (!results) {
@@ -600,6 +598,7 @@ function HostQuestionResults({ question, results, controls }) {
       )}
 
       <div className="lv-strip">
+        <p className="lv-stage" role="status">{stage}</p>
         <p className="lv-meta">
           <b>{answered}</b> of {players} answered · <b>{correct}</b> correct (
           {percent}%)
@@ -771,7 +770,7 @@ function ConnectedSession({ sessionId }) {
 
     if (completed && !host && "me" in state.final) {
       return (
-        <section className="ui-live">
+        <section className="ui-live lv-fit">
           <div className="lv-bar">
             <strong>{title}</strong>
             <span className="lv-bar-label">Complete</span>
@@ -875,28 +874,27 @@ function ConnectedSession({ sessionId }) {
   );
 
   return (
-    <section className={"ui-live lv" + (host ? " is-host" : " is-player")}>
+    <section className={"ui-live lv" + (host ? " is-host" : " is-player lv-fit")}>
       <ConfirmDialog confirmer={confirmer} />
 
       <div className="lv-bar">
-        <strong>{title}</strong>
+        <div className="lv-bar-left">
+          <strong>{title}</strong>
+          {host && code && phase !== "left" && (
+            <span className="lv-bar-label">
+              Code <b>{code}</b>{" "}
+              <CopyCodeButton
+                code={state.session.join_code}
+                label="join code"
+                className="ui-copy-code-small"
+              />
+            </span>
+          )}
+        </div>
 
         <div className="lv-bar-right">
-          <span className="lv-bar-label">
-            {host && code && phase !== "left" ? (
-              <>
-                Code <b>{code}</b>{" "}
-                <CopyCodeButton
-                  code={state.session.join_code}
-                  label="join code"
-                  className="ui-copy-code-small"
-                />{" "}
-                · {where}
-              </>
-            ) : (
-              where
-            )}
-          </span>
+          {/* The host sees where the quiz is in the bottom strip instead. */}
+          {!host && <span className="lv-bar-label">{where}</span>}
 
           {host && state.session?.status === "ACTIVE" && (
             <button
@@ -1031,9 +1029,7 @@ function ConnectedSession({ sessionId }) {
                 }
                 controls={
                   <div className="lv-strip">
-                    <p className="lv-meta">
-                      The question closes when time runs out or everyone answers.
-                    </p>
+                    <p className="lv-stage" role="status">{where}</p>
                     <div className="lv-strip-actions">
                       <button
                         className="qb-btn"
@@ -1055,6 +1051,7 @@ function ConnectedSession({ sessionId }) {
                   key={state.lastQuestion.session_question_id}
                   question={state.lastQuestion}
                   results={state.lastResults}
+                  stage={where}
                   controls={startOrNext ?? allDone}
                 />
               ) : (
