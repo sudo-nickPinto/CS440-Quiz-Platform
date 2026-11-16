@@ -1735,17 +1735,24 @@
   outline-offset: -5px;
 }
 
-.qp .qe-choice input:not([type="radio"]) {
+/* Answer text grows to more lines like the question box (AutoGrowTextarea
+   sets the height); one line fills the 46px row. */
+.qp .qe-choice textarea.qe-choice-text {
+  align-self: center;
   min-height: 0;
-  padding: 0 12px;
+  padding: 12px;
   border: 0;
   outline: none;
+  overflow: hidden;
+  resize: none;
   background: transparent;
+  box-shadow: none;
   font-size: 16px;
   font-weight: 700;
+  line-height: 1.35;
 }
 
-.qp .qe-choice input::placeholder {
+.qp .qe-choice textarea.qe-choice-text::placeholder {
   color: var(--gray);
   font-weight: 500;
 }

@@ -1249,7 +1249,9 @@ export function QuizEditor({
                               </span>
                             </button>
 
-                            <input
+                            <AutoGrowTextarea
+                              className="qe-choice-text"
+                              rows={1}
                               maxLength={ANSWER_LIMIT}
                               value={option}
                               placeholder={`Choice ${LETTERS[choiceIndex]}`}
@@ -1257,11 +1259,16 @@ export function QuizEditor({
                                 `Question ${index + 1}, ` +
                                 `choice ${LETTERS[choiceIndex]}`
                               }
+                              // Answers stay one paragraph: Enter does not add
+                              // a line and pasted line breaks become spaces.
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") event.preventDefault();
+                              }}
                               onChange={(event) =>
                                 changeQuestion(question.id, {
                                   options: question.options.map((text, i) =>
                                     i === choiceIndex
-                                      ? event.target.value
+                                      ? event.target.value.replace(/\s*[\r\n]+\s*/g, " ")
                                       : text,
                                   ),
                                 })
