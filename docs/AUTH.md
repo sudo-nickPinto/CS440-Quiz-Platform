@@ -133,7 +133,7 @@ Auth added two modules (`auth.py`, `accounts.py`), one route module (`routes/me.
 |---|---|
 | `main.jsx` | Wraps the app in `Auth0Provider` (domain, client id, redirect URI, audience). |
 | `App.jsx` | Reads login state from `useAuth0()`, session restore, logout, shows login page or lobby. A "no session" error from the silent check stays hidden; after a Sign in / Create account click it shows a message. |
-| `components/LandingPage.jsx` | Sign in and Create account buttons in the header, hero and closing section. Each goes straight to Auth0 (Create account adds `screen_hint: 'signup'`), pinned to the email/password connection, which also hides the Google button on Auth0's hosted page. |
+| `components/LandingPage.jsx` | Sign in and Create account buttons in the header, hero and closing section. Each goes straight to Auth0 (Create account adds `screen_hint: 'signup'`), pinned to the email/password connection. Google is also disabled for the app in Auth0, so email/password is the only connection and there is no Google button. |
 | `components/AccountGate.jsx` | Calls `/me` once logged in (creating the account on first login), then shows the verify-email, deactivated or profile setup screen if needed before the lobby. |
 | `components/ProfileSetupScreen.jsx`, `components/ProfileForm.jsx` | The one-time "Make it yours" screen: first name, last name and a preset avatar, saved with `PATCH /me`. The same form backs Edit profile (`/app/profile`). |
 | `avatars/` | `Avatar` (preset tile or initials), `AvatarPicker`, and the figure/color catalog. |
@@ -220,6 +220,10 @@ Every error has the shape `{"error": {"code": "...", "message": "..."}}`; the fr
 
 **Forgot password.** Auth0's hosted login page has a "Forgot password?" link for the email/password connection and sends the reset email. There is no code for it in this repo.
 
+**Email sender.** Verification and password-reset emails use the same sender (`QuizBurg <GBCquizburg@gmail.com>`) and are customized templates in the Auth0 tenant (subjects "Verify your email for QuizBurg" and "Reset your QuizBurg password"). This is set in Auth0, not in this repo.
+- *If emails stop arriving:* check the Auth0 logs for failed-notification (`fn`) events. The usual cause is a revoked or changed Gmail app password; generate a new one and update the email provider in Auth0.
+- *Rollback:* deleting the custom email provider returns the tenant to Auth0's built-in test sender, which is rate-limited.
+
 ## 10. Adding a protected route
 
 ```python
@@ -251,7 +255,7 @@ Login, token verification, account creation and linking of login methods all wor
 
 **Auth0 tenant settings (dashboard only, nothing in the repo)**
 5. **Require email verification for email/password signups**, and test that an unverified signup gets 403 `email_not_verified`. Account linking trusts `email_verified`, so this is a security requirement, not a nicety.
-6. **Set up a real email sender** (Authentication, then Email Provider). Auth0's built-in sender is rate-limited and meant for development. Verification and password-reset emails both go through it.
+6. **Real email sender: done.** The tenant uses a custom SMTP email provider through the team Gmail account `GBCquizburg@gmail.com`, shown to recipients as "QuizBurg". The Gmail app password lives only in Auth0, never in this repo. Gmail's sending limit is roughly 500 recipients per day for a consumer account; that is the ceiling to watch. See "Email sender" in section 9.
 7. **Turn on refresh tokens and decide how often people must log in** (the "once a month" idea). APIs > (our API) > Settings: enable **Allow Offline Access**. Applications > (our SPA) > Settings > Refresh Token Rotation: enable **Rotation**, and set the absolute and inactivity lifetimes (e.g. 30 days absolute, 7 days inactivity). Those lifetimes are now what decides when users must log in again. Email verification itself only happens once and never repeats.
 8. **Test "Forgot password?"** once end to end with a real inbox. It is provided by Auth0 and has no code in this repo.
 
