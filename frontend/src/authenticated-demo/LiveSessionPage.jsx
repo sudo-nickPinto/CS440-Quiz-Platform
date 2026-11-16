@@ -12,6 +12,7 @@ import QuizStartCountdown from "./QuizStartCountdown";
 import CopyCodeButton from "./CopyCodeButton";
 import { classPagePath } from "../classes/classPaths";
 import {
+  answerSuit,
   answerTextSize,
   inPreview,
   questionTextSize,
@@ -27,8 +28,10 @@ const CONNECTION_ERRORS = {
   closed: "The live connection is closed.",
 };
 
-function letter(index) {
-  return index < 26 ? String.fromCharCode(65 + index) : String(index + 1);
+// Screen-reader name for an answer position: its card suit.
+function suitName(index) {
+  const suit = answerSuit(index);
+  return suit[0].toUpperCase() + suit.slice(1);
 }
 
 // "482913" → "482 913", as on the mockup's projector screen
@@ -259,7 +262,7 @@ function QuestionScreen({
         <div
           className={`lv-my-pick ui-tone-${Math.max(submittedIndex, 0) % 4}`}
         >
-          {submittedIndex >= 0 ? letter(submittedIndex) : "✓"}
+          {submittedIndex >= 0 ? <AnswerSuit index={submittedIndex} /> : "✓"}
         </div>
         <h1>Answer submitted!</h1>
         <p role="status">Waiting for everyone else to answer…</p>
@@ -340,7 +343,6 @@ function QuestionScreen({
               className={`lv-host-answer ui-tone-${index % 4}`}
             >
               <AnswerSuit index={index} />
-              <span className="lv-index">{letter(index)}</span>
               <span className="lv-answer-text">{choice.choice_text}</span>
             </div>
           ))}
@@ -398,11 +400,10 @@ function QuestionScreen({
             type="button"
             className={`ui-answer ui-tone-${index % 4}`}
             disabled={!canAct || preview || seconds === 0}
-            aria-label={`Answer ${letter(index)}`}
+            aria-label={`${suitName(index)}: ${choice.choice_text}`}
             onClick={() => submit(choice.choice_id)}
           >
             <AnswerSuit index={index} />
-            {letter(index)}
           </button>
         ))}
       </div>
@@ -450,14 +451,13 @@ function HostQuestionResults({ question, results, controls }) {
     );
   }
 
-  const choices = question.choices.map((choice, index) => {
+  const choices = question.choices.map((choice) => {
     const result = results.choices?.find(
       (item) => item.choice_id === choice.choice_id,
     );
 
     return {
       ...choice,
-      label: letter(index),
       count: result?.response_count ?? 0,
       correct:
         result?.is_correct ||
@@ -513,8 +513,11 @@ function HostQuestionResults({ question, results, controls }) {
               </div>
 
               <div className="lv-dist-label">
-                <span className={`lv-index ui-tone-${index % 4}`}>
-                  {choice.label}
+                <span
+                  className={`lv-index ui-tone-${index % 4}`}
+                  aria-label={suitName(index)}
+                >
+                  <AnswerSuit index={index} />
                 </span>
                 <span className="lv-dl-text" title={choice.choice_text}>
                   {choice.choice_text}
@@ -591,7 +594,7 @@ function ParticipantFeedback({ question, results }) {
           <>
             You picked{" "}
             <b>
-              {letter(selectedIndex)} · {selected.choice_text}
+{selected.choice_text}
             </b>
           </>
         )}
@@ -600,7 +603,7 @@ function ParticipantFeedback({ question, results }) {
             {selected ? " · " : ""}The answer was{" "}
             <b>
               {correct
-                .map((choice) => `${letter(choice.index)} · ${choice.choice_text}`)
+                .map((choice) => choice.choice_text)
                 .join(" / ")}
             </b>
           </>
