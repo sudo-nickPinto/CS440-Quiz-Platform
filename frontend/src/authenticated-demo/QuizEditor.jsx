@@ -150,7 +150,6 @@ export function QuizEditor({
   const account = useAccount();
   const navigate = useNavigate();
   const confirmer = useConfirm();
-  const archiveAction = useAction();
   const [searchParams] = useSearchParams();
 
   const editing = existingQuiz !== null;
@@ -492,36 +491,6 @@ export function QuizEditor({
       })
     ) {
       navigate(backTo);
-    }
-  }
-
-  // Archive and save can't overlap in either direction: archiving waits for
-  // a save (including the publish and submit of "Save and send"), and saving
-  // waits for an archive. Otherwise a send could land on an archived quiz.
-  const archiveBlocked =
-    archiveAction.busy || action.busy || Boolean(savingKind) || questionSaving;
-
-  async function archiveQuiz() {
-    if (archiveBlocked) return;
-    const sure = await confirmer.confirm({
-      label: "Archive quiz",
-      title: `Archive “${editor.title.trim() || "this quiz"}”?`,
-      message:
-        (dirty ? "Your unsaved changes will be lost. " : "") +
-        "It will no longer be available to edit or host. Past results stay saved.",
-      confirmLabel: "Archive quiz",
-      cancelLabel: "Keep it",
-    });
-    if (!sure) return;
-
-    const done = await archiveAction.run(async () => {
-      await api(`/quizzes/${existingQuiz.quiz_id}/archive`, {
-        method: "PATCH",
-      });
-      return true;
-    });
-    if (done) {
-      navigate(classPagePath(existingQuiz.class_id), { replace: true });
     }
   }
 
@@ -900,8 +869,7 @@ export function QuizEditor({
     if (
       conflict ||
       savingQuestions.current.size > 0 ||
-      savingKind ||
-      archiveAction.busy
+      savingKind
     ) {
       return;
     }
@@ -1008,7 +976,7 @@ export function QuizEditor({
       <ConfirmDialog confirmer={confirmer} />
 
       <fieldset
-        disabled={action.busy || archiveAction.busy}
+        disabled={action.busy}
         className="qp-form-fields"
       >
         <div className="qe-bar">
@@ -1534,8 +1502,7 @@ export function QuizEditor({
                 disabled={
                   conflict ||
                   questionSaving ||
-                  Boolean(savingKind) ||
-                  archiveAction.busy
+                  Boolean(savingKind)
                 }
                 onClick={() => void save()}
               >
@@ -1555,8 +1522,7 @@ export function QuizEditor({
                   disabled={
                   conflict ||
                   questionSaving ||
-                  Boolean(savingKind) ||
-                  archiveAction.busy
+                  Boolean(savingKind)
                 }
                   title="Saves your quiz and sends it to the class organizers. You can host it once they approve it."
                   onClick={() => void save({ send: true })}
@@ -1578,29 +1544,6 @@ export function QuizEditor({
       />
     )}
 
-    {/* Outside the editor's <form>: archive controls remain at the bottom. */}
-    {ownsQuiz && (
-      <section className="qe-settings" aria-label="Sharing and settings">
-        <div className="qe-archive">
-          <div>
-            <h2>Archive quiz</h2>
-            <p>
-              Archived quizzes can&apos;t be edited or hosted. Past sessions
-              and results stay saved.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="qb-btn qb-btn-paper qe-archive-button"
-            disabled={archiveBlocked}
-            onClick={() => void archiveQuiz()}
-          >
-            {archiveAction.busy ? "Archiving…" : "Archive quiz"}
-          </button>
-          <RequestError error={archiveAction.error} />
-        </div>
-      </section>
-    )}
     </>
   );
 }
@@ -1608,7 +1551,9 @@ export function QuizEditor({
 export function QuizViewer() {
   const { quizId } = useParams();
   const account = useAccount();
+  const api = useApi();
   const action = useAction();
+  const confirmer = useConfirm();
   const validId = /^[1-9][0-9]*$/.test(quizId);
 
   const resource = useResource(validId ? `/quizzes/${quizId}` : null);
@@ -1664,8 +1609,26 @@ export function QuizViewer() {
     0,
   );
 
+  async function archiveQuiz() {
+    const sure = await confirmer.confirm({
+      label: "Archive quiz",
+      title: `Archive “${quiz.version.title}”?`,
+      message:
+        "It will no longer be available to edit or host. Past sessions and results stay saved.",
+      confirmLabel: "Archive quiz",
+      cancelLabel: "Keep it",
+    });
+    if (!sure) return;
+    const done = await action.run(async () => {
+      await api(`/quizzes/${quiz.quiz_id}/archive`, { method: "PATCH" });
+      return true;
+    });
+    if (done) navigate(classPagePath(quiz.class_id), { replace: true });
+  }
+
   return (
     <section className="qv" aria-labelledby="quiz-title">
+      <ConfirmDialog confirmer={confirmer} />
       <div className="qe-bar">
         <Link
           className="qe-back"
@@ -1718,6 +1681,17 @@ export function QuizViewer() {
             >
               Edit quiz
             </Link>
+          )}
+
+          {canShare && (
+            <button
+              type="button"
+              className="qb-btn qb-btn-paper"
+              disabled={action.busy}
+              onClick={() => void archiveQuiz()}
+            >
+              Archive
+            </button>
           )}
 
           {mine && (

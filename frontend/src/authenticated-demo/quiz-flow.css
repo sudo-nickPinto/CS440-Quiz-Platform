@@ -238,54 +238,9 @@
   }
 }
 
-/* Editor archive settings remain below the questions. */
-.qp .qe-settings {
-  border-top: var(--b);
-}
-
-.qp .qe-archive {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 20px;
-  padding: 22px clamp(16px, 4vw, 40px);
-  background: var(--paper);
-}
-
-.qp .qe-archive h2 {
-  margin: 0 0 4px;
-  font: 20px "Archivo Black", sans-serif;
-  text-transform: uppercase;
-}
-
-.qp .qe-archive p {
-  margin: 0;
-  max-width: 60ch;
-}
-
-.qp .qe-archive > :first-child {
-  flex: 1 1 320px;
-  min-width: 0;
-}
-
-.qp .qe-archive .qe-archive-button:hover:not(:disabled) {
-  background: var(--apricot);
-}
-
-.qp .qe-archive > .qp-error,
-.qp .qe-archive > [role="alert"] {
-  flex-basis: 100%;
-}
-
-@media (max-width: 640px) {
-  .qp .qe-archive .qe-archive-button {
-    flex: 1 1 100%;
-  }
-}
-
 /* Quiz page strip: facts on the left, the approval timeline in the middle,
-   the buttons on the right (Edit quiz · Hosting history · next step). */
+   the buttons on the right (Edit quiz · Archive · Hosting history · next
+   step). */
 .qp .qv > .qv-strip {
   background: #e6eef7;
   display: grid;
