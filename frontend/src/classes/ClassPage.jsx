@@ -189,11 +189,12 @@ function sessionWhen(value) {
 // Each opens that presentation's results.
 function QuizSessionRows({ classId, quizId, studentCount }) {
   const navigate = useNavigate();
+  const file = useFileDownload();
   const resource = useResource(`/classes/${classId}/quizzes/${quizId}/results`);
 
   if (resource.loading || resource.error || !resource.data) {
     return (
-      <tr className="cl-sess-row is-last">
+      <tr className="cl-sess-row cl-sess-foot">
         <td colSpan={PRESENTATION_COLUMNS.length}>
           {resource.error ? (
             <RequestError error={resource.error} retry={resource.reload} />
@@ -206,16 +207,14 @@ function QuizSessionRows({ classId, quizId, studentCount }) {
   }
 
   const sessions = resource.data.sessions;
-  return sessions.map((session, index) => {
+  const rows = sessions.map((session, index) => {
     const to = `/app/classes/${classId}/sessions/${session.session_id}/report`;
     const when = sessionWhen(session.started_at);
     return (
       <tr
         key={session.session_id}
         {...rowLink(navigate, to)}
-        className={`cl-click-row cl-sess-row${
-          index === sessions.length - 1 ? " is-last" : ""
-        }`}
+        className="cl-click-row cl-sess-row"
       >
         <td className="cl-sess-lead">
           <b>P{sessions.length - index}</b>
@@ -250,6 +249,40 @@ function QuizSessionRows({ classId, quizId, studentCount }) {
       </tr>
     );
   });
+
+  // Every presentation of the quiz in one workbook (organizers only; the
+  // tab itself is organizer-only).
+  return (
+    <>
+      {rows}
+      <tr className="cl-sess-row cl-sess-foot">
+        <td colSpan={PRESENTATION_COLUMNS.length}>
+          <span className="cl-sess-foot-in">
+            {file.error && (
+              <span className="cl-sess-foot-error" role="alert">
+                {file.error.message}
+              </span>
+            )}
+            <button
+              type="button"
+              className="cl-sess-export"
+              disabled={file.busy}
+              onClick={() =>
+                void file.download(
+                  `/classes/${classId}/quizzes/${quizId}/export.xlsx`,
+                  `class-${classId}-quiz-${quizId}-results.xlsx`,
+                )
+              }
+            >
+              {file.busy
+                ? "Preparing…"
+                : `Export all ${sessions.length} to Excel`}
+            </button>
+          </span>
+        </td>
+      </tr>
+    </>
+  );
 }
 
 // Organizer view of the Presentations tab: one row per presented quiz,

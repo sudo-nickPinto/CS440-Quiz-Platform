@@ -3,8 +3,8 @@ import { Link, useNavigate } from "react-router";
 import { useRemembered } from "../authenticated-demo/remember";
 import { formatScore, opensRow, pluralNoun, rowLink } from "./classHelpers";
 
-// Pieces of the class report tables, shared by the class page tabs and the
-// quiz presentation history page (ClassReports.jsx).
+// Pieces of the class page's report tables (rows, date blocks, score
+// meters).
 
 // A searchable report table; `rows` are { key, text, cells, to? } where
 // `text` is what the search box matches and `to`, if set, is opened by a
