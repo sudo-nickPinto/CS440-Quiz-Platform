@@ -251,13 +251,11 @@ def test_faculty_class_is_joined_by_code(mysql_live) -> None:
     )
     assert join_by_code(client, "bob", code).status_code == 200
 
-    # Leaving and coming back reuses the same membership row.
+    # Members can't leave on their own; an organizer has to remove them.
     left = client.delete(f"/classes/{class_id}/membership", headers=bearer("bob"))
-    assert left.status_code == 204
-    assert get(client, "bob", f"/classes/{class_id}").status_code == 404
-    back = join_by_code(client, "bob", code)
-    assert back.status_code == 200, back.text
-    assert back.json()["membership_status"] == "ACTIVE"
+    assert left.status_code == 403
+    assert error_code(left) == "class_self_leave_disabled"
+    assert get(client, "bob", f"/classes/{class_id}").status_code == 200
 
     # Someone an organizer removed can't let themselves back in.
     add_member(client, class_id, people["alice"].account_id, MembershipStatus.REMOVED)
@@ -580,19 +578,21 @@ def test_members_export_only_their_own_report(mysql_live) -> None:
         assert hidden.status_code == 404, url
         assert error_code(hidden) == "class_not_found"
 
-    # Bob leaves: off the roster, out of the class pages, history kept.
-    assert client.delete(f"{base}/membership", headers=bearer("bob")).status_code == 204
+    # Bob can't leave on his own, but an organizer can remove him: off the
+    # roster, out of the class pages, history kept.
+    own = client.delete(f"{base}/membership", headers=bearer("bob"))
+    assert own.status_code == 403
+    assert error_code(own) == "class_self_leave_disabled"
+    removed = client.delete(f"{base}/members/{bob}", headers=bearer("faculty"))
+    assert removed.status_code == 204, removed.text
     roster = get(client, "faculty", f"{base}/students").json()
     assert [s["display_name"] for s in roster["items"]] == ["Alice"]
     assert get(client, "bob", f"{base}/dashboard").status_code == 404
     kept = get(client, "faculty", f"{base}/students/{bob}/results").json()
-    assert (kept["status"], kept["session_count"]) == ("LEFT", 1)
+    assert (kept["status"], kept["session_count"]) == ("REMOVED", 1)
 
-    # Rejoining with the code brings his old games back with him.
-    assert join_by_code(client, "bob", data["code"]).status_code == 200
-    roster = get(client, "faculty", f"{base}/students").json()
-    assert [(s["display_name"], s["session_count"]) for s in roster["items"]] == [
-        ("Alice", 2),
-        ("Bob", 1),
-    ]
+    # A removed member can't rejoin with the code.
+    refused = join_by_code(client, "bob", data["code"])
+    assert refused.status_code == 403
+    assert error_code(refused) == "class_member_removed"
     assert stored_session(client, first).status == LiveSessionStatus.COMPLETED

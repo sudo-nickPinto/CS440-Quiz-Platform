@@ -96,6 +96,11 @@ def test_first_login_creates_an_account_that_later_logins_reuse(
         "account_id": account_id,
         "email": "ada@test.invalid",
         "display_name": "Ada Lovelace \U0001f680",
+        # A first sign-in has no saved profile yet.
+        "first_name": None,
+        "last_name": None,
+        "avatar_key": None,
+        "profile_complete": False,
         "role": "USER",
         "is_active": True,
     }
