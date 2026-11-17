@@ -18,9 +18,21 @@ const FINAL_CLOSE_CODES = new Set([4400, 4403]);
 const UNAUTHORIZED = 4401;
 
 // http://host:8000 -> ws://host:8000/ws/notifications (https -> wss).
-export function notificationsSocketUrl(apiBaseUrl) {
-  const base = String(apiBaseUrl ?? "").replace(/\/+$/, "").replace(/^http/, "ws");
-  return `${base}/ws/notifications`;
+// A relative API base such as the deployed `/api` uses the browser origin,
+// while the socket itself stays under nginx's WebSocket-enabled `/ws` route.
+export function notificationsSocketUrl(
+  apiBaseUrl,
+  browserOrigin = globalThis.location?.origin,
+) {
+  const base = String(apiBaseUrl ?? "").trim();
+  const url = browserOrigin
+    ? new URL(base || "/", browserOrigin)
+    : new URL(base);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.pathname = "/ws/notifications";
+  url.search = "";
+  url.hash = "";
+  return url.href;
 }
 
 // 1 s, 2 s, 4 s ... capped at 30 s.

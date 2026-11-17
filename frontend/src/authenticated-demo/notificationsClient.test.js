@@ -65,6 +65,12 @@ describe("notification WebSocket", () => {
     expect(notificationsSocketUrl("https://quiz.example")).toBe(
       "wss://quiz.example/ws/notifications",
     );
+    expect(notificationsSocketUrl("/api", "https://quizburg.example")).toBe(
+      "wss://quizburg.example/ws/notifications",
+    );
+    expect(notificationsSocketUrl("/api", "http://localhost:5173")).toBe(
+      "ws://localhost:5173/ws/notifications",
+    );
   });
 
   it("authenticates first, pings once ready, and forwards events", async () => {
