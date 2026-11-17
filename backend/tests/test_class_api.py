@@ -215,7 +215,7 @@ def test_class_and_creator_membership_are_atomic() -> None:
     database.dispose()
 
 
-def test_normal_list_includes_active_and_invited_but_not_inactive_memberships(
+def test_normal_list_includes_active_invited_and_requested_memberships(
     class_client,
 ) -> None:
     client, identities = class_client
@@ -239,7 +239,7 @@ def test_normal_list_includes_active_and_invited_but_not_inactive_memberships(
         )
         for status, code in zip(
             MembershipStatus,
-            ("ABCDEFGH", "JKMNPQRS", "TUVWXYZ2", "3456789A"),
+            ("ABCDEFGH", "JKMNPQRS", "TUVWXYZ2", "3456789A", "BCDEFGHJ", "CDEFGHJK"),
             strict=True,
         )
     }
@@ -249,12 +249,15 @@ def test_normal_list_includes_active_and_invited_but_not_inactive_memberships(
 
     assert response.status_code == 200
     assert [item["class_id"] for item in response.json()] == [
+        # Newest first; a pending join request shows so the student can see it.
+        class_ids[MembershipStatus.REQUESTED],
         class_ids[MembershipStatus.ACTIVE],
         class_ids[MembershipStatus.INVITED],
     ]
     by_status = {item["membership_status"]: item for item in response.json()}
     assert by_status["ACTIVE"]["current_role"] == "MEMBER"
     assert by_status["INVITED"]["current_role"] is None
+    assert by_status["REQUESTED"]["current_role"] is None
     assert all(item["join_code"] is None for item in response.json())
 
 
@@ -614,7 +617,9 @@ def test_join_by_code_accepts_any_spacing_or_case(class_client) -> None:
 
     assert response.status_code == 200
     assert response.json()["class_id"] == class_id
-    assert response.json()["current_role"] == "MEMBER"
+    # Using the code asks to join; an organizer approves it.
+    assert response.json()["membership_status"] == "REQUESTED"
+    assert response.json()["current_role"] is None
     # Members never see the code, even right after typing it.
     assert response.json()["join_code"] is None
     with client.app.state.database.session_factory() as db:
@@ -657,7 +662,7 @@ def test_join_by_code_refusals(
     assert response.json()["error"]["code"] == error_code
 
 
-def test_left_and_invited_people_can_join_by_code(class_client) -> None:
+def test_invited_people_join_by_code_and_left_people_ask_again(class_client) -> None:
     client, identities = class_client
     seed_class(
         client,
@@ -668,11 +673,11 @@ def test_left_and_invited_people_can_join_by_code(class_client) -> None:
         ),
     )
 
-    for who in ("left", "invited"):
+    for who, status in (("left", "REQUESTED"), ("invited", "ACTIVE")):
         act_as(client, identities[who])
         response = client.post("/classes/join", json={"code": "ABCDEFGH"})
         assert response.status_code == 200
-        assert response.json()["membership_status"] == "ACTIVE"
+        assert response.json()["membership_status"] == status
 
 
 def test_join_by_code_is_rate_limited_per_account(class_client) -> None:

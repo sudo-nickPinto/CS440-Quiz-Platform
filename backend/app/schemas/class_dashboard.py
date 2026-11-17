@@ -183,4 +183,6 @@ class ClassDashboardResponse(BaseModel):
     my_quiz_count: int
     # Organizers: every pending submission in the class. Members: their own.
     pending_submission_count: int
+    # Organizers: people waiting to join with the class code. Others: 0.
+    pending_join_request_count: int = 0
     approved_quiz_count: int

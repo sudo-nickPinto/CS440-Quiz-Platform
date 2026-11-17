@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.config import Settings, get_settings
 from app.database import Database
+from app.emails import EmailService
 from app.errors import register_error_handlers
 from app.live import LiveHub
 from app.quiz_editing import QuizEditHub
@@ -42,6 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.settings = settings
+    application.state.email = EmailService.from_settings(settings)
     application.state.live_hub = LiveHub(application)
     application.state.quiz_edit_hub = QuizEditHub(application)
     application.add_middleware(
