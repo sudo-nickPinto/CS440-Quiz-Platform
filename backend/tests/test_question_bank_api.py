@@ -8,7 +8,7 @@ from tests.test_class_quizzes_api import act_as, classes, create  # noqa: F401
 
 CSV_HEADER = (
     "question_text,explanation,choice_a,choice_b,choice_c,choice_d,"
-    "correct_choices,time_limit_seconds,base_points"
+    "correct_choices"
 )
 
 
@@ -33,6 +33,8 @@ def test_new_questions_are_automatically_banked_and_searchable(classes) -> None:
         data["other"],
     }
     assert body["pagination"]["total_items"] == 2
+    assert "time_limit_seconds" not in body["items"][0]
+    assert "base_points" not in body["items"][0]
 
 
 def test_class_bank_hides_drafts_but_shows_approved_questions(classes) -> None:
@@ -157,9 +159,9 @@ def test_csv_is_previewed_before_import_and_can_save_unselected_rows(classes) ->
     csv_text = "\n".join(
         [
             CSV_HEADER,
-            "Imported one,,Yes,No,,,A,30,750",
-            "Saved only,,Red,Blue,,,B,20,1000",
-            "Broken,,Only one,,,,A,20,1000",
+            "Imported one,,Yes,No,,,A",
+            "Saved only,,Red,Blue,,,B",
+            "Broken,,Only one,,,,A",
         ]
     )
     preview = client.post(
@@ -198,7 +200,7 @@ def test_csv_export_neutralizes_spreadsheet_formulas(classes) -> None:
     client, _, data = classes
     preview = client.post(
         f"/classes/{data['main']}/question-bank/csv/preview",
-        json={"csv_text": f"{CSV_HEADER}\n=2+2,,Yes,No,,,A,20,1000"},
+        json={"csv_text": f"{CSV_HEADER}\n=2+2,,Yes,No,,,A"},
     ).json()
     saved = client.post(
         f"/classes/{data['main']}/question-bank/csv",
@@ -216,7 +218,7 @@ def test_csv_export_neutralizes_spreadsheet_formulas(classes) -> None:
 
 def test_csv_preview_rejects_more_than_500_questions(classes) -> None:
     client, _, data = classes
-    row = "Question,,Yes,No,,,A,20,1000"
+    row = "Question,,Yes,No,,,A"
 
     response = client.post(
         f"/classes/{data['main']}/question-bank/csv/preview",

@@ -37,7 +37,7 @@ from app.schemas.quiz import AnswerChoiceCreate, QuestionCreate
 
 CSV_COLUMNS = [
     "question_text", "explanation", "choice_a", "choice_b", "choice_c",
-    "choice_d", "correct_choices", "time_limit_seconds", "base_points",
+    "choice_d", "correct_choices",
 ]
 MAX_CSV_ROWS = 500
 
@@ -70,8 +70,6 @@ def snapshot_question(
     item.question_type = question.question_type
     item.question_text = question.question_text
     item.explanation = question.explanation
-    item.time_limit_seconds = question.time_limit_seconds
-    item.base_points = question.base_points
     item.choices_json = _choice_data(question)
     db.flush()
     question.bank_question_id = item.bank_question_id
@@ -120,7 +118,6 @@ def _response(item: QuestionBankItem) -> QuestionBankItemResponse:
         bank_question_id=item.bank_question_id, owner_id=item.owner_id,
         source_class_id=item.source_class_id, question_type=item.question_type,
         question_text=item.question_text, explanation=item.explanation,
-        time_limit_seconds=item.time_limit_seconds, base_points=item.base_points,
         choices=[AnswerChoiceCreate.model_validate(choice) for choice in item.choices_json],
         updated_at=item.updated_at,
     )
@@ -145,10 +142,24 @@ def list_bank(db: Session, account: CurrentAccount, class_id: int, *, scope: Ban
     ))
 
 
-def _question_from_item(item: QuestionBankItem, order: int) -> Question:
+def _destination_time(version: QuizVersion) -> int:
+    """Use the destination quiz's effective default, matching the editor's rule."""
+    counts: dict[int, int] = {}
+    selected = 20
+    highest = 0
+    for question in sorted(version.questions, key=lambda value: value.question_order):
+        seconds = question.time_limit_seconds
+        counts[seconds] = counts.get(seconds, 0) + 1
+        if counts[seconds] > highest:
+            selected = seconds
+            highest = counts[seconds]
+    return selected
+
+
+def _question_from_item(item: QuestionBankItem, order: int, *, time_limit_seconds: int) -> Question:
     return Question(question_order=order, question_type=item.question_type,
         question_text=item.question_text, explanation=item.explanation,
-        time_limit_seconds=item.time_limit_seconds, base_points=item.base_points,
+        time_limit_seconds=time_limit_seconds, base_points=1000,
         choices=[AnswerChoice(choice_order=index, choice_text=choice["choice_text"],
             is_correct=choice["is_correct"]) for index, choice in enumerate(item.choices_json, 1)])
 
@@ -193,10 +204,13 @@ def add_from_bank(db: Session, account: CurrentAccount, class_id: int, quiz_id: 
     if set(by_id) != set(bank_ids):
         raise APIError(404, "bank_question_not_found", "A selected question is unavailable.")
     version = _latest_editor_version(quiz)
+    destination_time = _destination_time(version)
     order = max((q.question_order for q in version.questions), default=0)
     for bank_id in bank_ids:
         order += 1
-        question = _question_from_item(by_id[bank_id], order)
+        question = _question_from_item(
+            by_id[bank_id], order, time_limit_seconds=destination_time
+        )
         version.questions.append(question)
         db.flush()
         snapshot_question(db, question, owner_id=quiz.author_id, class_id=class_id, quiz_id=quiz_id)
@@ -258,8 +272,6 @@ def preview_csv(text: str) -> CsvPreviewResponse:
                 if unknown: errors.append(f"Unknown correct choice(s): {', '.join(sorted(unknown))}.")
                 payload = QuestionCreate(question_text=raw["question_text"],
                     explanation=raw["explanation"] or None,
-                    time_limit_seconds=int(raw["time_limit_seconds"] or 20),
-                    base_points=int(raw["base_points"] or 1000),
                     choices=[AnswerChoiceCreate(choice_text=value, is_correct=letter in correct)
                              for letter, value in choices])
                 rows.append(CsvPreviewRow(row_number=number, valid=not errors,
@@ -285,12 +297,14 @@ def import_csv(db: Session, account: CurrentAccount, class_id: int, quiz_id: int
         raise APIError(404, "quiz_not_found", "Quiz not found.")
     if quiz.status != QuizStatus.DRAFT:
         raise APIError(409, "quiz_not_editable", "Only draft quizzes can receive questions.")
-    version = _latest_editor_version(quiz); order = max((q.question_order for q in version.questions), default=0)
+    version = _latest_editor_version(quiz)
+    destination_time = _destination_time(version)
+    order = max((q.question_order for q in version.questions), default=0)
     for row in payload.rows:
         order += 1
         question = Question(question_order=order, question_text=row.question.question_text,
-            explanation=row.question.explanation, time_limit_seconds=row.question.time_limit_seconds,
-            base_points=row.question.base_points, choices=[AnswerChoice(choice_order=i,
+            explanation=row.question.explanation, time_limit_seconds=destination_time,
+            base_points=1000, choices=[AnswerChoice(choice_order=i,
                 choice_text=c.choice_text, is_correct=c.is_correct) for i, c in enumerate(row.question.choices, 1)])
         version.questions.append(question); db.flush()
         snapshot_question(db, question, owner_id=quiz.author_id, class_id=class_id, quiz_id=quiz_id)
@@ -299,8 +313,7 @@ def import_csv(db: Session, account: CurrentAccount, class_id: int, quiz_id: int
         for row in payload.bank_only_rows:
             db.add(QuestionBankItem(owner_id=account.account_id, source_class_id=class_id,
                 is_current=True, question_text=row.question.question_text,
-                explanation=row.question.explanation, time_limit_seconds=row.question.time_limit_seconds,
-                base_points=row.question.base_points,
+                explanation=row.question.explanation,
                 choices_json=[c.model_dump() for c in row.question.choices]))
             saved_only += 1
     quiz.revision += 1; quiz.updated_at = datetime.now(UTC).replace(tzinfo=None)
@@ -327,8 +340,6 @@ def save_csv_to_bank(
                 is_current=True,
                 question_text=row.question.question_text,
                 explanation=row.question.explanation,
-                time_limit_seconds=row.question.time_limit_seconds,
-                base_points=row.question.base_points,
                 choices_json=[choice.model_dump() for choice in row.question.choices],
             )
         )
@@ -350,8 +361,7 @@ def export_csv(db: Session, account: CurrentAccount, class_id: int, scope: BankS
     for item in items:
         choices = list(item.choices_json)[:4]
         row = {"question_text": safe(item.question_text), "explanation": safe(item.explanation),
-            "correct_choices": "|".join(chr(65+i) for i,c in enumerate(choices) if c["is_correct"]),
-            "time_limit_seconds": item.time_limit_seconds, "base_points": item.base_points}
+            "correct_choices": "|".join(chr(65+i) for i,c in enumerate(choices) if c["is_correct"])}
         for index, key in enumerate("abcd"):
             row[f"choice_{key}"] = safe(choices[index]["choice_text"]) if index < len(choices) else ""
         writer.writerow(row)

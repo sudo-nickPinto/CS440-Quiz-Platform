@@ -301,12 +301,6 @@ class QuestionBankItem(Base):
     )
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
     explanation: Mapped[str | None] = mapped_column(Text)
-    time_limit_seconds: Mapped[int] = mapped_column(
-        SMALLINT(unsigned=True), nullable=False, default=20, server_default="20"
-    )
-    base_points: Mapped[int] = mapped_column(
-        INTEGER(unsigned=True), nullable=False, default=1000, server_default="1000"
-    )
     choices_json: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DATETIME(fsp=3), nullable=False, server_default=func.now()

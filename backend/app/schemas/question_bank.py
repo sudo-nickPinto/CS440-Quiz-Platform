@@ -22,8 +22,6 @@ class QuestionBankItemResponse(BaseModel):
     question_type: QuestionType
     question_text: str
     explanation: str | None
-    time_limit_seconds: int
-    base_points: int
     choices: list[AnswerChoiceCreate]
     updated_at: datetime
 
