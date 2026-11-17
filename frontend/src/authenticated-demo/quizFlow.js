@@ -151,12 +151,20 @@ export function useQuizFlow(quiz, accountId) {
   const visible = showsQuizFlow(quiz);
   const classId = quiz?.class_id;
   const quizId = quiz?.quiz_id;
-  const [request, setRequest] = useState({ revision: 0, keep: false });
+  // floor: as in useResource, refresh() never falls back to an answer from
+  // before the last reload().
+  const [request, setRequest] = useState({
+    revision: 0,
+    keep: false,
+    floor: 0,
+  });
+  const { revision } = request;
   const base = visible ? `${classId}:${quizId}` : null;
-  const key = base ? `${base}:${request.revision}` : null;
+  const key = base ? `${base}:${revision}` : null;
   const [result, setResult] = useState({
     key: null,
     base: null,
+    revision: -1,
     pending: null,
     error: null,
   });
@@ -167,22 +175,26 @@ export function useQuizFlow(quiz, accountId) {
     findPendingSubmission(api, classId, quizId, { signal: controller.signal })
       .then((pending) => {
         if (!controller.signal.aborted) {
-          setResult({ key, base, pending, error: null });
+          setResult({ key, base, revision, pending, error: null });
         }
       })
       .catch((error) => {
         if (!controller.signal.aborted) {
-          setResult({ key, base, pending: null, error });
+          setResult({ key, base, revision, pending: null, error });
         }
       });
     return () => controller.abort();
-  }, [api, key, base, classId, quizId]);
+  }, [api, key, base, revision, classId, quizId]);
 
   // refresh() keeps showing the last answer for this quiz while the new one
   // loads; reload() shows the loading state.
   const current =
     result.key === key ||
-    (request.keep && base !== null && result.base === base && !result.error);
+    (request.keep &&
+      base !== null &&
+      result.base === base &&
+      result.revision >= request.floor &&
+      !result.error);
   const loading = visible && !current;
   const error = visible && current ? result.error : null;
   const pending = visible && current ? result.pending : null;
@@ -199,8 +211,16 @@ export function useQuizFlow(quiz, accountId) {
         ? quizFlowState({ quiz, accountId, pending })
         : null,
     reload: () =>
-      setRequest((value) => ({ revision: value.revision + 1, keep: false })),
+      setRequest((value) => ({
+        revision: value.revision + 1,
+        keep: false,
+        floor: value.revision + 1,
+      })),
     refresh: () =>
-      setRequest((value) => ({ revision: value.revision + 1, keep: true })),
+      setRequest((value) => ({
+        revision: value.revision + 1,
+        keep: true,
+        floor: value.floor,
+      })),
   };
 }
