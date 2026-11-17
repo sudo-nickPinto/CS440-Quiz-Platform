@@ -3,15 +3,22 @@ import { useLocation, useNavigate } from "react-router";
 
 import ConfirmDialog from "./ConfirmDialog";
 import { isLiveGamePath, joinSession } from "./liveSessions";
-import { useNotifications } from "./notifications";
+import { useCatchUp, useNotifications } from "./notifications";
 import { useAction, useApi } from "./rest";
 import RequestError from "./RequestError";
 
+// Join answers that mean the session is gone for this account (it ended, or
+// they are no longer in its class).
+const GONE_CODES = new Set(["session_not_joinable", "session_not_found"]);
+
 // "A quiz is live": pops up on any signed-in page when a host opens a lobby in
-// one of the caller's classes (the server's session_live push; the host never
-// gets one). Join goes straight into the game like the class page's Live
-// button. Only pushed events show it; sessions that were already live when the
-// page loaded are covered by the Live button and the header's Join game link.
+// one of the caller's classes where they are a member (the server's
+// session_live push with role MEMBER; co-organizers just see the Live button,
+// and the host gets nothing). Join goes straight into the game like the class
+// page's Live button. Only pushed events show it; sessions that were already
+// live when the page loaded are covered by the Live button and the header's
+// Join game link. No event says a lobby closed, so the popup rechecks when
+// the tab comes back and closes quietly if the session is gone.
 export default function LiveQuizPopup() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -26,7 +33,8 @@ export default function LiveQuizPopup() {
   const inGame = isLiveGamePath(pathname);
 
   useNotifications("session_live", (event) => {
-    const id = event?.session_id;
+    if (event?.role !== "MEMBER") return;
+    const id = event.session_id;
     if (id == null || seen.current.has(String(id))) return;
     // Never interrupt hosting or playing, and leave a join in progress alone.
     if (inGame || join.busy) return;
@@ -49,15 +57,55 @@ export default function LiveQuizPopup() {
     returnFocus.current = false;
   }, [live]);
 
-  function dismiss() {
-    seen.current.add(String(live.session_id));
+  // Back in the tab: the class's active sessions (what its Live button
+  // shows) say whether the session can still be joined. If the check fails,
+  // keep the popup; Join will tell.
+  useCatchUp(() => {
+    if (!live || join.busy) return;
+    const id = live.session_id;
+    api(`/classes/${live.class_id}/active-sessions`).then(
+      (sessions) => {
+        const open =
+          Array.isArray(sessions) &&
+          sessions.some(
+            (session) =>
+              String(session.session_id) === String(id) && !session.left,
+          );
+        if (!open) close(id);
+      },
+      () => {},
+    );
+  });
+
+  // Closes the popup for this session if it is still the one showing.
+  function close(id) {
+    seen.current.add(String(id));
     returnFocus.current = true;
-    setLive(null);
+    setLive((current) =>
+      current && String(current.session_id) === String(id) ? null : current,
+    );
+  }
+
+  function dismiss() {
+    close(live.session_id);
   }
 
   async function joinLive() {
     const id = live.session_id;
-    const joined = await join.run(() => joinSession(api, id));
+    let gone = false;
+    const joined = await join.run(async () => {
+      try {
+        return await joinSession(api, id);
+      } catch (error) {
+        if (!GONE_CODES.has(error?.code)) throw error;
+        gone = true;
+        return null;
+      }
+    });
+    if (gone) {
+      close(id);
+      return;
+    }
     if (!joined) return;
     seen.current.add(String(id));
     setLive(null);
