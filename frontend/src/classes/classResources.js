@@ -132,11 +132,27 @@ function useClassReport(classId, path) {
   });
 }
 
+// While the tab is visible the dashboard also refetches on this cadence.
+export const DASHBOARD_REFRESH_MS = 60_000;
+
 // Counts such as the pending-approval badge follow other people's changes
 // through useClassUpdates (pushed events, plus a refetch on reconnect and
-// when the tab comes back), not polling.
+// when the tab comes back). Some changes push no event (sessions ending,
+// members joining or leaving, attendance and grades), so a slow refresh
+// while the tab is visible keeps the rest from going stale. Hidden tabs skip
+// it and catch up when they come back.
 export function useClassDashboard(classId) {
-  return useClassReport(classId, "dashboard");
+  const dashboard = useClassReport(classId, "dashboard");
+  const { refresh } = dashboard;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") refresh?.();
+    }, DASHBOARD_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [refresh]);
+
+  return dashboard;
 }
 
 // Pushed events (docs/LIVE_PROTOCOL.md §11) that change what class pages show.
