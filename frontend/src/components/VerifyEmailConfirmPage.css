@@ -1,0 +1,6 @@
+/* /verify-email confirm page. The card, heading and buttons come from
+   VerifyEmailScreen.css; a link styled as a button only needs its underline
+   removed. */
+.verify-page a.verify-button {
+  text-decoration: none;
+}
