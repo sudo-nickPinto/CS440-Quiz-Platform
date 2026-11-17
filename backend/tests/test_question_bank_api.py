@@ -2,7 +2,12 @@
 
 from datetime import UTC, datetime
 
-from app.models import QuizCollaborator
+from app.models import (
+    ClassMembership,
+    MembershipStatus,
+    QuestionBankItem,
+    QuizCollaborator,
+)
 from tests.test_class_quizzes_api import act_as, classes, create  # noqa: F401
 
 
@@ -110,6 +115,36 @@ def test_bank_visibility_is_limited_to_owner_collaborator_and_organizer(classes)
     )
     assert unavailable.status_code == 404
     assert unavailable.json()["error"]["code"] == "bank_question_not_found"
+
+
+def test_removed_collaborator_cannot_see_source_class_questions_elsewhere(classes) -> None:
+    client, identities, data = classes
+    source = create(client, data["main"], "Removed collaborator source")
+    with client.app.state.database.session_factory() as db:
+        db.add_all([
+            QuizCollaborator(
+                quiz_id=source["quiz_id"],
+                account_id=identities["zoe"].account_id,
+                shared_by_id=identities["amy"].account_id,
+            ),
+            ClassMembership(
+                class_id=data["other"],
+                account_id=identities["zoe"].account_id,
+            ),
+        ])
+        membership = db.query(ClassMembership).filter_by(
+            class_id=data["main"], account_id=identities["zoe"].account_id
+        ).one()
+        membership.status = MembershipStatus.REMOVED
+        db.commit()
+
+    act_as(client, identities["zoe"])
+    response = client.get(
+        f"/classes/{data['other']}/question-bank", params={"scope": "mine"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
 
 
 def test_bank_selection_copies_an_independent_question_snapshot(classes) -> None:
@@ -266,6 +301,85 @@ def test_csv_preview_rejects_more_than_500_questions(classes) -> None:
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "csv_too_many_rows"
+
+
+def test_csv_and_bank_imports_enforce_editor_text_limits(classes) -> None:
+    client, _, data = classes
+    target = create(client, data["main"], "Text limit target")
+    too_long = "x" * 201
+    preview = client.post(
+        f"/classes/{data['main']}/question-bank/csv/preview",
+        json={"csv_text": f"{CSV_HEADER}\n{too_long},,Yes,No,,,A"},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["valid_count"] == 0
+    assert "200 characters" in preview.json()["rows"][0]["errors"][0]
+
+    direct_import = client.post(
+        f"/classes/{data['main']}/quizzes/{target['quiz_id']}/questions/csv",
+        json={
+            "rows": [{
+                "row_number": 2,
+                "question": {
+                    "question_text": too_long,
+                    "choices": [
+                        {"choice_text": "Yes", "is_correct": True},
+                        {"choice_text": "No", "is_correct": False},
+                    ],
+                },
+            }],
+        },
+    )
+    assert direct_import.status_code == 422
+    assert direct_import.json()["error"]["code"] == "question_text_too_long"
+
+    with client.app.state.database.session_factory() as db:
+        item = QuestionBankItem(
+            owner_id=target["author_id"],
+            source_class_id=data["main"],
+            is_current=True,
+            question_text=too_long,
+            choices_json=[
+                {"choice_text": "Yes", "is_correct": True},
+                {"choice_text": "No", "is_correct": False},
+            ],
+        )
+        db.add(item)
+        db.commit()
+        bank_question_id = item.bank_question_id
+    from_bank = client.post(
+        f"/classes/{data['main']}/quizzes/{target['quiz_id']}/questions/from-bank",
+        json={"bank_question_ids": [bank_question_id]},
+    )
+    assert from_bank.status_code == 422
+    assert from_bank.json()["error"]["code"] == "question_text_too_long"
+
+
+def test_csv_export_rejects_questions_with_more_than_four_choices(classes) -> None:
+    client, _, data = classes
+    response = client.post(
+        f"/classes/{data['main']}/quizzes",
+        json={
+            "title": "Five choices",
+            "questions": [{
+                "question_text": "Pick E",
+                "choices": [
+                    {"choice_text": letter, "is_correct": letter == "E"}
+                    for letter in "ABCDE"
+                ],
+            }],
+        },
+    )
+    assert response.status_code == 201, response.json()
+
+    exported = client.get(
+        f"/classes/{data['main']}/question-bank/export.csv",
+        params={"scope": "mine"},
+    )
+
+    assert exported.status_code == 422
+    assert exported.json()["error"]["code"] == "csv_choice_limit_exceeded"
+    assert exported.json()["error"]["details"]["choice_limit"] == 4
 
 
 def test_nonmembers_cannot_use_question_bank_or_duplication(classes) -> None:

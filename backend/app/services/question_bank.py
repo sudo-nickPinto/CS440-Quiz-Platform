@@ -7,11 +7,11 @@ from math import ceil
 
 from pydantic import ValidationError
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
-from app.models.classes import ClassRole
+from app.models.classes import ClassMembership, ClassRole, MembershipStatus
 from app.models.quiz import (
     AnswerChoice,
     Question,
@@ -78,10 +78,29 @@ def snapshot_question(
 
 
 def _collaborator_quiz_ids(account: CurrentAccount):
-    return select(QuizCollaborator.quiz_id).where(
-        QuizCollaborator.account_id == account.account_id,
-        QuizCollaborator.revoked_at.is_(None),
+    """Return shared quizzes whose source class the collaborator can still access."""
+    source_quiz = aliased(Quiz)
+    return (
+        select(QuizCollaborator.quiz_id)
+        .join(source_quiz, source_quiz.quiz_id == QuizCollaborator.quiz_id)
+        .join(
+            ClassMembership,
+            (ClassMembership.class_id == source_quiz.class_id)
+            & (ClassMembership.account_id == QuizCollaborator.account_id),
+        )
+        .where(
+            QuizCollaborator.account_id == account.account_id,
+            QuizCollaborator.revoked_at.is_(None),
+            ClassMembership.status == MembershipStatus.ACTIVE,
+        )
     )
+
+
+def _check_text_limits(questions) -> None:
+    # Imported locally because quizzes imports snapshot_question from this module.
+    from app.services.quizzes import _check_text_limits as check_quiz_text_limits
+
+    check_quiz_text_limits(questions)
 
 
 def _ensure_legacy_snapshots(
@@ -241,11 +260,15 @@ def add_from_bank(db: Session, account: CurrentAccount, class_id: int, quiz_id: 
     version = _latest_editor_version(quiz)
     destination_time = _destination_time(version)
     order = max((q.question_order for q in version.questions), default=0)
-    for bank_id in bank_ids:
-        order += 1
-        question = _question_from_item(
-            by_id[bank_id], order, time_limit_seconds=destination_time
+    pending_questions = [
+        _question_from_item(
+            by_id[bank_id], order + index, time_limit_seconds=destination_time
         )
+        for index, bank_id in enumerate(bank_ids, 1)
+    ]
+    _check_text_limits(pending_questions)
+    for question in pending_questions:
+        order += 1
         version.questions.append(question)
         db.flush()
         snapshot_question(db, question, owner_id=quiz.author_id, class_id=class_id, quiz_id=quiz_id)
@@ -309,8 +332,13 @@ def preview_csv(text: str) -> CsvPreviewResponse:
                     explanation=raw["explanation"] or None,
                     choices=[AnswerChoiceCreate(choice_text=value, is_correct=letter in correct)
                              for letter, value in choices])
+                _check_text_limits([payload])
                 rows.append(CsvPreviewRow(row_number=number, valid=not errors,
                     question=payload if not errors else None, errors=errors))
+            except APIError as exc:
+                rows.append(CsvPreviewRow(
+                    row_number=number, valid=False, errors=[exc.message]
+                ))
             except (ValueError, ValidationError) as exc:
                 rows.append(CsvPreviewRow(row_number=number, valid=False, errors=[str(exc)]))
     except csv.Error as exc:
@@ -332,6 +360,10 @@ def import_csv(db: Session, account: CurrentAccount, class_id: int, quiz_id: int
         raise APIError(404, "quiz_not_found", "Quiz not found.")
     if quiz.status != QuizStatus.DRAFT:
         raise APIError(409, "quiz_not_editable", "Only draft quizzes can receive questions.")
+    rows_to_save = [*payload.rows]
+    if payload.save_unselected_to_bank:
+        rows_to_save.extend(payload.bank_only_rows)
+    _check_text_limits([row.question for row in rows_to_save])
     version = _latest_editor_version(quiz)
     destination_time = _destination_time(version)
     order = max((q.question_order for q in version.questions), default=0)
@@ -367,6 +399,7 @@ def save_csv_to_bank(
     from app.services.quizzes import _require_active_membership
 
     _require_active_membership(db, account, class_id)
+    _check_text_limits([row.question for row in payload.rows])
     for row in payload.rows:
         db.add(
             QuestionBankItem(
@@ -395,12 +428,22 @@ def export_csv(db: Session, account: CurrentAccount, class_id: int, scope: BankS
     ) & QuestionBankItem.is_current.is_(True)
     if ids: condition = condition & QuestionBankItem.bank_question_id.in_(ids)
     items = list(db.scalars(select(QuestionBankItem).where(condition).order_by(QuestionBankItem.bank_question_id)))
+    unsupported = [
+        item.bank_question_id for item in items if len(item.choices_json) > 4
+    ]
+    if unsupported:
+        raise APIError(
+            422,
+            "csv_choice_limit_exceeded",
+            "CSV export supports at most four choices per question.",
+            details={"bank_question_ids": unsupported, "choice_limit": 4},
+        )
     out = io.StringIO(newline=""); writer = csv.DictWriter(out, fieldnames=CSV_COLUMNS); writer.writeheader()
     def safe(value):
         text = "" if value is None else str(value)
         return "'" + text if text.startswith(("=", "+", "-", "@")) else text
     for item in items:
-        choices = list(item.choices_json)[:4]
+        choices = list(item.choices_json)
         row = {"question_text": safe(item.question_text), "explanation": safe(item.explanation),
             "correct_choices": "|".join(chr(65+i) for i,c in enumerate(choices) if c["is_correct"])}
         for index, key in enumerate("abcd"):
