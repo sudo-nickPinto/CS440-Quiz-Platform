@@ -249,7 +249,9 @@ def _submission_event(
     }
 
 
-def test_organizer_hears_member_submit_and_others_hear_nothing(event_client) -> None:
+def test_organizer_and_submitter_hear_submit_and_others_hear_nothing(
+    event_client,
+) -> None:
     client, ctx, accounts = event_client
     class_id = ctx["class_id"]
     quiz_id, version_id = _published_quiz(client, class_id)
@@ -257,15 +259,17 @@ def test_organizer_hears_member_submit_and_others_hear_nothing(event_client) -> 
     with (
         client.websocket_connect(URL) as faculty,
         client.websocket_connect(URL) as owner,
+        client.websocket_connect(URL) as classmate,
         client.websocket_connect(URL) as outsider,
     ):
         _authenticate(faculty, "faculty")
         _authenticate(owner, "owner")
+        _authenticate(classmate, "classmate")
         _authenticate(outsider, "outsider")
 
         submission_id = _submit(client, class_id, version_id)
 
-        assert faculty.receive_json() == _submission_event(
+        expected = _submission_event(
             "submitted",
             "PENDING",
             submission_id,
@@ -273,8 +277,53 @@ def test_organizer_hears_member_submit_and_others_hear_nothing(event_client) -> 
             quiz_id,
             accounts["owner"],
         )
-        _assert_nothing_pending(owner)
+        assert faculty.receive_json() == expected
+        # The submitter's own tabs update too.
+        assert owner.receive_json() == expected
+        _assert_nothing_pending(classmate)
         _assert_nothing_pending(outsider)
+
+
+def test_submitter_hears_own_submit_and_withdraw_on_every_socket(
+    event_client,
+) -> None:
+    client, ctx, accounts = event_client
+    class_id = ctx["class_id"]
+    quiz_id, version_id = _published_quiz(client, class_id)
+
+    with (
+        client.websocket_connect(URL) as acting_tab,
+        client.websocket_connect(URL) as other_tab,
+    ):
+        _authenticate(acting_tab, "owner")
+        _authenticate(other_tab, "owner")
+
+        submission_id = _submit(client, class_id, version_id)
+        submitted = _submission_event(
+            "submitted",
+            "PENDING",
+            submission_id,
+            class_id,
+            quiz_id,
+            accounts["owner"],
+        )
+        assert acting_tab.receive_json() == submitted
+        assert other_tab.receive_json() == submitted
+
+        response = client.delete(
+            f"/classes/{class_id}/quiz-submissions/{submission_id}"
+        )
+        assert response.status_code == 204
+        withdrawn = _submission_event(
+            "withdrawn",
+            "WITHDRAWN",
+            submission_id,
+            class_id,
+            quiz_id,
+            accounts["owner"],
+        )
+        assert acting_tab.receive_json() == withdrawn
+        assert other_tab.receive_json() == withdrawn
 
 
 @pytest.mark.parametrize(
@@ -299,6 +348,7 @@ def test_submitter_hears_decision(event_client, decision, action) -> None:
 
         submission_id = _submit(client, class_id, version_id)
         assert faculty.receive_json()["action"] == "submitted"
+        assert owner.receive_json()["action"] == "submitted"
 
         ctx["act"]("faculty")
         response = client.patch(
@@ -388,6 +438,7 @@ def test_members_hear_session_live_but_host_and_outsider_do_not(
             "quiz_title": "Week 4",
             "host_name": "Faculty",
             "join_code": session["join_code"],
+            "role": "MEMBER",
         }
         assert classmate.receive_json() == expected
         assert owner.receive_json() == expected
