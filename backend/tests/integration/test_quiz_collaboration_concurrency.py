@@ -7,6 +7,7 @@ from app.errors import APIError
 from app.models.quiz import Question, QuestionBankItem, Quiz, QuizStatus, QuizVersion
 from app.schemas.quiz import QuestionCreate, QuestionUpdate, QuizPublish
 from app.services import quizzes as quiz_service
+from app.services.question_bank import add_from_bank
 from app.services.quizzes import (
     add_class_quiz_question,
     archive_quiz,
@@ -290,6 +291,64 @@ def test_edit_waiting_before_publish_updates_new_draft_not_published_version(
         assert versions[0].questions[0].question_text == "First question?"
         assert versions[1].published_at is None
         assert versions[1].questions[0].question_text == "Must not reach published"
+
+
+def test_bank_import_waiting_before_publish_cannot_mutate_published_version(
+    mysql_quiz_client,
+    monkeypatch,
+) -> None:
+    client, owner, _, class_id, quiz = _setup_shared_quiz(mysql_quiz_client)
+    with client.app.state.database.session_factory() as db:
+        bank_question_id = db.scalar(
+            select(QuestionBankItem.bank_question_id)
+            .where(QuestionBankItem.source_quiz_id == quiz["quiz_id"])
+            .order_by(QuestionBankItem.bank_question_id)
+        )
+    lock_requested, allow_lock = (
+        _pause_first_question_save_before_quiz_lock(monkeypatch)
+    )
+
+    def import_question():
+        with client.app.state.database.session_factory() as db:
+            try:
+                add_from_bank(
+                    db,
+                    owner,
+                    class_id,
+                    quiz["quiz_id"],
+                    [bank_question_id],
+                )
+                return "imported"
+            except APIError as exc:
+                return exc.code
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        pending_import = executor.submit(import_question)
+        try:
+            assert lock_requested.wait(timeout=10)
+            with client.app.state.database.session_factory() as db:
+                published = publish_class_quiz(
+                    db,
+                    owner,
+                    class_id,
+                    quiz["quiz_id"],
+                    QuizPublish(expected_revision=quiz["revision"]),
+                )
+        finally:
+            allow_lock.set()
+        outcome = pending_import.result(timeout=30)
+
+    assert published.status == QuizStatus.PUBLISHED
+    assert outcome == "quiz_not_editable"
+    with client.app.state.database.session_factory() as db:
+        versions = db.scalars(
+            select(QuizVersion)
+            .where(QuizVersion.quiz_id == quiz["quiz_id"])
+            .order_by(QuizVersion.version_number)
+        ).all()
+        assert len(versions) == 1
+        assert versions[0].published_at is not None
+        assert len(versions[0].questions) == 2
 
 
 def test_archive_wins_before_question_lock_without_being_undone(

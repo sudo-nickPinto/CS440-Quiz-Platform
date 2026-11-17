@@ -213,6 +213,29 @@ def _question_from_item(item: QuestionBankItem, order: int, *, time_limit_second
             is_correct=choice["is_correct"]) for index, choice in enumerate(item.choices_json, 1)])
 
 
+def _lock_import_destination(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    quiz_id: int,
+) -> Quiz:
+    """Serialize imports with publishing before choosing a destination version."""
+    from app.services.quizzes import (
+        _lock_class_quiz_for_update,
+        _require_quiz_editor,
+    )
+
+    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
+    _require_quiz_editor(db, account, quiz, lock_access=True)
+    if quiz.status != QuizStatus.DRAFT:
+        raise APIError(
+            409,
+            "quiz_not_editable",
+            "Only draft quizzes can receive questions.",
+        )
+    return quiz
+
+
 def _copy_question(question: Question, order: int) -> Question:
     return Question(
         question_order=order,
@@ -236,15 +259,10 @@ def add_from_bank(db: Session, account: CurrentAccount, class_id: int, quiz_id: 
                   bank_ids: list[int]):
     from app.services.quizzes import (
         _latest_editor_version, _load_readable_quiz, _require_active_membership,
-        _require_quiz_editor, _to_response,
+        _to_response,
     )
+    quiz = _lock_import_destination(db, account, class_id, quiz_id)
     membership = _require_active_membership(db, account, class_id)
-    quiz = _load_readable_quiz(db, account, quiz_id)
-    _require_quiz_editor(db, account, quiz)
-    if quiz.class_id != class_id:
-        raise APIError(404, "quiz_not_found", "Quiz not found.")
-    if quiz.status != QuizStatus.DRAFT:
-        raise APIError(409, "quiz_not_editable", "Only draft quizzes can receive questions.")
     visible = _visible_condition(
         account,
         class_id,
@@ -350,16 +368,10 @@ def preview_csv(text: str) -> CsvPreviewResponse:
 def import_csv(db: Session, account: CurrentAccount, class_id: int, quiz_id: int,
                payload: CsvImportRequest) -> CsvImportResponse:
     from app.services.quizzes import (
-        _latest_editor_version, _load_readable_quiz, _require_active_membership,
-        _require_quiz_editor, _to_response,
+        _latest_editor_version, _load_readable_quiz, _to_response,
     )
     # Selected rows enter the quiz and are automatically banked.
-    quiz = _load_readable_quiz(db, account, quiz_id)
-    _require_active_membership(db, account, class_id); _require_quiz_editor(db, account, quiz)
-    if quiz.class_id != class_id:
-        raise APIError(404, "quiz_not_found", "Quiz not found.")
-    if quiz.status != QuizStatus.DRAFT:
-        raise APIError(409, "quiz_not_editable", "Only draft quizzes can receive questions.")
+    quiz = _lock_import_destination(db, account, class_id, quiz_id)
     rows_to_save = [*payload.rows]
     if payload.save_unselected_to_bank:
         rows_to_save.extend(payload.bank_only_rows)
