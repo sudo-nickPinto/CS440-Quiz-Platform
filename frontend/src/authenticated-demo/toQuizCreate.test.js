@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
-import { toQuizCreate } from '../src/authenticated-demo/quizPayload.js'
+import { test } from 'vitest'
+import { toQuizCreate } from './quizPayload.js'
 
 function editor() {
   return {
@@ -19,6 +19,7 @@ function editor() {
 test('maps editor state to the exact backend request shape', () => {
   assert.deepEqual(toQuizCreate(editor()), {
     title: 'Geography',
+    description: null,
     questions: [{
       question_text: 'Capital of France?',
       explanation: null,
@@ -53,7 +54,8 @@ test('rejects missing correct answer', () => {
 })
 
 test('rejects invalid timers instead of sending NaN or zero', () => {
-  for (const limit of ['', 'invalid', '4', '301', '5.5']) {
+  // Same range as the backend: 1 to 65,535 seconds.
+  for (const limit of ['', 'invalid', '0', '65536', '5.5']) {
     const value = editor()
     value.questions[0].limit = limit
 
@@ -84,7 +86,7 @@ test('rejects blank choices and more than four choices', () => {
 test('rejects an empty quiz', () => {
   assert.throws(
     () => toQuizCreate({ ...editor(), questions: [] }),
-    /at least one/,
+    /between 1 and 65,535 questions/,
   )
 })
 

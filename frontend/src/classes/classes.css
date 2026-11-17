@@ -50,7 +50,7 @@
 }
 
 .qp .cl-button.cl-secondary:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp .cl-page button:disabled {
@@ -200,12 +200,50 @@
 }
 
 .qp .cl-card {
+  position: relative;
   min-width: 0;
   display: flex;
   flex-direction: column;
   border: var(--b);
   background: var(--paper);
   box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+/* The class name's link covers the whole card, so a click anywhere opens it. */
+.qp .cl-card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.qp .cl-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0 var(--ink);
+}
+
+.qp .cl-card:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.qp .cl-card:has(.cl-card-link:focus-visible) {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 3px;
+}
+
+.qp .cl-card-link:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp .cl-card,
+  .qp .cl-card:hover,
+  .qp .cl-card:active {
+    transition: none;
+    transform: none;
+  }
 }
 
 .qp .cl-card-banner {
@@ -264,7 +302,7 @@
   text-decoration: none;
 }
 
-.qp .cl-card-body h2 a:hover {
+.qp .cl-card:hover .cl-card-body h2 a {
   text-decoration: underline;
   text-decoration-color: var(--orange-deep);
 }
@@ -277,17 +315,6 @@
 .qp .cl-muted {
   color: var(--gray);
   font-size: 14px;
-}
-
-.qp .cl-card-footer {
-  padding: 14px 16px;
-  border-top: var(--b-thin);
-  background: var(--sand);
-}
-
-.qp .cl-card-footer a {
-  color: var(--navy);
-  font-weight: 700;
 }
 
 .qp .cl-state {
@@ -440,6 +467,9 @@
 }
 
 .qp .cl-table-wrap {
+  /* Holds the absolutely placed .cl-sr labels in headers, so they scroll
+     with the table instead of widening the page. */
+  position: relative;
   overflow-x: auto;
 }
 
@@ -759,12 +789,23 @@
   flex: 1 1 150px;
 }
 
+/* Keyboard focus, as in the mockups: a tight deep-orange outline on
+   buttons and links. Fields show focus on their own border (see below). */
 .qp .cl-page button:focus-visible,
-.qp .cl-page input:focus-visible,
-.qp .cl-page select:focus-visible,
 .qp .cl-page a:focus-visible {
-  outline: 3px solid var(--navy);
-  outline-offset: 4px;
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 2px;
+}
+
+/* Text fields and selects: no ring around the box (it showed on every
+   click); the box's own border turns deep orange instead. App-wide. */
+.qp input:focus-visible,
+.qp select:focus-visible,
+.qp textarea:focus-visible,
+.qp .cl-page input:focus-visible,
+.qp .cl-page select:focus-visible {
+  outline: none;
+  border-color: var(--orange-deep);
 }
 
 @media (max-width: 640px) {
@@ -794,10 +835,13 @@
   border-bottom: var(--b);
 }
 
+/* One line, left to right: LIVE | state | title | →. Buttons center their
+   contents app-wide, so this one starts at the left on purpose. */
 .qp .cl-page button.cl-live {
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: flex-start;
+  gap: 14px;
   width: 100%;
   padding: 14px 18px;
   background: var(--orange-deep);
@@ -826,21 +870,59 @@
   animation: cl-live-pulse 1.6s ease-in-out infinite;
 }
 
-.qp .cl-live-text {
-  display: grid;
-  min-width: 0;
+.qp .cl-live-sep {
+  flex: none;
+  width: 3px;
+  align-self: stretch;
+  background: currentColor;
+  opacity: 0.5;
 }
 
-.qp .cl-live-text strong {
+.qp .cl-live-state {
+  flex: none;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.qp .cl-live-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   font-family: "Archivo Black", sans-serif;
   font-size: 18px;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.qp .cl-live-text small {
-  font-size: 14px;
+.qp .cl-live-arrow {
+  flex: none;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.qp .cl-live-tag {
+  flex: none;
+}
+
+/* Phones: the title takes its own line under LIVE | state. */
+@media (max-width: 560px) {
+  .qp .cl-page button.cl-live {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .qp .cl-live-title {
+    order: 5;
+    flex-basis: 100%;
+    white-space: normal;
+  }
+
+  .qp .cl-live-arrow {
+    margin-left: auto;
+  }
 }
 
 @keyframes cl-live-pulse {
@@ -883,4 +965,141 @@
 
 .cl-page .cl-class-title h1 {
   overflow-wrap: anywhere;
+}
+
+.qp .cl-sort {
+  flex: 0 0 auto;
+}
+
+/* V3 Task 6: approval queue */
+.qp .cl-badge {
+  display: inline-block;
+  min-width: 1.6em;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border: var(--b);
+  background: var(--orange);
+  color: var(--ink);
+  font-size: 0.6em;
+  line-height: 1.2;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.qp .cl-approval {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Approve / Reject, on the Approvals tab and the submission preview: the
+   same size and type as the other buttons in report rows (cl-send). */
+.qp .cl-page button.cl-decide {
+  min-width: 112px;
+  min-height: 40px;
+  padding: 6px 16px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.qp .cl-page button.cl-decide:hover:not(:disabled) {
+  background: var(--apricot);
+}
+
+.qp .cl-page button.cl-decide.is-approve {
+  background: var(--orange-deep);
+  color: var(--paper);
+}
+
+.qp .cl-page button.cl-decide.is-approve:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.qp .cl-page button.cl-decide:disabled {
+  background: var(--sand);
+  color: var(--gray);
+  box-shadow: none;
+}
+
+/* V3 Task 6: read-only preview of a submitted quiz version */
+.qp .cl-preview-actions {
+  padding: 16px 20px 0;
+}
+
+.qp .cl-preview-questions {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 20px 20px 24px 44px;
+}
+
+.qp .cl-preview-questions ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qp .cl-preview-questions ul li {
+  padding: 8px 12px;
+  border: var(--b-thin);
+}
+
+.qp .cl-preview-questions ul li.is-correct {
+  background: var(--sky-soft);
+}
+
+.qp .cl-preview-q {
+  margin: 0;
+  font-weight: 700;
+}
+
+.qp .cl-preview-meta {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* Class page tabs cleanup: by-session / by-quiz toggle */
+.qp .cl-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.qp .cl-toggle button {
+  padding: 6px 12px;
+  box-shadow: none;
+  background: var(--paper);
+  font-size: 14px;
+}
+
+.qp .cl-toggle button + button {
+  border-left: 0;
+}
+
+.qp .cl-toggle button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Cards and rows: the owner tag, then one tag per other editor. */
+.qp .cl-people-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Owner in navy, editors in light blue. */
+.qp .cl-tag.is-owner {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.qp .cl-tag.is-editor {
+  background: var(--sky-soft);
+  color: var(--navy);
 }

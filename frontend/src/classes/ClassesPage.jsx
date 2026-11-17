@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { useRemembered } from "../authenticated-demo/remember";
 import { useNavigate } from "react-router";
 
 import { useAction, useApi } from "../authenticated-demo/rest";
 import { useClassesResource } from "./classResources";
-import { ClassCard, EmptyMessage, ResourceMessage } from "./ClassUI";
+import { ClassCard, ResourceMessage } from "./ClassUI";
 import { useAccount } from "../authenticated-demo/account";
 
 export default function ClassesPage() {
@@ -15,9 +16,8 @@ export default function ClassesPage() {
   const [panel, setPanel] = useState(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [sort, setSort] = useState("name");
+  const [query, setQuery] = useRemembered("classes:query", "");
+  const [filter, setFilter] = useRemembered("classes:filter", "all");
 
   const account = useAccount();
   const canCreateClass = account.is_active === true && account.role === "ADMIN";
@@ -41,11 +41,8 @@ export default function ClassesPage() {
       if (filter === "archived") return item.archived;
       return true;
     })
-    .sort((a, b) =>
-      sort === "name-desc"
-        ? b.name.localeCompare(a.name)
-        : a.name.localeCompare(b.name),
-    );
+    // Always alphabetical; the list is short and people scan it by name.
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   function togglePanel(nextPanel) {
     setPanel((current) => (current === nextPanel ? null : nextPanel));
@@ -285,43 +282,49 @@ export default function ClassesPage() {
           </select>
         </label>
 
-        <label>
-          <span className="cl-sr">Sort classes</span>
-          <select
-            value={sort}
-            onChange={(event) => setSort(event.target.value)}
-            disabled={!ready}
-          >
-            <option value="name">Name: A–Z</option>
-            <option value="name-desc">Name: Z–A</option>
-          </select>
-        </label>
-
-        <span className="cl-count" aria-live="polite">
+        {/* Not shown, but read out when a search or filter changes the list. */}
+        <span className="cl-sr" aria-live="polite">
           {ready
             ? `${visible.length} ${visible.length === 1 ? "class" : "classes"}`
-            : "— classes"}
+            : ""}
         </span>
-
-        <button
-          type="button"
-          onClick={resource.reload}
-          disabled={action.busy || resource.status === "loading"}
-        >
-          Refresh
-        </button>
       </div>
 
       {!ready ? (
         <ResourceMessage resource={resource} />
       ) : classes.length === 0 ? (
-        <EmptyMessage title="No classes yet">
-          Create a class or accept an invitation to get started.
-        </EmptyMessage>
+        <div className="cl-state">
+          <h2>No classes yet</h2>
+          <p>
+            {canCreateClass
+              ? "Create a class for your students, or join one with a class code."
+              : "Join a class with the code your instructor gave you. Your quizzes and drafts live inside your classes."}
+          </p>
+          <div className="cl-actions">
+            {canCreateClass && (
+              <button type="button" onClick={() => setPanel("create")}>
+                + New class
+              </button>
+            )}
+            <button type="button" onClick={() => setPanel("join")}>
+              Join class
+            </button>
+          </div>
+        </div>
       ) : visible.length === 0 ? (
-        <EmptyMessage title="No matching classes">
-          Try another search or change the class filter.
-        </EmptyMessage>
+        <div className="cl-state">
+          <h2>No matching classes</h2>
+          <p>Try another search or change the class filter.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setFilter("all");
+            }}
+          >
+            Clear search and filter
+          </button>
+        </div>
       ) : (
         <div className="cl-grid">
           {visible.map((item) => (

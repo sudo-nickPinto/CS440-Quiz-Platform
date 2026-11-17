@@ -5,9 +5,13 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
+from app.schemas.pagination import SortOrder
 from app.schemas.quiz import (
     ClassQuizListPage,
+    ClassQuizSort,
     QuizCollaboratorCreate,
+    QuizDefaultTimeUpdate,
+    QuizDefaultTimeUpdateResponse,
     QuizCollaboratorResponse,
     QuizCreate,
     QuizPublish,
@@ -27,6 +31,7 @@ from app.services.quizzes import (
     publish_class_quiz,
     revoke_quiz_collaborator,
     update_class_quiz,
+    update_class_quiz_default_time,
     update_class_quiz_question,
 )
 
@@ -50,10 +55,22 @@ def list_class_quizzes_route(
     class_id: int,
     page: Page = 1,
     page_size: PageSize = 25,
+    sort: ClassQuizSort = ClassQuizSort.CREATED_AT,
+    order: SortOrder = SortOrder.DESC,
+    mine: bool = False,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> ClassQuizListPage:
-    return list_class_quizzes(db, account, class_id, page=page, page_size=page_size)
+    return list_class_quizzes(
+        db,
+        account,
+        class_id,
+        page=page,
+        page_size=page_size,
+        sort=sort,
+        order=order,
+        mine=mine,
+    )
 
 
 @router.get("/{quiz_id}", response_model=QuizResponse)
@@ -119,6 +136,39 @@ async def update_class_quiz_question_route(
             "quiz_revision": result.quiz_revision,
             "editor_account_id": account.account_id,
             "question": result.question.model_dump(),
+        },
+    )
+    return result
+
+
+@router.patch(
+    "/{quiz_id}/default-time",
+    response_model=QuizDefaultTimeUpdateResponse,
+)
+async def update_class_quiz_default_time_route(
+    class_id: int,
+    quiz_id: int,
+    payload: QuizDefaultTimeUpdate,
+    request: Request,
+    account: CurrentAccount = Depends(get_active_account),
+) -> QuizDefaultTimeUpdateResponse:
+    hub = request.app.state.quiz_edit_hub
+    result = await hub.run_db(
+        update_class_quiz_default_time,
+        account,
+        class_id,
+        quiz_id,
+        payload,
+    )
+    await hub.broadcast(
+        quiz_id,
+        {
+            "type": "quiz_default_time_updated",
+            "quiz_id": quiz_id,
+            "quiz_revision": result.quiz_revision,
+            "editor_account_id": account.account_id,
+            "time_limit_seconds": result.time_limit_seconds,
+            "questions": [question.model_dump() for question in result.questions],
         },
     )
     return result

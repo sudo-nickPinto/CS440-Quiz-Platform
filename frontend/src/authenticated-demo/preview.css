@@ -55,7 +55,7 @@
 
 .qp button:hover:not(:disabled),
 .qp-button:hover {
-  background: var(--sky-soft);
+  filter: var(--hover-shade);
 }
 
 .qp button:disabled {
@@ -76,7 +76,7 @@
 
 .qp :focus-visible {
   outline: 3px solid var(--orange-deep);
-  outline-offset: 4px;
+  outline-offset: 2px;
 }
 
 .qp-header {

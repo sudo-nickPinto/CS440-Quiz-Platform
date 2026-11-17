@@ -9,6 +9,8 @@ from sqlalchemy import (
     CheckConstraint,
     Enum as SqlEnum,
     ForeignKey,
+    Index,
+    JSON,
     String,
     UniqueConstraint,
     func,
@@ -37,10 +39,21 @@ class SessionQuestionStatus(str, Enum):
     CLOSED = "CLOSED"
 
 
+class SessionCorrectionMode(str, Enum):
+    REPLACE = "REPLACE"
+    ADD = "ADD"
+    REMOVE = "REMOVE"
+
+
 class LiveSession(Base):
     """ORM mapping for a hosted quiz session from migration 0003."""
 
     __tablename__ = "live_session"
+    __table_args__ = (
+        CheckConstraint(
+            "score_revision >= 0", name="ck_live_session_score_revision"
+        ),
+    )
 
     session_id: Mapped[int] = mapped_column(
         INTEGER(unsigned=True), primary_key=True
@@ -82,6 +95,14 @@ class LiveSession(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
     ended_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
+    score_revision: Mapped[int] = mapped_column(
+        SMALLINT(unsigned=True), nullable=False, default=0, server_default="0"
+    )
+    rescored_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
+    rescored_by_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="RESTRICT"),
+    )
 
     participants: Mapped[list[SessionParticipant]] = relationship(
         back_populates="session", passive_deletes=True
@@ -158,9 +179,34 @@ class SessionQuestion(Base):
 
     session: Mapped[LiveSession] = relationship(back_populates="questions")
     question: Mapped[Question] = relationship()
+    corrected_choices: Mapped[list[SessionQuestionCorrectChoice]] = relationship(
+        back_populates="session_question", passive_deletes=True
+    )
     responses: Mapped[list[Response]] = relationship(
         back_populates="session_question", passive_deletes=True
     )
+
+
+class SessionQuestionCorrectChoice(Base):
+    """One accepted choice in a completed session's corrected answer set."""
+
+    __tablename__ = "session_question_correct_choice"
+
+    session_question_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("session_question.session_question_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    choice_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("answer_choice.choice_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+
+    session_question: Mapped[SessionQuestion] = relationship(
+        back_populates="corrected_choices"
+    )
+    choice: Mapped[AnswerChoice] = relationship()
 
 
 class Response(Base):
@@ -247,5 +293,64 @@ class Result(Base):
     )
     final_rank: Mapped[int] = mapped_column(SMALLINT(unsigned=True), nullable=False)
     computed_at: Mapped[datetime] = mapped_column(
+        DATETIME(fsp=3), nullable=False, server_default=func.now()
+    )
+
+
+class SessionAnswerCorrection(Base):
+    """Append-only audit record for one completed-session answer correction."""
+
+    __tablename__ = "session_answer_correction"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "score_revision",
+            name="uq_session_answer_correction_revision",
+        ),
+        CheckConstraint(
+            "score_revision >= 1",
+            name="ck_session_answer_correction_revision",
+        ),
+        Index(
+            "idx_session_answer_correction_question",
+            "session_question_id",
+            "corrected_at",
+        ),
+    )
+
+    correction_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True), primary_key=True
+    )
+    session_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("live_session.session_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    session_question_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("session_question.session_question_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    selected_choice_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("answer_choice.choice_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    correction_mode: Mapped[SessionCorrectionMode] = mapped_column(
+        SqlEnum(SessionCorrectionMode, values_callable=enum_values), nullable=False
+    )
+    previous_correct_choice_ids: Mapped[list[int]] = mapped_column(
+        JSON, nullable=False
+    )
+    corrected_choice_ids: Mapped[list[int]] = mapped_column(JSON, nullable=False)
+    corrected_by_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    score_revision: Mapped[int] = mapped_column(
+        SMALLINT(unsigned=True), nullable=False
+    )
+    corrected_at: Mapped[datetime] = mapped_column(
         DATETIME(fsp=3), nullable=False, server_default=func.now()
     )

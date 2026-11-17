@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { quizToEditor, toQuizCreate } from "./quizPayload";
+import {
+  normalizeEditorDefaultTime,
+  questionPayloadChanged,
+  quizQuestionToEditor,
+  quizToEditor,
+  toQuestionCreate,
+  toQuizCreate,
+} from "./quizPayload";
 
 function savedQuiz() {
   return {
@@ -57,6 +64,40 @@ describe("editing saved quizzes", () => {
     });
   });
 
+  it("reconstructs the saved quiz-wide timer instead of resetting to 20s", () => {
+    const quiz = savedQuiz();
+    const second = structuredClone(quiz.version.questions[0]);
+    const third = structuredClone(quiz.version.questions[0]);
+    second.question_id = 13;
+    second.question_order = 2;
+    third.question_id = 14;
+    third.question_order = 3;
+    third.time_limit_seconds = 45;
+    quiz.version.questions.push(second, third);
+
+    const editor = quizToEditor(quiz);
+
+    expect(editor.defaultTime).toBe(600);
+    expect(editor.questions.map((question) => question.limit)).toEqual([
+      null,
+      null,
+      45,
+    ]);
+  });
+
+  it("preserves question identity and revision for independent saves", () => {
+    const question = savedQuiz().version.questions[0];
+    question.revision = 4;
+
+    const editorQuestion = quizQuestionToEditor(question);
+
+    expect(editorQuestion.questionId).toBe(12);
+    expect(editorQuestion.revision).toBe(4);
+    expect(toQuestionCreate(editorQuestion, 0, 20).question_text).toBe(
+      "Which answer?",
+    );
+  });
+
   it("does not mutate the saved quiz when editor values change", () => {
     const quiz = savedQuiz();
     const editor = quizToEditor(quiz);
@@ -89,5 +130,73 @@ describe("editing saved quizzes", () => {
     editor.questions[0].basePoints = 0;
 
     expect(() => toQuizCreate(editor)).toThrow("base points");
+  });
+
+  it("detects a changed inherited quiz-wide duration", () => {
+    const editor = quizToEditor(savedQuiz());
+    const question = editor.questions[0];
+
+    expect(
+      questionPayloadChanged(
+        question,
+        question,
+        0,
+        30,
+        editor.defaultTime,
+      ),
+    ).toBe(true);
+  });
+
+  it("does not rewrite an explicit duration when the default changes", () => {
+    const editor = quizToEditor(savedQuiz());
+    const question = { ...editor.questions[0], limit: 45 };
+
+    expect(
+      questionPayloadChanged(question, question, 0, 30, 20),
+    ).toBe(false);
+  });
+
+  it("reconstructs a remotely changed quiz-wide duration", () => {
+    const editor = {
+      defaultTime: 20,
+      questions: [
+        { id: "one", limit: 30 },
+        { id: "two", limit: null },
+        { id: "custom", limit: 45 },
+      ],
+    };
+
+    const afterFirstUpdate = normalizeEditorDefaultTime(editor);
+    expect(afterFirstUpdate.defaultTime).toBe(20);
+
+    const afterSecondUpdate = normalizeEditorDefaultTime({
+      ...afterFirstUpdate,
+      questions: afterFirstUpdate.questions.map((question) =>
+        question.id === "two" ? { ...question, limit: 30 } : question,
+      ),
+    });
+
+    expect(afterSecondUpdate.defaultTime).toBe(30);
+    expect(afterSecondUpdate.questions.map((question) => question.limit)).toEqual([
+      null,
+      null,
+      45,
+    ]);
+  });
+
+  it("keeps the existing quiz default while remote durations are tied", () => {
+    const editor = normalizeEditorDefaultTime({
+      defaultTime: 20,
+      questions: [
+        { id: "remote", limit: 30 },
+        { id: "unchanged", limit: null },
+      ],
+    });
+
+    expect(editor.defaultTime).toBe(20);
+    expect(editor.questions.map((question) => question.limit)).toEqual([
+      30,
+      null,
+    ]);
   });
 });

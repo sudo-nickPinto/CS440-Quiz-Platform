@@ -54,6 +54,7 @@ def test_snapshot_contains_choice_totals_and_rank_style_ties() -> None:
     assert set(snapshot.participants[0].model_dump()) == {
         "session_participant_id",
         "display_name",
+        "avatar_key",
         "selected_choice_id",
         "is_correct",
         "points_awarded",

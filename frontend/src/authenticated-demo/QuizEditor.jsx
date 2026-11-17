@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Link,
   useLocation,
@@ -7,15 +7,51 @@ import {
   useSearchParams,
 } from "react-router";
 import { useAccount } from "./account";
-import HostQuizButton from "./HostQuizButton";
+import { QuizCredits } from "./QuizCollaborators";
 
-import { blankEditor, LETTERS, newQuestion } from "./model";
-import { toQuizCreate } from "./quizPayload";
+import {
+  ANSWER_LIMIT,
+  EXPLANATION_LIMIT,
+  blankEditor,
+  LETTERS,
+  newQuestion,
+  QUESTION_LIMIT,
+} from "./model";
+import {
+  normalizeEditorDefaultTime,
+  quizQuestionToEditor,
+  toQuestionCreate,
+  toQuizCreate,
+} from "./quizPayload";
+import {
+  canApplyRemoteQuestion,
+  canSaveDraftIndependently,
+  nextAggregateRevision,
+  reconcileAutosavedQuestion,
+  remoteStructureDecision,
+  saveAggregateQuiz,
+  saveDraftQuestions,
+} from "./quizDraftSave";
 import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 import ConfirmDialog from "./ConfirmDialog";
 import { useConfirm } from "./useConfirm";
-import { QuestionMenu, TimePicker } from "./EditorParts";
+import {
+  AutoGrowTextarea,
+  CharCount,
+  QuestionMenu,
+  TimePicker,
+} from "./EditorParts";
+import { useQuizCollaboration } from "./useQuizCollaboration";
+import { classPagePath } from "../classes/classPaths";
+import NewQuizClassPicker from "../classes/NewQuizClassPicker";
+import HostQuizButton from "./HostQuizButton";
+import { sendQuizForApproval, useQuizFlow } from "./quizFlow";
+import QuizCollaboratorDialog, {
+  AddCollaboratorCell,
+} from "./QuizCollaboratorDialog";
+import { QuizFlowButton, QuizFlowTrack } from "./QuizFlowPanel";
+import "./quiz-flow.css";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -95,29 +131,291 @@ export function QuizEditor({
 }) {
   const [initial] = useState(() => initialEditor ?? blankEditor());
   const [editor, setEditor] = useState(initial);
-  const [reviewing, setReviewing] = useState(false);
+  const [baselineEditor, setBaselineEditor] = useState(initial);
   const [validation, setValidation] = useState("");
   const [explaining, setExplaining] = useState(() => new Set());
+  const [remoteNotice, setRemoteNotice] = useState(null);
+  const [autosaveError, setAutosaveError] = useState(null);
+  const [questionSaveStatus, setQuestionSaveStatus] = useState({});
+  const autosaveTimers = useRef(new Map());
+  const defaultTimeTimer = useRef(null);
+  const savingDefaultTime = useRef(false);
+  const savingQuestions = useRef(new Set());
+  const editorRef = useRef(initial);
+  const baselineEditorRef = useRef(initial);
+  const quizRevisionRef = useRef(existingQuiz?.revision ?? null);
+  const aggregateStaleRef = useRef(false);
 
   const api = useApi();
   const action = useAction();
+  const account = useAccount();
   const navigate = useNavigate();
   const confirmer = useConfirm();
   const [searchParams] = useSearchParams();
 
   const editing = existingQuiz !== null;
+  // Sharing and archiving are the owner's, on a saved quiz in a class.
+  const ownsQuiz =
+    editing &&
+    existingQuiz.author_id === account.account_id &&
+    Boolean(existingQuiz.class_id);
+  // Sending publishes the draft first, and only the owner can publish.
+  const canSendFromEditor =
+    !editing || existingQuiz.author_id === account.account_id;
+  // Which save button was pressed, for its "Saving…" / "Sending…" label.
+  const [savingKind, setSavingKind] = useState(null);
+  const [sharing, setSharing] = useState(false);
   // New quizzes belong to a class: the class page links here with ?class=ID.
   const classId = searchParams.get("class");
   const validClass = /^[1-9][0-9]*$/.test(classId ?? "");
-  const dirty = JSON.stringify(editor) !== JSON.stringify(initial);
+  const dirty = JSON.stringify(editor) !== JSON.stringify(baselineEditor);
 
-  const conflict = action.error?.code === "quiz_edit_conflict";
+  const requestError = autosaveError ?? action.error;
+  const conflict = ["quiz_edit_conflict", "question_edit_conflict"].includes(
+    requestError?.code,
+  );
+  const questionSaving = Object.values(questionSaveStatus).includes("saving");
+
+  const collaborationStatus = useQuizCollaboration(
+    editing ? existingQuiz.quiz_id : null,
+    (message) => {
+      if (message.editor_account_id === account.account_id) return;
+      if (message.type === "quiz_default_time_updated") {
+        const currentEditor = editorRef.current;
+        const currentBaseline = baselineEditorRef.current;
+        if (currentEditor.defaultTime !== currentBaseline.defaultTime) {
+          aggregateStaleRef.current = true;
+          setRemoteNotice({
+            tone: "warning",
+            text: "A collaborator changed the default question time.",
+            detail:
+              "Your unsaved default-time change is still here. Reload to use the saved value.",
+            reload: true,
+          });
+          return;
+        }
+
+        const defaultTime = Number(message.time_limit_seconds);
+        const updates = new Map(
+          message.questions.map((question) => [question.question_id, question]),
+        );
+        const hasLocalTimerChange = currentEditor.questions.some((question) => {
+          if (!updates.has(question.questionId)) return false;
+          const baseline = currentBaseline.questions.find(
+            (item) => item.questionId === question.questionId,
+          );
+          return baseline && question.limit !== baseline.limit;
+        });
+        if (hasLocalTimerChange) {
+          aggregateStaleRef.current = true;
+          setRemoteNotice({
+            tone: "warning",
+            text: "A collaborator changed the default question time.",
+            detail:
+              "One of your unsaved question timers overlaps that change. Reload before saving it.",
+            reload: true,
+          });
+          return;
+        }
+        for (const questionId of updates.keys()) {
+          const timer = autosaveTimers.current.get(questionId);
+          if (timer) window.clearTimeout(timer);
+          autosaveTimers.current.delete(questionId);
+        }
+        const nextBaseline = {
+          ...currentBaseline,
+          defaultTime,
+          questions: currentBaseline.questions.map((question, index) => {
+            const saved = updates.get(question.questionId);
+            return saved
+              ? quizQuestionToEditor(saved, index, defaultTime)
+              : question;
+          }),
+        };
+        const nextEditor = {
+          ...currentEditor,
+          defaultTime,
+          questions: currentEditor.questions.map((question) => {
+            const saved = updates.get(question.questionId);
+            // The event only changes timers. Preserve local text/answer work,
+            // but accept the committed revision so its next autosave can merge.
+            return saved
+              ? { ...question, limit: null, revision: saved.revision }
+              : question;
+          }),
+        };
+        editorRef.current = nextEditor;
+        baselineEditorRef.current = nextBaseline;
+        setEditor(nextEditor);
+        setBaselineEditor(nextBaseline);
+        acceptQuizRevision(message.quiz_revision);
+        for (const question of nextEditor.questions) {
+          const baseline = nextBaseline.questions.find(
+            (item) => item.questionId === question.questionId,
+          );
+          if (
+            updates.has(question.questionId) &&
+            baseline &&
+            JSON.stringify(question) !== JSON.stringify(baseline)
+          ) {
+            scheduleQuestionAutosave(
+              question,
+              nextEditor.questions.indexOf(question),
+              250,
+            );
+          }
+        }
+        setRemoteNotice({
+          tone: "success",
+          text: `Default question time changed to ${defaultTime}s.`,
+          detail: "Questions using the quiz default were updated automatically.",
+          reload: false,
+        });
+        return;
+      }
+      if (message.type === "question_updated") {
+        const questionId = message.question.question_id;
+        const currentEditor = editorRef.current;
+        const currentBaseline = baselineEditorRef.current;
+        const local = currentEditor.questions.find(
+          (question) => question.questionId === questionId,
+        );
+        const baseline = currentBaseline.questions.find(
+          (question) => question.questionId === questionId,
+        );
+        if (!canApplyRemoteQuestion(local, baseline)) {
+          aggregateStaleRef.current = true;
+          setRemoteNotice({
+            tone: "warning",
+            text: "A collaborator saved this question while you have local changes.",
+            detail:
+              "Your work is still here. Save to check for a conflict, or reload the latest quiz.",
+            reload: true,
+          });
+          return;
+        }
+        const index = currentEditor.questions.indexOf(local);
+        const updated = quizQuestionToEditor(
+          message.question,
+          index,
+          currentEditor.defaultTime,
+        );
+        const nextEditor = normalizeEditorDefaultTime({
+          ...currentEditor,
+          questions: currentEditor.questions.map((question) =>
+            question.questionId === questionId ? updated : question,
+          ),
+        });
+        const nextBaseline = normalizeEditorDefaultTime({
+          ...currentBaseline,
+          questions: currentBaseline.questions.map((question) =>
+            question.questionId === questionId ? updated : question,
+          ),
+        });
+        editorRef.current = nextEditor;
+        baselineEditorRef.current = nextBaseline;
+        setEditor(nextEditor);
+        setBaselineEditor(nextBaseline);
+        acceptQuizRevision(message.quiz_revision);
+        setQuestionStatus(questionId, "remote");
+        if (!aggregateStaleRef.current) {
+          setRemoteNotice({
+            tone: "success",
+            text: `Question ${index + 1} was updated by a collaborator.`,
+            detail: "The saved change is now shown in your editor.",
+            reload: false,
+          });
+        }
+        return;
+      }
+      if (message.type === "question_added") {
+        const questionId = message.question.question_id;
+        const append = (currentEditor) => {
+          if (
+            currentEditor.questions.some(
+              (question) => question.questionId === questionId,
+            )
+          ) {
+            return currentEditor;
+          }
+          return {
+            ...currentEditor,
+            questions: [
+              ...currentEditor.questions,
+              quizQuestionToEditor(
+                message.question,
+                currentEditor.questions.length,
+                currentEditor.defaultTime,
+              ),
+            ],
+          };
+        };
+        const nextEditor = append(editorRef.current);
+        const nextBaseline = append(baselineEditorRef.current);
+        editorRef.current = nextEditor;
+        baselineEditorRef.current = nextBaseline;
+        setEditor(nextEditor);
+        setBaselineEditor(nextBaseline);
+        acceptQuizRevision(message.quiz_revision);
+        if (!aggregateStaleRef.current) {
+          setRemoteNotice({
+            tone: "success",
+            text: "A collaborator added a new question.",
+            detail: "It was added without changing your unsaved question work.",
+            reload: false,
+          });
+        }
+        return;
+      }
+      if (message.type === "quiz_structure_updated") {
+        const decision = remoteStructureDecision({
+          editor: editorRef.current,
+          baselineEditor: baselineEditorRef.current,
+          currentRevision: quizRevisionRef.current,
+          incomingRevision: message.quiz_revision,
+        });
+        if (decision.reload) {
+          quizRevisionRef.current = decision.revision;
+          onReload?.();
+          return;
+        }
+        aggregateStaleRef.current = true;
+        setRemoteNotice({
+          tone: "warning",
+          text: "A collaborator changed the quiz structure.",
+          detail:
+            "Reload when you are ready. Your unsaved work has not been replaced.",
+          reload: true,
+        });
+      } else if (message.type === "quiz_published") {
+        const decision = remoteStructureDecision({
+          editor: editorRef.current,
+          baselineEditor: baselineEditorRef.current,
+          currentRevision: quizRevisionRef.current,
+          incomingRevision: message.quiz_revision,
+        });
+        if (decision.reload) {
+          quizRevisionRef.current = decision.revision;
+          onReload?.();
+          return;
+        }
+        aggregateStaleRef.current = true;
+        setRemoteNotice({
+          tone: "info",
+          text: "The owner sent this version for approval.",
+          detail:
+            "Reload when you are ready. Your unsaved work has not been replaced.",
+          reload: true,
+        });
+      }
+    },
+  );
 
   const backTo = editing
     ? `/app/quizzes/${existingQuiz.quiz_id}`
     : validClass
       ? `/app/classes/${classId}`
-      : "/app/dashboard/present";
+      : "/app/classes";
 
   const ids = editor.questions.map((question) => question.id);
   const current = useCurrentQuestion(ids);
@@ -152,6 +450,28 @@ export function QuizEditor({
     };
   }, [dirty]);
 
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+
+  useEffect(() => {
+    baselineEditorRef.current = baselineEditor;
+  }, [baselineEditor]);
+
+  useEffect(
+    () => () => {
+      for (const timer of autosaveTimers.current.values()) {
+        window.clearTimeout(timer);
+      }
+      autosaveTimers.current.clear();
+      if (defaultTimeTimer.current) {
+        window.clearTimeout(defaultTimeTimer.current);
+        defaultTimeTimer.current = null;
+      }
+    },
+    [],
+  );
+
   async function leaveEditor(event) {
     if (action.busy) {
       event.preventDefault();
@@ -176,18 +496,26 @@ export function QuizEditor({
   }
 
   function edit(next) {
+    editorRef.current = next;
     setEditor(next);
-    setReviewing(false);
     setValidation("");
   }
 
   function changeQuestion(id, changes) {
-    edit({
-      ...editor,
-      questions: editor.questions.map((question) =>
-        question.id === id ? { ...question, ...changes } : question,
-      ),
-    });
+    const currentEditor = editorRef.current;
+    const index = currentEditor.questions.findIndex(
+      (question) => question.id === id,
+    );
+    if (index < 0) return;
+
+    const updatedQuestion = {
+      ...currentEditor.questions[index],
+      ...changes,
+    };
+    const questions = [...currentEditor.questions];
+    questions[index] = updatedQuestion;
+    edit({ ...currentEditor, questions });
+    scheduleQuestionAutosave(updatedQuestion, index);
   }
 
   function move(index, offset) {
@@ -217,13 +545,125 @@ export function QuizEditor({
 
   // Changing the quiz-wide time moves every question that followed it.
   function setQuizTime(seconds) {
-    edit({
-      ...editor,
+    const currentEditor = editorRef.current;
+    const nextEditor = {
+      ...currentEditor,
       defaultTime: seconds,
-      questions: editor.questions.map((question) =>
-        ownTime(question) == null ? { ...question, limit: null } : question,
+      questions: currentEditor.questions.map((question) =>
+        question.limit == null ||
+        Number(question.limit) === Number(currentEditor.defaultTime)
+          ? { ...question, limit: null }
+          : question,
       ),
-    });
+    };
+    edit(nextEditor);
+    scheduleDefaultTimeAutosave();
+  }
+
+  function scheduleDefaultTimeAutosave(delay = 350) {
+    if (!editing || existingQuiz.status !== "DRAFT" || conflict) return;
+    if (defaultTimeTimer.current) {
+      window.clearTimeout(defaultTimeTimer.current);
+    }
+    defaultTimeTimer.current = window.setTimeout(() => {
+      defaultTimeTimer.current = null;
+      void autosaveDefaultTime();
+    }, delay);
+  }
+
+  async function autosaveDefaultTime() {
+    if (savingDefaultTime.current || savingQuestions.current.size > 0) {
+      scheduleDefaultTimeAutosave(250);
+      return;
+    }
+    const savingEditor = editorRef.current;
+    const questionIds = savingEditor.questions
+      .filter((question) => question.questionId && question.limit == null)
+      .map((question) => question.questionId);
+    if (!questionIds.length) return;
+
+    // The dedicated request owns inherited timers. Cancel delayed question
+    // requests so they cannot emit misleading per-question update events.
+    for (const questionId of questionIds) {
+      const timer = autosaveTimers.current.get(questionId);
+      if (timer) window.clearTimeout(timer);
+      autosaveTimers.current.delete(questionId);
+      setQuestionStatus(questionId, "saving");
+    }
+
+    savingDefaultTime.current = true;
+    setAutosaveError(null);
+    try {
+      const result = await api(
+        `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}` +
+          "/default-time",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            time_limit_seconds: Number(savingEditor.defaultTime),
+            question_ids: questionIds,
+          }),
+        },
+      );
+      const updates = new Map(
+        result.questions.map((question) => [question.question_id, question]),
+      );
+      const savedDefaultTime = Number(result.time_limit_seconds);
+      const currentBaseline = baselineEditorRef.current;
+      const nextBaseline = {
+        ...currentBaseline,
+        defaultTime: savedDefaultTime,
+        questions: currentBaseline.questions.map((question, index) => {
+          const saved = updates.get(question.questionId);
+          return saved
+            ? quizQuestionToEditor(saved, index, savedDefaultTime)
+            : question;
+        }),
+      };
+      const currentEditor = editorRef.current;
+      const nextEditor = {
+        ...currentEditor,
+        questions: currentEditor.questions.map((question) => {
+          const saved = updates.get(question.questionId);
+          return saved
+            ? { ...question, limit: null, revision: saved.revision }
+            : question;
+        }),
+      };
+      baselineEditorRef.current = nextBaseline;
+      editorRef.current = nextEditor;
+      setBaselineEditor(nextBaseline);
+      setEditor(nextEditor);
+      acceptQuizRevision(result.quiz_revision);
+      questionIds.forEach((questionId) => setQuestionStatus(questionId, "saved"));
+
+      // A second picker change made while the request was in flight wins.
+      if (Number(nextEditor.defaultTime) !== savedDefaultTime) {
+        scheduleDefaultTimeAutosave(100);
+      } else {
+        for (const question of nextEditor.questions) {
+          const baseline = nextBaseline.questions.find(
+            (item) => item.questionId === question.questionId,
+          );
+          if (
+            question.questionId &&
+            baseline &&
+            JSON.stringify(question) !== JSON.stringify(baseline)
+          ) {
+            scheduleQuestionAutosave(
+              question,
+              nextEditor.questions.indexOf(question),
+              250,
+            );
+          }
+        }
+      }
+    } catch (failure) {
+      setAutosaveError(failure);
+      questionIds.forEach((questionId) => setQuestionStatus(questionId, "error"));
+    } finally {
+      savingDefaultTime.current = false;
+    }
   }
 
   // Picking the quiz time for one question means "follow the quiz".
@@ -243,6 +683,16 @@ export function QuizEditor({
         cancelLabel: "Keep it",
       })
     ) {
+      if (question.questionId) {
+        const timer = autosaveTimers.current.get(question.questionId);
+        if (timer) window.clearTimeout(timer);
+        autosaveTimers.current.delete(question.questionId);
+        setQuestionSaveStatus((currentStatus) => {
+          const nextStatus = { ...currentStatus };
+          delete nextStatus[question.questionId];
+          return nextStatus;
+        });
+      }
       edit({
         ...editor,
         questions: editor.questions.filter((item) => item.id !== question.id),
@@ -250,94 +700,322 @@ export function QuizEditor({
     }
   }
 
-  function review(event) {
-    event.preventDefault();
-
+  // Checks the quiz can be saved; shows the first problem if not.
+  function validate() {
     try {
-      toQuizCreate(editor);
+      toQuizCreate(editorRef.current);
       setValidation("");
-      setReviewing(true);
+      return true;
     } catch (error) {
       setValidation(error.message);
-      setReviewing(false);
+      return false;
     }
   }
 
-  async function save() {
-    if (conflict) return;
-
-    const quiz = await action.run(() => {
-      const payload = toQuizCreate(editor);
-
-      if (editing) {
-        payload.expected_revision = existingQuiz.revision;
-      }
-
-      const path = editing
-        ? `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}`
-        : `/classes/${classId}/quizzes`;
-
-      return api(path, {
-        method: editing ? "PUT" : "POST",
-        body: JSON.stringify(payload),
-      });
-    });
-
-    if (quiz) {
-      navigate(`/app/quizzes/${quiz.quiz_id}`, {
-        replace: true,
-      });
-    }
-  }
-
-  if (!editing && !validClass) {
-    return (
-      <section className="qp-content">
-        <h1>Create a quiz</h1>
-        <p>
-          Quizzes now belong to a class. Open one of your classes and choose
-          "+ New quiz" there.
-        </p>
-        <Link className="qp-button" to="/app/classes">
-          Go to my classes
-        </Link>
-      </section>
+  function acceptQuizRevision(revision) {
+    quizRevisionRef.current = nextAggregateRevision(
+      quizRevisionRef.current,
+      revision,
+      aggregateStaleRef.current,
     );
   }
 
+  function setQuestionStatus(questionId, status) {
+    setQuestionSaveStatus((currentStatus) => ({
+      ...currentStatus,
+      [questionId]: status,
+    }));
+  }
+
+  function scheduleQuestionAutosave(question, index, delay = 800) {
+    if (
+      !editing ||
+      existingQuiz.status !== "DRAFT" ||
+      !question.questionId ||
+      conflict
+    ) {
+      return;
+    }
+
+    const previousTimer = autosaveTimers.current.get(question.questionId);
+    if (previousTimer) window.clearTimeout(previousTimer);
+    setQuestionStatus(question.questionId, "pending");
+    const timer = window.setTimeout(() => {
+      autosaveTimers.current.delete(question.questionId);
+      // Read the latest editor snapshot when the debounce expires. A previous
+      // request may have advanced this question's revision while this timer
+      // was waiting, and sending the older captured object would create a
+      // false edit conflict on the user's next keystroke.
+      const latestIndex = editorRef.current.questions.findIndex(
+        (item) => item.questionId === question.questionId,
+      );
+      const latestQuestion = editorRef.current.questions[latestIndex];
+      void autosaveQuestion(
+        latestQuestion ?? question,
+        latestIndex >= 0 ? latestIndex : index,
+      );
+    }, delay);
+    autosaveTimers.current.set(question.questionId, timer);
+  }
+
+  async function autosaveQuestion(question, index) {
+    const questionId = question.questionId;
+    if (!questionId) return;
+    if (savingQuestions.current.has(questionId)) {
+      scheduleQuestionAutosave(question, index, 250);
+      return;
+    }
+
+    let payload;
+    try {
+      payload = toQuestionCreate(
+        question,
+        index,
+        editorRef.current.defaultTime,
+      );
+    } catch {
+      setQuestionStatus(questionId, "invalid");
+      return;
+    }
+
+    payload.expected_revision = question.revision;
+    savingQuestions.current.add(questionId);
+    setQuestionStatus(questionId, "saving");
+    setAutosaveError(null);
+    let savedSuccessfully = false;
+
+    try {
+      const result = await api(
+        `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}` +
+          `/questions/${questionId}`,
+        { method: "PATCH", body: JSON.stringify(payload) },
+      );
+      const saved = quizQuestionToEditor(
+        result.question,
+        index,
+        editorRef.current.defaultTime,
+      );
+      const currentEditor = editorRef.current;
+      const currentQuestion = currentEditor.questions.find(
+        (item) => item.questionId === questionId,
+      );
+      const { baselineQuestion, editorQuestion } =
+        reconcileAutosavedQuestion({
+          submittedQuestion: question,
+          currentQuestion: currentQuestion ?? question,
+          savedQuestion: saved,
+        });
+      const nextBaseline = {
+        ...baselineEditorRef.current,
+        questions: baselineEditorRef.current.questions.map((item) =>
+          item.questionId === questionId ? baselineQuestion : item,
+        ),
+      };
+      baselineEditorRef.current = nextBaseline;
+      setBaselineEditor(nextBaseline);
+      const nextEditor = {
+        ...currentEditor,
+        questions: currentEditor.questions.map((currentQuestion) => {
+          if (currentQuestion.questionId !== questionId) return currentQuestion;
+          return editorQuestion;
+        }),
+      };
+      editorRef.current = nextEditor;
+      setEditor(nextEditor);
+      acceptQuizRevision(result.quiz_revision);
+      if (!aggregateStaleRef.current) setRemoteNotice(null);
+      setQuestionStatus(questionId, "saved");
+      savedSuccessfully = true;
+    } catch (failure) {
+      setAutosaveError(failure);
+      if (failure.code === "question_edit_conflict") {
+        aggregateStaleRef.current = true;
+        setRemoteNotice({
+          tone: "warning",
+          text: "A collaborator saved this question before your changes.",
+          detail: "Reload the latest quiz before making an aggregate save.",
+          reload: true,
+        });
+      }
+      setQuestionStatus(
+        questionId,
+        failure.code === "question_edit_conflict" ? "conflict" : "error",
+      );
+    } finally {
+      savingQuestions.current.delete(questionId);
+      const currentQuestion = editorRef.current.questions.find(
+        (item) => item.questionId === questionId,
+      );
+      const baselineQuestion = baselineEditorRef.current.questions.find(
+        (item) => item.questionId === questionId,
+      );
+      if (
+        savedSuccessfully &&
+        currentQuestion &&
+        baselineQuestion &&
+        JSON.stringify(currentQuestion) !== JSON.stringify(baselineQuestion)
+      ) {
+        scheduleQuestionAutosave(
+          currentQuestion,
+          editorRef.current.questions.indexOf(currentQuestion),
+          250,
+        );
+      }
+    }
+  }
+
+  // Saves the draft. With send, it then publishes and sends that version for
+  // approval in the same click, so nobody has to go back to the class page.
+  async function save({ send = false } = {}) {
+    if (
+      conflict ||
+      savingQuestions.current.size > 0 ||
+      savingKind
+    ) {
+      return;
+    }
+    if (!validate()) return;
+    setSavingKind(send ? "send" : "draft");
+    try {
+      await saveAndContinue(send);
+    } finally {
+      setSavingKind(null);
+    }
+  }
+
+  async function saveAndContinue(send) {
+    // The final save owns every still-pending local change. Prevent a delayed
+    // question autosave from racing the requests below with the same revision.
+    for (const timer of autosaveTimers.current.values()) {
+      window.clearTimeout(timer);
+    }
+    autosaveTimers.current.clear();
+
+    const quiz = await action.run(async () => {
+      const savingEditor = editorRef.current;
+      const savingBaseline = baselineEditorRef.current;
+
+      if (editing) {
+        // Published quizzes need one aggregate save to create the next draft.
+        // Existing questions and questions appended to a draft use independent
+        // mutations. Deleting, reordering, inserting in the middle, or renaming
+        // still uses the aggregate revision until those operations are split.
+        if (
+          existingQuiz.status === "DRAFT" &&
+          canSaveDraftIndependently(savingEditor, savingBaseline)
+        ) {
+          const result = await saveDraftQuestions({
+            editor: savingEditor,
+            baselineEditor: savingBaseline,
+            existingQuiz,
+            api,
+            onProgress: (progress) => {
+              editorRef.current = progress.editor;
+              baselineEditorRef.current = progress.baselineEditor;
+              setEditor(progress.editor);
+              setBaselineEditor(progress.baselineEditor);
+              acceptQuizRevision(progress.quizRevision);
+            },
+          });
+          return result.lastResult
+            ? { quiz_id: existingQuiz.quiz_id }
+            : existingQuiz;
+        }
+
+        return saveAggregateQuiz({
+          editor: savingEditor,
+          revision: quizRevisionRef.current,
+          existingQuiz,
+          api,
+        });
+      }
+
+      return api(`/classes/${classId}/quizzes`, {
+        method: "POST",
+        body: JSON.stringify(toQuizCreate(savingEditor)),
+      });
+    });
+
+    if (!quiz) return;
+
+    const savedId = quiz.quiz_id ?? existingQuiz?.quiz_id;
+    const quizClassId = editing ? existingQuiz.class_id : Number(classId);
+    // Only a problem gets a message on the quiz page; a normal save or send
+    // shows in the page itself (the status pill and the timeline).
+    let notice = null;
+
+    if (send) {
+      // The draft is already saved, so a failure here must not send people
+      // back into the editor (saving again would duplicate a new quiz).
+      try {
+        await sendQuizForApproval(api, quizClassId, savedId);
+      } catch (error) {
+        notice = {
+          tone: "warning",
+          text: `Saved as a draft, but it couldn't be sent for approval: ${error.message}`,
+        };
+      }
+    }
+
+    navigate(`/app/quizzes/${savedId}`, {
+      replace: true,
+      state: { classId: quizClassId, notice },
+    });
+  }
+
+  if (!editing && !validClass) {
+    return <NewQuizClassPicker />;
+  }
+
   return (
-    <form className="qe" noValidate onSubmit={review}>
+    <>
+    <form
+      className="qe"
+      noValidate
+      onSubmit={(event) => event.preventDefault()}
+    >
       <ConfirmDialog confirmer={confirmer} />
 
-      <fieldset disabled={action.busy} className="qp-form-fields">
+      <fieldset
+        disabled={action.busy}
+        className="qp-form-fields"
+      >
         <div className="qe-bar">
           <Link className="qe-back" to={backTo} onClick={leaveEditor}>
             <span aria-hidden="true">←</span>
-            <span className="qe-back-word">
-              {editing ? "Quiz" : "Class"}
-            </span>
+            <span className="qe-back-word">{editing ? "Quiz" : "Class"}</span>
             <span className="ui-sr">
               {editing ? "Cancel editing" : "Back to class"}
             </span>
           </Link>
 
-          <div className="qe-titlebox">
-            <label className="qe-eyebrow" htmlFor="quiz-title">
+          <div className="qe-titlebox qv-titlebox">
+            <label className="ui-sr" htmlFor="quiz-title">
               Quiz title
             </label>
-            <input
-              id="quiz-title"
-              maxLength={200}
-              autoComplete="off"
-              placeholder="Untitled quiz"
-              value={editor.title}
-              onChange={(event) =>
-                edit({
-                  ...editor,
-                  title: event.target.value,
-                })
-              }
-            />
+            <div className="qv-titleline">
+              <input
+                id="quiz-title"
+                className="qe-title-input"
+                maxLength={200}
+                autoComplete="off"
+                placeholder="Untitled quiz"
+                value={editor.title}
+                onChange={(event) =>
+                  edit({
+                    ...editor,
+                    title: event.target.value,
+                  })
+                }
+              />
+              <span
+                className={"qe-pill qv-pill" + (editing ? " is-saved" : "")}
+              >
+                {editing
+                  ? `Editing · v${existingQuiz.version.version_number}`
+                  : "New quiz"}
+              </span>
+            </div>
 
             <textarea
               rows={1}
@@ -354,14 +1032,18 @@ export function QuizEditor({
             />
           </div>
 
-          <div className="qe-state">
-            <span className={"qe-pill" + (editing ? " is-saved" : "")}>
-              {editing
-                ? `Editing · v${existingQuiz.version.version_number}`
-                : "New quiz"}
-            </span>
-          </div>
+          {ownsQuiz && existingQuiz.status !== "ARCHIVED" && (
+            <AddCollaboratorCell onOpen={() => setSharing(true)} />
+          )}
         </div>
+
+        {/* Collaborators don't get the owner's sharing panel, so credit the
+            owner and the other editors here instead. */}
+        {editing && !ownsQuiz && existingQuiz.author_name && (
+          <p className="qv-facts">
+            <QuizCredits quiz={existingQuiz} accountId={account.account_id} />
+          </p>
+        )}
 
         <div className="qe-strip">
           <JumpChips ids={ids} current={current} />
@@ -388,6 +1070,61 @@ export function QuizEditor({
             </span>
           </TimePicker>
         </div>
+
+        {editing && (collaborationStatus !== "open" || remoteNotice) && (
+          <div
+            className={`qe-collaboration is-${collaborationStatus}`}
+            aria-live="polite"
+          >
+            {collaborationStatus !== "open" && (
+              <div className="qe-live-state">
+                <span className="qe-live-dot" aria-hidden="true" />
+                <span>
+                  <b>
+                    {collaborationStatus === "reconnecting"
+                      ? "Reconnecting live editing…"
+                      : collaborationStatus === "failed"
+                        ? "Live editing unavailable"
+                        : "Connecting live editing…"}
+                  </b>
+                  <small>
+                    You can still save; refresh before editing shared content.
+                  </small>
+                </span>
+              </div>
+            )}
+
+            {remoteNotice && (
+              <div className={`qe-live-message is-${remoteNotice.tone}`}>
+                <span aria-hidden="true">
+                  {remoteNotice.tone === "success" ? "✓" : "!"}
+                </span>
+                <p>
+                  <strong>{remoteNotice.text}</strong>
+                  <small>{remoteNotice.detail}</small>
+                </p>
+                {remoteNotice.reload && (
+                  <button
+                    type="button"
+                    className="qb-btn qb-btn-paper"
+                    onClick={() => onReload?.()}
+                  >
+                    Reload latest
+                  </button>
+                )}
+                {!remoteNotice.reload && (
+                  <button
+                    type="button"
+                    className="ui-linkbtn"
+                    onClick={() => setRemoteNotice(null)}
+                  >
+                    Dismiss
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="qe-stack">
           {editor.questions.length > 0 ? (
@@ -440,19 +1177,27 @@ export function QuizEditor({
                   </div>
 
                   <div className="qe-body">
-                    <textarea
-                      id={`question-text-${question.id}`}
-                      className="qe-qtext"
-                      rows={1}
-                      aria-label={`Question ${index + 1} text`}
-                      placeholder="Type your question"
-                      value={question.text}
-                      onChange={(event) =>
-                        changeQuestion(question.id, {
-                          text: event.target.value,
-                        })
-                      }
-                    />
+                    <div className="qe-qtext-box">
+                      <AutoGrowTextarea
+                        id={`question-text-${question.id}`}
+                        className="qe-qtext"
+                        rows={1}
+                        maxLength={QUESTION_LIMIT}
+                        aria-label={`Question ${index + 1} text`}
+                        placeholder="Type your question"
+                        value={question.text}
+                        onChange={(event) =>
+                          changeQuestion(question.id, {
+                            text: event.target.value,
+                          })
+                        }
+                      />
+                      <CharCount
+                        value={question.text}
+                        limit={QUESTION_LIMIT}
+                        note
+                      />
+                    </div>
 
                     <div
                       className="qe-choices"
@@ -487,19 +1232,26 @@ export function QuizEditor({
                               </span>
                             </button>
 
-                            <input
-                              maxLength={500}
+                            <AutoGrowTextarea
+                              className="qe-choice-text"
+                              rows={1}
+                              maxLength={ANSWER_LIMIT}
                               value={option}
                               placeholder={`Choice ${LETTERS[choiceIndex]}`}
                               aria-label={
                                 `Question ${index + 1}, ` +
                                 `choice ${LETTERS[choiceIndex]}`
                               }
+                              // Answers stay one paragraph: Enter does not add
+                              // a line and pasted line breaks become spaces.
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") event.preventDefault();
+                              }}
                               onChange={(event) =>
                                 changeQuestion(question.id, {
                                   options: question.options.map((text, i) =>
                                     i === choiceIndex
-                                      ? event.target.value
+                                      ? event.target.value.replace(/\s*[\r\n]+\s*/g, " ")
                                       : text,
                                   ),
                                 })
@@ -507,6 +1259,11 @@ export function QuizEditor({
                             />
 
                             <span className="qe-choice-end">
+                              <CharCount
+                                value={option}
+                                limit={ANSWER_LIMIT}
+                              />
+
                               {correct && (
                                 <span className="qe-tag" aria-hidden="true">
                                   Correct
@@ -586,7 +1343,7 @@ export function QuizEditor({
                         <textarea
                           id={`explanation-${question.id}`}
                           rows={2}
-                          maxLength={5000}
+                          maxLength={EXPLANATION_LIMIT}
                           value={question.explanation ?? ""}
                           placeholder="Why is this the right answer? Shown in the results review."
                           onChange={(event) =>
@@ -595,10 +1352,10 @@ export function QuizEditor({
                             })
                           }
                         />
-                        <small>
-                          {(question.explanation ?? "").length.toLocaleString()}
-                          /5,000
-                        </small>
+                        <CharCount
+                          value={question.explanation ?? ""}
+                          limit={EXPLANATION_LIMIT}
+                        />
                       </label>
                     )}
                   </div>
@@ -636,6 +1393,39 @@ export function QuizEditor({
                         Reset to default ({editor.defaultTime}s)
                       </button>
                     )}
+
+                    {editing &&
+                      existingQuiz.status === "DRAFT" &&
+                      question.questionId && (
+                        <div className="qe-question-save">
+                          <span
+                            className={`is-${questionSaveStatus[question.questionId] ?? "saved"}`}
+                            role="status"
+                          >
+                            {questionSaveStatus[question.questionId] ===
+                            "pending"
+                              ? "Unsaved changes…"
+                              : questionSaveStatus[question.questionId] ===
+                                  "saving"
+                                ? "Saving…"
+                                : questionSaveStatus[question.questionId] ===
+                                    "invalid"
+                                  ? "Complete this question to autosave"
+                                  : questionSaveStatus[question.questionId] ===
+                                      "error"
+                                    ? "Autosave failed"
+                                    : questionSaveStatus[
+                                          question.questionId
+                                        ] === "conflict"
+                                      ? "Editing conflict"
+                                      : questionSaveStatus[
+                                            question.questionId
+                                          ] === "remote"
+                                        ? "↻ Updated by collaborator"
+                                        : "✓ Saved live"}
+                          </span>
+                        </div>
+                      )}
                   </div>
                 </article>
               </div>
@@ -655,7 +1445,7 @@ export function QuizEditor({
             <span aria-hidden="true">+</span> Add question
           </button>
 
-          <RequestError error={action.error} />
+          <RequestError error={requestError} />
 
           {conflict && (
             <div className="qe-conflict">
@@ -688,79 +1478,82 @@ export function QuizEditor({
           )}
         </div>
 
-        <div className={"qe-savebar" + (reviewing ? " is-confirm" : "")}>
+        <div className="qe-savebar">
           <div className="qe-savebar-in">
-            {reviewing ? (
-              <>
-                <div className="qe-confirm-text">
-                  <h2>
-                    {editing ? "Save these changes?" : "Save this quiz?"}
-                  </h2>
-                  <p>
-                    {editing
-                      ? "This saves a draft. Publish it from the quiz page when it is ready to host."
-                      : "It's saved as a draft in this class. A draft can't be hosted until it's published."}
-                  </p>
-                </div>
-
-                <div className="qe-confirm-actions">
-                  <button
-                    type="button"
-                    className="qb-btn qb-btn-paper"
-                    onClick={() => setReviewing(false)}
-                  >
-                    Keep editing
-                  </button>
-
-                  <button
-                    type="button"
-                    className="qb-btn"
-                    disabled={conflict}
-                    onClick={() => void save()}
-                  >
-                    {action.busy
-                      ? "Saving…"
-                      : editing
-                        ? "Save changes"
-                        : "Save draft"}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="qe-savebar-msg">
-                  {validation ? (
-                    <>
-                      <span className="qe-bad" role="alert">
-                        {validation}
-                      </span>
-                      {badQuestion && (
-                        <button
-                          type="button"
-                          className="ui-linkbtn"
-                          onClick={() => goToQuestion(badQuestion)}
-                        >
-                          Show me
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <span>{plural(editor.questions.length, "question")}</span>
-                      <span className="qe-dim">{clock(totalTime)} total</span>
-                    </>
+            <p className="qe-savebar-msg">
+              {validation ? (
+                <>
+                  <span className="qe-bad" role="alert">
+                    {validation}
+                  </span>
+                  {badQuestion && (
+                    <button
+                      type="button"
+                      className="ui-linkbtn"
+                      onClick={() => goToQuestion(badQuestion)}
+                    >
+                      Show me
+                    </button>
                   )}
-                </p>
+                </>
+              ) : (
+                <>
+                  <span>{plural(editor.questions.length, "question")}</span>
+                  <span className="qe-dim">{clock(totalTime)} total</span>
+                </>
+              )}
+            </p>
 
-                <button type="submit" className="qb-btn" disabled={conflict}>
-                  Save quiz
+            <div className="qe-save-actions">
+              <button
+                type="button"
+                className={"qb-btn" + (canSendFromEditor ? " qb-btn-paper" : "")}
+                disabled={
+                  conflict ||
+                  questionSaving ||
+                  Boolean(savingKind)
+                }
+                onClick={() => void save()}
+              >
+                {questionSaving
+                  ? "Finishing live save…"
+                  : savingKind === "draft"
+                    ? "Saving…"
+                    : editing
+                      ? "Save changes"
+                      : "Save draft"}
+              </button>
+
+              {canSendFromEditor && (
+                <button
+                  type="button"
+                  className="qb-btn"
+                  disabled={
+                  conflict ||
+                  questionSaving ||
+                  Boolean(savingKind)
+                }
+                  title="Saves your quiz and sends it to the class organizers. You can host it once they approve it."
+                  onClick={() => void save({ send: true })}
+                >
+                  {savingKind === "send" ? "Sending…" : "Save and send for approval"}
                 </button>
-              </>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </fieldset>
     </form>
+
+    {/* Outside the editor's <form>, so its invite form isn't nested. */}
+    {sharing && (
+      <QuizCollaboratorDialog
+        quiz={existingQuiz}
+        onClose={() => setSharing(false)}
+      />
+    )}
+
+    </>
   );
 }
 
@@ -769,12 +1562,28 @@ export function QuizViewer() {
   const account = useAccount();
   const api = useApi();
   const action = useAction();
+  const confirmer = useConfirm();
   const validId = /^[1-9][0-9]*$/.test(quizId);
 
   const resource = useResource(validId ? `/quizzes/${quizId}` : null);
+  const flow = useQuizFlow(resource.data ?? null, account.account_id);
 
-  // Opened from a class page: the back link returns there.
-  const fromClass = useLocation().state?.classId ?? null;
+  // Opened from a class page (or straight after saving): the back link
+  // returns to that class. A warning from the editor (saved, but not sent)
+  // shows until the page is left.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const fromClass = location.state?.classId ?? null;
+  const [notice] = useState(() => location.state?.notice ?? null);
+  const [sharing, setSharing] = useState(false);
+  useEffect(() => {
+    if (location.state?.notice) {
+      navigate(location.pathname, {
+        replace: true,
+        state: { classId: location.state.classId },
+      });
+    }
+  }, [location, navigate]);
 
   if (!validId) {
     return <p role="alert">Invalid quiz ID.</p>;
@@ -792,7 +1601,15 @@ export function QuizViewer() {
 
   const quiz = resource.data;
   const mine = quiz.author_id === account.account_id;
-  const published = quiz.status === "PUBLISHED";
+  const canShare = mine && quiz.class_id && quiz.status !== "ARCHIVED";
+  // Owners and organizers see the approval timeline in the strip, with the
+  // next step as the last button. Collaborators and other members keep a
+  // Host button or a link to the class page.
+  const approved = quiz.hosting?.can_host === true;
+  const stateLabel =
+    quiz.status === "ARCHIVED"
+      ? "Archived"
+      : flow.state?.label ?? (approved ? "Approved" : "Draft");
   const questions = [...quiz.version.questions].sort(
     (a, b) => a.question_order - b.question_order,
   );
@@ -801,68 +1618,91 @@ export function QuizViewer() {
     0,
   );
 
-  async function publishQuiz() {
-    const publishedQuiz = await action.run(() =>
-      api(
-        `/classes/${quiz.class_id}/quizzes/${quiz.quiz_id}/publish`,
-        {
-          method: "POST",
-          body: JSON.stringify({ expected_revision: quiz.revision }),
-        },
-      ),
-    );
-    if (publishedQuiz) resource.reload();
+  async function archiveQuiz() {
+    const sure = await confirmer.confirm({
+      label: "Archive quiz",
+      title: `Archive “${quiz.version.title}”?`,
+      message:
+        "It will no longer be available to edit or host. Past sessions and results stay saved.",
+      confirmLabel: "Archive quiz",
+      cancelLabel: "Keep it",
+    });
+    if (!sure) return;
+    const done = await action.run(async () => {
+      await api(`/quizzes/${quiz.quiz_id}/archive`, { method: "PATCH" });
+      return true;
+    });
+    if (done) navigate(classPagePath(quiz.class_id), { replace: true });
   }
 
   return (
     <section className="qv" aria-labelledby="quiz-title">
+      <ConfirmDialog confirmer={confirmer} />
       <div className="qe-bar">
         <Link
           className="qe-back"
-          to={
-            fromClass ? `/app/classes/${fromClass}` : "/app/dashboard/present"
-          }
+          to={classPagePath(fromClass ?? quiz.class_id)}
         >
           <span aria-hidden="true">←</span>
-          <span className="qe-back-word">
-            {fromClass ? "Class" : "Dashboard"}
-          </span>
-          <span className="ui-sr">
-            {fromClass ? "Back to class" : "Back to dashboard"}
-          </span>
+          <span className="qe-back-word">Class</span>
+          <span className="ui-sr">Back to class</span>
         </Link>
 
-        <div className="qe-titlebox">
-          <span className="qe-eyebrow">Quiz</span>
-          <h1 id="quiz-title" className="qv-title">
-            {quiz.version.title}
-          </h1>
+        <div className="qe-titlebox qv-titlebox">
+          <div className="qv-titleline">
+            <h1 id="quiz-title" className="qv-title">
+              {quiz.version.title}
+            </h1>
+            <span
+              className={"qe-pill qv-pill" + (approved ? " is-saved" : "")}
+            >
+              {stateLabel} · v{quiz.version.version_number}
+            </span>
+          </div>
           {quiz.version.description && (
             <p className="qv-description">{quiz.version.description}</p>
           )}
         </div>
 
-        <div className="qe-state">
-          <span className={"qe-pill" + (published ? " is-saved" : "")}>
-            {published
-              ? "Published"
-              : quiz.status === "DRAFT"
-                ? "Draft"
-                : "Archived"}{" "}
-            · v
-            {quiz.version.version_number}
-          </span>
-        </div>
+        {canShare && (
+          <AddCollaboratorCell onOpen={() => setSharing(true)} />
+        )}
       </div>
+
+      {sharing && (
+        <QuizCollaboratorDialog quiz={quiz} onClose={() => setSharing(false)} />
+      )}
 
       <div className="qv-strip">
         <p className="qv-facts">
           <b>{plural(questions.length, "question")}</b>
           <span>{clock(totalTime)} total</span>
-          <span>{quiz.visibility === "PUBLIC" ? "Public" : "Private"}</span>
+          <QuizCredits quiz={quiz} accountId={account.account_id} />
         </p>
 
+        <QuizFlowTrack flow={flow} />
+
         <div className="qv-actions">
+          {quiz.can_edit && quiz.status !== "ARCHIVED" && (
+            <Link
+              className="qb-btn qb-btn-paper"
+              to={`/app/quizzes/${quiz.quiz_id}/edit`}
+            >
+              Edit quiz
+            </Link>
+          )}
+
+          {canShare && (
+            <button
+              type="button"
+              className="qb-btn qb-btn-paper"
+              disabled={action.busy}
+              onClick={() => void archiveQuiz()}
+            >
+              Archive
+            </button>
+          )}
+
           {mine && (
             <Link
               className="qb-btn qb-btn-paper"
@@ -872,37 +1712,53 @@ export function QuizViewer() {
             </Link>
           )}
 
-          {mine && quiz.status !== "ARCHIVED" && (
-            <Link
-              className="qb-btn qb-btn-paper"
-              to={`/app/quizzes/${quiz.quiz_id}/edit`}
-            >
-              Edit quiz
-            </Link>
+          {quiz.status !== "ARCHIVED" && (
+            <QuizFlowButton
+              quiz={quiz}
+              flow={flow}
+              action={action}
+              onChange={() => resource.reload()}
+            />
           )}
 
-          {!published && mine && quiz.status === "DRAFT" && (
-            <button
-              type="button"
-              className="qb-btn"
-              disabled={action.busy}
-              onClick={() => void publishQuiz()}
-            >
-              {action.busy ? "Publishing…" : "Publish quiz"}
-            </button>
-          )}
-
-          {published && mine && (
+          {/* Without the approval track (collaborators, other members),
+              keep the previous Host button and class-page link. */}
+          {!flow.visible &&
+            quiz.class_id &&
+            quiz.status !== "ARCHIVED" &&
+            approved && (
             <div className="qv-host">
               <HostQuizButton
                 quiz={quiz}
+                classId={quiz.class_id}
                 action={action}
-                label="Host in its class →"
+                label="Host live session →"
               />
             </div>
           )}
+
+          {!flow.visible &&
+            quiz.class_id &&
+            quiz.status !== "ARCHIVED" &&
+            !approved &&
+            (mine || quiz.can_edit) && (
+              <div className="qv-host">
+                <Link
+                  className="qb-btn"
+                  to={`/app/classes/${quiz.class_id}?view=user&section=My%20quizzes`}
+                >
+                  Send for approval →
+                </Link>
+              </div>
+            )}
         </div>
       </div>
+
+      {notice && (
+        <p className={`qf-notice is-${notice.tone}`} role="status">
+          {notice.text}
+        </p>
+      )}
 
       <div className="qe-stack">
         <RequestError error={action.error} />

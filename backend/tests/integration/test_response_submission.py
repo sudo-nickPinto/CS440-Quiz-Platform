@@ -148,6 +148,8 @@ def response_context(
     participant = SessionParticipant(
         session=live_session,
         account_id=participant_account.account_id,
+        # Joined before the question opened, so they may answer it.
+        joined_at=now - timedelta(seconds=3),
     )
     played_question = SessionQuestion(
         session=live_session,
@@ -313,3 +315,56 @@ def test_choice_from_another_question_is_rejected(
 
     assert result.status_code == 422
     assert result.json()["error"]["code"] == "choice_not_for_question"
+
+
+def _set_joined_at(response_context: ResponseContext, offset: timedelta) -> None:
+    """Move the participant's joined_at relative to the question's opened_at."""
+    scenario = response_context.scenario
+    played_question = response_context.db.get(
+        SessionQuestion, scenario.session_question_id
+    )
+    participant = response_context.db.get(
+        SessionParticipant, scenario.participant_id
+    )
+    assert played_question is not None and participant is not None
+    participant.joined_at = played_question.opened_at + offset
+    response_context.db.commit()
+
+
+def test_participant_who_joined_mid_question_cannot_answer_it(
+    response_context: ResponseContext,
+) -> None:
+    # The answer-progress roster leaves this person out, so ALL_ANSWERED
+    # wouldn't wait for them; they must not be able to score the question.
+    _set_joined_at(response_context, timedelta(seconds=1))
+    scenario = response_context.scenario
+
+    result = response_context.client.post(
+        response_url(scenario),
+        json={"choice_id": scenario.correct_choice_id},
+    )
+
+    assert result.status_code == 409
+    assert result.json()["error"]["code"] == "joined_after_question_opened"
+    response_context.db.expire_all()
+    saved = response_context.db.scalar(
+        select(Response).where(
+            Response.session_participant_id == scenario.participant_id
+        )
+    )
+    assert saved is None
+
+
+def test_participant_who_joined_as_the_question_opened_can_answer(
+    response_context: ResponseContext,
+) -> None:
+    # Same boundary as the roster: joined_at <= opened_at counts.
+    _set_joined_at(response_context, timedelta(0))
+    scenario = response_context.scenario
+
+    result = response_context.client.post(
+        response_url(scenario),
+        json={"choice_id": scenario.correct_choice_id},
+    )
+
+    assert result.status_code == 201

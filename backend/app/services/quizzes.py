@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 from math import ceil
 
-from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy import and_, case, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
@@ -21,13 +21,20 @@ from app.models.quiz import (
     QuizVersion,
     QuizVisibility,
 )
-from app.schemas.class_dashboard import PageInfo
+from app.models.quiz_submission import QuizSubmission
+from app.schemas.pagination import PageInfo, SortOrder
 from app.schemas.quiz import (
     ClassQuizListItem,
     ClassQuizListPage,
+    ClassQuizSort,
+    QuizAccess,
     QuizCollaboratorCreate,
     QuizCollaboratorResponse,
+    QuizContributor,
     QuizCreate,
+    QuizDefaultTimeUpdate,
+    QuizDefaultTimeUpdateResponse,
+    QuizHosting,
     QuizListItem,
     QuizPublish,
     QuestionCreate,
@@ -39,6 +46,70 @@ from app.schemas.quiz import (
     QuizVersionResponse,
 )
 from app.services.class_authorization import get_class, get_class_membership
+from app.services.hosting import quiz_hosting, quiz_hosting_many
+
+
+# Longest question and answer text a host screen can show (see the editor's
+# QUESTION_LIMIT / ANSWER_LIMIT in frontend/src/authenticated-demo/model.js).
+QUESTION_TEXT_LIMIT = 200
+CHOICE_TEXT_LIMIT = 120
+EXPLANATION_LIMIT = 1000
+
+
+def _check_text_limits(
+    questions, version: QuizVersion | None = None, *, numbered: bool = True
+) -> None:
+    """Reject new or edited text over the limits.
+
+    Text already saved in ``version`` (the quiz's current editor version) is
+    let through unchanged, so quizzes written before the limits still save
+    until someone edits that text.
+    """
+    known_questions = set()
+    known_choices = set()
+    known_explanations = set()
+    if version is not None:
+        for question in version.questions:
+            known_questions.add(question.question_text)
+            known_choices.update(choice.choice_text for choice in question.choices)
+            known_explanations.add(getattr(question, "explanation", None))
+
+    for number, question in enumerate(questions, start=1):
+        which = f"Question {number}" if numbered else "This question"
+        if (
+            len(question.question_text) > QUESTION_TEXT_LIMIT
+            and question.question_text not in known_questions
+        ):
+            raise APIError(
+                422,
+                "question_text_too_long",
+                f"{which} is longer than {QUESTION_TEXT_LIMIT} characters.",
+                details={"limit": QUESTION_TEXT_LIMIT},
+            )
+        for choice in question.choices:
+            if (
+                len(choice.choice_text) > CHOICE_TEXT_LIMIT
+                and choice.choice_text not in known_choices
+            ):
+                raise APIError(
+                    422,
+                    "choice_text_too_long",
+                    f"An answer in {which.lower()} is longer than "
+                    f"{CHOICE_TEXT_LIMIT} characters.",
+                    details={"limit": CHOICE_TEXT_LIMIT},
+                )
+        explanation = getattr(question, "explanation", None) or ""
+        if (
+            len(explanation) > EXPLANATION_LIMIT
+            and explanation not in known_explanations
+        ):
+            raise APIError(
+                422,
+                "explanation_too_long",
+                f"The explanation for {which.lower()} is longer than "
+                f"{EXPLANATION_LIMIT:,} characters.",
+                details={"limit": EXPLANATION_LIMIT},
+            )
 
 
 def _quiz_query(quiz_id: int):
@@ -166,16 +237,59 @@ def _latest_editor_version(quiz: Quiz) -> QuizVersion:
     return _latest_published_version(quiz)
 
 
+def _attribution(db: Session, quiz: Quiz) -> dict:
+    """Who to credit on the quiz page: the owner and its active editors.
+
+    Only display names, for callers who may already read the quiz. The same
+    people the owner sees in the collaborators panel, without emails.
+    """
+    author_name = db.scalar(
+        select(Account.display_name).where(Account.account_id == quiz.author_id)
+    )
+    # Only editors who still have access: an unrevoked share, an active
+    # account, and an ACTIVE membership in the quiz's class. Someone removed
+    # from the class or deactivated keeps an unrevoked row but isn't credited.
+    rows = []
+    if quiz.class_id is not None:
+        rows = db.execute(
+            select(Account.account_id, Account.display_name)
+            .join(QuizCollaborator, QuizCollaborator.account_id == Account.account_id)
+            .join(
+                ClassMembership,
+                (ClassMembership.account_id == Account.account_id)
+                & (ClassMembership.class_id == quiz.class_id),
+            )
+            .where(
+                QuizCollaborator.quiz_id == quiz.quiz_id,
+                QuizCollaborator.revoked_at.is_(None),
+                Account.is_active.is_(True),
+                ClassMembership.status == MembershipStatus.ACTIVE,
+            )
+            .order_by(Account.display_name, Account.account_id)
+        ).all()
+    return {
+        "author_name": author_name,
+        "collaborators": [
+            QuizContributor(account_id=account_id, display_name=display_name)
+            for account_id, display_name in rows
+        ],
+    }
+
+
 def _to_response(
     db: Session,
     account: CurrentAccount,
     quiz: Quiz,
 ) -> QuizResponse:
-    return _to_response_with_version(
+    response = _to_response_with_version(
         quiz,
         _latest_editor_version(quiz),
         can_edit=_can_edit(db, account, quiz),
     )
+    response.hosting = quiz_hosting(db, account, quiz)
+    for field, value in _attribution(db, quiz).items():
+        setattr(response, field, value)
+    return response
 
 
 def _to_response_with_version(
@@ -288,7 +402,7 @@ def _same_question_content(left: Question, right: Question) -> bool:
     )
 
 
-def _to_list_item(quiz: Quiz) -> QuizListItem:
+def _to_list_item(quiz: Quiz, hosting: QuizHosting | None) -> QuizListItem:
     version = _latest_editor_version(quiz)
     return QuizListItem(
         quiz_id=quiz.quiz_id,
@@ -299,6 +413,7 @@ def _to_list_item(quiz: Quiz) -> QuizListItem:
         description=version.description,
         question_count=len(version.questions),
         created_at=quiz.created_at,
+        hosting=hosting,
     )
 
 
@@ -319,6 +434,7 @@ def create_quiz(
         raise APIError(
             409, "class_archived", "An archived class cannot get new quizzes."
         )
+    _check_text_limits(payload.questions)
 
     version = QuizVersion(
         version_number=1,
@@ -397,7 +513,9 @@ def list_quizzes(
         .options(selectinload(Quiz.versions).selectinload(QuizVersion.questions))
         .order_by(Quiz.created_at.desc(), Quiz.quiz_id.desc())
     )
-    return [_to_list_item(quiz) for quiz in db.scalars(statement).all()]
+    quizzes = db.scalars(statement).all()
+    hosting = quiz_hosting_many(db, account, quizzes)
+    return [_to_list_item(quiz, hosting[quiz.quiz_id]) for quiz in quizzes]
 
 
 def get_quiz(
@@ -408,6 +526,25 @@ def get_quiz(
     return _to_response(db, account, _load_readable_quiz(db, account, quiz_id))
 
 
+def _latest_submissions(
+    db: Session, class_id: int, version_ids: list[int]
+) -> dict[int, QuizSubmission]:
+    """The newest submission of each version to this class."""
+    if not version_ids:
+        return {}
+    newest: dict[int, QuizSubmission] = {}
+    for submission in db.scalars(
+        select(QuizSubmission)
+        .where(
+            QuizSubmission.class_id == class_id,
+            QuizSubmission.quiz_version_id.in_(version_ids),
+        )
+        .order_by(QuizSubmission.submitted_at, QuizSubmission.submission_id)
+    ):
+        newest[submission.quiz_version_id] = submission
+    return newest
+
+
 def list_class_quizzes(
     db: Session,
     account: CurrentAccount,
@@ -415,48 +552,162 @@ def list_class_quizzes(
     *,
     page: int,
     page_size: int,
+    sort: ClassQuizSort = ClassQuizSort.CREATED_AT,
+    order: SortOrder = SortOrder.DESC,
+    mine: bool = False,
 ) -> ClassQuizListPage:
-    """A class's quizzes, newest first.
+    """A page of a class's quizzes.
 
-    Organizers see every quiz in the class; members see the ones they own.
+    Organizers see every quiz in the class; members see the ones they own
+    or collaborate on. ``mine`` narrows an organizer's list the same way.
     """
     membership = _require_active_membership(db, account, class_id)
+    collaborating = select(QuizCollaborator.quiz_id).where(
+        QuizCollaborator.account_id == account.account_id,
+        QuizCollaborator.revoked_at.is_(None),
+    )
     condition = Quiz.class_id == class_id
-    if membership.role != ClassRole.ORGANIZER:
-        collaborator_access = exists(
-            select(1).where(
-                QuizCollaborator.quiz_id == Quiz.quiz_id,
-                QuizCollaborator.account_id == account.account_id,
-                QuizCollaborator.revoked_at.is_(None),
-            )
-        )
+    if mine or membership.role != ClassRole.ORGANIZER:
         condition = and_(
             condition,
-            or_(Quiz.author_id == account.account_id, collaborator_access),
+            or_(
+                Quiz.author_id == account.account_id,
+                Quiz.quiz_id.in_(collaborating),
+            ),
         )
 
-    total = db.scalar(select(func.count(Quiz.quiz_id)).where(condition)) or 0
-    rows = db.execute(
-        select(Quiz, Account.display_name)
-        .join(Account, Account.account_id == Quiz.author_id)
+    total = db.scalar(select(func.count(Quiz.quiz_id)).where(condition))
+
+    # Titles live on the version people edit: the newest draft, else the
+    # newest published version (_latest_editor_version). Find it in SQL so
+    # the database can sort, count and page.
+    editor_number = (
+        select(
+            QuizVersion.quiz_id,
+            func.coalesce(
+                func.max(
+                    case(
+                        (QuizVersion.published_at.is_(None), QuizVersion.version_number)
+                    )
+                ),
+                func.max(QuizVersion.version_number),
+            ).label("version_number"),
+        )
+        .group_by(QuizVersion.quiz_id)
+        .subquery()
+    )
+    editor_version = aliased(QuizVersion)
+    column = {
+        ClassQuizSort.UPDATED_AT: Quiz.updated_at,
+        ClassQuizSort.CREATED_AT: Quiz.created_at,
+        ClassQuizSort.TITLE: func.lower(editor_version.title),
+    }[sort]
+    # The id breaks ties so equal timestamps or titles still page stably.
+    ordering = (
+        (column.desc(), Quiz.quiz_id.desc())
+        if order == SortOrder.DESC
+        else (column.asc(), Quiz.quiz_id.asc())
+    )
+    page_ids = db.scalars(
+        select(Quiz.quiz_id)
+        .join(editor_number, editor_number.c.quiz_id == Quiz.quiz_id)
+        .join(
+            editor_version,
+            and_(
+                editor_version.quiz_id == Quiz.quiz_id,
+                editor_version.version_number == editor_number.c.version_number,
+            ),
+        )
         .where(condition)
-        .options(selectinload(Quiz.versions).selectinload(QuizVersion.questions))
-        .order_by(Quiz.created_at.desc(), Quiz.quiz_id.desc())
+        .order_by(*ordering)
         .limit(page_size)
         .offset((page - 1) * page_size)
     ).all()
 
+    loaded = {
+        quiz.quiz_id: (quiz, author_name)
+        for quiz, author_name in db.execute(
+            select(Quiz, Account.display_name)
+            .join(Account, Account.account_id == Quiz.author_id)
+            .where(Quiz.quiz_id.in_(page_ids))
+            .options(
+                selectinload(Quiz.versions).selectinload(QuizVersion.questions)
+            )
+        ).all()
+    }
+    rows = [loaded[quiz_id] for quiz_id in page_ids]
+    editing = set(db.scalars(collaborating))
+    collaborator_names: dict[int, list[str]] = {}
+    for quiz_id, name in db.execute(
+        select(QuizCollaborator.quiz_id, Account.display_name)
+        .join(Account, Account.account_id == QuizCollaborator.account_id)
+        .join(
+            ClassMembership,
+            (ClassMembership.account_id == Account.account_id)
+            & (ClassMembership.class_id == class_id),
+        )
+        .where(
+            QuizCollaborator.quiz_id.in_(page_ids),
+            QuizCollaborator.revoked_at.is_(None),
+            # Only editors who still have access, as on the quiz page: an
+            # active account with an ACTIVE membership in this class.
+            Account.is_active.is_(True),
+            ClassMembership.status == MembershipStatus.ACTIVE,
+            # A collaborator sees the owner ("Shared by ...") and the other
+            # editors, not their own name.
+            QuizCollaborator.account_id != account.account_id,
+        )
+        .order_by(Account.display_name, Account.account_id)
+    ).all():
+        collaborator_names.setdefault(quiz_id, []).append(name)
+    newest_published = {
+        quiz.quiz_id: max(published, key=lambda v: v.version_number)
+        for quiz, _ in rows
+        if (published := [v for v in quiz.versions if v.published_at is not None])
+    }
+    approvals = _latest_submissions(
+        db,
+        class_id,
+        [version.quiz_version_id for version in newest_published.values()],
+    )
+
+    hosting = quiz_hosting_many(db, account, [quiz for quiz, _ in rows])
     items = []
     for quiz, author_name in rows:
         version = _latest_editor_version(quiz)
+        published = newest_published.get(quiz.quiz_id)
+        submission = (
+            approvals.get(published.quiz_version_id) if published else None
+        )
+        if quiz.author_id == account.account_id:
+            access = QuizAccess.OWNER
+        elif quiz.quiz_id in editing:
+            access = QuizAccess.EDITOR
+        else:
+            access = None
         items.append(
             ClassQuizListItem(
-                **_to_list_item(quiz).model_dump(),
+                **_to_list_item(quiz, hosting[quiz.quiz_id]).model_dump(),
                 author_name=author_name,
                 version_number=version.version_number,
                 updated_at=quiz.updated_at,
+                my_access=access,
+                published_version_id=(
+                    published.quiz_version_id if published else None
+                ),
+                approval_status=submission.status if submission else None,
+                approval_submission_id=(
+                    submission.submission_id if submission else None
+                ),
+                # Only whoever sent a request may withdraw it.
+                approval_sent_by_me=bool(
+                    submission
+                    and submission.submitted_by_id == account.account_id
+                ),
+                collaborator_names=collaborator_names.get(quiz.quiz_id, []),
             )
         )
+
     return ClassQuizListPage(
         class_id=class_id,
         items=items,
@@ -672,6 +923,7 @@ def update_class_quiz_question(
         )
 
     editor_version = _latest_editor_version(quiz)
+    _check_text_limits([payload], editor_version, numbered=False)
     source = next(
         (question for question in editor_version.questions if question.question_id == question_id),
         None,
@@ -856,6 +1108,74 @@ def update_class_quiz_question(
         ) from exc
 
 
+def update_class_quiz_default_time(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    quiz_id: int,
+    payload: QuizDefaultTimeUpdate,
+) -> QuizDefaultTimeUpdateResponse:
+    """Atomically change the timer for questions following the quiz default.
+
+    The client sends the exact inherited-question IDs, so explicit per-question
+    overrides are left alone. Only timer and revision columns are changed; this
+    lets the caller preserve local text edits while accepting the new revision.
+    """
+    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
+    _require_quiz_editor(db, account, quiz, lock_access=True)
+    if quiz.status != QuizStatus.DRAFT:
+        raise APIError(
+            409,
+            "quiz_not_editable",
+            "Only a draft quiz's default time can be changed.",
+        )
+
+    editor_version = _latest_editor_version(quiz)
+    if editor_version.published_at is not None:
+        raise APIError(
+            409,
+            "quiz_not_editable",
+            "Only a draft quiz's default time can be changed.",
+        )
+
+    questions_by_id = {
+        question.question_id: question for question in editor_version.questions
+    }
+    requested_ids = set(payload.question_ids)
+    if not requested_ids.issubset(questions_by_id):
+        raise APIError(404, "question_not_found", "Question not found.")
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        questions = [
+            questions_by_id[question_id] for question_id in payload.question_ids
+        ]
+        for question in questions:
+            question.time_limit_seconds = payload.time_limit_seconds
+            question.revision += 1
+            question.updated_at = now
+        quiz.revision += 1
+        quiz.updated_at = now
+        db.flush()
+        response = QuizDefaultTimeUpdateResponse(
+            quiz_id=quiz_id,
+            quiz_revision=quiz.revision,
+            time_limit_seconds=payload.time_limit_seconds,
+            questions=[
+                QuestionResponse.model_validate(question) for question in questions
+            ],
+        )
+        db.commit()
+        return response
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(
+            500,
+            "default_time_update_failed",
+            "Could not save the quiz default time.",
+        ) from exc
+
+
 def add_class_quiz_question(
     db: Session,
     account: CurrentAccount,
@@ -886,6 +1206,7 @@ def add_class_quiz_question(
         raise APIError(409, "quiz_not_editable", "An archived quiz cannot be edited.")
 
     editor_version = _latest_editor_version(quiz)
+    _check_text_limits([payload], numbered=False)
     if editor_version.published_at is not None:
         editor_version = QuizVersion(
             quiz_id=quiz_id,
@@ -950,6 +1271,7 @@ def update_class_quiz(
             "Reload the latest version before saving again.",
             details={"current_revision": quiz.revision},
         )
+    _check_text_limits(payload.questions, _latest_editor_version(quiz))
 
     now = datetime.now(UTC).replace(tzinfo=None)
     changed = db.execute(
@@ -1011,6 +1333,8 @@ def update_class_quiz(
             updated_at=now,
             can_edit=True,
             version=QuizVersionResponse.model_validate(draft),
+            hosting=quiz_hosting(db, account, quiz),
+            **_attribution(db, quiz),
         )
         db.commit()
         return response
@@ -1114,6 +1438,8 @@ def publish_class_quiz(
             updated_at=now,
             can_edit=True,
             version=QuizVersionResponse.model_validate(draft),
+            hosting=quiz_hosting(db, account, quiz),
+            **_attribution(db, quiz),
         )
         db.commit()
         return response

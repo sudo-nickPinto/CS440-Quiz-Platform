@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier, Event
+from threading import Barrier
 
 import pytest
 from sqlalchemy import func, select
@@ -169,7 +169,7 @@ def test_concurrent_admin_changes_are_serialized(mysql_quiz_client, operation) -
         assert active_admins == 1
 
 
-def test_remove_wins_over_concurrent_leave(mysql_quiz_client) -> None:
+def test_self_leave_is_disabled(mysql_quiz_client) -> None:
     client, class_admin, target = mysql_quiz_client
     with client.app.state.database.session_factory() as db:
         class_ = Class(
@@ -196,41 +196,13 @@ def test_remove_wins_over_concurrent_leave(mysql_quiz_client) -> None:
         db.commit()
         class_id = class_.class_id
 
-    leave_started = Event()
     target_account = CurrentAccount(target.account_id, AccountRole.USER, True)
 
-    def leave_while_removal_is_uncommitted() -> str | None:
-        with client.app.state.database.session_factory() as leave_db:
-            leave_started.set()
-            try:
-                leave_class(leave_db, target_account, class_id)
-            except APIError as exc:
-                return exc.code
-        return None
-
-    # Hold the same class-first lock used by roster removal, then commit the
-    # removal while leave_class is waiting for that lock. Once unblocked,
-    # leave_class must re-read REMOVED and refuse to overwrite it with LEFT.
-    with client.app.state.database.session_factory() as remove_db:
-        remove_db.scalar(
-            select(Class).where(Class.class_id == class_id).with_for_update()
-        )
-        membership = remove_db.scalar(
-            select(ClassMembership)
-            .where(
-                ClassMembership.class_id == class_id,
-                ClassMembership.account_id == target.account_id,
-            )
-            .with_for_update()
-        )
-        assert membership is not None
-        membership.status = MembershipStatus.REMOVED
-
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(leave_while_removal_is_uncommitted)
-            assert leave_started.wait(timeout=5)
-            remove_db.commit()
-            assert future.result(timeout=10) == "class_not_found"
+    with client.app.state.database.session_factory() as leave_db:
+        with pytest.raises(APIError) as exc_info:
+            leave_class(leave_db, target_account, class_id)
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.code == "class_self_leave_disabled"
 
     with client.app.state.database.session_factory() as db:
         stored_status = db.scalar(
@@ -239,4 +211,4 @@ def test_remove_wins_over_concurrent_leave(mysql_quiz_client) -> None:
                 ClassMembership.account_id == target.account_id,
             )
         )
-        assert stored_status == MembershipStatus.REMOVED
+        assert stored_status == MembershipStatus.ACTIVE

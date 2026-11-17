@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router";
+import { Link, Navigate, useNavigate, useParams } from "react-router";
 import { useResource } from "../authenticated-demo/rest";
 import RequestError from "../authenticated-demo/RequestError";
 import {
@@ -6,6 +6,7 @@ import {
   ParticipantResults,
 } from "../authenticated-demo/SessionResults";
 import { useFileDownload } from "../authenticated-demo/useFileDownload";
+import { rowLink } from "./classHelpers";
 
 function validId(value) {
   return (
@@ -119,7 +120,7 @@ function ExcelButton({ file, path, name }) {
   );
 }
 
-function SessionReport({ report, classId }) {
+function SessionReport({ report, classId, onCorrected, refreshing }) {
   const backTo = `/app/classes/${classId}`;
 
   /*
@@ -135,6 +136,8 @@ function SessionReport({ report, classId }) {
         exportPath={`/classes/${classId}/sessions/${report.session_id}/export.xlsx`}
         exportName={`class-${classId}-session-${report.session_id}-results.xlsx`}
         exportLabel="Export Excel"
+        onCorrected={onCorrected}
+        refreshing={refreshing}
       />
     );
   }
@@ -166,107 +169,37 @@ export function ClassSessionReportPage() {
 
   return (
     <ReportRequest valid={valid} resource={resource}>
-      {(report) => <SessionReport report={report} classId={classId} />}
+      {(report) => (
+        <SessionReport
+          report={report}
+          classId={classId}
+          onCorrected={resource.refresh}
+          refreshing={resource.refreshing}
+        />
+      )}
     </ReportRequest>
   );
 }
 
-function QuizReport({ report, classId }) {
+// The old per-quiz history page. Presentations now open in place on the
+// class page's Presentations tab, so old links land there.
+export function ClassQuizReportRedirect() {
+  const { classId } = useParams();
   return (
-    <>
-      <Summary
-        items={[
-          ["Completed presentations", number(report.session_count)],
-          ["Total participations", number(report.participant_count)],
-          ["Average points", number(report.average_score)],
-        ]}
-      />
-
-      <p className="cl-section-note">
-        Each row is a completed presentation in this class. Scores reflect the
-        saved results of that presentation.
-      </p>
-
-      <div className="cl-table-wrap">
-        <table className="cl-table">
-          <caption className="cl-sr">Quiz presentation history</caption>
-
-          <thead>
-            <tr>
-              <th scope="col">Date</th>
-              <th scope="col">Quiz title at presentation</th>
-              <th scope="col">Host</th>
-              <th scope="col">Participants</th>
-              <th scope="col">Average points</th>
-              <th scope="col">Report</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {report.sessions.map((session) => (
-              <tr key={session.session_id}>
-                <td>{date(session.started_at)}</td>
-                <td>{session.quiz_title}</td>
-                <td>{session.host_name}</td>
-                <td>{number(session.participant_count)}</td>
-                <td>{number(session.average_score)}</td>
-                <td>
-                  <Link to={sessionUrl(classId, session.session_id)}>
-                    Open report →
-                  </Link>
-                </td>
-              </tr>
-            ))}
-
-            {report.sessions.length === 0 && (
-              <tr>
-                <td colSpan={6}>
-                  <div className="cl-state">
-                    <p>No completed presentations are available.</p>
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
-export function ClassQuizReportPage() {
-  const { classId, quizId } = useParams();
-  const valid = validId(classId) && validId(quizId);
-
-  const resource = useResource(
-    valid ? `/classes/${classId}/quizzes/${quizId}/results` : null,
-  );
-  const file = useFileDownload();
-
-  return (
-    <ReportFrame
-      classId={classId}
-      title={resource.data?.title || "Quiz report"}
-      actions={
-        // Class-wide exports are for the class's organizers only.
-        resource.data?.view === "organizer" && (
-          <ExcelButton
-            file={file}
-            path={`/classes/${classId}/quizzes/${quizId}/export.xlsx`}
-            name={`class-${classId}-quiz-${quizId}-results.xlsx`}
-          />
-        )
+    <Navigate
+      replace
+      to={
+        validId(classId)
+          ? `/app/classes/${classId}?section=Presentations`
+          : "/app/classes"
       }
-      error={file.error}
-    >
-      <ReportRequest valid={valid} resource={resource}>
-        {(report) => <QuizReport report={report} classId={classId} />}
-      </ReportRequest>
-    </ReportFrame>
+    />
   );
 }
 
 function StudentReport({ report, classId }) {
+  const navigate = useNavigate();
+
   return (
     <>
       <Summary
@@ -311,7 +244,12 @@ function StudentReport({ report, classId }) {
 
           <tbody>
             {report.sessions.map((session) => (
-              <tr key={session.session_id}>
+              // A played session opens its results from anywhere on the row.
+              <tr
+                key={session.session_id}
+                {...(session.played &&
+                  rowLink(navigate, sessionUrl(classId, session.session_id)))}
+              >
                 <td>{date(session.started_at)}</td>
                 <td>{session.quiz_title}</td>
                 <td>{session.played ? "Played" : "Absent"}</td>

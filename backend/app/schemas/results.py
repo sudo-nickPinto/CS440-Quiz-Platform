@@ -23,6 +23,7 @@ class ParticipantQuestionResult(ResultsModel):
 
     session_participant_id: int = Field(gt=0)
     display_name: str
+    avatar_key: str | None = None
     selected_choice_id: int | None = Field(default=None, gt=0)
     is_correct: bool
     points_awarded: int = Field(ge=0)
@@ -66,6 +67,7 @@ class FinalStanding(ResultsModel):
 
     session_participant_id: int = Field(gt=0)
     display_name: str
+    avatar_key: str | None = None
     total_score: int = Field(ge=0)
     correct_count: int = Field(ge=0)
     final_rank: int = Field(gt=0)
@@ -73,6 +75,7 @@ class FinalStanding(ResultsModel):
 
 class LeaderboardEntry(ResultsModel):
     display_name: str
+    avatar_key: str | None = None
     total_score: int = Field(ge=0)
     final_rank: int = Field(gt=0)
 
@@ -115,6 +118,7 @@ def participant_final_view(
         leaderboard=[
             LeaderboardEntry(
                 display_name=row.display_name,
+                avatar_key=row.avatar_key,
                 total_score=row.total_score,
                 final_rank=row.final_rank,
             )

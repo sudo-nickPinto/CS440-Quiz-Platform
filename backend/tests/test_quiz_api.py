@@ -211,7 +211,7 @@ def test_inactive_account_cannot_use_quiz_endpoints(
         ("", None),
         ("   \n  ", None),
         (None, None),
-        ("x" * 5000, "x" * 5000),
+        ("x" * 1000, "x" * 1000),
     ],
 )
 def test_explanation_is_saved_and_returned(

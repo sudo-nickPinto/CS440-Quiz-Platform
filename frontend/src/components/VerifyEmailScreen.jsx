@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
-import { apiFetch, NEEDS_INTERACTION, returnToState } from '../api'
+import {
+  apiFetch,
+  NEEDS_INTERACTION,
+  PASSWORD_CONNECTION,
+  returnToState,
+} from '../api'
 import './VerifyEmailScreen.css'
 
 // Shown when the backend refuses to create/link the account because the
-// user's email isn't verified yet. onVerified runs once /me succeeds.
+// user's email isn't verified yet. onVerified(account) runs once /me succeeds.
 export default function VerifyEmailScreen({ onVerified }) {
   const { getAccessTokenSilently, loginWithRedirect, logout, user } = useAuth0()
   const headingRef = useRef(null)
@@ -24,8 +29,10 @@ export default function VerifyEmailScreen({ onVerified }) {
       // Auth0 only reflects the new email_verified state in a newly issued
       // token, and the backend reads it via /userinfo with that token, so
       // skip the token cache.
-      await apiFetch('/me', () => getAccessTokenSilently({ cacheMode: 'off' }))
-      onVerified()
+      const account = await apiFetch('/me', () =>
+        getAccessTokenSilently({ cacheMode: 'off' }),
+      )
+      onVerified(account)
       return
     } catch (err) {
       if (err.code === 'email_not_verified') {
@@ -36,6 +43,7 @@ export default function VerifyEmailScreen({ onVerified }) {
           await loginWithRedirect({
             appState: returnToState(),
             authorizationParams: {
+              connection: PASSWORD_CONNECTION,
               prompt: 'login',
               ...(user?.email ? { login_hint: user.email } : {}),
             },

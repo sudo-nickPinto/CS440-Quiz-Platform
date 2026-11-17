@@ -1,4 +1,6 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+
+import { charCount } from "./model";
 
 // Pieces of the quiz editor from quiz-editor-main.html. They only render
 // controls; QuizEditor owns the editor state and passes changes back.
@@ -135,6 +137,51 @@ export function TimePicker({
       </div>
     </details>
   );
+}
+
+const SMALLER = "Long text shows smaller on the host’s screen.";
+
+// The gray "185/200" counter next to a field, shown from 20 characters
+// before its limit (see model.js). With `note`, also says why it matters.
+export function CharCount({ value, limit, note = false }) {
+  const count = charCount(value.length, limit);
+  if (!count.visible) return null;
+  return (
+    <span className="qe-count" aria-live="polite">
+      {note && <span className="qe-count-note">{SMALLER} </span>}
+      {count.label}
+      <span className="ui-sr"> characters</span>
+    </span>
+  );
+}
+
+// A textarea that grows with its text instead of scrolling inside.
+export function AutoGrowTextarea({ value, ...props }) {
+  const ref = useRef(null);
+
+  useLayoutEffect(() => {
+    const box = ref.current;
+    if (!box) return undefined;
+    function fit() {
+      box.style.height = "auto";
+      // scrollHeight excludes the border, but the box is border-box sized.
+      const border = box.offsetHeight - box.clientHeight;
+      box.style.height = `${box.scrollHeight + border}px`;
+    }
+    fit();
+    // Width changes (window resize, sidebar) rewrap the text.
+    if (typeof ResizeObserver === "undefined") return undefined;
+    let width = box.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (box.clientWidth === width) return;
+      width = box.clientWidth;
+      fit();
+    });
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [value]);
+
+  return <textarea ref={ref} value={value} {...props} />;
 }
 
 // The ⋯ menu in each question card's black title bar.

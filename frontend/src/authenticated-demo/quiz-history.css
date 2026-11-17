@@ -86,8 +86,8 @@
 
 .qp .qh a:focus-visible,
 .qp .qh button:focus-visible {
-  outline: 3px solid var(--navy);
-  outline-offset: 4px;
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 2px;
 }
 
 @media (max-width: 640px) {

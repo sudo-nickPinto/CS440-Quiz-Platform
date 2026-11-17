@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 
 from pydantic import (
     BaseModel,
@@ -14,7 +15,8 @@ from app.models.quiz import (
     QuizStatus,
     QuizVisibility,
 )
-from app.schemas.class_dashboard import PageInfo
+from app.models.quiz_submission import SubmissionStatus
+from app.schemas.pagination import PageInfo
 
 
 class QuizRequestModel(BaseModel):
@@ -65,6 +67,20 @@ class QuestionCreate(QuizRequestModel):
 
 class QuestionUpdate(QuestionCreate):
     expected_revision: int = Field(ge=1, strict=True)
+
+
+class QuizDefaultTimeUpdate(QuizRequestModel):
+    time_limit_seconds: int = Field(ge=1, le=65_535)
+    question_ids: list[int] = Field(min_length=1, max_length=65_535)
+
+    @field_validator("question_ids")
+    @classmethod
+    def question_ids_must_be_unique(cls, value: list[int]) -> list[int]:
+        if any(question_id < 1 for question_id in value):
+            raise ValueError("Question IDs must be positive integers.")
+        if len(value) != len(set(value)):
+            raise ValueError("Question IDs must be unique.")
+        return value
 
 
 class QuizCreate(QuizRequestModel):
@@ -148,6 +164,13 @@ class QuestionUpdateResponse(BaseModel):
     question: QuestionResponse
 
 
+class QuizDefaultTimeUpdateResponse(BaseModel):
+    quiz_id: int
+    quiz_revision: int
+    time_limit_seconds: int
+    questions: list[QuestionResponse]
+
+
 class QuizVersionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -161,9 +184,33 @@ class QuizVersionResponse(BaseModel):
     questions: list[QuestionResponse]
 
 
+class QuizHosting(BaseModel):
+    """Whether the caller can host the quiz right now, and if not, why.
+
+    reason is a short code (for example "pending_approval") and message is a
+    sentence to show next to the Host button.
+    """
+
+    can_host: bool
+    reason: str | None = None
+    message: str | None = None
+
+
+class QuizContributor(BaseModel):
+    """A name to credit on the quiz page. No email: managing collaborators
+    (and seeing their addresses) stays with the owner's collaborators API."""
+
+    account_id: int
+    display_name: str
+
+
 class QuizResponse(BaseModel):
     quiz_id: int
     author_id: int
+    # Attribution for anyone allowed to read the quiz (owner, class
+    # organizer, active collaborator).
+    author_name: str | None = None
+    collaborators: list[QuizContributor] = Field(default_factory=list)
     class_id: int | None
     revision: int
     status: QuizStatus
@@ -172,6 +219,7 @@ class QuizResponse(BaseModel):
     updated_at: datetime
     can_edit: bool
     version: QuizVersionResponse
+    hosting: QuizHosting | None = None
 
 
 class QuizListItem(BaseModel):
@@ -183,12 +231,36 @@ class QuizListItem(BaseModel):
     description: str | None
     question_count: int
     created_at: datetime
+    hosting: QuizHosting | None = None
+
+
+class ClassQuizSort(str, Enum):
+    UPDATED_AT = "updated_at"
+    CREATED_AT = "created_at"
+    TITLE = "title"
+
+
+class QuizAccess(str, Enum):
+    OWNER = "OWNER"
+    EDITOR = "EDITOR"
 
 
 class ClassQuizListItem(QuizListItem):
     author_name: str
     version_number: int
     updated_at: datetime
+    # How the caller can work on the quiz; null when an organizer sees a
+    # quiz they neither own nor collaborate on.
+    my_access: QuizAccess | None
+    # The newest published version, and where it stands in this class's
+    # approval queue (null if it was never submitted). Only an APPROVED
+    # newest version can be hosted.
+    published_version_id: int | None = None
+    approval_status: SubmissionStatus | None = None
+    approval_submission_id: int | None = None
+    approval_sent_by_me: bool = False
+    # Display names of the quiz's active collaborators, A to Z.
+    collaborator_names: list[str] = Field(default_factory=list)
 
 
 class ClassQuizListPage(BaseModel):

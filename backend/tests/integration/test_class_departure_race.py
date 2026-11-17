@@ -1,4 +1,4 @@
-"""Leaving or being removed from a class vs. live sessions, on real MySQL."""
+"""Class roster removal vs. live sessions, on real MySQL."""
 
 import threading
 import time
@@ -33,17 +33,21 @@ def _session(context: ResponseContext) -> LiveSession:
     return context.db.get(LiveSession, context.scenario.session_id)
 
 
-def test_leaving_the_class_marks_the_participant_as_left(
+def test_self_leave_is_rejected_without_changing_the_participant(
     response_context: ResponseContext,
 ) -> None:
     session = _session(response_context)
     participant = response_context.participant
 
     with Session(response_context.client.app.state.database.engine) as db:
-        left_sessions = leave_class(db, participant, session.class_id)
+        try:
+            leave_class(db, participant, session.class_id)
+        except APIError as exc:
+            assert exc.status_code == 403
+            assert exc.code == "class_self_leave_disabled"
+        else:
+            raise AssertionError("self-service class departure was allowed")
 
-    assert left_sessions == [session.session_id]
-    # End the fixture session's old snapshot before reading the new row.
     response_context.db.rollback()
     row = response_context.db.scalar(
         select(SessionParticipant).where(
@@ -51,7 +55,7 @@ def test_leaving_the_class_marks_the_participant_as_left(
             SessionParticipant.account_id == participant.account_id,
         )
     )
-    assert row.left_at is not None
+    assert row.left_at is None
 
 
 def test_join_waits_for_a_removal_that_is_committing(

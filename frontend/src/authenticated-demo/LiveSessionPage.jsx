@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router";
 
 import { useLiveSession } from "../live/useLiveSession";
@@ -7,7 +7,17 @@ import RequestError from "./RequestError";
 import ConfirmDialog from "./ConfirmDialog";
 import { useConfirm } from "./useConfirm";
 import { HostFinal, ParticipantFinal } from "./LiveFinal";
+import Avatar from "../avatars/Avatar";
 import QuizStartCountdown from "./QuizStartCountdown";
+import CopyCodeButton from "./CopyCodeButton";
+import { classPagePath } from "../classes/classPaths";
+import {
+  answerSuit,
+  answerTextSize,
+  inPreview,
+} from "../live/questionDisplay";
+import { PREVIEW_STEPS, QUESTION_STEPS, useFitText } from "../live/fitText";
+import AnswerSuit from "./AnswerSuit";
 
 const CONNECTION_ERRORS = {
   unauthorized: "Your login needs to be renewed.",
@@ -18,8 +28,10 @@ const CONNECTION_ERRORS = {
   closed: "The live connection is closed.",
 };
 
-function letter(index) {
-  return index < 26 ? String.fromCharCode(65 + index) : String(index + 1);
+// Screen-reader name for an answer position: its card suit.
+function suitName(index) {
+  const suit = answerSuit(index);
+  return suit[0].toUpperCase() + suit.slice(1);
 }
 
 // "482913" → "482 913", as on the mockup's projector screen
@@ -50,7 +62,9 @@ function Marks({ total, current }) {
           className={
             index + 1 < current ? "done" : index + 1 === current ? "cur" : ""
           }
-        />
+        >
+          {index + 1}
+        </i>
       ))}
     </span>
   );
@@ -81,6 +95,11 @@ function Leaderboard({ rows }) {
           style={{ "--i": index }}
         >
           <span className="lv-rank">{row.rank}</span>
+          <Avatar
+            className="lv-board-avatar"
+            avatarKey={row.avatar_key}
+            name={row.display_name}
+          />
           <strong>{row.display_name}</strong>
           <span className="lv-pts">
             {row.cumulative_score.toLocaleString()} pts
@@ -102,22 +121,20 @@ function HostLobby({ state, title, actions }) {
           <p className="lv-eyebrow">Live session · Waiting room</p>
           <h1>{title}</h1>
 
-          <div className="lv-join-row">
-            <p className="lv-join-step">
-              Go to <b>{window.location.host}/app/join</b>
-              <br />
-              and enter the code
-            </p>
+          <div className="lv-count">
+            <strong>{count}</strong>
+            <span>{count === 1 ? "Player" : "Players"}</span>
+          </div>
 
+          <div className="lv-join-row">
             <div className="lv-join-code">
               <small>Join code</small>
               {code || "Loading…"}
             </div>
 
-            <div className="lv-count">
-              <strong>{count}</strong>
-              <span>{count === 1 ? "Player" : "Players"}</span>
-            </div>
+            <p className="lv-join-step">
+              Go to <b>{window.location.host}/app/join</b> and enter the code
+            </p>
           </div>
         </div>
 
@@ -129,7 +146,12 @@ function HostLobby({ state, title, actions }) {
         <div className="lv-players">
           {state.participants.map((person) => (
             <span className="lv-chip" key={person.session_participant_id}>
-              {person.display_name}
+              <Avatar
+                className="lv-chip-avatar"
+                avatarKey={person.avatar_key}
+                name={person.display_name}
+              />
+              <span className="lv-chip-name">{person.display_name}</span>
             </span>
           ))}
 
@@ -196,6 +218,77 @@ function ParticipantLobby({ state, title, actions }) {
   );
 }
 
+const EASE_OUT = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+// When the host's question preview ends, the big centred question glides
+// up and shrinks into its place in the top bar, then the timer, the answer
+// count and the four answers pop in. Runs after useFitText has sized the new
+// screen (layout effects run in order), and not at all with reduced motion.
+function usePreviewHandoff(rootRef, preview, questionId) {
+  const from = useRef(null);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const heading = root?.querySelector("h1");
+    if (!heading) return;
+
+    if (preview) {
+      // Remember where the preview question sits, every render, so the last
+      // position before the switch is the one we start from.
+      const box = heading.getBoundingClientRect();
+      from.current = {
+        questionId,
+        x: box.left + box.width / 2,
+        y: box.top + box.height / 2,
+        font: parseFloat(getComputedStyle(heading).fontSize),
+      };
+      return;
+    }
+
+    const start = from.current;
+    from.current = null;
+    if (!start || start.questionId !== questionId) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!heading.animate) return;
+
+    const box = heading.getBoundingClientRect();
+    const scale = start.font / parseFloat(getComputedStyle(heading).fontSize);
+    const dx = start.x - (box.left + box.width / 2);
+    const dy = start.y - (box.top + box.height / 2);
+    // The question's box scrolls, which would clip the big heading on its
+    // way in; let it overflow until the move ends.
+    const holder = heading.parentElement;
+    holder.style.overflow = "visible";
+    const move = heading.animate(
+      [
+        { transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
+        { transform: "none" },
+      ],
+      { duration: 900, easing: EASE_OUT },
+    );
+    const settle = () => holder.style.removeProperty("overflow");
+    move.finished.then(settle, settle);
+
+    const pop = (element, delay) =>
+      element?.animate(
+        [
+          { opacity: 0, transform: "translateY(24px) scale(0.9)" },
+          { opacity: 1, transform: "none" },
+        ],
+        { duration: 420, delay, easing: EASE_OUT, fill: "backwards" },
+      );
+    pop(root.querySelector(".lv-timer"), 450);
+    pop(root.querySelector(".lv-answer-count"), 520);
+    root
+      .querySelectorAll(".lv-host-answer")
+      .forEach((answer, index) => pop(answer, 600 + index * 90));
+    root.querySelector(".lv-track")?.animate(
+      [{ opacity: 0 }, { opacity: 1 }],
+      { duration: 300, delay: 450, fill: "backwards" },
+    );
+  });
+}
+
 function QuestionScreen({
   state,
   host,
@@ -204,9 +297,12 @@ function QuestionScreen({
   submit,
   controls,
   standing,
+  leave,
 }) {
   const question = state.currentQuestion;
   const [now, setNow] = useState(() => Date.now());
+  // When this screen first showed the question; see previewEndsAt.
+  const [seenAt] = useState(() => Date.now());
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
@@ -225,6 +321,13 @@ function QuestionScreen({
       ? Math.max(0, Math.min(100, ((deadline - now) / duration) * 100))
       : 0;
 
+  const preview = inPreview(question, seenAt, now);
+  const fitRef = useFitText(
+    `${question.question_id}:${preview}`,
+    preview ? PREVIEW_STEPS : QUESTION_STEPS,
+  );
+  usePreviewHandoff(fitRef, preview, question.question_id);
+
   const submittedIndex = question.choices.findIndex(
     (choice) => choice.choice_id === state.myAnswer?.choice_id,
   );
@@ -236,11 +339,34 @@ function QuestionScreen({
         <div
           className={`lv-my-pick ui-tone-${Math.max(submittedIndex, 0) % 4}`}
         >
-          {submittedIndex >= 0 ? letter(submittedIndex) : "✓"}
+          {submittedIndex >= 0 ? <AnswerSuit index={submittedIndex} /> : "✓"}
         </div>
         <h1>Answer submitted!</h1>
         <p role="status">Waiting for everyone else to answer…</p>
         <Dots />
+      </section>
+    );
+  }
+
+  if (host && preview) {
+    return (
+      <section
+        ref={fitRef}
+        className="lv-hq is-preview"
+        aria-label={`Question ${question.question_order}`}
+      >
+        <div className="lv-hq-preview" data-fit-question>
+          <p className="lv-eyebrow">
+            Question {question.question_order} of {question.total_questions}
+          </p>
+          <h1>{question.question_text}</h1>
+          <p className="lv-hq-ready" role="status">
+            <Dots />
+            Answers in a moment…
+          </p>
+        </div>
+
+        {controls}
       </section>
     );
   }
@@ -252,6 +378,7 @@ function QuestionScreen({
 
     return (
       <section
+        ref={fitRef}
         className="lv-hq"
         aria-label={`Question ${question.question_order}`}
       >
@@ -264,7 +391,7 @@ function QuestionScreen({
             {seconds ?? "—"}
           </div>
 
-          <div className="lv-hq-text">
+          <div className="lv-hq-text" data-fit-question>
             <h1>{question.question_text}</h1>
           </div>
 
@@ -286,9 +413,10 @@ function QuestionScreen({
             <div
               key={choice.choice_id}
               className={`lv-host-answer ui-tone-${index % 4}`}
+              data-fit-answer
             >
-              <span className="lv-index">{letter(index)}</span>
-              <span>{choice.choice_text}</span>
+              <AnswerSuit index={index} />
+              <span className="lv-answer-text">{choice.choice_text}</span>
             </div>
           ))}
         </div>
@@ -311,27 +439,25 @@ function QuestionScreen({
     >
       <div className="lv-pq-top">
         <div className="lv-q-label">
-          <span>
+          <span className="ui-sr">
             Question {question.question_order} of {question.total_questions}
           </span>
           <Marks
             total={question.total_questions}
             current={question.question_order}
           />
-          <small>The question is on the host’s screen.</small>
         </div>
 
-        <div
-          className={"lv-ptimer" + (seconds !== null && seconds <= 5 ? " is-urgent" : "")}
-          role="timer"
-          aria-label="Seconds remaining"
-        >
-          {seconds ?? "—"}
+        <div className="lv-pq-stats">
+          <span>
+            Score{" "}
+            <b>{standing ? standing.cumulative_score.toLocaleString() : "—"}</b>
+          </span>
+          <span>
+            Rank <b>{standing?.rank == null ? "—" : `#${standing.rank}`}</b>
+          </span>
+          {leave}
         </div>
-      </div>
-
-      <div className="lv-tbar" aria-hidden="true">
-        <i style={{ width: `${progress}%` }} />
       </div>
 
       <div
@@ -344,42 +470,45 @@ function QuestionScreen({
             key={choice.choice_id}
             type="button"
             className={`ui-answer ui-tone-${index % 4}`}
-            disabled={!canAct || seconds === 0}
-            aria-label={`Answer ${letter(index)}`}
+            disabled={!canAct || preview || seconds === 0}
+            aria-label={`${suitName(index)}: ${choice.choice_text}`}
             onClick={() => submit(choice.choice_id)}
           >
-            {letter(index)}
+            <AnswerSuit index={index} />
           </button>
         ))}
+
+        {/* Floats over the tiles while they are locked, so nothing moves. */}
+        {(preview || busy || seconds === 0) && (
+          <p className="lv-pq-msg" role="status">
+            {preview
+              ? "Read the question on the host’s screen. Answers open in a moment…"
+              : busy
+                ? "Submitting your answer…"
+                : "Time’s up. Waiting for the question to close…"}
+          </p>
+        )}
       </div>
 
-      <div className="lv-stat-row lv-pbottom">
-        <Stat
-          label="Score"
-          value={standing ? standing.cumulative_score.toLocaleString() : "—"}
-        />
-        <Stat
-          label="Rank"
-          value={standing?.rank == null ? "—" : `#${standing.rank}`}
-        />
+      {/* The timer row under the tiles is always there, so the tiles never
+          change size. */}
+      <div className="lv-pq-foot">
+        <div className="lv-tbar" aria-hidden="true">
+          <i style={{ width: `${progress}%` }} />
+        </div>
+        <div
+          className={"lv-ptimer" + (seconds !== null && seconds <= 5 ? " is-urgent" : "")}
+          role="timer"
+          aria-label="Seconds remaining"
+        >
+          {seconds ?? "—"}
+        </div>
       </div>
-
-      {busy && (
-        <p className="lv-note" role="status">
-          Submitting your answer…
-        </p>
-      )}
-
-      {seconds === 0 && (
-        <p className="lv-note" role="status">
-          Time’s up. Waiting for the server to close the question…
-        </p>
-      )}
     </section>
   );
 }
 
-function HostQuestionResults({ question, results, controls }) {
+function HostQuestionResults({ question, results, stage, controls }) {
   const [showBoard, setShowBoard] = useState(false);
 
   if (!results) {
@@ -390,14 +519,13 @@ function HostQuestionResults({ question, results, controls }) {
     );
   }
 
-  const choices = question.choices.map((choice, index) => {
+  const choices = question.choices.map((choice) => {
     const result = results.choices?.find(
       (item) => item.choice_id === choice.choice_id,
     );
 
     return {
       ...choice,
-      label: letter(index),
       count: result?.response_count ?? 0,
       correct:
         result?.is_correct ||
@@ -421,7 +549,11 @@ function HostQuestionResults({ question, results, controls }) {
           of {question.total_questions}
         </p>
         <h1>{showBoard ? "Leaderboard" : "How did everyone answer?"}</h1>
-        {!showBoard && <p className="lv-r-q">{question.question_text}</p>}
+        {!showBoard && (
+          <p className="lv-r-q" title={question.question_text}>
+            {question.question_text}
+          </p>
+        )}
       </div>
 
       {showBoard ? (
@@ -429,7 +561,11 @@ function HostQuestionResults({ question, results, controls }) {
           <Leaderboard rows={results.participants || []} />
         </div>
       ) : (
-        <div className="lv-dist" style={{ "--n": choices.length }}>
+        <div
+          className="lv-dist"
+          style={{ "--n": choices.length }}
+          data-size={answerTextSize(question.choices)}
+        >
           {choices.map((choice, index) => (
             <div
               key={choice.choice_id}
@@ -444,11 +580,12 @@ function HostQuestionResults({ question, results, controls }) {
                 </div>
               </div>
 
-              <div className="lv-dist-label">
-                <span className={`lv-index ui-tone-${index % 4}`}>
-                  {choice.label}
+              <div className={`lv-dist-label ui-tone-${index % 4}`}>
+                <AnswerSuit index={index} />
+                <span className="ui-sr">{suitName(index)}: </span>
+                <span className="lv-dl-text" title={choice.choice_text}>
+                  {choice.choice_text}
                 </span>
-                <span className="lv-dl-text">{choice.choice_text}</span>
                 {choice.correct && (
                   <span className="lv-check" aria-label="Correct">
                     ✓
@@ -461,6 +598,7 @@ function HostQuestionResults({ question, results, controls }) {
       )}
 
       <div className="lv-strip">
+        <p className="lv-stage" role="status">{stage}</p>
         <p className="lv-meta">
           <b>{answered}</b> of {players} answered · <b>{correct}</b> correct (
           {percent}%)
@@ -521,7 +659,7 @@ function ParticipantFeedback({ question, results }) {
           <>
             You picked{" "}
             <b>
-              {letter(selectedIndex)} · {selected.choice_text}
+{selected.choice_text}
             </b>
           </>
         )}
@@ -530,7 +668,7 @@ function ParticipantFeedback({ question, results }) {
             {selected ? " · " : ""}The answer was{" "}
             <b>
               {correct
-                .map((choice) => `${letter(choice.index)} · ${choice.choice_text}`)
+                .map((choice) => choice.choice_text)
                 .join(" / ")}
             </b>
           </>
@@ -578,7 +716,7 @@ function ConnectedSession({ sessionId }) {
   const host = state.role === "host";
   const canAct = state.connection === "open" && !action.busy;
   const title = metadata.data?.quiz_title || `Session ${sessionId}`;
-  const dashboard = `/app/dashboard/${host ? "present" : "participate"}`;
+  const classPage = classPagePath(metadata.data?.class_id);
   const terminalMessage = CONNECTION_ERRORS[state.connection];
 
   const canAdvance =
@@ -614,7 +752,7 @@ function ConnectedSession({ sessionId }) {
 
     if (completed && host && Array.isArray(state.final.standings)) {
       return (
-        <section className="ui-live">
+        <section className="ui-live lv-fit">
           <div className="lv-bar">
             <strong>{title}</strong>
             <span className="lv-bar-label">Final results</span>
@@ -624,6 +762,7 @@ function ConnectedSession({ sessionId }) {
             title={title}
             totalQuestions={total ?? "—"}
             sessionId={sessionId}
+            backTo={classPage}
           />
         </section>
       );
@@ -631,7 +770,7 @@ function ConnectedSession({ sessionId }) {
 
     if (completed && !host && "me" in state.final) {
       return (
-        <section className="ui-live">
+        <section className="ui-live lv-fit">
           <div className="lv-bar">
             <strong>{title}</strong>
             <span className="lv-bar-label">Complete</span>
@@ -640,6 +779,7 @@ function ConnectedSession({ sessionId }) {
             final={state.final}
             totalQuestions={total ?? "—"}
             sessionId={sessionId}
+            backTo={classPage}
           />
         </section>
       );
@@ -734,22 +874,27 @@ function ConnectedSession({ sessionId }) {
   );
 
   return (
-    <section className={"ui-live lv" + (host ? " is-host" : " is-player")}>
+    <section className={"ui-live lv" + (host ? " is-host" : " is-player") + " lv-fit"}>
       <ConfirmDialog confirmer={confirmer} />
 
       <div className="lv-bar">
-        <strong>{title}</strong>
+        <div className="lv-bar-left">
+          <strong>{title}</strong>
+          {host && code && phase !== "left" && (
+            <span className="lv-bar-label">
+              Code <b>{code}</b>{" "}
+              <CopyCodeButton
+                code={state.session.join_code}
+                label="join code"
+                className="ui-copy-code-small"
+              />
+            </span>
+          )}
+        </div>
 
         <div className="lv-bar-right">
-          <span className="lv-bar-label">
-            {host && code && phase !== "left" ? (
-              <>
-                Code <b>{code}</b> · {where}
-              </>
-            ) : (
-              where
-            )}
-          </span>
+          {/* The host sees where the quiz is in the bottom strip instead. */}
+          {!host && <span className="lv-bar-label">{where}</span>}
 
           {host && state.session?.status === "ACTIVE" && (
             <button
@@ -790,8 +935,8 @@ function ConnectedSession({ sessionId }) {
                   : undefined
               }
             />
-            <Link className="qb-btn qb-btn-paper" to={dashboard}>
-              Back to dashboard
+            <Link className="qb-btn qb-btn-paper" to={classPage}>
+              Back to class
             </Link>
           </div>
         )}
@@ -820,8 +965,8 @@ function ConnectedSession({ sessionId }) {
             {phase === "left" && (
               <div className="lv-centered">
                 <h1>You left the session</h1>
-                <Link className="qb-btn" to="/app/dashboard/participate">
-                  Back to dashboard
+                <Link className="qb-btn" to={classPage}>
+                  Back to class
                 </Link>
               </div>
             )}
@@ -876,6 +1021,7 @@ function ConnectedSession({ sessionId }) {
                 state={state}
                 standing={standing}
                 host={host}
+                leave={leave}
                 busy={action.busy}
                 canAct={canAct}
                 submit={(choiceId) =>
@@ -883,9 +1029,7 @@ function ConnectedSession({ sessionId }) {
                 }
                 controls={
                   <div className="lv-strip">
-                    <p className="lv-meta">
-                      The question closes when time runs out or everyone answers.
-                    </p>
+                    <p className="lv-stage" role="status">{where}</p>
                     <div className="lv-strip-actions">
                       <button
                         className="qb-btn"
@@ -907,6 +1051,7 @@ function ConnectedSession({ sessionId }) {
                   key={state.lastQuestion.session_question_id}
                   question={state.lastQuestion}
                   results={state.lastResults}
+                  stage={where}
                   controls={startOrNext ?? allDone}
                 />
               ) : (
@@ -931,9 +1076,11 @@ function ConnectedSession({ sessionId }) {
               </div>
             )}
 
+            {/* While answering, Leave sits in the top row of the question. */}
             {!host &&
               state.session &&
-              !["left", "connecting", "lobby"].includes(phase) && (
+              !["left", "connecting", "lobby"].includes(phase) &&
+              !(phase === "question" && state.currentQuestion && !state.myAnswer) && (
                 <div className="lv-foot">{leave}</div>
               )}
 
@@ -961,7 +1108,7 @@ export default function LiveSessionPage() {
     return (
       <section className="qp-content">
         <h1>Invalid session ID</h1>
-        <Link to="/app/dashboard/present">Back to dashboard</Link>
+        <Link to="/app/classes">Back to classes</Link>
       </section>
     );
   }

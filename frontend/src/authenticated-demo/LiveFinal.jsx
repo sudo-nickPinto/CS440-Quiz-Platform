@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
+import Avatar from "../avatars/Avatar";
+
 // End-of-quiz screens from presenter-flow-main.html (podium + top 5) and
 // participant-flow-main.html ("Quiz complete · Great job!"). They read the
 // session_ended payload; the buttons lead to the saved report pages.
@@ -19,7 +21,7 @@ function useRaised() {
   return raised;
 }
 
-export function HostFinal({ final, title, totalQuestions, sessionId }) {
+export function HostFinal({ final, title, totalQuestions, sessionId, backTo }) {
   const raised = useRaised();
   const standings = [...(final.standings ?? [])].sort(
     (a, b) => a.final_rank - b.final_rank,
@@ -51,8 +53,15 @@ export function HostFinal({ final, title, totalQuestions, sessionId }) {
                   style={{ "--h": heights[index], "--i": index }}
                 >
                   <div className="lv-podium-name">
+                    <Avatar
+                      className="lv-podium-avatar"
+                      avatarKey={row.avatar_key}
+                      name={row.display_name}
+                    />
                     <strong>{row.display_name}</strong>
-                    <span>{fmt(row.total_score)} pts</span>
+                    <span className="lv-podium-pts">
+                      {fmt(row.total_score)} pts
+                    </span>
                   </div>
                   <div className="lv-podium-block">
                     <span className="lv-podium-rank">{row.final_rank}</span>
@@ -70,6 +79,11 @@ export function HostFinal({ final, title, totalQuestions, sessionId }) {
               {top.map((row, index) => (
                 <li key={row.session_participant_id} style={{ "--i": index }}>
                   <span className="lv-rank">{row.final_rank}</span>
+                  <Avatar
+                    className="lv-board-avatar"
+                    avatarKey={row.avatar_key}
+                    name={row.display_name}
+                  />
                   <strong>{row.display_name}</strong>
                   <span className="lv-pts">{fmt(row.total_score)} pts</span>
                 </li>
@@ -82,8 +96,8 @@ export function HostFinal({ final, title, totalQuestions, sessionId }) {
       )}
 
       <div className="lv-actions">
-        <Link className="qb-btn qb-btn-paper" to="/app/dashboard/present">
-          Back to dashboard
+        <Link className="qb-btn qb-btn-paper" to={backTo || "/app/classes"}>
+          Back to class
         </Link>
         <Link className="qb-btn" to={`/app/results/host/${sessionId}`}>
           View full results →
@@ -93,7 +107,7 @@ export function HostFinal({ final, title, totalQuestions, sessionId }) {
   );
 }
 
-export function ParticipantFinal({ final, totalQuestions, sessionId }) {
+export function ParticipantFinal({ final, totalQuestions, sessionId, backTo }) {
   const me = final.me;
 
   return (
@@ -135,8 +149,8 @@ export function ParticipantFinal({ final, totalQuestions, sessionId }) {
         <Link className="qb-btn" to={`/app/results/me/${sessionId}`}>
           See your answers →
         </Link>
-        <Link className="qb-btn qb-btn-paper" to="/app/dashboard/participate">
-          Back to dashboard
+        <Link className="qb-btn qb-btn-paper" to={backTo || "/app/classes"}>
+          Back to class
         </Link>
       </div>
     </section>

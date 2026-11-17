@@ -27,7 +27,7 @@ services:
       - ./ulugbek-err/migrations/0008_quiz_class.up.sql:/docker-entrypoint-initdb.d/0008.sql:ro
       - ./ulugbek-err/migrations/0009_quiz_collaboration.up.sql:/docker-entrypoint-initdb.d/0009.sql:ro
       - ./ulugbek-err/migrations/0010_quiz_submission.up.sql:/docker-entrypoint-initdb.d/0010.sql:ro
-      # 0011 is reserved by the account-profile branch currently in review.
+      - ./ulugbek-err/migrations/0011_account_profile.up.sql:/docker-entrypoint-initdb.d/0011.sql:ro
       - ./ulugbek-err/migrations/0012_question_revision.up.sql:/docker-entrypoint-initdb.d/0012.sql:ro
     healthcheck:
       test:

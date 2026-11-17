@@ -17,11 +17,15 @@ from sqlalchemy.engine import URL, make_url
 
 from app.models import (
     Class,
+    FacultyAccessEvent,
     ClassMembership,
     Quiz,
     QuizCollaborator,
     QuizCollaboratorEvent,
     QuizSubmission,
+    LiveSession,
+    SessionAnswerCorrection,
+    SessionQuestion,
 )
 
 MIGRATIONS = Path(__file__).resolve().parents[3] / "ulugbek-err" / "migrations"
@@ -147,6 +151,9 @@ def test_models_match_migrated_tables(
             QuizCollaborator,
             QuizCollaboratorEvent,
             QuizSubmission,
+            SessionQuestion,
+            SessionAnswerCorrection,
+            FacultyAccessEvent,
         ):
             table = model.__table__
             columns = {
@@ -171,6 +178,11 @@ def test_models_match_migrated_tables(
                     assert unique[constraint.name] == [
                         c.name for c in constraint.columns
                     ]
+
+        live_session_columns = {
+            column["name"] for column in inspector.get_columns(LiveSession.__tablename__)
+        }
+        assert {"score_revision", "rescored_at", "rescored_by_id"} <= live_session_columns
     finally:
         engine.dispose()
 

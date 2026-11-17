@@ -1,0 +1,215 @@
+/* Faculty access page (account menu). Same paper cards, heavy borders and
+   offset shadows as the profile page and class pages. */
+
+.qp .fa-page {
+  display: grid;
+  gap: 20px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 36px 22px 48px;
+}
+
+.qp .fa-page h1,
+.qp .fa-page h2,
+.qp .fa-page p {
+  margin: 0;
+}
+
+.qp .fa-page > .ui-eyebrow {
+  margin-bottom: -12px;
+}
+
+.qp .fa-page > .qp-button {
+  justify-self: start;
+}
+
+.qp .fa-lede {
+  max-width: 62ch;
+}
+
+.qp .fa-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.qp .fa-card h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 20px;
+}
+
+.qp .fa-card h2 small {
+  color: var(--gray);
+  font-size: 14px;
+}
+
+.qp .fa-add label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .fa-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.qp .fa-add-row input {
+  flex: 1 1 260px;
+  min-width: 0;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.qp .fa-add-row input[aria-invalid="true"] {
+  border-color: var(--orange-deep);
+}
+
+.qp .fa-help {
+  color: var(--gray);
+  font-size: 14px;
+}
+
+.qp .fa-error {
+  color: var(--orange-deep);
+  font-weight: 700;
+}
+
+.qp .fa-notice {
+  padding: 12px 16px;
+  border: var(--b);
+  background: var(--sky-soft);
+  font-weight: 700;
+}
+
+.qp .fa-list,
+.qp .fa-history {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qp .fa-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 14px 0;
+  border-top: var(--b-thin);
+}
+
+.qp .fa-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.qp .fa-person {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.qp .fa-person strong {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.qp .fa-email {
+  overflow-wrap: anywhere;
+}
+
+.qp .fa-person small,
+.qp .fa-history small {
+  color: var(--gray);
+  font-size: 13px;
+}
+
+.qp .fa-tag {
+  padding: 1px 7px;
+  border: 2px solid var(--ink);
+  background: var(--navy);
+  color: var(--paper);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .fa-remove {
+  background: var(--paper);
+}
+
+.qp .fa-remove:hover:not(:disabled) {
+  background: var(--apricot);
+}
+
+.qp .fa-history li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: var(--b-thin);
+}
+
+.qp .fa-history li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.qp .fa-history li > span:last-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.qp .fa-action {
+  flex: none;
+  min-width: 76px;
+  padding: 2px 8px;
+  border: 2px solid var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.qp .fa-action.is-granted {
+  background: var(--sky-soft);
+  color: var(--navy);
+}
+
+.qp .fa-action.is-revoked {
+  background: var(--apricot);
+  color: var(--ink);
+}
+
+@media (max-width: 600px) {
+  .qp .fa-page {
+    padding: 24px 16px 36px;
+  }
+
+  .qp .fa-card {
+    padding: 16px;
+  }
+
+  .qp .fa-add-row > *,
+  .qp .fa-remove {
+    flex: 1 1 100%;
+  }
+}

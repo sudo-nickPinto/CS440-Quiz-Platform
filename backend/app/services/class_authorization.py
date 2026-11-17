@@ -27,12 +27,6 @@ class ClassAccess:
             and self.membership.role == ClassRole.ORGANIZER
         )
 
-    @property
-    def is_global_admin(self) -> bool:
-        # Compatibility with the existing dashboard response.
-        # V3 never grants global class access.
-        return False
-
 
 def require_active_faculty(account: CurrentAccount) -> None:
     if not account.is_active:

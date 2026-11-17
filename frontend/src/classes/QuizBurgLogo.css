@@ -7,7 +7,7 @@
 }
 
 .qb-brand-link:focus-visible {
-  outline: 3px solid #bf4c0c;
+  outline: 3px solid var(--orange-deep);
   outline-offset: 8px;
 }
 
@@ -16,9 +16,9 @@
   align-items: stretch;
   gap: 3px;
   box-sizing: border-box;
-  border: 3px solid #222222;
-  background: #222222;
-  box-shadow: 4px 4px 0 #222222;
+  border: var(--b);
+  background: var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
   transform: rotate(-1.5deg);
   font-family: "Archivo Black", sans-serif;
   font-size: 22px;
@@ -30,17 +30,17 @@
 .qb-logo > .qb-quiz,
 .qb-logo > .qb-burg {
   display: block;
-  color: #fcf9f4;
+  color: var(--paper);
   padding: 6px 11px;
 }
 
 .qb-logo > .qb-quiz {
-  background: #043371;
+  background: var(--navy);
   padding-right: 9px;
 }
 
 .qb-logo > .qb-burg {
-  background: #bf4c0c;
+  background: var(--orange-deep);
   padding-left: 9px;
 }
 

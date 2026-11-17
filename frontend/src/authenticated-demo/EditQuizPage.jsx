@@ -1,15 +1,14 @@
 import { Link, useParams } from "react-router";
+import { classPagePath } from "../classes/classPaths";
 
-import { useAccount } from "./account";
 import { useResource } from "./rest";
 import { quizToEditor } from "./quizPayload";
-import { canEditQuiz } from "./quizEditing";
+import { canEditQuiz, quizEditorKey } from "./quizEditing";
 import { QuizEditor } from "./QuizEditor";
 import RequestError from "./RequestError";
 
 export default function EditQuizPage() {
   const { quizId } = useParams();
-  const account = useAccount();
 
   const validId = /^[1-9]\d*$/.test(quizId ?? "");
   const resource = useResource(
@@ -39,11 +38,11 @@ export default function EditQuizPage() {
     return <p role="alert">The quiz could not be loaded.</p>;
   }
 
-  if (quiz.author_id !== account.account_id) {
+  if (!quiz.can_edit) {
     return (
       <section className="qp-content">
         <h1>Editing unavailable</h1>
-        <p>Only the quiz creator can edit this quiz.</p>
+        <p>Only the quiz creator or an active collaborator can edit this quiz.</p>
         <Link to={`/app/quizzes/${quiz.quiz_id}`}>
           Back to quiz
         </Link>
@@ -51,13 +50,13 @@ export default function EditQuizPage() {
     );
   }
 
-  if (!canEditQuiz(quiz, account.account_id)) {
+  if (!canEditQuiz(quiz)) {
     return (
       <section className="qp-content">
         <h1>Editing unavailable</h1>
         <p>Archived quizzes cannot be edited.</p>
-        <Link to="/app/dashboard/present">
-          Back to dashboard
+        <Link to={classPagePath(quiz.class_id)}>
+          Back to class
         </Link>
       </section>
     );
@@ -81,7 +80,7 @@ export default function EditQuizPage() {
 
   return (
     <QuizEditor
-      key={`${quiz.quiz_id}:${quiz.version.quiz_version_id}`}
+      key={quizEditorKey(quiz)}
       initialEditor={initialEditor}
       existingQuiz={quiz}
       onReload={resource.reload}

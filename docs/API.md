@@ -51,10 +51,91 @@ No auth. `200 {"status": "ok", "components": {"database": "ok"}}`, or `503 datab
 The caller's account, created on first call.
 
 ```json
-{ "account_id": 7, "email": "a@gettysburg.edu", "display_name": "Ana", "role": "USER", "is_active": true }
+{
+  "account_id": 7, "email": "a@gettysburg.edu", "display_name": "Ana Lopez",
+  "first_name": "Ana", "last_name": "Lopez", "avatar_key": "owl.sky",
+  "profile_complete": true, "role": "USER", "is_active": true
+}
 ```
 
-`role` is `USER` or `ADMIN`.
+`role` is `USER` or `ADMIN`. `profile_complete` is false until both names are saved; the app shows the profile setup screen until then. `first_name`, `last_name` and `avatar_key` are `null` on a new account.
+
+### `PATCH /me`
+Saves the caller's profile and returns the same body as `GET /me`. Always send all three fields:
+
+```json
+{ "first_name": "Ana", "last_name": "Lopez", "avatar_key": "owl.sky" }
+```
+
+- Names are trimmed and must be 1–50 characters with no control characters.
+- `avatar_key` is `"figure.color"` from the preset list in `backend/app/avatars.py`, or `null` for initials. There are no uploads.
+- `display_name` becomes `"First Last"`, so every screen, report and export that shows names picks up the change.
+
+Errors: `403 inactive_account`, `422 invalid_profile` (blank or too-long name, bad characters, unknown avatar).
+
+## Faculty access
+
+Faculty status (`role: "ADMIN"`, stored as `account_type = 'ADMINISTRATOR'`) lets someone create classes and be made a class organizer. It never gives access to a class they don't organize. These routes let faculty manage it from the app's **Faculty access** page (issue #116). Every route needs an active faculty account; anyone else gets `403 faculty_required`.
+
+### `GET /faculty` → `200 FacultyAccessPage`
+
+```json
+{
+  "faculty": [
+    {
+      "account_id": 3,
+      "display_name": "Ana Lopez",
+      "email": "alopez@gettysburg.edu",
+      "is_me": false,
+      "granted_at": "2026-11-13T15:02:11.120000Z",
+      "granted_by_name": "Jane Kim"
+    }
+  ],
+  "history": [
+    {
+      "event_id": 7,
+      "action": "GRANTED",
+      "account_id": 3,
+      "account_name": "Ana Lopez",
+      "account_email": "alopez@gettysburg.edu",
+      "actor_name": "Jane Kim",
+      "occurred_at": "2026-11-13T15:02:11.120000Z"
+    }
+  ]
+}
+```
+
+`faculty` lists active faculty by name. `granted_at` and `granted_by_name` are `null` for faculty set up directly in the database. `history` is the newest 50 grants and removals.
+
+### `POST /faculty` → `201 FacultyMember`
+
+```json
+{ "email": "alopez@gettysburg.edu" }
+```
+
+Gives faculty status to the account with that email (trimmed, case-insensitive). The person has to sign in to the app once first so their account exists. Recorded in `faculty_access_event`.
+
+Errors: `404 account_not_found`, `409 account_inactive`, `409 already_faculty`, `422 email_required` / validation errors.
+
+### `DELETE /faculty/{account_id}` → `204`
+
+Removes faculty status. The person keeps their account and class memberships, but every organizer power needs faculty status, so they can no longer manage classes. You can't remove your own access, so at least one faculty account always remains. Recorded in `faculty_access_event`.
+
+It's refused while the person is the only usable organizer (active `ORGANIZER` membership on an active faculty account) of any class, archived classes included, because no one else could manage that class. This uses the same locked organizer count as removing, demoting or leaving an organizer. Make another faculty member an organizer of those classes first. The error lists them:
+
+```json
+{
+  "error": {
+    "code": "last_organizer",
+    "message": "Jane Kim is the only organizer of “CS 440”. Make another faculty member an organizer there first, then remove their faculty access.",
+    "details": { "classes": [{ "class_id": 4, "name": "CS 440" }] }
+  }
+}
+```
+
+Errors: `404 faculty_not_found` (no such account, or not faculty), `409 cannot_revoke_self`, `409 last_organizer`.
+
+Both changes lock the two account rows and re-read the caller's own status, so faculty who were just removed can't keep granting or removing access.
 
 ## Quizzes
 
@@ -106,12 +187,12 @@ Errors:
 - `500 quiz_save_failed`.
 
 ### `GET /classes/{class_id}/quizzes` → `200 ClassQuizListPage`
-The class's quizzes, newest first. Organizers get every quiz in the class; members get only their own. It takes `page` and `page_size` (1–100, default 25).
+The class's quizzes. Organizers get every quiz in the class; members get only the ones they own or collaborate on. `mine=true` narrows an organizer's list the same way. It takes `page`, `page_size` (1–100, default 25), `sort=created_at|updated_at|title` (default `created_at`) and `order=asc|desc` (default `desc`). Each item's `my_access` is `OWNER`, `EDITOR` (an active collaborator), or null when an organizer sees someone else's quiz. `published_version_id` is the newest published version (null for a draft-only quiz), and `approval_status` / `approval_submission_id` describe that version's newest submission to this class (`PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`, or null if it was never submitted). `approval_sent_by_me` says whether the caller sent that submission, so the class page offers Withdraw only to them.
 
 ```json
 {
   "class_id": 4,
-  "items": [{ "quiz_id": 3, "author_id": 7, "author_name": "Amy", "class_id": 4, "status": "PUBLISHED", "title": "…", "description": null, "question_count": 10, "version_number": 2, "created_at": "…", "updated_at": "…" }],
+  "items": [{ "quiz_id": 3, "author_id": 7, "author_name": "Amy", "class_id": 4, "status": "PUBLISHED", "title": "…", "description": null, "question_count": 10, "version_number": 2, "created_at": "…", "updated_at": "…", "my_access": "OWNER" }],
   "pagination": { "page": 1, "page_size": 25, "total_items": 1, "total_pages": 1 }
 }
 ```
@@ -131,7 +212,7 @@ The caller's own quizzes, across every class they're active in, newest first. In
 ### `GET /quizzes/{quiz_id}` → `200 QuizResponse`
 Full quiz, including correct answers. Same rule as above: only the owner or an organizer of the quiz's class, and anyone else gets 404.
 
-`QuizResponse`: `quiz_id, author_id, class_id, revision, status, visibility, created_at, updated_at, version`. `version` holds `quiz_version_id, version_number, title, description, created_at, published_at, questions[]`. Each question holds `question_id, question_order, question_type, question_text, explanation, time_limit_seconds, base_points, choices[]`. Each choice holds `choice_id, choice_order, choice_text, is_correct`.
+`QuizResponse`: `quiz_id, author_id, author_name, collaborators, class_id, revision, status, visibility, created_at, updated_at, version`. `author_name` and `collaborators` (the active editors, each `{ account_id, display_name }`, no email) credit the quiz for anyone allowed to read it; managing collaborators and seeing their emails stays owner-only. `version` holds `quiz_version_id, version_number, title, description, created_at, published_at, questions[]`. Each question holds `question_id, question_order, question_type, question_text, explanation, time_limit_seconds, base_points, choices[]`. Each choice holds `choice_id, choice_order, choice_text, is_correct`.
 
 Errors: `404 quiz_not_found`, `500 invalid_quiz`.
 
@@ -279,8 +360,8 @@ Starts a `LOBBY` session in the class with a fresh 6-digit `join_code`. There ar
 Rules, checked in this order:
 1. The caller is an active member of the class, and the class isn't archived.
 2. The quiz belongs to this class.
-3. The caller is the quiz owner or an active organizer of the class. Being a collaborator isn't enough, and faculty status gives no extra access.
-4. The quiz isn't archived and has a published version.
+3. The caller is the quiz owner or an active organizer of the class. Organizer powers need faculty status too, the same rule as every other organizer action, so an old non-faculty organizer can only host their own quizzes. Being a collaborator isn't enough, and faculty status alone (without being an organizer of this class) gives no extra access.
+4. The quiz isn't archived, has a published version, and has no unpublished draft on top of it (an edited quiz must be published and approved again).
 5. That newest published version is approved for the class (Task 4). Pending, rejected, withdrawn and stale (a newer version was published) versions can't be hosted.
 
 | Status | Code | When |
@@ -295,6 +376,32 @@ Rules, checked in this order:
 | 503 | `join_code_unavailable` | No free join code after several tries; retry |
 
 The old `POST /quizzes/{quiz_id}/sessions` route is gone.
+
+When hosting is refused for one of rules 1–5, the error also says exactly why, in `error.details.reason`, and the `message` says what to do next. The error codes above stay the same.
+
+**Knowing before you click.** Quiz responses (`GET /quizzes`, `GET /quizzes/{id}`, `GET /classes/{id}/quizzes`, `GET /classes/{id}/quizzes/{quiz_id}`, and the create, update and publish responses) include a `hosting` object for the caller. It comes from the same checks as this endpoint, so the Host button and the server always agree:
+
+```json
+"hosting": { "can_host": false, "reason": "pending_approval", "message": "This quiz is waiting for a class organizer to approve it." }
+```
+
+| `reason` | Meaning | Error code when you try anyway |
+|---|---|---|
+| `not_in_class` | Old quiz with no class | `quiz_not_hostable` |
+| `class_archived` | The class is archived | `class_archived` |
+| `not_host` | Caller isn't the quiz owner or a class organizer | `session_host_denied` |
+| `quiz_archived` | The quiz is archived | `quiz_not_hostable` |
+| `not_published` | Still a draft | `quiz_not_hostable` |
+| `unpublished_changes` | Edited after publishing. The page shows the new draft, so the older published version isn't hosted silently; publish and get the new version approved | `quiz_not_hostable` |
+| `not_submitted` | Published but never submitted for approval | `quiz_version_not_approved` |
+| `pending_approval` | Waiting for an organizer | `quiz_version_not_approved` |
+| `rejected` | An organizer rejected this version | `quiz_version_not_approved` |
+| `withdrawn` | The submission was withdrawn | `quiz_version_not_approved` |
+| `approval_outdated` | An older version was approved, but not the newest one | `quiz_version_not_approved` |
+
+When hosting is allowed, `hosting` is `{"can_host": true, "reason": null, "message": null}`.
+
+The status is loaded in a fixed number of queries for the whole list, so long quiz lists don't make extra database calls.
 
 ### `POST /sessions/join` → `201 SessionJoinResponse`
 Any active account. Body: `{"join_code": "123456"}` (6 digits; surrounding spaces are trimmed). Works in `LOBBY` or `ACTIVE`; a late joiner starts from the next question. The host is notified over the WebSocket after the commit.
@@ -323,7 +430,7 @@ Host, Admin, or a participant who hasn't left.
 Errors: `403 session_access_denied`, `404 session_not_found`, `500 invalid_session`.
 
 ### `GET /sessions/{session_id}/participants` → `200 SessionParticipant[]`
-Host or Admin. Participants who haven't left, in join order.
+Host or Admin. Participants who haven't left, in join order. Each row is `{ session_participant_id, account_id, display_name, avatar_key, joined_at }`.
 
 Errors: `403 session_access_denied`, `404 session_not_found`, `500 invalid_participant`.
 
@@ -339,6 +446,7 @@ The receipt deliberately leaves out correctness and points until the question cl
 | 409 | `session_not_active` | Session isn't ACTIVE |
 | 409 | `question_not_open` | Question is PENDING or CLOSED |
 | 409 | `response_deadline_passed` | Arrived after `closes_at` |
+| 409 | `joined_after_question_opened` | Joined after this question opened (`joined_at > opened_at`); they start with the next question |
 | 409 | `response_already_submitted` | Already answered this question |
 | 422 | `choice_not_for_question` | `choice_id` belongs to another question |
 | 500 | `invalid_question_timing` | Server timestamps are inconsistent |
@@ -353,8 +461,8 @@ Shared errors: `403 session_access_denied`, `404 session_not_found`, `409 result
 
 ### `GET /sessions/{session_id}/results` → `200 FinalResults | ParticipantFinalResults`
 Final standings, matching the live `session_ended` event. Ties share a rank (1, 1, 3).
-- Host or Admin: `{ session_id, status, ended_at, standings: [{ session_participant_id, display_name, total_score, correct_count, final_rank }] }`.
-- Participant: `{ session_id, status, ended_at, me: <own standing or null>, leaderboard: [{ display_name, total_score, final_rank }] }` (top 5).
+- Host or Admin: `{ session_id, status, ended_at, standings: [{ session_participant_id, display_name, avatar_key, total_score, correct_count, final_rank }] }`.
+- Participant: `{ session_id, status, ended_at, me: <own standing or null>, leaderboard: [{ display_name, avatar_key, total_score, final_rank }] }` (top 5).
 
 ### `GET /sessions/{session_id}/report` → `200`
 Per-question breakdown for the results pages, sent with `Cache-Control: no-store`.
@@ -364,7 +472,8 @@ Per-question breakdown for the results pages, sent with `Cache-Control: no-store
   "session_id": 12, "view": "host", "status": "COMPLETED",
   "quiz_title": "…", "host_name": "…", "ended_at": "…+00:00",
   "total_participants": 8, "played_count": 5,
-  "questions": [{ "question_id", "order", "text", "explanation", "seconds", "base_points", "played", "choices": [{ "id", "text", "correct" }] }],
+  "score_revision": 1, "rescored_at": "…+00:00", "can_correct": true,
+  "questions": [{ "question_id", "session_question_id", "order", "text", "explanation", "seconds", "base_points", "played", "corrected", "choices": [{ "id", "text", "correct" }] }],
   "players": [{ "id", "name", "rank", "points", "correct",
                 "answers": [{ "question_id", "state", "choice_id", "points", "time_ms" }] }]
 }
@@ -375,6 +484,35 @@ Per-question breakdown for the results pages, sent with `Cache-Control: no-store
 - A `CANCELLED` session returns empty `questions` and `players`.
 
 Extra error: `500 results_incomplete`.
+
+### Correct a completed session's answer and rescore it
+
+Only an active faculty organizer of the session's class may use these routes.
+The correction belongs to this completed session only: it never edits the quiz
+or any other presentation. Every applied correction records its actor, old and
+new choices, timestamp, and score revision.
+
+- `POST /sessions/{session_id}/questions/{session_question_id}/correct-answer` applies the correction and recalculates stored responses, totals, correct counts, and ranks in one transaction.
+
+```json
+{
+  "choice_id": 42,
+  "mode": "REPLACE",
+  "expected_score_revision": 0
+}
+```
+
+`mode` is `REPLACE` to make only the selected choice correct, `ADD` to keep the
+existing accepted choices and add the selected choice, or `REMOVE` to stop
+accepting a selected currently-correct choice. Removing the last correct answer
+is rejected. The mode defaults to `REPLACE` for API compatibility.
+
+`expected_score_revision` comes from the session report's `score_revision`.
+A concurrent rescore returns `409 score_revision_conflict`; the caller must
+reload the report before trying again.
+Other errors include `403 not_class_organizer`, `409 session_not_completed`,
+`409 session_question_not_closed`, `409 correct_answer_unchanged`, and
+`409 last_correct_answer`, and `422 choice_not_in_question`.
 
 ### `GET /sessions/{session_id}/results/export.csv` → `200 text/csv`
 Host or Admin only. Returns `session-{id}-results.csv` (UTF-8 with BOM, `no-store`). It contains:
@@ -405,8 +543,8 @@ Join a class by its code. Body: `{"code": "ABCD-2345"}`. Case, spaces and the da
 | 409 | `already_class_member` | Already an active member |
 | 429 | `too_many_join_attempts` | More than 10 tries in a minute from one account (counted per server process) |
 
-### `DELETE /classes/{class_id}/membership` → `204`
-Leave a class. The membership becomes `LEFT`, and the code brings them back. Errors: `404 class_not_found` (not a member), `409 not_class_member` (an Admin who never joined), `409 last_organizer`.
+### `DELETE /classes/{class_id}/membership` → `403`
+Self-service class departure is disabled. This route always returns `class_self_leave_disabled`; an organizer must remove the member through `DELETE /classes/{class_id}/members/{account_id}`.
 
 ### Class reports
 Built from the class's `COMPLETED` sessions only; open sessions never count. Scores are each player's `result.total_score`.
@@ -416,11 +554,17 @@ Built from the class's `COMPLETED` sessions only; open sessions never count. Sco
   - `class_average` and `attendance_rate`, which are organizers only and null for members;
   - `active_sessions`;
   - the five most recent `completed_sessions` and `presented_quizzes`;
-  - the first ten `students`, for organizers.
-- `GET /classes/{class_id}/sessions`: for any member. It takes `page`, `page_size` (1–100), `sort=started_at|participant_count|average_score` and `order`. Each item has:
+  - the first ten `students`, for organizers;
+  - `my_quizzes`, the five most recently updated quizzes in this class the caller owns or collaborates on (same items as `GET /classes/{class_id}/quizzes?mine=true`), and `my_quiz_count`, the full total.
+  - `pending_submission_count`: every pending submission in the class for organizers, the caller's own for members; and `approved_quiz_count`, the hostable approved quizzes.
+
+  `is_global_admin` was removed in V3: Admin status never grants access to a class.
+- `GET /classes/{class_id}/sessions`: for any member. It takes `page`, `page_size` (1–100), `sort=started_at|participant_count|average_score`, `order`, and optional `q` (at most 200 characters; longer values return `422`). The server trims leading and trailing whitespace from `q`, then matches a case-insensitive substring of `quiz_title` across all completed sessions in this class before sorting and pagination. Missing, empty, or whitespace-only `q` returns the original full list. `total_items` and `total_pages` count matching sessions. Each item has:
   - `session_id, quiz_id, quiz_title, status, host_name, is_host, started_at, ended_at, participant_count`;
   - `average_score` and `top_score`, which are organizers only;
   - `my_score` and `my_rank`, the caller's own result or null.
+
+  Example: `GET /classes/12/sessions?q=week%201&page=1&page_size=25&sort=started_at&order=desc` returns the first page of that class's completed sessions whose quiz titles contain `week 1`, newest first.
 - `GET /classes/{class_id}/presented-quizzes`: for any member. (It was `/quizzes` before V3; that address now lists the class's own quizzes.) Completed sessions grouped by quiz, with `presented_at, session_count, participant_count` and `average_score` (organizers only). It takes `sort=presented_at|title|participant_count`.
 - `GET /classes/{class_id}/students`: organizers only (`403 not_class_organizer`). Active `MEMBER`s, with:
   - `session_count, average_score, total_points`;
@@ -429,7 +573,11 @@ Built from the class's `COMPLETED` sessions only; open sessions never count. Sco
 
   It takes `sort=name|average_score|session_count`.
 
-All four use the same paging shape: `{ class_id, items, pagination: { page, page_size, total_items, total_pages } }`.
+- `GET /classes/{class_id}/dashboard/submissions`: for any member (V3 Task 6). Organizers see every submission in the class; members see their own. It takes `status=PENDING|APPROVED|REJECTED|WITHDRAWN` (optional), `sort=submitted_at|title|submitter` (default `submitted_at`) and `order` (default `desc`). Each item has `submission_id, quiz_id, quiz_version_id, version_number, quiz_title, question_count, submitted_by_id, submitter_name, status, submitted_at, decided_at, decided_by_name`, and `is_current_version` (false once a newer version is published). Decisions still go through `PATCH`/`DELETE /classes/{class_id}/quiz-submissions/{submission_id}`. Counting, sorting and paging happen in the database.
+- `GET /classes/{class_id}/dashboard/submissions/{submission_id}/preview`: the organizer or the submitter (others get `404 submission_not_found`). Returns `{ submission, version }`: the same summary as above plus the exact submitted `QuizVersion` with its questions and choices (including `is_correct`), never the quiz's newer draft. The Approvals queue links here (`/app/classes/{class_id}/submissions/{submission_id}`) so organizers review what they approve.
+- `GET /classes/{class_id}/dashboard/approved-quizzes`: for any member (V3 Task 6). The same versions as `GET /classes/{class_id}/approved-quizzes`, paged, with `title, question_count, author_name, approved_at, approved_by_name`, and `hosting` plus `can_host`, from the same checks as starting a session (see the `hosting` reasons above), so the owner sees why an approved quiz is blocked, for example `unpublished_changes`, and other members get `not_host`. `can_view` says whether the caller may open `GET /quizzes/{quiz_id}` (owner, organizer, or active collaborator); the My quizzes tab only links the card when it's true. It takes `sort=approved_at|title` and `order`. An archived class returns its list with `can_host` false (`class_archived`) instead of `409`.
+
+All six use the same paging shape: `{ class_id, items, pagination: { page, page_size, total_items, total_pages } }`.
 
 ### Detailed class reports
 For one session, one quiz or one student. Like the lists above, they only count the class's `COMPLETED` sessions and use stored scores. All three are sent with `Cache-Control: no-store`.

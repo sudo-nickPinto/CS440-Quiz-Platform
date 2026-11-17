@@ -87,7 +87,9 @@ describe('createLiveSession', () => {
     expect(fetchImpl).toHaveBeenCalledWith('http://api/sessions/9/participants', {
       headers: { Authorization: 'Bearer tok' },
     })
-    expect(live.getState().participants).toEqual([{ session_participant_id: 4, display_name: 'Ann' }])
+    expect(live.getState().participants).toEqual([
+      { session_participant_id: 4, display_name: 'Ann', avatar_key: null },
+    ])
   })
 
   describe('a roster response that arrives late', () => {

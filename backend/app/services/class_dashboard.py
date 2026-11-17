@@ -35,6 +35,9 @@ from app.schemas.class_dashboard import (
     SortOrder,
     StudentSort,
 )
+from app.schemas.quiz import ClassQuizSort
+from app.services.quizzes import list_class_quizzes as list_my_class_quizzes
+from app.services.class_approvals import approval_counts
 from app.services.class_authorization import (
     ClassAccess,
     require_class_member,
@@ -224,6 +227,7 @@ def _quiz_summaries(
     summaries = []
     for quiz_id, quiz_sessions in grouped.items():
         score_sum, result_count = totals[quiz_id]
+        latest = quiz_sessions[0]
         summaries.append(
             ClassQuizSummary(
                 quiz_id=quiz_id,
@@ -237,6 +241,11 @@ def _quiz_summaries(
                     if organizer and result_count
                     else None
                 ),
+                last_session_id=latest.session_id,
+                last_host_name=latest.host_name,
+                last_participant_count=latest.participant_count,
+                last_average_score=latest.average_score,
+                last_top_score=latest.top_score,
             )
         )
     summaries.sort(key=lambda item: item.presented_at, reverse=True)
@@ -406,11 +415,17 @@ def list_class_sessions(
     page_size: int,
     sort: SessionSort,
     order: SortOrder,
+    q: str | None = None,
 ) -> ClassSessionPage:
     access = require_class_member(db, account, class_id)
     sessions, _ = _session_summaries(
         db, account, class_id, access, (LiveSessionStatus.COMPLETED,)
     )
+    query = (q or "").strip().casefold()
+    if query:
+        sessions = [
+            session for session in sessions if query in session.quiz_title.casefold()
+        ]
     sessions = _sort_sessions(sessions, sort, order)
     return ClassSessionPage(
         class_id=class_id,
@@ -432,7 +447,18 @@ def get_class_dashboard(
     quizzes = _quiz_summaries(completed, rows, organizer)
     active, _ = _session_summaries(db, account, class_id, access, LIVE_STATUSES)
     students = _class_students(db, class_id)
+    my_quizzes = list_my_class_quizzes(
+        db,
+        account,
+        class_id,
+        page=1,
+        page_size=RECENT_SCORE_COUNT,
+        sort=ClassQuizSort.UPDATED_AT,
+        order=SortOrder.DESC,
+        mine=True,
+    )
 
+    pending_count, approved_count = approval_counts(db, account, access, class_id)
     class_average = attendance_rate = None
     if organizer:
         averages = [s.average_score for s in students if s.average_score is not None]
@@ -444,7 +470,6 @@ def get_class_dashboard(
         class_id=access.class_.class_id,
         class_name=access.class_.name,
         current_user_role=access.membership.role if access.membership else None,
-        is_global_admin=access.is_global_admin,
         is_archived=access.class_.archived_at is not None,
         active_member_count=_active_member_count(db, class_id),
         student_count=len(students),
@@ -459,6 +484,10 @@ def get_class_dashboard(
             if organizer
             else None
         ),
+        my_quizzes=my_quizzes.items,
+        my_quiz_count=my_quizzes.pagination.total_items,
+        pending_submission_count=pending_count,
+        approved_quiz_count=approved_count,
     )
 
 

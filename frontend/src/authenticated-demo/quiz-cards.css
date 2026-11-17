@@ -1,0 +1,193 @@
+.qp .qc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 24px;
+  padding: 24px;
+}
+
+.qp .qc-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.qp .qc-card:has(details[open]) { position: relative; z-index: 5; }
+.qp .qc-banner {
+  position: relative;
+  display: flex;
+  align-items: end;
+  min-height: 140px;
+  padding: 48px 18px 18px;
+  border-bottom: var(--b);
+  background: var(--apricot);
+  color: var(--ink);
+}
+.qp .qc-card:nth-child(even) .qc-banner { background: var(--sky-soft); }
+.qp .qc-card.qc-archived .qc-banner { background: var(--sand); }
+.qp .qc-status {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 6px 10px;
+  background: var(--navy);
+  color: var(--paper);
+  border-right: var(--b-thin);
+  border-bottom: var(--b-thin);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.qp .qc-archived .qc-status { background: var(--ink); }
+.qp .qc-headline { font-size: 24px; overflow-wrap: anywhere; }
+.qp .qc-body { flex: 1; padding: 20px 18px; }
+.qp .qc-body h2 { margin: 0 0 14px; font-size: 21px; overflow-wrap: anywhere; }
+.qp .qc-body h2 a { color: var(--ink); text-decoration: none; }
+.qp .qc-body h2 a:hover { text-decoration: underline; }
+.qp .qc-meta { display: grid; gap: 8px; font-size: 14px; overflow-wrap: anywhere; }
+.qp .qc-meta p { margin: 0; }
+.qp .qc-meta .cl-tag { width: fit-content; }
+.qp .qc-approval {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding-top: 4px;
+}
+.qp .qc-approval .cl-approval-note {
+  color: var(--gray);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.qp .qc-approval button.cl-send {
+  min-width: 172px;
+  padding: 6px 12px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.qp .qc-approval button.cl-send.is-withdraw {
+  background: var(--paper);
+  color: var(--ink);
+}
+.qp .qc-approval button.cl-send.is-approved:disabled {
+  background: var(--navy);
+  color: var(--paper);
+  box-shadow: none;
+  cursor: default;
+  opacity: 1;
+}
+/* Host live is orange on cards and rows, like on the quiz page. */
+.qp .qc-approval .qc-host > button,
+.qp .cl-approval-cell .qc-host > button {
+  min-width: 172px;
+  padding: 6px 12px;
+  background: var(--orange-deep);
+  color: var(--paper);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.qp .qc-approval .qc-host > button:hover:not(:disabled),
+.qp .cl-approval-cell .qc-host > button:hover:not(:disabled) {
+  background: var(--orange-deep);
+  filter: var(--hover-shade);
+}
+.qp .qc-approval button.cl-send:disabled:not(.is-approved) {
+  background: var(--sand);
+  color: var(--gray);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.qp .qc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 18px;
+  border-top: var(--b-thin);
+  background: var(--sand);
+}
+.qp .qc-footer > a { color: var(--navy); font-weight: 800; }
+.qp .qc-footer .ui-row-menu,
+.qp .qc-footer .ui-row-menu[open] { position: relative; margin: 0; flex: 0 0 auto; }
+.qp .qc-footer .ui-row-options { top: calc(100% + 8px); right: 0; left: auto; min-width: 0; width: min(260px, 72vw); }
+.qp .qc-footer .cl-kebab-wrap { display: grid; place-items: center; }
+.qp .qc-footer button.cl-kebab {
+  width: 50px;
+  height: 38px;
+  padding: 0;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-size: 20px;
+  line-height: 1;
+}
+.qp .qc-footer button.cl-kebab:hover {
+  filter: var(--hover-shade);
+}
+
+.qp .qc-footer button.cl-kebab[aria-expanded="true"] {
+  background: var(--sky-soft);
+}
+.qp .qc-footer button.cl-kebab:active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+.qp .qc-card a:focus-visible,
+.qp .qc-card button:focus-visible,
+.qp .qc-card summary:focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 2px;
+}
+.qp .qc-progress { height: 10px; border: var(--b-thin); background: var(--sand); }
+.qp .qc-progress > span { display: block; height: 100%; background: var(--navy); }
+.qp .qc-empty { margin: 24px; }
+@media (max-width: 600px) {
+  .qp .qc-grid { gap: 18px; padding: 16px; }
+}
+
+/* Whole-card link (QuizCard wholeCard). No transform on hover: the card's ⋯
+   menu pops up with position: fixed, which a transformed ancestor would
+   break. */
+.qp .qc-card.is-clickable {
+  position: relative;
+  cursor: pointer;
+  transition: box-shadow 120ms ease;
+}
+.qp .qc-card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+/* Controls on the card stay clickable above the card link. */
+.qp .qc-card.is-clickable .qc-approval,
+.qp .qc-card.is-clickable .qc-footer {
+  position: relative;
+  z-index: 1;
+}
+.qp .qc-card.is-clickable .qc-footer {
+  justify-content: flex-end;
+}
+.qp .qc-card.is-clickable:hover {
+  box-shadow: 9px 9px 0 var(--ink);
+}
+.qp .qc-card.is-clickable:hover .qc-body h2 a {
+  text-decoration: underline;
+  text-decoration-color: var(--orange-deep);
+}
+.qp .qc-card.is-clickable:has(.qc-card-link:focus-visible) {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 3px;
+}
+.qp .qc-card.is-clickable .qc-card-link:focus-visible {
+  outline: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .qp .qc-card.is-clickable {
+    transition: none;
+  }
+}

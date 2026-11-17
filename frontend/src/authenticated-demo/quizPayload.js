@@ -1,46 +1,170 @@
 export function quizToEditor(quiz) {
   const version = quiz.version;
+  const questions = [...version.questions].sort(
+    (a, b) => a.question_order - b.question_order,
+  );
+  const timerCounts = new Map();
+  let defaultTime = 20;
+  let highestCount = 0;
+
+  // Quiz versions currently persist the effective timer on each question,
+  // not a separate editor-default value. Reconstruct the default from the
+  // most common saved timer so reopening does not incorrectly reset it to 20s.
+  for (const question of questions) {
+    const seconds = Number(question.time_limit_seconds);
+    const count = (timerCounts.get(seconds) ?? 0) + 1;
+    timerCounts.set(seconds, count);
+    if (count > highestCount) {
+      defaultTime = seconds;
+      highestCount = count;
+    }
+  }
 
   return {
     title: version.title,
     description: version.description ?? "",
-    defaultTime: 20,
-    questions: [...version.questions]
-      .sort((a, b) => a.question_order - b.question_order)
-      .map((question, index) => {
-        const choices = [...question.choices].sort(
-          (a, b) => a.choice_order - b.choice_order,
-        );
-
-        const correctChoices = choices.filter(
-          (choice) => choice.is_correct,
-        );
-
-        // Preserve the current editor's supported question format.
-        // Refuse unsupported questions instead of silently changing them.
-        if (
-          question.question_type !== "MULTIPLE_CHOICE" ||
-          choices.length < 2 ||
-          choices.length > 4 ||
-          correctChoices.length !== 1
-        ) {
-          throw new Error(
-            `Question ${index + 1} cannot be edited here. ` +
-              "This editor supports two to four choices with one correct answer.",
-          );
-        }
-
-        return {
-          id: `saved-${question.question_id}`,
-          text: question.question_text,
-          explanation: question.explanation ?? "",
-          options: choices.map((choice) => choice.choice_text),
-          correct: choices.findIndex((choice) => choice.is_correct),
-          limit: question.time_limit_seconds,
-          basePoints: question.base_points,
-        };
-      }),
+    defaultTime,
+    questions: questions.map((question, index) =>
+      quizQuestionToEditor(question, index, defaultTime),
+    ),
   };
+}
+
+export function quizQuestionToEditor(question, index = 0, defaultTime = null) {
+  const choices = [...question.choices].sort(
+    (a, b) => a.choice_order - b.choice_order,
+  );
+  const correctChoices = choices.filter((choice) => choice.is_correct);
+
+  // Preserve the current editor's supported question format. Refuse
+  // unsupported questions instead of silently changing them.
+  if (
+    question.question_type !== "MULTIPLE_CHOICE" ||
+    choices.length < 2 ||
+    choices.length > 4 ||
+    correctChoices.length !== 1
+  ) {
+    throw new Error(
+      `Question ${index + 1} cannot be edited here. ` +
+        "This editor supports two to four choices with one correct answer.",
+    );
+  }
+
+  return {
+    id: `saved-${question.question_id}`,
+    questionId: question.question_id,
+    revision: question.revision ?? 1,
+    text: question.question_text,
+    explanation: question.explanation ?? "",
+    options: choices.map((choice) => choice.choice_text),
+    correct: choices.findIndex((choice) => choice.is_correct),
+    limit:
+      defaultTime != null &&
+      Number(question.time_limit_seconds) === Number(defaultTime)
+        ? null
+        : question.time_limit_seconds,
+    basePoints: question.base_points,
+  };
+}
+
+export function normalizeEditorDefaultTime(editor) {
+  if (!editor.questions.length) return editor;
+
+  const previousDefault = Number(editor.defaultTime);
+  const effectiveTimes = editor.questions.map((question) =>
+    Number(question.limit ?? previousDefault),
+  );
+  const counts = new Map();
+  let nextDefault = effectiveTimes[0];
+  let highestCount = 0;
+
+  for (const seconds of effectiveTimes) {
+    const count = (counts.get(seconds) ?? 0) + 1;
+    counts.set(seconds, count);
+    if (
+      count > highestCount ||
+      (count === highestCount && seconds === previousDefault)
+    ) {
+      nextDefault = seconds;
+      highestCount = count;
+    }
+  }
+
+  return {
+    ...editor,
+    defaultTime: nextDefault,
+    questions: editor.questions.map((question, index) => ({
+      ...question,
+      limit: effectiveTimes[index] === nextDefault ? null : effectiveTimes[index],
+    })),
+  };
+}
+
+export function toQuestionCreate(question, index, defaultTime) {
+  const label = `Question ${index + 1}`;
+  const text = question.text.trim();
+  const explanation = (question.explanation ?? "").trim();
+  const seconds = Number(question.limit ?? defaultTime);
+  const points = Number(question.basePoints ?? 1000);
+
+  if (!text) throw new Error(`${label}: enter the question text.`);
+  if (explanation.length > 5000) {
+    throw new Error(`${label}: explanation must be 5,000 characters or fewer.`);
+  }
+  if (!Number.isInteger(seconds) || seconds < 1 || seconds > 65_535) {
+    throw new Error(
+      `${label}: use a whole number from 1 to 65,535 seconds.`,
+    );
+  }
+  if (!Number.isInteger(points) || points < 1 || points > 4_294_967_295) {
+    throw new Error(
+      `${label}: use a whole number from 1 to 4,294,967,295 base points.`,
+    );
+  }
+  if (question.options.length < 2 || question.options.length > 4) {
+    throw new Error(`${label}: provide two to four choices.`);
+  }
+  if (
+    !Number.isInteger(question.correct) ||
+    question.correct < 0 ||
+    question.correct >= question.options.length
+  ) {
+    throw new Error(`${label}: select the correct answer.`);
+  }
+
+  return {
+    question_text: text,
+    explanation: explanation || null,
+    time_limit_seconds: seconds,
+    base_points: points,
+    choices: question.options.map((option, choiceIndex) => {
+      const choice = option.trim();
+      if (!choice || choice.length > 500) {
+        throw new Error(`${label}: choices must have 1–500 characters.`);
+      }
+      return {
+        choice_text: choice,
+        is_correct: choiceIndex === question.correct,
+      };
+    }),
+  };
+}
+
+export function questionPayloadChanged(
+  question,
+  savedQuestion,
+  index,
+  defaultTime,
+  savedDefaultTime,
+) {
+  if (!savedQuestion) return true;
+
+  return (
+    JSON.stringify(toQuestionCreate(question, index, defaultTime)) !==
+    JSON.stringify(
+      toQuestionCreate(savedQuestion, index, savedDefaultTime),
+    )
+  );
 }
 
 export function toQuizCreate(editor) {
@@ -61,81 +185,8 @@ export function toQuizCreate(editor) {
     title,
     description: (editor.description ?? "").trim() || null,
 
-    questions: editor.questions.map((question, index) => {
-      const label = `Question ${index + 1}`;
-      const text = question.text.trim();
-      const explanation = (question.explanation ?? "").trim();
-      const seconds = Number(question.limit ?? editor.defaultTime);
-      const points = Number(question.basePoints ?? 1000);
-
-      if (!text) {
-        throw new Error(`${label}: enter the question text.`);
-      }
-
-      if (explanation.length > 5000) {
-        throw new Error(
-          `${label}: explanation must be 5,000 characters or fewer.`,
-        );
-      }
-
-      // Match the existing backend limits so loading and saving
-      // a valid stored quiz does not discard its timing.
-      if (
-        !Number.isInteger(seconds) ||
-        seconds < 1 ||
-        seconds > 65_535
-      ) {
-        throw new Error(
-          `${label}: use a whole number from 1 to 65,535 seconds.`,
-        );
-      }
-
-      if (
-        !Number.isInteger(points) ||
-        points < 1 ||
-        points > 4_294_967_295
-      ) {
-        throw new Error(
-          `${label}: use a whole number from 1 to 4,294,967,295 base points.`,
-        );
-      }
-
-      if (
-        question.options.length < 2 ||
-        question.options.length > 4
-      ) {
-        throw new Error(`${label}: provide two to four choices.`);
-      }
-
-      if (
-        !Number.isInteger(question.correct) ||
-        question.correct < 0 ||
-        question.correct >= question.options.length
-      ) {
-        throw new Error(`${label}: select the correct answer.`);
-      }
-
-      return {
-        question_text: text,
-        explanation: explanation || null,
-        time_limit_seconds: seconds,
-        base_points: points,
-
-        choices: question.options.map((option, choiceIndex) => {
-          const choice = option.trim();
-
-          if (!choice || choice.length > 500) {
-            throw new Error(
-              `${label}: choices must have 1–500 characters.`,
-            );
-          }
-
-          return {
-            choice_text: choice,
-            is_correct: choiceIndex === question.correct,
-          };
-        }),
-      };
-    }),
+    questions: editor.questions.map((question, index) =>
+      toQuestionCreate(question, index, editor.defaultTime),
+    ),
   };
 }

@@ -42,6 +42,7 @@ def results_db() -> Iterator[Session]:
                         auth0_sub=f"test|results-{account_id}",
                         email=f"results-{account_id}@test.invalid",
                         display_name=display_name,
+                        avatar_key="fox.orange" if account_id == 2 else None,
                     )
                     for account_id, display_name in [
                         (2, "Zoe"),
@@ -315,6 +316,14 @@ def test_leaderboard_includes_every_participant_and_rank_style_ties(
         ("Dana", None, False, 0, 100, 5),
         ("Eve", None, False, 0, 0, 6),
     ]
+
+
+def test_leaderboard_carries_each_participant_avatar(results_db: Session) -> None:
+    result = get_closed_question_results(results_db, SESSION_ID, SESSION_QUESTION_ID)
+
+    avatars = {p.display_name: p.avatar_key for p in result.participants}
+    assert avatars["Zoe"] == "fox.orange"
+    assert avatars["Alice"] is None
 
 
 def test_question_from_another_session_is_not_returned(results_db: Session) -> None:

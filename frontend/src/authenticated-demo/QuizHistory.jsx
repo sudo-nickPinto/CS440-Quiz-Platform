@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRemembered } from "./remember";
 import { Link, useParams } from "react-router";
 
 import RequestError from "./RequestError";
@@ -32,7 +32,7 @@ function DateBlock({ value }) {
 }
 
 function HistoryList({ endpoint, host, backTo }) {
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useRemembered(`history:${endpoint}:page`, 0);
 
   const resource = useResource(
     `${endpoint}?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`,

@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { readRemembered, writeRemembered } from "./remember";
+import QuestionWheel from "./QuestionWheel";
 import {
   Link,
   Navigate,
@@ -6,9 +8,16 @@ import {
   useParams,
   useSearchParams,
 } from "react-router";
-import { useResource } from "./rest";
+import { useAction, useApi, useResource } from "./rest";
+import { classPagePath } from "../classes/classPaths";
 import RequestError from "./RequestError";
 import { useFileDownload } from "./useFileDownload";
+import {
+  canCorrectSessionQuestion,
+  canSelectCorrectChoice,
+  correctionModesForChoice,
+  correctionRequest,
+} from "./sessionCorrections";
 import "./session-results.css";
 
 const LABEL = {
@@ -18,11 +27,12 @@ const LABEL = {
   not_played: "Not played",
 };
 
-const GLYPH = {
-  correct: "✓",
-  wrong: "✗",
-  missed: "—",
-  not_played: "·",
+// Shorter words for the tags on the report card tiles.
+const TAG = {
+  correct: "Correct",
+  wrong: "Wrong",
+  missed: "Missed",
+  not_played: "Skipped",
 };
 
 const fmt = (value) => Number(value).toLocaleString();
@@ -32,15 +42,17 @@ const seconds = (value) =>
 
 const letterOf = (index) => String.fromCharCode(65 + index);
 
+// A result square that shows the result by color only (sky correct,
+// apricot wrong, sand missed, dashed paper not played); the label is in
+// the tooltip and for screen readers.
 function Mark({ answer, order }) {
   return (
     <span
       className={"rr-mark " + answer.state}
+      role="img"
       title={"Q" + order + ": " + LABEL[answer.state]}
       aria-label={"Q" + order + ": " + LABEL[answer.state]}
-    >
-      {GLYPH[answer.state]}
-    </span>
+    />
   );
 }
 
@@ -53,14 +65,65 @@ function Stat({ label, value }) {
   );
 }
 
+function RescoreNotice({ report }) {
+  if (!report.score_revision) return null;
+
+  return (
+    <aside className="rr-rescore-notice" role="status">
+      <strong>Results updated</strong>
+      <span>
+        This session has been rescored {report.score_revision} {report.score_revision === 1 ? "time" : "times"}.
+        {report.rescored_at
+          ? ` Latest update: ${new Date(report.rescored_at).toLocaleString()}.`
+          : ""}
+      </span>
+    </aside>
+  );
+}
+
+function CorrectionConfirmation({ currentChoices, selectedChoice, busy, pendingMode, onConfirm, onCancel, promptRef }) {
+  const modes = correctionModesForChoice(currentChoices, selectedChoice);
+  const alreadyCorrect = modes[0] === "REMOVE";
+  const currentLabels = currentChoices.map((choice) => choice.text).join(", ");
+
+  return (
+    <section
+      className="rr-correction-prompt"
+      aria-label="Confirm correct answer change"
+      ref={promptRef}
+      tabIndex={-1}
+    >
+      <p>
+        <strong>Are you sure you want to make this change?</strong><br />
+        Currently accepted: <b>{currentLabels}</b>. Selected: <b>{selectedChoice.text}</b>.
+        Scores and ranks for this saved session will be recalculated.
+      </p>
+      <div className="rr-correction-actions">
+        <button type="button" className="rr-button" disabled={busy} onClick={onCancel}>Cancel</button>
+        {alreadyCorrect ? (
+          <button type="button" className="rr-button orange" disabled={busy} onClick={() => onConfirm("REMOVE")}>
+            {busy && pendingMode === "REMOVE" ? "Rescoring…" : "Remove correct answer"}
+          </button>
+        ) : (
+          <>
+            <button type="button" className="rr-button" disabled={busy} onClick={() => onConfirm("REPLACE")}>
+              {busy && pendingMode === "REPLACE" ? "Rescoring…" : "Replace correct answer"}
+            </button>
+            <button type="button" className="rr-button orange" disabled={busy} onClick={() => onConfirm("ADD")}>
+              {busy && pendingMode === "ADD" ? "Rescoring…" : "Add another correct answer"}
+            </button>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function Title({ report, host, children, backTo, backLabel }) {
   const destination =
-    backTo ||
-    (host
-      ? `/app/quizzes/${report.quiz_id}/reports`
-      : "/app/dashboard/participate");
+    backTo || "/app/classes";
 
-  const label = backLabel || (host ? "Hosting history" : "Participate");
+  const label = backLabel || "Classes";
 
   return (
     <header className="rr-title">
@@ -93,8 +156,7 @@ function AnswerDetail({ question, answer, total, nav }) {
         </span>
         <span className="rr-detail-tools">
           <span className={"rr-result " + answer.state}>
-            {GLYPH[answer.state]} {LABEL[answer.state]} · {fmt(answer.points)}{" "}
-            pts
+            {LABEL[answer.state]} · {fmt(answer.points)} pts
           </span>
           {nav}
         </span>
@@ -102,10 +164,6 @@ function AnswerDetail({ question, answer, total, nav }) {
 
       <div className="rr-detail-body">
         <h3>{question.text}</h3>
-
-        {!question.played && (
-          <p>This question was not played before the session ended.</p>
-        )}
 
         <div className="rr-choices">
           {question.choices.map((choice, index) => {
@@ -125,11 +183,11 @@ function AnswerDetail({ question, answer, total, nav }) {
                   <strong>{choice.text}</strong>
                   <small>
                     {choice.correct && selected
-                      ? "✓ Your answer · correct"
+                      ? "Your answer · correct"
                       : choice.correct
-                        ? "✓ Correct answer"
+                        ? "Correct answer"
                         : selected
-                          ? "✗ Your answer"
+                          ? "Your answer"
                           : ""}
                   </small>
                 </div>
@@ -157,12 +215,6 @@ function AnswerDetail({ question, answer, total, nav }) {
             </p>
           </div>
         </div>
-
-        {answer.state === "missed" && (
-          <p className="rr-missed-note">
-            No answer was recorded. A missed question counts as 0 points.
-          </p>
-        )}
       </div>
     </section>
   );
@@ -231,9 +283,6 @@ function People({ title, kind, people, questionIndex, onPerson }) {
   return (
     <section className="rr-people">
       <h4>
-        <span className={"rr-mark " + kind} aria-hidden="true">
-          {GLYPH[kind]}
-        </span>
         {title} · <b>{people.length}</b>
       </h4>
 
@@ -259,7 +308,79 @@ function People({ title, kind, people, questionIndex, onPerson }) {
   );
 }
 
-function QuestionBreakdown({ question, index, players, onPerson }) {
+function QuestionBreakdown({ question, index, players, onPerson, report, onCorrected, refreshing }) {
+  const api = useApi();
+  const applyAction = useAction();
+  const [editingCorrectAnswer, setEditingCorrectAnswer] = useState(false);
+  const [selectedChoiceId, setSelectedChoiceId] = useState(null);
+  const [complete, setComplete] = useState("");
+  const [pendingMode, setPendingMode] = useState(null);
+  const correctionPrompt = useRef(null);
+  const canCorrect = canCorrectSessionQuestion(report, question);
+  const currentChoices = question.choices.filter((choice) => choice.correct);
+  const selectedChoice = question.choices.find((choice) => choice.id === selectedChoiceId);
+  const correctionBusy = applyAction.busy || refreshing;
+
+  useEffect(() => {
+    if (!selectedChoice) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      correctionPrompt.current?.focus();
+      correctionPrompt.current?.scrollIntoView({ block: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedChoice]);
+
+  function closeCorrection() {
+    setEditingCorrectAnswer(false);
+    setSelectedChoiceId(null);
+  }
+
+  function selectCorrectAnswer(choice) {
+    if (!canSelectCorrectChoice({
+      editing: editingCorrectAnswer,
+      choice,
+      currentChoices,
+      busy: correctionBusy,
+    })) return;
+    setComplete("");
+    setSelectedChoiceId((selectedId) =>
+      selectedId === choice.id ? null : choice.id
+    );
+  }
+
+  async function applyCorrection(mode) {
+    if (!selectedChoice) return;
+    let correctionError = null;
+    setPendingMode(mode);
+    const result = await applyAction.run(() =>
+      api(
+        `/sessions/${report.session_id}/questions/${question.session_question_id}/correct-answer`,
+        {
+          method: "POST",
+          body: JSON.stringify(
+            correctionRequest(selectedChoiceId, mode, report.score_revision),
+          ),
+        },
+      ).catch((error) => {
+        correctionError = error;
+        throw error;
+      }),
+    );
+    setPendingMode(null);
+    if (!result) {
+      if (correctionError?.code === "score_revision_conflict") {
+        applyAction.clearError();
+        closeCorrection();
+        setComplete("Someone else updated these results. The latest answers and scores were loaded; review them before trying again.");
+        onCorrected?.();
+      }
+      return;
+    }
+    closeCorrection();
+    setComplete(`Question ${question.order} was corrected and the saved results were rescored.`);
+    onCorrected?.();
+  }
+
   const byState = (state) =>
     players.filter((p) => p.answers[index].state === state);
 
@@ -275,7 +396,7 @@ function QuestionBreakdown({ question, index, players, onPerson }) {
   const groups = [
     ...question.choices.map((choice, i) => ({
       key: choice.id,
-      letter: choice.correct ? "✓" : letterOf(i),
+      letter: letterOf(i),
       label: letterOf(i) + ". " + choice.text,
       count: players.filter((p) => p.answers[index].choice_id === choice.id)
         .length,
@@ -321,25 +442,78 @@ function QuestionBreakdown({ question, index, players, onPerson }) {
           <div className="rr-xp">
             <div className="rr-panel-heading">
               <span>Q{question.order} · Answer split</span>
-              <span>
-                {right.length}/{players.length} correct
+              <span className="rr-correction-tools">
+                <span>{right.length}/{players.length} correct</span>
+                {canCorrect && !editingCorrectAnswer && (
+                  <button
+                    type="button"
+                    className="rr-edit-answer-button"
+                    disabled={refreshing}
+                    onClick={() => {
+                      setComplete("");
+                      setEditingCorrectAnswer(true);
+                    }}
+                  >
+                    Edit correct answer
+                  </button>
+                )}
+                {editingCorrectAnswer && (
+                  <button
+                    type="button"
+                    className="rr-edit-answer-button"
+                    disabled={correctionBusy}
+                    onClick={closeCorrection}
+                  >
+                    Cancel edit
+                  </button>
+                )}
               </span>
             </div>
 
+            {editingCorrectAnswer && (
+              <p className="rr-correction-hint" role="status">
+                Click an answer letter to choose the answer that should have been marked correct. Nothing changes until you confirm the rescore.
+              </p>
+            )}
+            {complete && <p className="rr-correction-success" role="status">{complete}</p>}
+
             <div className="rr-breakdown">
               <div className="rr-padding">
-                {groups.map((group) => (
+                {groups.map((group) => {
+                  const choice = question.choices.find((item) => item.id === group.key);
+                  const selectable = canSelectCorrectChoice({
+                    editing: editingCorrectAnswer,
+                    choice,
+                    currentChoices,
+                    busy: correctionBusy,
+                  });
+                  return (
                   <div
                     className={
                       "rr-bar-row" +
                       (group.correct ? " correct" : "") +
-                      (group.missed ? " is-missed" : "")
+                      (group.missed ? " is-missed" : "") +
+                      (selectedChoiceId === group.key ? " is-selected" : "")
                     }
                     key={group.key}
                   >
-                    <span className="rr-let" aria-hidden="true">
-                      {group.letter}
-                    </span>
+                    {selectable ? (
+                      <button
+                        type="button"
+                        className="rr-let rr-let-button"
+                        aria-label={
+                          selectedChoiceId === group.key
+                            ? `Cancel selection of answer ${group.label}`
+                            : `Select answer ${group.label} as correct`
+                        }
+                        disabled={correctionBusy}
+                        onClick={() => selectCorrectAnswer(choice)}
+                      >
+                        {group.letter}
+                      </button>
+                    ) : (
+                      <span className="rr-let" aria-hidden="true">{group.letter}</span>
+                    )}
                     <strong>
                       {group.label}
                       {group.correct && <em> Correct</em>}
@@ -354,7 +528,8 @@ function QuestionBreakdown({ question, index, players, onPerson }) {
                       </small>
                     </span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div>
@@ -381,6 +556,19 @@ function QuestionBreakdown({ question, index, players, onPerson }) {
                 />
               </div>
             </div>
+
+            <RequestError error={applyAction.error} />
+            {editingCorrectAnswer && currentChoices.length > 0 && selectedChoice && (
+              <CorrectionConfirmation
+                currentChoices={currentChoices}
+                selectedChoice={selectedChoice}
+                busy={correctionBusy}
+                pendingMode={pendingMode}
+                promptRef={correctionPrompt}
+                onCancel={closeCorrection}
+                onConfirm={(mode) => void applyCorrection(mode)}
+              />
+            )}
           </div>
         </div>
       )}
@@ -399,12 +587,17 @@ export function HostResults({
   exportPath = `/sessions/${report.session_id}/results/export.csv`,
   exportName = `session-${report.session_id}-results.csv`,
   exportLabel = "Export CSV",
+  onCorrected,
+  refreshing = false,
 }) {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const file = useFileDownload();
 
-  const questionsTab = params.get("tab") === "questions";
+  // ?tab= wins; otherwise the tab last open on this report.
+  const tabMemory = `results:${exportPath}:tab`;
+  const questionsTab =
+    (params.get("tab") ?? readRemembered(tabMemory)) === "questions";
   const players = report.players;
 
   const average = (field) =>
@@ -419,6 +612,7 @@ export function HostResults({
   const filteredQuestions = report.questions.filter((q) => matches(q.text));
 
   function changeTab(tab) {
+    writeRemembered(tabMemory, tab);
     setQuery("");
     setParams({ tab });
   }
@@ -450,6 +644,7 @@ export function HostResults({
       </Title>
 
       <RequestError error={file.error} />
+      <RescoreNotice report={report} />
 
       <div className="rr-summary">
         <Stat label="Participants" value={report.total_participants} />
@@ -526,6 +721,9 @@ export function HostResults({
               index={report.questions.indexOf(q)}
               players={players}
               onPerson={showPerson}
+              report={report}
+              onCorrected={onCorrected}
+              refreshing={refreshing}
             />
           ))}
 
@@ -638,6 +836,24 @@ export function ParticipantResults({ report, backTo, backLabel }) {
     }
   }
 
+  // Phone wheel: scroll so the top of the question card sits at the top of
+  // the screen; the question and its options then fit above the wheel bar.
+  function frameQuestion({ smooth = false } = {}) {
+    window.requestAnimationFrame(() => {
+      const detail = document.querySelector(".rr-me .rr-answer-detail");
+      if (!detail) return;
+      const delta = detail.getBoundingClientRect().top - 8;
+      if (Math.abs(delta) < 2) return;
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      window.scrollBy({ top: delta, behavior: smooth && !reduce ? "smooth" : "auto" });
+    });
+  }
+
+  function pickFromWheel(index, { live = false } = {}) {
+    selectQuestion(index);
+    frameQuestion({ smooth: !live });
+  }
+
   const last = report.questions.length - 1;
   const nav = (
     <span className="rr-tbtns">
@@ -666,22 +882,22 @@ export function ParticipantResults({ report, backTo, backLabel }) {
       <nav className="rr-crumbs" aria-label="Breadcrumb">
         <Link
           className="rr-crumb-back"
-          to={backTo || "/app/dashboard/participate"}
+          to={backTo || "/app/classes"}
         >
-          ← {backLabel || "Participate"}
+          ← {backLabel || "Classes"}
         </Link>
         <div className="rr-trail">
-          <span>Dashboard /</span>
+          <span>Classes /</span>
           <span>Results /</span>
           <b>{report.quiz_title}</b>
         </div>
-        <div className="rr-private">You, the host &amp; admins</div>
       </nav>
+
+      <RescoreNotice report={report} />
 
       <div className="rr-me-content">
         <section className="rr-band" aria-label="Report card">
           <div className="rr-band-title">
-            <small>Report card</small>
             <h1>{report.quiz_title}</h1>
             <p>
               Hosted by <b>{report.host_name}</b> ·{" "}
@@ -740,20 +956,6 @@ export function ParticipantResults({ report, backTo, backLabel }) {
           <section className="rr-answer-map" aria-label="Your answers">
             <div className="rr-panel-heading">
               <span>Your answers</span>
-              <span className="rr-key">
-                <span aria-label={`${count("correct")} correct`}>
-                  <i className="correct" aria-hidden="true">✓</i>
-                  {count("correct")}
-                </span>
-                <span aria-label={`${count("wrong")} wrong`}>
-                  <i className="wrong" aria-hidden="true">✗</i>
-                  {count("wrong")}
-                </span>
-                <span aria-label={`${count("missed")} missed`}>
-                  <i className="missed" aria-hidden="true">—</i>
-                  {count("missed")}
-                </span>
-              </span>
             </div>
 
             <div className="rr-tiles">
@@ -770,27 +972,21 @@ export function ParticipantResults({ report, backTo, backLabel }) {
                 >
                   <span className="rr-tile-top">
                     <strong>Q{q.order}</strong>
-                    <span>{GLYPH[player.answers[i].state]}</span>
+                    <span className="rr-tile-tag">
+                      {TAG[player.answers[i].state]}
+                    </span>
                   </span>
                   <span className="rr-tile-bottom">
                     <small>
                       {player.answers[i].points
                         ? "+" + fmt(player.answers[i].points)
-                        : "0"}
+                        : "0 pts"}
                     </small>
-                    <small>
-                      {player.answers[i].time_ms == null
-                        ? LABEL[player.answers[i].state]
-                        : seconds(player.answers[i].time_ms)}
-                    </small>
+                    <small>{seconds(player.answers[i].time_ms)}</small>
                   </span>
                 </button>
               ))}
             </div>
-
-            <p className="rr-hint">
-              Pick a question to see your answer and the correct one.
-            </p>
           </section>
 
           <div>
@@ -805,6 +1001,14 @@ export function ParticipantResults({ report, backTo, backLabel }) {
           </div>
         </div>
       </div>
+
+      <QuestionWheel
+        questions={report.questions}
+        answers={player.answers}
+        selected={selected}
+        onSelect={pickFromWheel}
+        onEngage={frameQuestion}
+      />
     </div>
   );
 }
@@ -816,6 +1020,14 @@ export default function SessionResults() {
   const valid =
     /^[1-9][0-9]*$/.test(sessionId || "") &&
     Number.isSafeInteger(Number(sessionId));
+
+  // The report doesn't say which class the session was in; the session
+  // itself does. "Back" always goes to that class.
+  const session = useResource(valid ? "/sessions/" + sessionId : null);
+  const classId = session.data?.class_id;
+  const back = classId
+    ? { backTo: classPagePath(classId), backLabel: "Class" }
+    : {};
 
   const resource = useResource(
     valid
@@ -840,7 +1052,7 @@ export default function SessionResults() {
     return (
       <section className="qp-content">
         <RequestError error={resource.error} retry={resource.reload} />
-        <Link to="/app/dashboard/participate">Return to dashboard</Link>
+        <Link to="/app/classes">Back to classes</Link>
       </section>
     );
   }
@@ -863,7 +1075,7 @@ export default function SessionResults() {
   if (report.status === "CANCELLED") {
     return (
       <div className="rr">
-        <Title report={report} host={host} />
+        <Title report={report} host={host} {...back} />
         <p className="rr-padding">
           This session was cancelled. No quiz results were recorded.
         </p>
@@ -872,8 +1084,13 @@ export default function SessionResults() {
   }
 
   return host ? (
-    <HostResults report={report} />
+    <HostResults
+      report={report}
+      onCorrected={resource.refresh}
+      refreshing={resource.refreshing}
+      {...back}
+    />
   ) : (
-    <ParticipantResults report={report} />
+    <ParticipantResults report={report} {...back} />
   );
 }

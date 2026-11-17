@@ -88,6 +88,7 @@ def get_class_session_results(
     report = build_session_report(
         db, session, load_final_results(db, session), viewer_id
     )
+    report["can_correct"] = _is_organizer(access)
     report["class_id"] = class_id
     report["started_at"] = _utc(session.started_at or session.created_at).isoformat()
     return report

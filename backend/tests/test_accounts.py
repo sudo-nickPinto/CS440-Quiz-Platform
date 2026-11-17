@@ -22,6 +22,9 @@ CREATE TABLE account (
     auth0_sub    VARCHAR(255) NOT NULL UNIQUE,
     email        VARCHAR(320) NOT NULL UNIQUE,
     display_name VARCHAR(100) NOT NULL,
+    first_name   VARCHAR(50) NULL,
+    last_name    VARCHAR(50) NULL,
+    avatar_key   VARCHAR(32) NULL,
     account_type VARCHAR(20) NULL,
     is_active    BOOLEAN NOT NULL DEFAULT 1
 );
@@ -175,3 +178,85 @@ def test_unverified_email_is_not_linked(client):
     assert response.status_code == 403
     assert error_code(response) == "email_not_verified"
     assert count_identities(client) == 1
+
+
+def patch_me(client, body, token=None):
+    return client.patch(
+        "/me", json=body, headers={"Authorization": f"Bearer {token or make_token()}"}
+    )
+
+
+def test_new_account_profile_is_incomplete(client):
+    body = get_me(client, make_token()).json()
+    assert body["profile_complete"] is False
+    assert body["first_name"] is None
+    assert body["avatar_key"] is None
+
+
+def test_patch_me_saves_profile(client):
+    get_me(client, make_token())
+    response = patch_me(
+        client, {"first_name": "  Ada  ", "last_name": "Love  lace", "avatar_key": "owl.sky"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["first_name"] == "Ada"
+    assert body["last_name"] == "Love lace"
+    assert body["display_name"] == "Ada Love lace"
+    assert body["avatar_key"] == "owl.sky"
+    assert body["profile_complete"] is True
+    assert get_me(client, make_token()).json()["profile_complete"] is True
+
+
+def test_patch_me_allows_no_avatar(client):
+    get_me(client, make_token())
+    response = patch_me(client, {"first_name": "Ada", "last_name": "L", "avatar_key": None})
+    assert response.status_code == 200
+    assert response.json()["avatar_key"] is None
+
+
+@pytest.mark.parametrize(
+    "first,last",
+    [
+        ("", "Lovelace"),
+        ("Ada", "   "),
+        ("A" * 51, "Lovelace"),
+        ("Ada", "L" * 51),
+        ("A" * 50, "L" * 50),
+        ("Ada\x00", "Lovelace"),
+    ],
+    ids=["empty-first", "blank-last", "long-first", "long-last", "long-combined", "control-char"],
+)
+def test_patch_me_rejects_invalid_names(client, first, last):
+    get_me(client, make_token())
+    response = patch_me(client, {"first_name": first, "last_name": last, "avatar_key": None})
+    assert response.status_code == 422
+    assert error_code(response) == "invalid_profile"
+    assert get_me(client, make_token()).json()["profile_complete"] is False
+
+
+def test_patch_me_accepts_longest_combined_name(client):
+    get_me(client, make_token())
+    response = patch_me(
+        client, {"first_name": "A" * 50, "last_name": "L" * 48, "avatar_key": None}
+    )
+    assert response.status_code == 200
+    assert len(response.json()["display_name"]) == 99
+
+
+@pytest.mark.parametrize("avatar_key", ["owl", "owl.purple", "dragon.sky", ""])
+def test_patch_me_rejects_unknown_avatar(client, avatar_key):
+    get_me(client, make_token())
+    response = patch_me(
+        client, {"first_name": "Ada", "last_name": "Lovelace", "avatar_key": avatar_key}
+    )
+    assert response.status_code == 422
+    assert error_code(response) == "invalid_profile"
+
+
+def test_patch_me_rejects_inactive_account(client):
+    get_me(client, make_token())
+    with client.app_ref.state.database.engine.begin() as conn:
+        conn.execute(text("UPDATE account SET is_active = 0"))
+    response = patch_me(client, {"first_name": "Ada", "last_name": "L", "avatar_key": None})
+    assert response.status_code == 403

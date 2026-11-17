@@ -1,5 +1,11 @@
 import { useAccount } from "../authenticated-demo/account";
-import { useResource } from "../authenticated-demo/rest";
+import { useEffect, useState } from "react";
+import { useApi, useResource } from "../authenticated-demo/rest";
+import {
+  approvedQuizzesPath,
+  myQuizzesPath,
+  submissionsPath,
+} from "./classHelpers";
 
 function normalizeClass(record, account) {
   if (
@@ -108,8 +114,8 @@ export function useClassResource(classId) {
 
 export const REPORT_PAGE_SIZE = 25;
 
-function useClassReport(classId, path) {
-  const result = useResource(`/classes/${classId}/${path}`);
+function useClassReport(classId, path, pollMs = 0) {
+  const result = useResource(`/classes/${classId}/${path}`, pollMs);
 
   return resourceState(result, (data) => {
     if (!data || typeof data !== "object") {
@@ -120,8 +126,12 @@ function useClassReport(classId, path) {
   });
 }
 
+// Polled so counts such as the pending-approval badge pick up changes
+// other people make (a student sending a quiz for approval).
+export const DASHBOARD_POLL_MS = 30000;
+
 export function useClassDashboard(classId) {
-  return useClassReport(classId, "dashboard");
+  return useClassReport(classId, "dashboard", DASHBOARD_POLL_MS);
 }
 
 export function useClassSessions(classId, page = 1) {
@@ -131,17 +141,105 @@ export function useClassSessions(classId, page = 1) {
   );
 }
 
-// Organizer-only; best average first, so row order is the class rank.
-export function useClassStudents(classId, page = 1) {
-  return useClassReport(
-    classId,
-    `students?page=${page}&page_size=${REPORT_PAGE_SIZE}&sort=average_score&order=desc`,
-  );
+// Every student's scores, keyed by account id, for the Students tab. The
+// students report is paged (at most 100 a page), so read every page.
+export function useClassStudentStats(classId) {
+  const api = useApi();
+  const [revision, setRevision] = useState(0);
+  const key = `${classId}:${revision}`;
+  const [result, setResult] = useState({ key: null, data: null, error: null });
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function load() {
+      try {
+        const byId = new Map();
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const data = await api(
+            `/classes/${classId}/students?page=${page}&page_size=100&sort=name&order=asc`,
+            { signal: controller.signal },
+          );
+          if (!data || !Array.isArray(data.items)) {
+            throw new Error("The student scores could not be read.");
+          }
+          for (const student of data.items) {
+            byId.set(Number(student.account_id), student);
+          }
+          totalPages = data.pagination?.total_pages ?? 1;
+          page += 1;
+        } while (page <= totalPages);
+
+        if (!controller.signal.aborted) {
+          setResult({ key, data: byId, error: null });
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setResult({ key, data: null, error });
+        }
+      }
+    }
+
+    void load();
+    return () => controller.abort();
+  }, [api, classId, key]);
+
+  const current = result.key === key;
+  return {
+    data: current ? result.data : null,
+    error: current ? result.error : null,
+    loading: !current,
+    reload: () => setRevision((value) => value + 1),
+  };
 }
 
 export function useClassQuizzes(classId, page = 1) {
   return useClassReport(
     classId,
     `presented-quizzes?page=${page}&page_size=${REPORT_PAGE_SIZE}&sort=presented_at&order=desc`,
+  );
+}
+
+// Quizzes in this class the caller owns or collaborates on.
+export function useMyClassQuizzes(classId, page = 1, sortKey = "recent") {
+  const result = useResource(myQuizzesPath(classId, page, sortKey, REPORT_PAGE_SIZE));
+
+  return resourceState(result, (data) => {
+    if (!data || !Array.isArray(data.items)) {
+      throw new Error("Your quizzes could not be read.");
+    }
+
+    return data;
+  });
+}
+
+function usePagedReport(path, what) {
+  const result = useResource(path);
+
+  return resourceState(result, (data) => {
+    if (!data || !Array.isArray(data.items)) {
+      throw new Error(`${what} could not be read.`);
+    }
+
+    return data;
+  });
+}
+
+// Organizers get every submission in the class; members only their own.
+export function useClassSubmissions(classId, page = 1, sortKey = "newest", status = "") {
+  return usePagedReport(
+    submissionsPath(classId, page, sortKey, status, REPORT_PAGE_SIZE),
+    "Quiz submissions",
+  );
+}
+
+// Approved quizzes any active member can see; can_host marks the ones the
+// caller may start.
+export function useApprovedQuizzes(classId, page = 1, sortKey = "recent") {
+  return usePagedReport(
+    approvedQuizzesPath(classId, page, sortKey),
+    "Approved quizzes",
   );
 }
