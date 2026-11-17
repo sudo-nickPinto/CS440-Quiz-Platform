@@ -98,7 +98,7 @@ Code: `backend/app/services/class_dashboard.py` and the report tables in `fronte
 
 ## 7. Deploying
 
-Migration `0007_session_class` must be applied to the production database before the new backend starts, and so must `0015_class_roster` (join requests and rosters). Apply it the same way as earlier migrations (`ulugbek-err/migrations/README.md`), then redeploy as described in [DEPLOYMENT.md](DEPLOYMENT.md):
+Migration `0007_session_class` must be applied to the production database before the new backend starts, and so must `0016_class_roster` (join requests and rosters). Apply it the same way as earlier migrations (`ulugbek-err/migrations/README.md`), then redeploy as described in [DEPLOYMENT.md](DEPLOYMENT.md):
 
 ```bash
 docker compose --env-file deploy/.env up --build -d

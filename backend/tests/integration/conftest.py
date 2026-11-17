@@ -77,7 +77,7 @@ def cleanup_database(app) -> None:
         "quiz",
         # After quiz and live_session, which both point at class (0007, 0008).
         "class_membership",
-        # Points at class and account (0015).
+        # Points at class and account (0016).
         "class_roster_entry",
         "class",
         "group_membership",

@@ -36,9 +36,9 @@ class MembershipStatus(str, Enum):
     ACTIVE = "ACTIVE"
     LEFT = "LEFT"
     REMOVED = "REMOVED"
-    # Used the class code or link and waits for an organizer (0015).
+    # Used the class code or link and waits for an organizer (0016).
     REQUESTED = "REQUESTED"
-    # An organizer turned the join request down (0015).
+    # An organizer turned the join request down (0016).
     REJECTED = "REJECTED"
 
 
@@ -154,7 +154,7 @@ class ClassMembership(Base):
 
 
 class ClassRosterEntry(Base):
-    """A student from an imported roster file (migration 0015).
+    """A student from an imported roster file (migration 0016).
 
     The registrar's file has a student ID and "Last,First" name, and usually
     no email, so `account_id` stays NULL until the student is matched.

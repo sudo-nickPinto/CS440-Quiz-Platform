@@ -1,4 +1,4 @@
--- 0015: class rosters and join requests that need an organizer's approval.
+-- 0016: class rosters and join requests that need an organizer's approval.
 --
 -- * class_membership.status gains REQUESTED (someone used the class code or
 --   link and is waiting for an organizer) and REJECTED (an organizer turned
@@ -44,4 +44,4 @@ CREATE TABLE class_roster_entry (
     INDEX idx_class_roster_account (account_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
-INSERT INTO schema_migrations (version) VALUES ('0015_class_roster');
+INSERT INTO schema_migrations (version) VALUES ('0016_class_roster');
