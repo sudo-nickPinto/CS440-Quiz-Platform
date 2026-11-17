@@ -46,6 +46,20 @@ ROSTER_CSV = "\n".join(
     ]
 ).encode()
 
+# The same class with an Email column filled in for Maya, Lin and Tunde.
+# Emails are verified at sign-in, so these rows can act on accounts.
+EMAIL_ROSTER_CSV = "\n".join(
+    [
+        "ID,Name,Email",
+        '6100001,"Rivera,Maya",riverma01@gettysburg.edu',
+        '6100002,"Chen,Lin Mei",chenli01@gettysburg.edu',
+        '6100003,"Okafor,Tunde",okaftu01@gettysburg.edu',
+        '6100004,"Kim,Jae",',
+        '6100005,"Novak,Ivana",',
+        "",
+    ]
+).encode()
+
 PEOPLE = {
     # name: (email, first, last, display, faculty)
     "organizer": ("organizer@gettysburg.edu", "Olive", "Organizer", "Olive Organizer", True),
@@ -236,17 +250,56 @@ def test_parse_refuses_unusable_files(content, code) -> None:
 # -- Importing --------------------------------------------------------------
 
 
-def test_import_invites_matches_and_saves_the_rest(roster_client) -> None:
+def test_name_only_import_reports_matches_without_inviting(roster_client) -> None:
+    """The registrar export has no emails. Names can be edited in a profile,
+    so a name match is shown to the organizer but never acts on an account."""
     client, identities, class_id = roster_client
 
     response = upload(client, class_id, ROSTER_CSV)
 
     assert response.status_code == 200
     body = response.json()
+    rows = {row["student_number"]: row for row in body["rows"]}
+    assert {number: row["outcome"] for number, row in rows.items()} == {
+        "6100001": "name_match",
+        "6100002": "name_match",  # display name "Lin Chen"
+        "6100003": "name_match",
+        "6100004": "ambiguous",
+        "6100005": "expected",
+    }
+    assert body["counts"] == {"name_match": 3, "ambiguous": 1, "expected": 1}
+    assert body["emails_sent"] == 0
+    assert outbox(client) == []
+    # The organizer sees who it might be, with the email to check.
+    assert rows["6100001"]["account_id"] == identities["maya"].account_id
+    assert PEOPLE["maya"][0] in rows["6100001"]["message"]
+    assert "join with the class code" in rows["6100005"]["message"]
+    for name in ("maya", "lin", "tunde", "jae_a"):
+        assert membership(client, class_id, identities[name].account_id) is None
+
+    roster = client.get(f"/classes/{class_id}/roster").json()
+    assert [entry["last_name"] for entry in roster] == [
+        "Chen",
+        "Kim",
+        "Novak",
+        "Okafor",
+        "Rivera",
+    ]
+    # Nothing is linked to an account by name.
+    assert all(entry["account_id"] is None for entry in roster)
+
+
+def test_email_import_invites_matches_and_saves_the_rest(roster_client) -> None:
+    client, identities, class_id = roster_client
+
+    response = upload(client, class_id, EMAIL_ROSTER_CSV)
+
+    assert response.status_code == 200
+    body = response.json()
     outcomes = {row["student_number"]: row["outcome"] for row in body["rows"]}
     assert outcomes == {
         "6100001": "invited",
-        "6100002": "invited",  # matched by display name "Lin Chen"
+        "6100002": "invited",
         "6100003": "invited",
         "6100004": "ambiguous",
         "6100005": "expected",
@@ -266,21 +319,18 @@ def test_import_invites_matches_and_saves_the_rest(roster_client) -> None:
     assert "https://quizburg.example/app/classes" in invitation.body
     assert "https://quizburg.example/app/join/class/ABCD-EFGH" in invitation.body
 
-    roster = client.get(f"/classes/{class_id}/roster").json()
-    assert [entry["last_name"] for entry in roster] == [
-        "Chen",
-        "Kim",
-        "Novak",
-        "Okafor",
-        "Rivera",
-    ]
-    assert {entry["last_name"]: entry["membership_status"] for entry in roster}["Novak"] is None
+    roster = {
+        entry["last_name"]: entry
+        for entry in client.get(f"/classes/{class_id}/roster").json()
+    }
+    assert roster["Rivera"]["account_id"] == identities["maya"].account_id
+    assert roster["Novak"]["membership_status"] is None
 
 
 def test_dry_run_saves_and_sends_nothing(roster_client) -> None:
     client, identities, class_id = roster_client
 
-    response = upload(client, class_id, ROSTER_CSV, dry_run=True)
+    response = upload(client, class_id, EMAIL_ROSTER_CSV, dry_run=True)
 
     assert response.status_code == 200
     assert response.json()["dry_run"] is True
@@ -293,14 +343,27 @@ def test_dry_run_saves_and_sends_nothing(roster_client) -> None:
 
 def test_importing_again_updates_rows_without_resending(roster_client) -> None:
     client, _, class_id = roster_client
-    upload(client, class_id, ROSTER_CSV)
+    upload(client, class_id, EMAIL_ROSTER_CSV)
+    outbox(client).clear()
+
+    again = upload(client, class_id, EMAIL_ROSTER_CSV).json()
+
+    assert again["counts"] == {"already_invited": 3, "ambiguous": 1, "expected": 1}
+    assert outbox(client) == []
+    assert len(client.get(f"/classes/{class_id}/roster").json()) == 5
+
+
+def test_reimport_without_emails_keeps_earlier_email_links(roster_client) -> None:
+    """Once a row is tied to an account by email, a later name-only export
+    (the registrar's usual one) still recognizes that account."""
+    client, _, class_id = roster_client
+    upload(client, class_id, EMAIL_ROSTER_CSV)
     outbox(client).clear()
 
     again = upload(client, class_id, ROSTER_CSV).json()
 
     assert again["counts"] == {"already_invited": 3, "ambiguous": 1, "expected": 1}
     assert outbox(client) == []
-    assert len(client.get(f"/classes/{class_id}/roster").json()) == 5
 
 
 def test_import_approves_pending_request_and_skips_members(roster_client) -> None:
@@ -322,7 +385,7 @@ def test_import_approves_pending_request_and_skips_members(roster_client) -> Non
 
     rows = {
         row["student_number"]: row
-        for row in upload(client, class_id, ROSTER_CSV).json()["rows"]
+        for row in upload(client, class_id, EMAIL_ROSTER_CSV).json()["rows"]
     }
 
     assert rows["6100001"]["outcome"] == "approved"
@@ -335,6 +398,26 @@ def test_import_approves_pending_request_and_skips_members(roster_client) -> Non
     )
     approved = [m for m in outbox(client) if m.to == PEOPLE["maya"][0]]
     assert approved[0].subject == "You're in CS 440 Fall 2026"
+
+
+def test_name_only_import_leaves_pending_requests_waiting(roster_client) -> None:
+    """Someone could rename themselves to a roster name and ask to join; a
+    later name-only import must not approve them."""
+    client, identities, class_id = roster_client
+    act_as(client, identities["maya"])
+    client.post("/classes/join", json={"code": "ABCD-EFGH"})
+    act_as(client, identities["organizer"])
+
+    rows = {
+        row["student_number"]: row
+        for row in upload(client, class_id, ROSTER_CSV).json()["rows"]
+    }
+
+    assert rows["6100001"]["outcome"] == "name_match"
+    assert membership(client, class_id, identities["maya"].account_id).status == (
+        MembershipStatus.REQUESTED
+    )
+    assert outbox(client) == []
 
 
 def test_import_with_email_invites_people_without_accounts(roster_client) -> None:
@@ -416,30 +499,85 @@ def test_code_join_waits_for_approval(roster_client) -> None:
     assert dashboard["pending_join_request_count"] == 1
 
 
-def test_roster_name_match_is_approved_automatically(roster_client) -> None:
-    client, identities, class_id = roster_client
-    # Ivana has no account at import time.
-    upload(client, class_id, ROSTER_CSV)
+def _account(client, name, email, first, last) -> CurrentAccount:
     with client.app.state.database.session_factory() as db:
-        ivana = Account(
-            auth0_sub="auth0|ivana",
-            email="novaiv01@gettysburg.edu",
-            first_name="Ivana",
-            last_name="Novak",
-            display_name="Ivana Novak",
+        person = Account(
+            auth0_sub=f"auth0|{name}",
+            email=email,
+            first_name=first,
+            last_name=last,
+            display_name=f"{first} {last}",
         )
-        db.add(ivana)
+        db.add(person)
         db.commit()
-        identity = CurrentAccount(ivana.account_id, AccountRole.USER, True)
+        return CurrentAccount(person.account_id, AccountRole.USER, True)
 
-    response = join(client, identity)
 
-    assert response.json()["membership_status"] == "ACTIVE"
+def _ivana_row(client):
     with client.app.state.database.session_factory() as db:
-        entry = db.scalar(
+        return db.scalar(
             select(ClassRosterEntry).where(ClassRosterEntry.student_number == "6100005")
         )
-        assert entry.account_id == identity.account_id
+
+
+def test_roster_name_match_alone_never_approves_a_join(roster_client) -> None:
+    client, identities, class_id = roster_client
+    # Ivana has no account at import time and the export has no emails.
+    upload(client, class_id, ROSTER_CSV)
+    ivana = _account(client, "ivana", "novaiv01@gettysburg.edu", "Ivana", "Novak")
+
+    response = join(client, ivana)
+
+    assert response.json()["membership_status"] == "REQUESTED"
+    assert _ivana_row(client).account_id is None
+
+    # The organizer sees the roster row as a hint on her request.
+    act_as(client, identities["organizer"])
+    pending = client.get(f"/classes/{class_id}/join-requests").json()
+    assert pending[0]["roster_name_match"] == {
+        "student_number": "6100005",
+        "first_name": "Ivana",
+        "last_name": "Novak",
+    }
+
+
+def test_renaming_yourself_to_a_roster_name_is_not_approved(roster_client) -> None:
+    """The attack from review: someone with the class code changes their
+    profile name to an unmatched roster row before joining."""
+    client, identities, class_id = roster_client
+    upload(client, class_id, ROSTER_CSV)
+    with client.app.state.database.session_factory() as db:
+        person = db.get(Account, identities["outsider"].account_id)
+        person.first_name, person.last_name = "Ivana", "Novak"
+        person.display_name = "Ivana Novak"
+        db.commit()
+
+    response = join(client, identities["outsider"])
+
+    assert response.json()["membership_status"] == "REQUESTED"
+    assert _ivana_row(client).account_id is None
+
+
+def test_roster_email_match_is_approved_on_join(roster_client) -> None:
+    """A roster row listing the account's (verified) email is approved."""
+    client, _, class_id = roster_client
+    ivana = _account(client, "ivana", "novaiv01@gettysburg.edu", "Ivana", "Novak")
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            ClassRosterEntry(
+                class_id=class_id,
+                student_number="6100005",
+                first_name="Ivana",
+                last_name="Novak",
+                email="NovaIv01@gettysburg.edu",
+            )
+        )
+        db.commit()
+
+    response = join(client, ivana)
+
+    assert response.json()["membership_status"] == "ACTIVE"
+    assert _ivana_row(client).account_id == ivana.account_id
 
 
 def test_approve_reject_and_accept_all_send_emails(roster_client) -> None:

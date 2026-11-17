@@ -308,8 +308,10 @@ def join_class(
         return _to_response(class_, membership)
 
     # Using the code is a request an organizer approves (Approvals ->
-    # Students). Someone already invited, or on the imported roster, was
-    # chosen by an organizer, so they are in straight away.
+    # Students). Someone already invited, or on the imported roster by their
+    # verified email (or an earlier link), was chosen by an organizer, so
+    # they are in straight away. A roster name alone doesn't count: names
+    # can be edited, so that request waits for an organizer.
     now = _utc_now_milliseconds()
     person = db.get(Account, account.account_id)
     roster_entry = (

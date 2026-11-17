@@ -52,6 +52,7 @@ from app.schemas.class_roster import (
     RosterEntryResponse,
     RosterImportResponse,
     RosterImportRow,
+    RosterNameHint,
     RosterRowOutcome,
     StudentSuggestion,
 )
@@ -398,6 +399,7 @@ def import_roster(
 
     accounts = list(db.scalars(select(Account).where(Account.is_active.is_(True))))
     by_email = {candidate.email.lower(): candidate for candidate in accounts}
+    by_id = {candidate.account_id: candidate for candidate in accounts}
     entries = {
         entry.student_number: entry
         for entry in db.scalars(
@@ -426,9 +428,18 @@ def import_roster(
         if item.error:
             continue
 
+        entry = entries.get(item.student_number)
+
+        # Only verifiable matches act on an account: a link made earlier
+        # (by email), or the email in this file. Sign-in emails are verified;
+        # names aren't, since anyone can edit theirs, so a name match is
+        # only reported to the organizer (NAME_MATCH) and changes nothing.
         match: Account | None = None
-        if item.email:
+        if entry is not None and entry.account_id is not None:
+            match = by_id.get(entry.account_id)
+        if match is None and item.email:
             match = by_email.get(item.email)
+        name_match: Account | None = None
         ambiguous = False
         if match is None:
             named = [
@@ -437,10 +448,9 @@ def import_roster(
                 if names_match(item.first_name, item.last_name, candidate)
             ]
             if len(named) == 1:
-                match = named[0]
+                name_match = named[0]
             ambiguous = len(named) > 1
 
-        entry = entries.get(item.student_number)
         new_email = item.email is not None and (
             entry is None or (entry.email or "").lower() != item.email
         )
@@ -460,14 +470,30 @@ def import_roster(
         entry.imported_by_id = account.account_id
 
         if match is None:
-            result.outcome = (
-                RosterRowOutcome.AMBIGUOUS if ambiguous else RosterRowOutcome.EXPECTED
-            )
-            result.message = (
-                "More than one account has this name. Add them with + Add student."
-                if ambiguous
-                else "No account yet. Their join request will be approved automatically."
-            )
+            if name_match is not None:
+                result.outcome = RosterRowOutcome.NAME_MATCH
+                result.account_id = name_match.account_id
+                result.account_name = name_match.display_name
+                result.message = (
+                    f"Same name as {name_match.display_name} ({name_match.email}). "
+                    "Names can be changed in a profile, so this isn't matched "
+                    "automatically. If it's them, approve their join request or "
+                    "add them with + Add student."
+                )
+            elif ambiguous:
+                result.outcome = RosterRowOutcome.AMBIGUOUS
+                result.message = (
+                    "More than one account has this name. Add them with + Add student."
+                )
+            else:
+                result.outcome = RosterRowOutcome.EXPECTED
+                result.message = (
+                    "No account yet. They're approved automatically when they "
+                    "sign up with this email and join."
+                    if entry.email
+                    else "No account yet. When they join with the class code, "
+                    "you'll see their request under Approvals."
+                )
             if new_email and entry.account_id is None:
                 messages.append(
                     email.roster_invitation(
@@ -566,20 +592,31 @@ def list_roster(
     ]
 
 
+def _unclaimed_or_own_entries(
+    db: Session, class_id: int, account_id: int
+) -> list[ClassRosterEntry]:
+    return list(
+        db.scalars(
+            select(ClassRosterEntry).where(
+                ClassRosterEntry.class_id == class_id,
+                or_(
+                    ClassRosterEntry.account_id.is_(None),
+                    ClassRosterEntry.account_id == account_id,
+                ),
+            )
+        ).all()
+    )
+
+
 def find_roster_entry(
     db: Session, class_id: int, account: Account
 ) -> ClassRosterEntry | None:
-    """The roster row that is this account: same account, same email, or,
-    for a row not matched yet, the same name."""
-    entries = db.scalars(
-        select(ClassRosterEntry).where(
-            ClassRosterEntry.class_id == class_id,
-            or_(
-                ClassRosterEntry.account_id.is_(None),
-                ClassRosterEntry.account_id == account.account_id,
-            ),
-        )
-    ).all()
+    """The roster row that is verifiably this account: already linked to it,
+    or listing the account's email (sign-in emails are verified before an
+    account exists). Joining with the code approves this account straight
+    away, so a name match never counts here: names can be edited in the
+    profile; organizers see it as a hint instead (list_join_requests)."""
+    entries = _unclaimed_or_own_entries(db, class_id, account.account_id)
     address = account.email.lower()
     for entry in entries:
         if entry.account_id == account.account_id:
@@ -587,13 +624,7 @@ def find_roster_entry(
     for entry in entries:
         if entry.email and entry.email.lower() == address:
             return entry
-    named = [
-        entry
-        for entry in entries
-        if entry.account_id is None and names_match(entry.first_name, entry.last_name, account)
-    ]
-    # Two unmatched rows with this name: let an organizer decide.
-    return named[0] if len(named) == 1 else None
+    return None
 
 
 def claim_roster_invitations(db: Session, account_id: int, email: str) -> int:
@@ -645,12 +676,36 @@ def list_join_requests(
         .options(joinedload(ClassMembership.account))
         .order_by(ClassMembership.decided_at, ClassMembership.membership_id)
     ).all()
+    unclaimed = list(
+        db.scalars(
+            select(ClassRosterEntry).where(
+                ClassRosterEntry.class_id == class_id,
+                ClassRosterEntry.account_id.is_(None),
+            )
+        )
+    )
+
+    def hint(person: Account) -> RosterNameHint | None:
+        named = [
+            entry
+            for entry in unclaimed
+            if names_match(entry.first_name, entry.last_name, person)
+        ]
+        if len(named) != 1:
+            return None
+        return RosterNameHint(
+            student_number=named[0].student_number,
+            first_name=named[0].first_name,
+            last_name=named[0].last_name,
+        )
+
     return [
         JoinRequestResponse(
             account_id=membership.account_id,
             email=membership.account.email,
             display_name=membership.account.display_name,
             requested_at=membership.decided_at or membership.updated_at,
+            roster_name_match=hint(membership.account),
         )
         for membership in memberships
     ]

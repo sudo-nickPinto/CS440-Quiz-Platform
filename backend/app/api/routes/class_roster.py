@@ -29,16 +29,36 @@ def _email(request: Request) -> EmailService:
     return request.app.state.email
 
 
+def _import_in_worker(
+    request: Request,
+    account: CurrentAccount,
+    class_id: int,
+    content: bytes,
+    email: EmailService,
+    dry_run: bool,
+):
+    """Runs in a worker thread with its own database session.
+
+    SQLAlchemy sessions aren't thread-safe, so the session is created, used
+    and closed here, in the worker, rather than borrowing the request's.
+    """
+    with request.app.state.database.session_factory() as db:
+        return import_roster(db, account, class_id, content, email, dry_run=dry_run)
+
+
 @router.post("/roster/import", response_model=RosterImportResponse)
 async def import_roster_route(
     class_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
     dry_run: bool = Query(default=False),
-    db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> RosterImportResponse:
-    """The request body is the roster file itself (CSV or .xlsx), not a form."""
+    """The request body is the roster file itself (CSV or .xlsx), not a form.
+
+    The body has to be read asynchronously, so this route is async; the
+    blocking database work then runs in a worker thread (see above).
+    """
     content = bytearray()
     async for chunk in request.stream():
         content.extend(chunk)
@@ -47,9 +67,14 @@ async def import_roster_route(
                 413, "roster_file_too_large", "The roster file is larger than 2 MB."
             )
     email = _email(request)
-    # The import itself is ordinary blocking database work.
     response, messages = await run_in_threadpool(
-        import_roster, db, account, class_id, bytes(content), email, dry_run=dry_run
+        _import_in_worker,
+        request,
+        account,
+        class_id,
+        bytes(content),
+        email,
+        dry_run,
     )
     if messages:
         background_tasks.add_task(email.send_all, messages)

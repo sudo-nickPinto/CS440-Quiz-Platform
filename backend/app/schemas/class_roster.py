@@ -15,8 +15,13 @@ class RosterRowOutcome(str, Enum):
     ALREADY_IN_CLASS = "already_in_class"
     # Matched an account that already has an invitation waiting.
     ALREADY_INVITED = "already_invited"
-    # No account yet. Saved; their join request will be approved automatically.
+    # No account yet. Saved; if the row has an email, signing up with it and
+    # joining is approved automatically. Otherwise their request waits.
     EXPECTED = "expected"
+    # Exactly one account has this name, but no email or earlier link ties
+    # it to the row. Saved like EXPECTED and reported (account_id/name) so
+    # the organizer can check; names are editable, so nothing is approved.
+    NAME_MATCH = "name_match"
     # More than one account has this name. Saved like EXPECTED.
     AMBIGUOUS = "ambiguous"
     # Matched an account an organizer removed; left alone.
@@ -57,11 +62,20 @@ class RosterEntryResponse(BaseModel):
     updated_at: datetime
 
 
+class RosterNameHint(BaseModel):
+    student_number: str
+    first_name: str
+    last_name: str
+
+
 class JoinRequestResponse(BaseModel):
     account_id: int
     email: str
     display_name: str
     requested_at: datetime
+    # An unclaimed roster row with this person's name: a hint for the
+    # organizer, never an automatic approval (names can be edited).
+    roster_name_match: RosterNameHint | None = None
 
 
 class JoinRequestDecisionResponse(BaseModel):
