@@ -8,8 +8,6 @@ describe("question-bank editor conversion", () => {
     const bankItem = {
       question_text: "Which value is even?",
       explanation: null,
-      time_limit_seconds: 30,
-      base_points: 750,
       choices: [
         { choice_text: "2", is_correct: true },
         { choice_text: "3", is_correct: false },
@@ -23,8 +21,8 @@ describe("question-bank editor conversion", () => {
       explanation: "",
       options: ["2", "3"],
       correct: 0,
-      limit: 30,
-      basePoints: 750,
+      limit: null,
+      basePoints: 1000,
     });
     expect(converted.id).toEqual(expect.any(String));
     expect(converted.options).not.toBe(bankItem.choices);

@@ -6,7 +6,8 @@ export function toEditorQuestion(item) {
     explanation: item.explanation ?? "",
     options: item.choices.map((choice) => choice.choice_text),
     correct,
-    limit: item.time_limit_seconds,
-    basePoints: item.base_points,
+    // Reused content inherits the destination quiz's current defaults.
+    limit: null,
+    basePoints: 1000,
   };
 }

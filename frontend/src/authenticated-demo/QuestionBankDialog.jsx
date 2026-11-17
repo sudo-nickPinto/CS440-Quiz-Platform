@@ -10,6 +10,7 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
   const [search, setSearch] = useState("");
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(new Set());
+  const [expanded, setExpanded] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -23,6 +24,7 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
 
   function resetDialog() {
     setSelected(new Set());
+    setExpanded(new Set());
     setPreview(null);
     setCsvSelected(new Set());
     setSaveOthers(false);
@@ -39,6 +41,7 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
     const closeOnEscape = (event) => {
       if (event.key !== "Escape") return;
       setSelected(new Set());
+      setExpanded(new Set());
       setPreview(null);
       setCsvSelected(new Set());
       setSaveOthers(false);
@@ -166,17 +169,50 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
         <RequestError error={error} />
         <div className="qb-bank-list" aria-busy={loading}>
           {loading ? <p>Loading questions…</p> : items.length ? items.map((item) => (
-            <label key={item.bank_question_id} className="qb-bank-row">
-              <input type="checkbox" checked={selected.has(item.bank_question_id)} onChange={() => toggle(setSelected, item.bank_question_id)} />
-              <span><strong>{item.question_text}</strong><small>{item.choices.length} choices · {item.time_limit_seconds}s{item.owner_id ? "" : ""}</small></span>
-            </label>
+            <article
+              key={item.bank_question_id}
+              className={`qb-bank-row${selected.has(item.bank_question_id) ? " is-selected" : ""}`}
+            >
+              <label className="qb-bank-select">
+                <input
+                  type="checkbox"
+                  checked={selected.has(item.bank_question_id)}
+                  onChange={() => toggle(setSelected, item.bank_question_id)}
+                />
+                <span className="qb-bank-check" aria-hidden="true">✓</span>
+                <span className="qb-bank-copy">
+                  <strong>{item.question_text}</strong>
+                </span>
+              </label>
+              <button
+                type="button"
+                className="qb-bank-expand"
+                aria-expanded={expanded.has(item.bank_question_id)}
+                aria-controls={`bank-choices-${item.bank_question_id}`}
+                aria-label={`${expanded.has(item.bank_question_id) ? "Hide" : "Show"} choices for ${item.question_text}`}
+                onClick={() => toggle(setExpanded, item.bank_question_id)}
+              >
+                <span aria-hidden="true" />
+              </button>
+              {expanded.has(item.bank_question_id) && (
+                <ol className="qb-bank-choices" id={`bank-choices-${item.bank_question_id}`}>
+                  {item.choices.map((choice, index) => (
+                    <li key={`${item.bank_question_id}-${index}`} className={choice.is_correct ? "is-correct" : ""}>
+                      <span>{String.fromCharCode(65 + index)}</span>
+                      <strong>{choice.choice_text}</strong>
+                      {choice.is_correct && <small>Correct</small>}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </article>
           )) : <p>No matching questions.</p>}
         </div>
         <button className="qb-btn qb-btn-blue" type="button" disabled={!selected.size || busy} onClick={addSelected}>Add selected ({selected.size})</button>
 
         <details className="qb-csv">
           <summary>Import CSV</summary>
-          <p>Columns: question_text, explanation, choice_a–choice_d, correct_choices, time_limit_seconds, base_points.</p>
+          <p>Columns: question_text, explanation, choice_a–choice_d, correct_choices.</p>
           <input type="file" accept=".csv,text/csv" onChange={(e) => readCsv(e.target.files?.[0])} />
           {preview && <div className="qb-csv-preview">
             <strong>{preview.valid_count} valid · {preview.invalid_count} invalid</strong>
