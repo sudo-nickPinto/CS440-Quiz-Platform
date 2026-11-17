@@ -1,9 +1,11 @@
-import { useEffect } from "react";
 import { useNavigate } from "react-router";
 
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import RequestError from "../authenticated-demo/RequestError";
-import { useNotifications } from "../authenticated-demo/notifications";
+import {
+  useCatchUp,
+  useNotifications,
+} from "../authenticated-demo/notifications";
 import { joinSession } from "../authenticated-demo/liveSessions";
 import { liveState } from "./classHelpers";
 
@@ -30,10 +32,7 @@ export default function ClassLiveButton({ classId }) {
   });
 
   // Check again as soon as the tab comes back, instead of waiting for a poll.
-  useEffect(() => {
-    window.addEventListener("focus", reload);
-    return () => window.removeEventListener("focus", reload);
-  }, [reload]);
+  useCatchUp(refresh);
 
   async function open(session) {
     if (session.left) return;

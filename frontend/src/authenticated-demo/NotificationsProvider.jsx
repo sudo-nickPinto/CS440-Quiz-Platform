@@ -11,7 +11,8 @@ import {
 // One notification socket for the signed-in app. Opens while there is an
 // active account in AccountContext and closes on sign-out or unmount. Pages
 // listen with useNotifications / useNotificationsReconnect / useCatchUp
-// (./notifications.js).
+// (./notifications.js). This is also the app's one focus/visibility listener
+// for catching up, so pages don't each add their own.
 export default function NotificationsProvider({ children }) {
   const account = useContext(AccountContext);
   const { getAccessTokenSilently } = useAuth0();
@@ -26,11 +27,28 @@ export default function NotificationsProvider({ children }) {
         getAccessTokenSilently(freshToken ? { cacheMode: "off" } : undefined),
       onEvent: (event) => bus.emit(event),
       onReady: ({ reconnected }) => {
-        if (reconnected) bus.emitReconnect();
+        if (!reconnected) return;
+        bus.emitReconnect();
+        // Events sent while the socket was down are not replayed.
+        bus.catchUp({ force: true });
       },
     });
     return () => client.close();
   }, [accountId, bus, getAccessTokenSilently]);
+
+  // The tab came back: timers may have been throttled and events missed
+  // while it was hidden. Throttled inside the bus.
+  useEffect(() => {
+    function onReturn() {
+      if (document.visibilityState !== "hidden") bus.catchUp();
+    }
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
+    return () => {
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
+    };
+  }, [bus]);
 
   return (
     <NotificationsContext.Provider value={bus}>
