@@ -7,6 +7,9 @@ export default defineConfig({
   plugins: [react()],
   define: {
     "import.meta.env.VITE_API_BASE_URL": JSON.stringify("/__test_api"),
+    "import.meta.env.VITE_AUTH0_DOMAIN": JSON.stringify(
+      "tenant.example.auth0.com",
+    ),
   },
   server: {
     host: "127.0.0.1",
