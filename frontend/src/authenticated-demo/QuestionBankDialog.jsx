@@ -15,8 +15,8 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [csvFileName, setCsvFileName] = useState("");
   const [csvSelected, setCsvSelected] = useState(new Set());
-  const [saveOthers, setSaveOthers] = useState(false);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -26,8 +26,8 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
     setSelected(new Set());
     setExpanded(new Set());
     setPreview(null);
+    setCsvFileName("");
     setCsvSelected(new Set());
-    setSaveOthers(false);
     setError(null);
   }
 
@@ -43,8 +43,8 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
       setSelected(new Set());
       setExpanded(new Set());
       setPreview(null);
+      setCsvFileName("");
       setCsvSelected(new Set());
-      setSaveOthers(false);
       setError(null);
       onCloseRef.current();
     };
@@ -95,6 +95,7 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
 
   async function readCsv(file) {
     if (!file) return;
+    setCsvFileName(file.name);
     const text = await file.text(); setBusy(true); setError(null);
     try {
       const result = await api(`/classes/${classId}/question-bank/csv/preview`, {
@@ -116,25 +117,12 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
           method: "POST",
           body: JSON.stringify({
             rows: chosen.map(({ row_number, question }) => ({ row_number, question })),
-            save_unselected_to_bank: saveOthers,
-            bank_only_rows: saveOthers
-              ? validCsvRows.filter((row) => !csvSelected.has(row.row_number)).map(({ row_number, question }) => ({ row_number, question }))
-              : [],
+            save_unselected_to_bank: false,
+            bank_only_rows: [],
           }),
         });
         onReload?.(); closeDialog();
       } else {
-        if (saveOthers) {
-          const bankOnly = validCsvRows.filter((row) => !csvSelected.has(row.row_number));
-          if (bankOnly.length) {
-            await api(`/classes/${classId}/question-bank/csv`, {
-              method: "POST",
-              body: JSON.stringify({
-                rows: bankOnly.map(({ row_number, question }) => ({ row_number, question })),
-              }),
-            });
-          }
-        }
         onAdd(chosen.map((row) => toEditorQuestion({ ...row.question, question_text: row.question.question_text })));
         closeDialog();
       }
@@ -212,14 +200,24 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
 
         <details className="qb-csv">
           <summary>Import CSV</summary>
-          <p>Columns: question_text, explanation, choice_a–choice_d, correct_choices.</p>
-          <input type="file" accept=".csv,text/csv" onChange={(e) => readCsv(e.target.files?.[0])} />
+          <p className="qb-csv-help">Columns: question_text, explanation, choice_a–choice_d, correct_choices.</p>
+          <label className="qb-csv-file">
+            <span>Choose CSV</span>
+            <strong>{csvFileName || "No file selected"}</strong>
+            <input type="file" accept=".csv,text/csv" onChange={(e) => readCsv(e.target.files?.[0])} />
+          </label>
           {preview && <div className="qb-csv-preview">
-            <strong>{preview.valid_count} valid · {preview.invalid_count} invalid</strong>
+            <div className="qb-csv-status">
+              <strong>{preview.valid_count} valid</strong>
+              <span>{preview.invalid_count} invalid</span>
+            </div>
             {preview.rows.map((row) => row.valid ? (
-              <label key={row.row_number}><input type="checkbox" checked={csvSelected.has(row.row_number)} onChange={() => toggle(setCsvSelected, row.row_number)} /> Row {row.row_number}: {row.question.question_text}</label>
-            ) : <p role="alert" key={row.row_number}>Row {row.row_number}: {row.errors.join(" ")}</p>)}
-            <label><input type="checkbox" checked={saveOthers} onChange={(e) => setSaveOthers(e.target.checked)} /> Save other valid, unselected rows to my bank</label>
+              <label className="qb-csv-row" key={row.row_number}>
+                <input type="checkbox" checked={csvSelected.has(row.row_number)} onChange={() => toggle(setCsvSelected, row.row_number)} />
+                <span className="qb-csv-check" aria-hidden="true">✓</span>
+                <span><small>Row {row.row_number}</small><strong>{row.question.question_text}</strong></span>
+              </label>
+            ) : <p className="qb-csv-error" role="alert" key={row.row_number}>Row {row.row_number}: {row.errors.join(" ")}</p>)}
             <button type="button" className="qb-btn qb-btn-orange" disabled={!csvSelected.size || busy} onClick={importCsv}>Import selected ({csvSelected.size})</button>
           </div>}
         </details>
