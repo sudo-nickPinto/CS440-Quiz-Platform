@@ -5,9 +5,9 @@
 --   the request down). Neither gives any access; only ACTIVE does.
 -- * class_roster_entry keeps the students an organizer imported from the
 --   registrar's roster file. The file has a student ID and "Last,First" name
---   but usually no email, so an entry may not point at an account yet. A join
---   request from someone whose name or email matches an entry is approved
---   automatically.
+--   but usually no email, so an entry may not point at an account yet. Only a
+--   verified email match or an existing account link can approve a join
+--   request automatically; name-only matches require organizer review.
 
 ALTER TABLE class_membership
     MODIFY status ENUM('INVITED', 'ACTIVE', 'LEFT', 'REMOVED', 'REQUESTED', 'REJECTED')
