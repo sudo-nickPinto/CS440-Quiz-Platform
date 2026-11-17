@@ -20,6 +20,9 @@ from app.live.protocol import CloseCode, encode
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
+# A socket that cannot take one event in this time is treated as dead: it is
+# dropped and closed, and its client reconnects and refetches.
+SEND_TIMEOUT_SECONDS = 5
 
 
 @dataclass(eq=False)
@@ -96,7 +99,9 @@ class NotificationHub:
     ) -> None:
         """Send one event to every open socket of each listed account.
 
-        Duplicate ids are sent once. A failed send drops only that socket.
+        Duplicate ids are sent once. Sockets are sent to concurrently, each
+        within SEND_TIMEOUT_SECONDS; one that fails or times out is dropped
+        and closed without holding up the others.
         """
         text = encode(payload)
         targets = [
@@ -106,21 +111,27 @@ class NotificationHub:
         ]
         if targets:
             await asyncio.gather(
-                *(self._send_text(target, text) for target in targets)
+                *(self._send_or_drop(target, text) for target in targets)
             )
 
-    async def close_account(
-        self,
-        account_id: int,
-        code: CloseCode = CloseCode.FORBIDDEN,
-        reason: str = "inactive_account",
+    async def _send_or_drop(
+        self, connection: NotificationConnection, text: str
     ) -> None:
-        targets = list(self._accounts.pop(account_id, set()))
-        for connection in targets:
-            try:
-                await connection.websocket.close(code=code, reason=reason)
-            except Exception:
-                logger.debug("Notification socket already closed", exc_info=True)
+        try:
+            async with asyncio.timeout(SEND_TIMEOUT_SECONDS):
+                async with connection.send_lock:
+                    await connection.websocket.send_text(text)
+            return
+        except Exception:
+            logger.debug("Dropped a slow or closed notification socket", exc_info=True)
+        await self.disconnect(connection)
+        try:
+            async with asyncio.timeout(SEND_TIMEOUT_SECONDS):
+                await connection.websocket.close(
+                    code=CloseCode.GOING_AWAY, reason="send_failed"
+                )
+        except Exception:
+            logger.debug("Notification socket already closed", exc_info=True)
 
     async def shutdown(self) -> None:
         targets = [

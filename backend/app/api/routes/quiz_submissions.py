@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
@@ -31,11 +31,14 @@ async def create_quiz_submission_route(
     class_id: int,
     payload: QuizSubmissionCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizSubmissionResponse:
     hub = request.app.state.notification_hub
     result = await hub.run_db(create_quiz_submission, account, class_id, payload)
-    await notify_submission_changed(
+    # Runs after the response is sent; failures are logged, never raised.
+    background_tasks.add_task(
+        notify_submission_changed,
         hub,
         submission_id=result.submission_id,
         action="submitted",
@@ -65,13 +68,15 @@ async def decide_quiz_submission_route(
     submission_id: int,
     payload: QuizSubmissionDecision,
     request: Request,
+    background_tasks: BackgroundTasks,
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizSubmissionResponse:
     hub = request.app.state.notification_hub
     result = await hub.run_db(
         decide_quiz_submission, account, class_id, submission_id, payload
     )
-    await notify_submission_changed(
+    background_tasks.add_task(
+        notify_submission_changed,
         hub,
         submission_id=result.submission_id,
         action=(
@@ -90,11 +95,13 @@ async def withdraw_quiz_submission_route(
     class_id: int,
     submission_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     account: CurrentAccount = Depends(get_active_account),
 ) -> Response:
     hub = request.app.state.notification_hub
     await hub.run_db(withdraw_quiz_submission, account, class_id, submission_id)
-    await notify_submission_changed(
+    background_tasks.add_task(
+        notify_submission_changed,
         hub,
         submission_id=submission_id,
         action="withdrawn",
