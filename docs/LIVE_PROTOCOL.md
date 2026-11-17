@@ -241,9 +241,10 @@ One socket a signed-in user keeps open anywhere in the app, so the server can pu
 
 - **Auth:** same as §2. The first message must be `{"type": "auth", "token": "<Auth0 access token>"}` within 5 seconds, verified by the same `authenticate_token()`.
 - **Ready:** on success the server sends `{"type": "notifications_ready"}` before anything else.
-- **Keep-alive:** `{"type": "ping"}` → `{"type": "pong"}`; 60 s of silence closes with `1001` `idle_timeout`. Each ping also rechecks that the account is still active. Any other client message closes with `4400`.
-- **Close codes** (§7): `4400` first message wasn't `auth` / bad JSON / unknown message; `4401` missing, invalid or expired token, or auth timeout; `4403` inactive or unknown account; `1001` idle timeout or server shutdown (reconnect); `1011` server error (reconnect with backoff).
+- **Keep-alive:** `{"type": "ping"}` → `{"type": "pong"}`; 120 s of silence closes with `1001` `idle_timeout`. The client pings every 25 s; the long limit leaves room for hidden tabs, whose timers browsers throttle. Each ping also rechecks that the account is still active. Any other client message closes with `4400`.
+- **Close codes** (§7): `4400` first message wasn't `auth` / bad JSON / unknown message; `4401` missing, invalid or expired token, or auth timeout; `4403` inactive or unknown account; `1001` idle timeout, server shutdown, or an event the socket could not take in time (`send_failed`) (reconnect); `1011` server error (reconnect with backoff).
 - **Events are hints, not data.** The server sends one after the change commits; the client refetches over HTTP. Missed events are not replayed, so a client refetches what it shows after every (re)connect.
+- **Delivery:** routes schedule events with FastAPI `BackgroundTasks`, so they go out after the HTTP response and never slow it down. All recipient sockets are sent to at once, each with a 5 s limit; a socket that errors or times out is dropped and closed with `1001` `send_failed`, and its client reconnects and refetches.
 - **One process:** the registry is in memory, so only sockets on the same uvicorn worker are reached (§8.3).
 
 ### Event types (server → client)
@@ -252,8 +253,8 @@ Built in `backend/app/notifications/events.py`. Payloads carry ids, titles and s
 
 | `type` | Sent when | Fields | Who receives it |
 |---|---|---|---|
-| `submission_changed` | A quiz submission is created, approved, rejected or withdrawn (`routes/quiz_submissions.py`) | `action` (`submitted` \| `approved` \| `rejected` \| `withdrawn`), `submission_id`, `class_id`, `quiz_id`, `quiz_title` (the submitted version's title), `class_name`, `status` (the submission's status after the change: `PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`), `actor_account_id` | `submitted`, `withdrawn`: the class's organizers. `approved`, `rejected`: the organizers plus the submitter and the quiz's author, if they are still active members of the class. "Organizers" means the people who may decide submissions: an `ACTIVE` `ORGANIZER` membership held by an active faculty account. |
-| `session_live` | A host opens a lobby (`POST /classes/{class_id}/quizzes/{quiz_id}/sessions`) | `session_id`, `class_id`, `class_name`, `quiz_title`, `host_name`, `join_code` | Every active account with an `ACTIVE` membership in the session's class, except the host. A session with no class sends nothing. Join the same way the class page's Live button does: `POST /sessions/{session_id}/join`, then open `/app/play/{session_id}`. `join_code` is the code members already see in `GET /classes/{class_id}/active-sessions`. |
+| `submission_changed` | A quiz submission is created, approved, rejected or withdrawn (`routes/quiz_submissions.py`) | `action` (`submitted` \| `approved` \| `rejected` \| `withdrawn`), `submission_id`, `class_id`, `quiz_id`, `quiz_title` (the submitted version's title), `class_name`, `status` (the submission's status after the change: `PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`), `actor_account_id` | Every action: the class's organizers and the submitter (so the submitter's other tabs update). `approved`, `rejected` also reach the quiz's author. The submitter and author only get it while they are still active members of the class. "Organizers" means the people who may decide submissions: an `ACTIVE` `ORGANIZER` membership held by an active faculty account. |
+| `session_live` | A host opens a lobby (`POST /classes/{class_id}/quizzes/{quiz_id}/sessions`) | `session_id`, `class_id`, `class_name`, `quiz_title`, `host_name`, `join_code`, `role` | Every active account with an `ACTIVE` membership in the session's class, except the host. A session with no class sends nothing. `role` is the recipient's role in the class: `ORGANIZER` for the class's other organizers (same rule as above), `MEMBER` for everyone else. The app shows its "A quiz is live" popup only for `MEMBER`; organizers just get their Live button refreshed. Join the same way the class page's Live button does: `POST /sessions/{session_id}/join`, then open `/app/play/{session_id}`. `join_code` is the code members already see in `GET /classes/{class_id}/active-sessions`. |
 
 Example:
 
@@ -263,19 +264,30 @@ Example:
 
 ### Sending a notification from a new action
 
-Do the database work and commit first, then await the matching `notify_*` function from `app/notifications/events.py`. It resolves recipients in its own DB session and never raises, so a failed push can't fail the request. For example, a route that withdraws a submission as a side effect:
+Do the database work and commit first, then schedule the matching `notify_*` function from `app/notifications/events.py` with the route's `BackgroundTasks`, so it runs after the response is sent. It resolves recipients in its own DB session and never raises, so a failed push can't fail the request. For example, a route that withdraws a submission as a side effect:
 
 ```python
+from fastapi import BackgroundTasks
+
 from app.notifications.events import notify_submission_changed
 
+# in the route: request: Request, background_tasks: BackgroundTasks
 hub = request.app.state.notification_hub
 await hub.run_db(some_service_that_withdraws_and_commits, account, class_id, quiz_id)
-await notify_submission_changed(
-    hub,  # i.e. request.app.state.notification_hub
+background_tasks.add_task(
+    notify_submission_changed,
+    hub,
     submission_id=withdrawn_submission_id,
     action="withdrawn",
     actor_account_id=account.account_id,
 )
 ```
 
-Known gap: only the three submission routes and lobby creation send events today, so the planned automatic withdrawal of a pending submission when its quiz is edited sends no notification until its route makes this call. A new event type gets a resolver plus a `notify_*` entry point in the same file, and a row in the table above.
+Known gap: only the three submission routes and lobby creation send events today, so the planned automatic withdrawal of a pending submission when its quiz is edited sends no notification until its route makes this call. Until then the class dashboard's slow refresh (below) picks the change up. A new event type gets a resolver plus a `notify_*` entry point in the same file, and a row in the table above.
+
+### Client
+
+`NotificationsProvider` (frontend `src/authenticated-demo/`) owns the one socket and the app's one focus/visibility listener. Pages subscribe through `useNotifications`, `useNotificationsReconnect` and `useCatchUp`. Catch-up runs when the socket reconnects, and when the tab comes back, at most once per 10 s across the whole app.
+
+- Class pages refresh on matching events and on catch-up. The class dashboard (counts, the Approvals badge) also refreshes every 60 s while the tab is visible, because some of its changes send no event (sessions ending, members joining or leaving, attendance and grades). Hidden tabs skip it and catch up when they come back.
+- No event says a lobby closed, so the "A quiz is live" popup rechecks `GET /classes/{class_id}/active-sessions` on catch-up and closes quietly if the session is no longer listed. A Join that fails with `session_not_joinable` or `session_not_found` also just closes it.
