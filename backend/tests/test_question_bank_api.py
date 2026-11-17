@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from app.models import QuizCollaborator, QuizSubmission, SubmissionStatus
+from app.models import QuizCollaborator
 from tests.test_class_quizzes_api import act_as, classes, create  # noqa: F401
 
 
@@ -37,13 +37,39 @@ def test_new_questions_are_automatically_banked_and_searchable(classes) -> None:
     assert "base_points" not in body["items"][0]
 
 
-def test_class_bank_hides_drafts_but_shows_approved_questions(classes) -> None:
+def test_bank_visibility_is_limited_to_owner_collaborator_and_organizer(classes) -> None:
     client, identities, data = classes
-    quiz = create(client, data["main"], "Needs approval")
+    quiz = create(client, data["main"], "Shared only when allowed")
 
     act_as(client, identities["zoe"])
-    before = client.get(f"/classes/{data['main']}/question-bank").json()
-    assert before["items"] == []
+    assert client.get(
+        f"/classes/{data['main']}/question-bank"
+    ).json()["items"] == []
+
+    act_as(client, identities["prof"])
+    assert client.get(
+        f"/classes/{data['main']}/question-bank"
+    ).json()["items"] == []
+
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            QuizCollaborator(
+                quiz_id=quiz["quiz_id"],
+                account_id=identities["zoe"].account_id,
+                shared_by_id=identities["amy"].account_id,
+            )
+        )
+        db.commit()
+
+    act_as(client, identities["zoe"])
+    shared = client.get(
+        f"/classes/{data['main']}/question-bank",
+        params={"scope": "mine"},
+    ).json()
+    assert {item["question_text"] for item in shared["items"]} == {
+        "Which number is even?",
+        "Select a vowel.",
+    }
 
     act_as(client, identities["amy"])
     published = client.post(
@@ -51,26 +77,39 @@ def test_class_bank_hides_drafts_but_shows_approved_questions(classes) -> None:
         json={"expected_revision": quiz["revision"]},
     )
     assert published.status_code == 200, published.json()
-    version_id = published.json()["version"]["quiz_version_id"]
-    with client.app.state.database.session_factory() as db:
-        db.add(
-            QuizSubmission(
-                class_id=data["main"],
-                quiz_version_id=version_id,
-                submitted_by_id=identities["amy"].account_id,
-                status=SubmissionStatus.APPROVED,
-                decided_by_id=identities["prof"].account_id,
-                decided_at=datetime.now(UTC).replace(tzinfo=None),
-            )
-        )
-        db.commit()
 
-    act_as(client, identities["zoe"])
-    after = client.get(f"/classes/{data['main']}/question-bank").json()
-    assert {item["question_text"] for item in after["items"]} == {
+    act_as(client, identities["prof"])
+    organizer_view = client.get(
+        f"/classes/{data['main']}/question-bank"
+    ).json()
+    assert {item["question_text"] for item in organizer_view["items"]} == {
         "Which number is even?",
         "Select a vowel.",
     }
+    shared_bank_id = organizer_view["items"][0]["bank_question_id"]
+
+    with client.app.state.database.session_factory() as db:
+        collaborator = db.get(
+            QuizCollaborator,
+            (quiz["quiz_id"], identities["zoe"].account_id),
+        )
+        collaborator.revoked_at = datetime.now(UTC).replace(tzinfo=None)
+        collaborator.revoked_by_id = identities["amy"].account_id
+        db.commit()
+
+    act_as(client, identities["zoe"])
+    ordinary_member_view = client.get(
+        f"/classes/{data['main']}/question-bank"
+    ).json()
+    assert ordinary_member_view["items"] == []
+
+    target = create(client, data["main"], "Cannot copy hidden questions")
+    unavailable = client.post(
+        f"/classes/{data['main']}/quizzes/{target['quiz_id']}/questions/from-bank",
+        json={"bank_question_ids": [shared_bank_id]},
+    )
+    assert unavailable.status_code == 404
+    assert unavailable.json()["error"]["code"] == "bank_question_not_found"
 
 
 def test_bank_selection_copies_an_independent_question_snapshot(classes) -> None:

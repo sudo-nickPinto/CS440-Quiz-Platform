@@ -11,16 +11,17 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
+from app.models.classes import ClassRole
 from app.models.quiz import (
     AnswerChoice,
     Question,
     QuestionBankItem,
     Quiz,
+    QuizCollaborator,
     QuizStatus,
     QuizVersion,
     QuizVisibility,
 )
-from app.models.quiz_submission import QuizSubmission, SubmissionStatus
 from app.schemas.pagination import PageInfo
 from app.schemas.question_bank import (
     BankScope,
@@ -76,18 +77,28 @@ def snapshot_question(
     return item
 
 
-def _approved_version_ids(db: Session, class_id: int) -> list[int]:
-    return list(db.scalars(select(QuizSubmission.quiz_version_id).where(
-        QuizSubmission.class_id == class_id,
-        QuizSubmission.status == SubmissionStatus.APPROVED,
-    )))
+def _collaborator_quiz_ids(account: CurrentAccount):
+    return select(QuizCollaborator.quiz_id).where(
+        QuizCollaborator.account_id == account.account_id,
+        QuizCollaborator.revoked_at.is_(None),
+    )
 
 
-def _ensure_legacy_snapshots(db: Session, account: CurrentAccount, class_id: int) -> None:
-    approved = _approved_version_ids(db, class_id)
-    conditions = [Quiz.author_id == account.account_id]
-    if approved:
-        conditions.append(QuizVersion.quiz_version_id.in_(approved))
+def _ensure_legacy_snapshots(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    *,
+    is_organizer: bool,
+) -> None:
+    conditions = [
+        Quiz.author_id == account.account_id,
+        Quiz.quiz_id.in_(_collaborator_quiz_ids(account)),
+    ]
+    if is_organizer:
+        conditions.append(
+            (Quiz.class_id == class_id) & (Quiz.status == QuizStatus.PUBLISHED)
+        )
     rows = db.execute(
         select(Question, Quiz.author_id, Quiz.class_id, Quiz.quiz_id)
         .join(QuizVersion, QuizVersion.quiz_version_id == Question.quiz_version_id)
@@ -102,15 +113,29 @@ def _ensure_legacy_snapshots(db: Session, account: CurrentAccount, class_id: int
         db.commit()
 
 
-def _visible_condition(db: Session, account: CurrentAccount, class_id: int, scope: BankScope):
+def _visible_condition(
+    account: CurrentAccount,
+    class_id: int,
+    scope: BankScope,
+    *,
+    is_organizer: bool,
+):
     mine = QuestionBankItem.owner_id == account.account_id
-    if scope == BankScope.MINE:
-        return mine
-    approved = _approved_version_ids(db, class_id)
-    approved_question_ids = select(Question.question_id).where(
-        Question.quiz_version_id.in_(approved or [-1])
+    collaborated = QuestionBankItem.source_quiz_id.in_(
+        _collaborator_quiz_ids(account)
     )
-    return or_(mine, QuestionBankItem.source_question_id.in_(approved_question_ids))
+    if scope == BankScope.MINE:
+        return or_(mine, collaborated)
+    conditions = [mine, collaborated]
+    if is_organizer:
+        published_class_quiz_ids = select(Quiz.quiz_id).where(
+            Quiz.class_id == class_id,
+            Quiz.status == QuizStatus.PUBLISHED,
+        )
+        conditions.append(
+            QuestionBankItem.source_quiz_id.in_(published_class_quiz_ids)
+        )
+    return or_(*conditions)
 
 
 def _response(item: QuestionBankItem) -> QuestionBankItemResponse:
@@ -126,9 +151,14 @@ def _response(item: QuestionBankItem) -> QuestionBankItemResponse:
 def list_bank(db: Session, account: CurrentAccount, class_id: int, *, scope: BankScope,
               search: str, page: int, page_size: int) -> QuestionBankPage:
     from app.services.quizzes import _require_active_membership
-    _require_active_membership(db, account, class_id)
-    _ensure_legacy_snapshots(db, account, class_id)
-    condition = _visible_condition(db, account, class_id, scope)
+    membership = _require_active_membership(db, account, class_id)
+    is_organizer = membership.role == ClassRole.ORGANIZER
+    _ensure_legacy_snapshots(
+        db, account, class_id, is_organizer=is_organizer
+    )
+    condition = _visible_condition(
+        account, class_id, scope, is_organizer=is_organizer
+    )
     if search.strip():
         condition = condition & QuestionBankItem.question_text.ilike(f"%{search.strip()}%")
     condition = condition & QuestionBankItem.is_current.is_(True)
@@ -189,14 +219,19 @@ def add_from_bank(db: Session, account: CurrentAccount, class_id: int, quiz_id: 
         _latest_editor_version, _load_readable_quiz, _require_active_membership,
         _require_quiz_editor, _to_response,
     )
-    _require_active_membership(db, account, class_id)
+    membership = _require_active_membership(db, account, class_id)
     quiz = _load_readable_quiz(db, account, quiz_id)
     _require_quiz_editor(db, account, quiz)
     if quiz.class_id != class_id:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
     if quiz.status != QuizStatus.DRAFT:
         raise APIError(409, "quiz_not_editable", "Only draft quizzes can receive questions.")
-    visible = _visible_condition(db, account, class_id, BankScope.CLASS)
+    visible = _visible_condition(
+        account,
+        class_id,
+        BankScope.CLASS,
+        is_organizer=membership.role == ClassRole.ORGANIZER,
+    )
     items = list(db.scalars(select(QuestionBankItem).where(
         QuestionBankItem.bank_question_id.in_(bank_ids), visible,
         QuestionBankItem.is_current.is_(True))))
@@ -350,8 +385,14 @@ def save_csv_to_bank(
 def export_csv(db: Session, account: CurrentAccount, class_id: int, scope: BankScope,
                ids: list[int] | None = None) -> str:
     from app.services.quizzes import _require_active_membership
-    _require_active_membership(db, account, class_id); _ensure_legacy_snapshots(db, account, class_id)
-    condition = _visible_condition(db, account, class_id, scope) & QuestionBankItem.is_current.is_(True)
+    membership = _require_active_membership(db, account, class_id)
+    is_organizer = membership.role == ClassRole.ORGANIZER
+    _ensure_legacy_snapshots(
+        db, account, class_id, is_organizer=is_organizer
+    )
+    condition = _visible_condition(
+        account, class_id, scope, is_organizer=is_organizer
+    ) & QuestionBankItem.is_current.is_(True)
     if ids: condition = condition & QuestionBankItem.bank_question_id.in_(ids)
     items = list(db.scalars(select(QuestionBankItem).where(condition).order_by(QuestionBankItem.bank_question_id)))
     out = io.StringIO(newline=""); writer = csv.DictWriter(out, fieldnames=CSV_COLUMNS); writer.writeheader()
