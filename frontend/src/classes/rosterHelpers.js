@@ -6,6 +6,7 @@ export const ROSTER_OUTCOMES = {
   invited: { label: "Invited", tone: "good" },
   approved: { label: "Request approved", tone: "good" },
   expected: { label: "No account yet", tone: "wait" },
+  name_match: { label: "Same name, check email", tone: "warn" },
   already_invited: { label: "Already invited", tone: "none" },
   already_in_class: { label: "Already in class", tone: "none" },
   ambiguous: { label: "Same name as others", tone: "warn" },
@@ -27,7 +28,7 @@ export function rosterSummary(counts) {
 
 // True when importing would change anything (and so is worth a button).
 export function rosterHasChanges(counts) {
-  return ["invited", "approved", "expected", "ambiguous"].some(
+  return ["invited", "approved", "expected", "ambiguous", "name_match"].some(
     (key) => counts?.[key] > 0,
   );
 }
@@ -58,7 +59,9 @@ export function suggestionStatus(status) {
 
 // Only ask the server once the search could match something.
 export function suggestionQuery(text) {
-  const query = String(text ?? "").trim().replace(/\s+/g, " ");
+  const query = String(text ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
   return query.length >= 2 ? query : "";
 }
 
