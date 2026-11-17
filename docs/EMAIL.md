@@ -22,7 +22,7 @@ All are environment variables (`backend/.env` locally, `deploy/.env` with Docker
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `EMAIL_BACKEND` | `log` | `log` writes each email to the server log and sends nothing (local development). `smtp` sends for real. `memory` keeps them in a list, for tests |
+| `EMAIL_BACKEND` | `log` | `log` prints each email in the backend window and sends nothing (local development). `smtp` sends for real. `memory` keeps them in a list, for tests |
 | `EMAIL_FROM` | `QuizBurg <no-reply@quizburg.local>` | The From header. Use an address the SMTP server may send as |
 | `SMTP_HOST` | | Required with `EMAIL_BACKEND=smtp` |
 | `SMTP_PORT` | `587` | |
@@ -30,7 +30,7 @@ All are environment variables (`backend/.env` locally, `deploy/.env` with Docker
 | `SMTP_STARTTLS` | `true` | Upgrade the connection with STARTTLS before logging in |
 | `APP_BASE_URL` | `http://localhost:5173` | The frontend address used in links |
 
-Any SMTP service works, for example the college's relay or a transactional email provider. To try it locally without a real server, keep `EMAIL_BACKEND=log` and read the emails in the Uvicorn output.
+Any SMTP service works, for example the college's relay or a transactional email provider. To try it locally without a real server, keep `EMAIL_BACKEND=log` and read the emails in the Uvicorn window.
 
 ## Adding another email
 

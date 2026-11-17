@@ -6,8 +6,8 @@ emails; those are configured in the Auth0 dashboard, not here.
 
 Which transport is used comes from EMAIL_BACKEND:
 
-- ``log`` (the default): nothing leaves the machine; each message is written
-  to the server log. Good for local development.
+- ``log`` (the default): nothing leaves the machine; each message is printed
+  in the server window. Good for local development.
 - ``smtp``: sends through SMTP_HOST, with STARTTLS unless SMTP_STARTTLS=false
   (see docs/EMAIL.md).
 - ``memory``: keeps messages in ``EmailService.outbox``, for tests.
@@ -45,11 +45,15 @@ class EmailTransport(Protocol):
 
 
 class LogTransport:
+    """Prints each email in the server window. The app doesn't configure
+    logging, so an INFO log line would be hidden."""
+
     def send(self, message: OutgoingEmail) -> None:
-        logger.info(
-            "Email not sent (EMAIL_BACKEND=log): subject=%r\n%s",
-            message.subject,
-            message.body,
+        print(
+            "\n--- Email not sent (EMAIL_BACKEND=log) ---\n"
+            f"Subject: {message.subject}\n\n{message.body}\n"
+            "------------------------------------------",
+            flush=True,
         )
 
 
