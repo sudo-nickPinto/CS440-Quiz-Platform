@@ -14,7 +14,9 @@ from app.notifications import NotificationConnection, NotificationHub
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["notifications"])
 AUTH_TIMEOUT_SECONDS = 5
-IDLE_TIMEOUT_SECONDS = 60
+# Clients ping every 25 s; the slack covers hidden tabs whose timers the
+# browser throttles.
+IDLE_TIMEOUT_SECONDS = 120
 
 
 def account_is_active(db: Session, account_id: int) -> bool:

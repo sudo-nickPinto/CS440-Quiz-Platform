@@ -7,7 +7,8 @@
 import { NEEDS_INTERACTION } from "../api";
 
 // Same cadence as the quiz-edit and live sockets; the server drops a socket
-// after 60 s of silence.
+// after 120 s of silence, which leaves room for hidden tabs whose timers the
+// browser throttles.
 export const NOTIFICATIONS_PING_MS = 25_000;
 export const NOTIFICATIONS_MAX_BACKOFF_MS = 30_000;
 
