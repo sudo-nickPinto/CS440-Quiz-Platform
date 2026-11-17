@@ -37,7 +37,8 @@ import {
   ReportTable,
   ScoreMeter,
 } from "./ReportTable";
-import { AddMemberDialog, ClassStudents } from "./ClassManagement";
+import { ClassStudents } from "./ClassManagement";
+import { AddStudentDialog, JoinRequestsTable } from "./StudentRoster";
 import {
   useClassDashboard,
   useClassQuizzes,
@@ -852,7 +853,7 @@ function SubmissionsTable({ classInfo, onChange }) {
         emptyTitle={
           status === "PENDING" ? "Nothing to review" : "No submissions"
         }
-        emptyText="When a member sends a quiz for approval, it shows up here."
+        emptyText="When a student sends a quiz for approval, it shows up here."
         pagination={resource.data.pagination}
         onPageChange={setPage}
         controls={
@@ -943,6 +944,58 @@ function SubmissionsTable({ classInfo, onChange }) {
           };
         })}
       />
+    </>
+  );
+}
+
+// Approvals has two lists: quizzes sent for approval, and people who asked
+// to join with the class code. Each sub-tab shows its own waiting count.
+const APPROVAL_TABS = ["Quizzes", "Students"];
+
+function ApprovalsSection({ classInfo, dashboard }) {
+  const [tab, setTab] = useRemembered(
+    `class:${classInfo.id}:approvals-tab`,
+    "Quizzes",
+    { isValid: (value) => APPROVAL_TABS.includes(value) },
+  );
+  const ready = dashboard.status === "ready";
+  const waiting = {
+    Quizzes: ready ? dashboard.data.pending_submission_count : 0,
+    Students: ready ? (dashboard.data.pending_join_request_count ?? 0) : 0,
+  };
+
+  return (
+    <>
+      <div className="cl-subtabs">
+        <div
+          className="cl-view-switch"
+          role="group"
+          aria-label="Approval lists"
+        >
+          {APPROVAL_TABS.map((label) => (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={tab === label}
+              onClick={() => setTab(label)}
+            >
+              {label}
+              {waiting[label] > 0 && (
+                <span className="cl-badge">
+                  {waiting[label]}
+                  <span className="cl-sr"> waiting</span>
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tab === "Students" ? (
+        <JoinRequestsTable classInfo={classInfo} onChange={dashboard.reload} />
+      ) : (
+        <SubmissionsTable classInfo={classInfo} onChange={dashboard.reload} />
+      )}
     </>
   );
 }
@@ -1063,8 +1116,12 @@ function ClassWorkspace({ classInfo, onChange }) {
       setSearchParams(next, { replace: true });
     }
   }, [view, activeSection, showAdminLayout, searchParams, setSearchParams]);
+  // Quizzes waiting for approval plus people waiting to join.
   const pendingApprovals =
-    dashboard.status === "ready" ? dashboard.data.pending_submission_count : 0;
+    dashboard.status === "ready"
+      ? dashboard.data.pending_submission_count +
+        (dashboard.data.pending_join_request_count ?? 0)
+      : 0;
 
   function changeView(nextView) {
     setView(nextView);
@@ -1193,7 +1250,7 @@ function ClassWorkspace({ classInfo, onChange }) {
               disabled={classInfo.archived}
               onClick={() => setAddOpen(true)}
             >
-              + Add member
+              + Add student
             </button>
 
             <button
@@ -1251,9 +1308,10 @@ function ClassWorkspace({ classInfo, onChange }) {
       </div>
 
       {adminView && addOpen && (
-        <AddMemberDialog
+        <AddStudentDialog
           classInfo={classInfo}
           onClose={() => setAddOpen(false)}
+          onChange={dashboard.reload}
         />
       )}
 
@@ -1309,7 +1367,7 @@ function ClassWorkspace({ classInfo, onChange }) {
           onChange={onChange}
         />
       ) : activeSection === "Approvals" ? (
-        <SubmissionsTable classInfo={classInfo} onChange={dashboard.reload} />
+        <ApprovalsSection classInfo={classInfo} dashboard={dashboard} />
       ) : activeSection === "My quizzes" ? (
         <PresentTable
           classInfo={classInfo}

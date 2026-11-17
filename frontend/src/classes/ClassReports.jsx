@@ -1,5 +1,7 @@
 import { Link, Navigate, useNavigate, useParams } from "react-router";
-import { useResource } from "../authenticated-demo/rest";
+import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
+import { useAction, useApi, useResource } from "../authenticated-demo/rest";
+import { useConfirm } from "../authenticated-demo/useConfirm";
 import RequestError from "../authenticated-demo/RequestError";
 import {
   HostResults,
@@ -7,6 +9,7 @@ import {
 } from "../authenticated-demo/SessionResults";
 import { useFileDownload } from "../authenticated-demo/useFileDownload";
 import { rowLink } from "./classHelpers";
+import { useClassResource } from "./classResources";
 
 function validId(value) {
   return (
@@ -285,6 +288,56 @@ function StudentReport({ report, classId }) {
   );
 }
 
+// "Remove from class" lives on the student's full report, for organizers.
+// It keeps the student's past results and ends their access right away.
+function RemoveStudentButton({ classId, accountId, name }) {
+  const api = useApi();
+  const action = useAction();
+  const confirmer = useConfirm();
+  const navigate = useNavigate();
+
+  async function remove() {
+    const confirmed = await confirmer.confirm({
+      label: "Remove student",
+      title: `Remove ${name} from this class?`,
+      message:
+        "They lose access right away. Their past results stay in the class reports.",
+      confirmLabel: "Remove from class",
+    });
+    if (!confirmed) return;
+    const removed = await action.run(async () => {
+      await api(`/classes/${classId}/members/${accountId}`, {
+        method: "DELETE",
+      });
+      return true;
+    });
+    if (removed) {
+      navigate(`/app/classes/${classId}?view=admin&section=Students`, {
+        replace: true,
+      });
+    }
+  }
+
+  return (
+    <>
+      <ConfirmDialog confirmer={confirmer} />
+      <button
+        type="button"
+        className="cl-secondary cl-danger"
+        disabled={action.busy}
+        onClick={() => void remove()}
+      >
+        Remove from class
+      </button>
+      {action.error && (
+        <p className="cl-feedback cl-error" role="alert">
+          {action.error.message}
+        </p>
+      )}
+    </>
+  );
+}
+
 export function ClassStudentReportPage() {
   const { classId, accountId } = useParams();
   const valid = validId(classId) && validId(accountId);
@@ -292,7 +345,12 @@ export function ClassStudentReportPage() {
   const resource = useResource(
     valid ? `/classes/${classId}/students/${accountId}/results` : null,
   );
+  const classInfo = useClassResource(classId);
   const file = useFileDownload();
+  const canRemove =
+    classInfo.status === "ready" &&
+    classInfo.data.canManage &&
+    !classInfo.data.archived;
 
   return (
     <ReportFrame
@@ -303,13 +361,23 @@ export function ClassStudentReportPage() {
           : "Student report"
       }
       actions={
-        // Anyone who can open this report may export it.
+        // Anyone who can open this report may export it; only organizers
+        // remove students.
         resource.data && (
-          <ExcelButton
-            file={file}
-            path={`/classes/${classId}/students/${accountId}/export.xlsx`}
-            name={`class-${classId}-student-${accountId}-results.xlsx`}
-          />
+          <div className="cl-actions">
+            <ExcelButton
+              file={file}
+              path={`/classes/${classId}/students/${accountId}/export.xlsx`}
+              name={`class-${classId}-student-${accountId}-results.xlsx`}
+            />
+            {canRemove && (
+              <RemoveStudentButton
+                classId={classId}
+                accountId={accountId}
+                name={resource.data.display_name}
+              />
+            )}
+          </div>
         )
       }
       error={file.error}

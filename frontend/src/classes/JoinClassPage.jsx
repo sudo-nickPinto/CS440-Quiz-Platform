@@ -1,16 +1,19 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import RequestError from "../authenticated-demo/RequestError";
 import { useAction, useApi } from "../authenticated-demo/rest";
 
-// Invite links (/app/join/class/:code) join as soon as the page opens.
+// Invite links (/app/join/class/:code) ask to join as soon as the page
+// opens. Usually that is a request an organizer approves; someone invited or
+// on the class roster goes straight in.
 export default function JoinClassPage() {
   const { code } = useParams();
   const api = useApi();
   const action = useAction();
   const navigate = useNavigate();
   const started = useRef(false);
+  const [requested, setRequested] = useState(null);
 
   useEffect(() => {
     // Strict Mode mounts twice in development; join only once.
@@ -25,7 +28,9 @@ export default function JoinClassPage() {
         }),
       );
 
-      if (joined) {
+      if (joined?.membership_status === "REQUESTED") {
+        setRequested(joined);
+      } else if (joined) {
         navigate(`/app/classes/${joined.class_id}`, { replace: true });
       }
     })();
@@ -42,7 +47,12 @@ export default function JoinClassPage() {
       <div className="cl-state" role="status">
         <h1 id="join-class-heading">Join a class</h1>
 
-        {!action.error ? (
+        {requested ? (
+          <p>
+            Request sent to {requested.name}. An organizer needs to accept it;
+            you&apos;ll get an email when they do.
+          </p>
+        ) : !action.error ? (
           <p>Joining…</p>
         ) : action.error.code === "already_class_member" ? (
           <p>You&apos;re already in this class. Find it under Classes.</p>

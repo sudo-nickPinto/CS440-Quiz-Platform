@@ -14,6 +14,7 @@ export default function ClassesPage() {
   const resource = useClassesResource();
 
   const [panel, setPanel] = useState(null);
+  const [notice, setNotice] = useState(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [query, setQuery] = useRemembered("classes:query", "");
@@ -28,8 +29,16 @@ export default function ClassesPage() {
   const invitations = records.filter(
     (item) => item.membershipStatus === "INVITED",
   );
+  // Asked to join with the class code; an organizer hasn't decided yet.
+  const requests = records.filter(
+    (item) => item.membershipStatus === "REQUESTED",
+  );
 
-  const classes = records.filter((item) => item.membershipStatus !== "INVITED");
+  const classes = records.filter(
+    (item) =>
+      item.membershipStatus !== "INVITED" &&
+      item.membershipStatus !== "REQUESTED",
+  );
 
   const visible = classes
     .filter((item) =>
@@ -78,9 +87,18 @@ export default function ClassesPage() {
       }),
     );
 
-    if (joined) {
-      navigate(`/app/classes/${joined.class_id}`);
+    if (!joined) return;
+    if (joined.membership_status === "REQUESTED") {
+      // Not in the class yet: an organizer approves the request.
+      setPanel(null);
+      setCode("");
+      setNotice(
+        `Request sent to ${joined.name}. You'll get an email when an organizer accepts it.`,
+      );
+      resource.reload();
+      return;
     }
+    navigate(`/app/classes/${joined.class_id}`);
   }
 
   async function respondToInvitation(classId, decision) {
@@ -142,6 +160,12 @@ export default function ClassesPage() {
       {action.error && (
         <p className="cl-feedback cl-error" role="alert">
           {action.error.message}
+        </p>
+      )}
+
+      {notice && !action.error && (
+        <p className="cl-feedback" role="status">
+          {notice}
         </p>
       )}
 
@@ -250,6 +274,27 @@ export default function ClassesPage() {
                 >
                   Decline
                 </button>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
+      {ready && requests.length > 0 && (
+        <section
+          className="cl-invitations"
+          aria-labelledby="class-requests-heading"
+        >
+          <h2 id="class-requests-heading">Waiting for approval</h2>
+
+          {requests.map((item) => (
+            <article className="cl-invitation" key={item.id}>
+              <div>
+                <h3>{item.name}</h3>
+                <p>
+                  You asked to join this class. An organizer needs to accept
+                  your request; you&apos;ll get an email when they do.
+                </p>
               </div>
             </article>
           ))}

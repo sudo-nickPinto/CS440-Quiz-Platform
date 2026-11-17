@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment } from "react";
 import { useRemembered } from "../authenticated-demo/remember";
 import { Link, useNavigate } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
@@ -8,7 +8,6 @@ import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import { useConfirm } from "../authenticated-demo/useConfirm";
 import { ResourceMessage } from "./ClassUI";
 import {
-  initials,
   MEMBER_SORTS,
   membersWithStats,
   rowLink,
@@ -57,7 +56,9 @@ function personName(person) {
 
 // The Students tab: every student once with rank, recent scores, average
 // and attendance, then any co-organizers. A row opens to show each
-// presentation the student was part of, plus the role and remove actions.
+// presentation the student was part of. Removing a student is on their full
+// report; a co-organizer's row keeps its own Remove button (they have no
+// report).
 export function ClassStudents({ classInfo, dashboard, onChange }) {
   const account = useAccount();
   const api = useApi();
@@ -71,7 +72,6 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
   const sessions = useClassSessions(classInfo.id, 1);
 
   const memory = `class:${classInfo.id}:students`;
-  const [query, setQuery] = useRemembered(`${memory}:query`, "");
   const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "average", {
     isValid: (key) => key in MEMBER_SORTS,
   });
@@ -93,34 +93,9 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
     }
   }
 
-  async function changeRole(member) {
-    const nextRole = member.role === "ORGANIZER" ? "MEMBER" : "ORGANIZER";
+  async function removeOrganizer(member) {
     const confirmed = await confirmer.confirm({
-      label: "Change role",
-      title: `Make ${personName(member)} ${
-        nextRole === "ORGANIZER" ? "an organizer" : "a student"
-      }?`,
-      message:
-        nextRole === "ORGANIZER"
-          ? "Organizers can add, remove and manage members."
-          : "They will no longer be able to manage this class.",
-      confirmLabel: nextRole === "ORGANIZER" ? "Make organizer" : "Make student",
-    });
-    if (!confirmed) return;
-
-    const succeeded = await action.run(async () => {
-      await api(`/classes/${classInfo.id}/members/${member.account_id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ role: nextRole }),
-      });
-      return true;
-    });
-    if (succeeded) refreshAfterMemberChange(member);
-  }
-
-  async function removeMember(member) {
-    const confirmed = await confirmer.confirm({
-      label: "Remove member",
+      label: "Remove organizer",
       title: `Remove ${personName(member)}?`,
       message: "They will lose access to this class.",
       confirmLabel: "Remove",
@@ -154,7 +129,7 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
                 ? "not-found"
                 : "error",
           error:
-            resource.error ?? new Error("The member list could not be read."),
+            resource.error ?? new Error("The student list could not be read."),
           reload: resource.reload,
         }}
       />
@@ -163,10 +138,9 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
 
   const rows = membersWithStats(resource.data, stats.data, sortKey);
   const ranks = studentRanks(rows);
-  const needle = query.trim().toLowerCase();
-  const visible = rows.filter((member) =>
-    `${member.display_name ?? ""} ${member.email}`.toLowerCase().includes(needle),
-  );
+  // No search box: the list is one class. To find anyone in QuizBurg, use
+  // "+ Add student", which searches every account.
+  const visible = rows;
   const studentTotal = rows.filter((row) => row.role !== "ORGANIZER").length;
 
   return (
@@ -174,16 +148,6 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
       <ConfirmDialog confirmer={confirmer} />
 
       <div className="cl-toolbar">
-        <label className="cl-search">
-          <span className="cl-sr">Search students</span>
-          <input
-            type="search"
-            placeholder="Search students…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-
         <label className="cl-sort">
           <span className="cl-sr">Sort students</span>
           <select
@@ -365,8 +329,7 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
                           member={member}
                           completed={completed}
                           busy={action.busy}
-                          onChangeRole={() => void changeRole(member)}
-                          onRemove={() => void removeMember(member)}
+                          onRemove={() => void removeOrganizer(member)}
                         />
                       </td>
                     </tr>
@@ -379,11 +342,10 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
               <tr>
                 <td colSpan={6}>
                   <div className="cl-state" role="status">
-                    <h2>{needle ? "No matches" : "No students yet"}</h2>
+                    <h2>No students yet</h2>
                     <p>
-                      {needle
-                        ? "Try another search."
-                        : "Share the class code or use + Add member."}
+                      Share the class code, import the roster or use + Add
+                      student.
                     </p>
                   </div>
                 </td>
@@ -395,8 +357,8 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
 
       <p className="cl-section-note">
         Scores are points. A chip is blue at or above that presentation&apos;s
-        class average and orange below it. The last active organizer cannot be
-        removed or made a student.
+        class average and orange below it. To remove a student, open their
+        full report. The last active organizer cannot be removed.
       </p>
     </section>
   );
@@ -409,7 +371,6 @@ function StudentDetail({
   member,
   completed,
   busy,
-  onChangeRole,
   onRemove,
 }) {
   const organizer = member.role === "ORGANIZER";
@@ -516,201 +477,21 @@ function StudentDetail({
         ))}
 
       <div className="cl-panel-foot">
-        {!organizer && (
+        {organizer ? (
+          <button
+            type="button"
+            className="cl-secondary cl-danger"
+            disabled={busy || classInfo.archived}
+            onClick={onRemove}
+          >
+            Remove from class
+          </button>
+        ) : (
           <Link className="cl-button cl-secondary" to={reportPath}>
             Full report →
           </Link>
         )}
-        <button
-          type="button"
-          className="cl-secondary"
-          disabled={busy || classInfo.archived}
-          onClick={onChangeRole}
-        >
-          {organizer ? "Make student" : "Make organizer"}
-        </button>
-        <button
-          type="button"
-          className="cl-secondary cl-danger"
-          disabled={busy || classInfo.archived}
-          onClick={onRemove}
-        >
-          Remove from class
-        </button>
       </div>
     </div>
-  );
-}
-
-// "+ Add member" pop-up: invite by account email, and see or cancel the
-// invitations still waiting to be accepted.
-export function AddMemberDialog({ classInfo, onClose }) {
-  const ref = useRef(null);
-  const api = useApi();
-  const action = useAction();
-  const invites = useResource(`/classes/${classInfo.id}/invites`);
-  const [email, setEmail] = useState("");
-  const [added, setAdded] = useState(0);
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (dialog && !dialog.open) dialog.showModal();
-  }, []);
-
-  async function invite(event) {
-    event.preventDefault();
-    const sent = await action.run(() =>
-      api(`/classes/${classInfo.id}/invites`, {
-        method: "POST",
-        body: JSON.stringify({ email: email.trim() }),
-      }),
-    );
-    if (sent) {
-      setEmail("");
-      setAdded((count) => count + 1);
-      invites.reload();
-    }
-  }
-
-  async function cancel(invitation) {
-    const done = await action.run(async () => {
-      await api(`/classes/${classInfo.id}/invites/${invitation.account_id}`, {
-        method: "DELETE",
-      });
-      return true;
-    });
-    if (done) invites.reload();
-  }
-
-  const pending = Array.isArray(invites.data) ? invites.data : [];
-
-  return (
-    <dialog
-      ref={ref}
-      className="cl-dlg"
-      aria-labelledby="cl-add-title"
-      onCancel={(event) => {
-        event.preventDefault();
-        onClose();
-      }}
-      onClick={(event) => {
-        // A click on the backdrop lands on the <dialog> itself.
-        if (event.target === ref.current) onClose();
-      }}
-    >
-      <div className="cl-dlg-top">
-        <span>
-          Add member{classInfo.code && <> · <b>{classInfo.code}</b></>}
-        </span>
-        <button
-          type="button"
-          className="cl-dlg-x"
-          aria-label="Close"
-          onClick={onClose}
-        >
-          ×
-        </button>
-      </div>
-
-      <form className="cl-dlg-head" onSubmit={invite}>
-        <h2 id="cl-add-title">Add someone to this class</h2>
-        <div className="cl-dlg-row">
-          <label className="cl-search">
-            <span className="cl-sr">Account email</span>
-            <input
-              type="email"
-              placeholder="Their QuizBurg account email…"
-              value={email}
-              autoFocus
-              required
-              disabled={action.busy || classInfo.archived}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
-          <button
-            type="submit"
-            className="cl-add-one"
-            disabled={action.busy || classInfo.archived || !email.trim()}
-          >
-            + Invite
-          </button>
-        </div>
-        <p>
-          {classInfo.archived
-            ? "This class is archived, so no one new can join."
-            : "They need a QuizBurg account and accept the invite from their Classes page" +
-              (classInfo.code && classInfo.joiningOpen
-                ? `, or they can join with code ${classInfo.code}.`
-                : ".")}
-        </p>
-        {action.error && (
-          <p className="cl-dlg-error" role="alert">
-            {action.error.message}
-          </p>
-        )}
-      </form>
-
-      <div className="cl-dlg-sub">
-        <span>Waiting to accept</span>
-        <span>
-          {pending.length} {pending.length === 1 ? "person" : "people"}
-        </span>
-      </div>
-
-      <div className="cl-people">
-        {invites.loading ? (
-          <p className="cl-dlg-empty" role="status">
-            Loading invitations…
-          </p>
-        ) : invites.error ? (
-          <p className="cl-dlg-empty" role="alert">
-            {invites.error.message}{" "}
-            <button type="button" onClick={invites.reload}>
-              Retry
-            </button>
-          </p>
-        ) : pending.length === 0 ? (
-          <p className="cl-dlg-empty">No pending invitations.</p>
-        ) : (
-          pending.map((invitation) => (
-            <div className="cl-person" key={invitation.account_id}>
-              <span className="cl-pav" aria-hidden="true">
-                {initials(personName(invitation))}
-              </span>
-              <span>
-                <strong className="cl-pname">{personName(invitation)}</strong>
-                {invitation.display_name &&
-                  invitation.display_name !== invitation.email && (
-                    <small className="cl-pmail">{invitation.email}</small>
-                  )}
-              </span>
-              <button
-                type="button"
-                className="cl-secondary"
-                disabled={action.busy}
-                onClick={() => void cancel(invitation)}
-              >
-                Cancel
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="cl-dlg-foot">
-        <span aria-live="polite">
-          {added === 0 ? (
-            "Nobody invited yet"
-          ) : (
-            <>
-              <b>{added}</b> invited
-            </>
-          )}
-        </span>
-        <button type="button" className="cl-add-one" onClick={onClose}>
-          Done
-        </button>
-      </div>
-    </dialog>
   );
 }

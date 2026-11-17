@@ -120,10 +120,10 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
           <h2 id="qv-collab-title">Who else can edit this quiz?</h2>
           <div className="cl-dlg-row">
             <label className="cl-search">
-              <span className="cl-sr">Class member email</span>
+              <span className="cl-sr">Email of someone in this class</span>
               <input
                 type="email"
-                placeholder="A class member's account email…"
+                placeholder="Email of someone in this class…"
                 value={email}
                 autoFocus
                 required
@@ -141,7 +141,7 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
             </button>
           </div>
           <p>
-            They need to be an active member of this class. Editors can change
+            They need to be a student or organizer in this class. Editors can change
             the questions and answers.
           </p>
           {action.error && (

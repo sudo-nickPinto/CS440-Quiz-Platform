@@ -1481,3 +1481,133 @@
     display: none;
   }
 }
+
+/* "+ Add student": Invite one / Import roster switch, name and email
+   suggestions, and the roster preview. */
+.qp .cl-dlg .cl-dlg-tabs {
+  margin: 12px 18px 0;
+  align-self: flex-start;
+}
+
+.qp .cl-suggest {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--b-thin);
+  background: var(--paper);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.qp .cl-suggest li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: var(--b-thin);
+}
+
+.qp .cl-suggest li:last-child {
+  border-bottom: none;
+}
+
+.qp .cl-roster {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* The whole panel scrolls; its parts keep their natural height. */
+.qp .cl-roster > * {
+  flex-shrink: 0;
+}
+
+.qp .cl-file {
+  position: relative;
+  align-self: flex-start;
+  cursor: pointer;
+}
+
+/* The real input covers the styled label, so it stays keyboard-usable. */
+.qp .cl-file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.qp .cl-file:focus-within {
+  outline: 3px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.qp .cl-roster-table {
+  border: var(--b-thin);
+}
+
+.qp .cl-page .cl-roster-table th,
+.qp .cl-page .cl-roster-table td {
+  padding: 6px 10px;
+  vertical-align: top;
+}
+
+.qp .cl-page .cl-roster-table td:first-child {
+  min-width: 150px;
+}
+
+.qp .cl-roster-table small {
+  display: block;
+  color: var(--gray);
+  font-size: 12px;
+}
+
+.qp .cl-outcome {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 2px solid var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qp .cl-outcome.is-good {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.qp .cl-outcome.is-wait {
+  background: var(--sky-soft);
+  color: var(--navy);
+}
+
+.qp .cl-outcome.is-warn {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.qp .cl-outcome.is-none {
+  background: var(--sand);
+  color: var(--ink);
+}
+
+/* Approvals → Quizzes / Students */
+.qp .cl-subtabs {
+  display: flex;
+  padding: 12px 20px 0;
+}
+
+.qp .cl-subtabs .cl-badge {
+  margin-left: 6px;
+}
+
+@media (max-width: 560px) {
+  .qp .cl-suggest li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .qp .cl-suggest li .cl-pav {
+    display: none;
+  }
+}

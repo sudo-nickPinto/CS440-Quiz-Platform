@@ -36,7 +36,9 @@ function normalizeClass(record, account) {
       ? "Organizer"
       : record.membership_status === "INVITED"
         ? "Invited"
-        : "Member",
+        : record.membership_status === "REQUESTED"
+          ? "Waiting for approval"
+          : "Student",
   };
 }
 
