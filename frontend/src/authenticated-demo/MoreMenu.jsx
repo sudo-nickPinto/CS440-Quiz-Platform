@@ -1,6 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import "./more-menu.css";
+
+// Matches .qb-more-menu's min-width plus a little room.
+const MENU_WIDTH = 250;
 
 // "More ▾": a few rare or risky actions (archive, move to trash) one click
 // away from the everyday buttons, so they aren't pressed by accident.
@@ -11,6 +14,8 @@ import "./more-menu.css";
 // are left.
 export default function MoreMenu({ label = "More", items, disabled = false }) {
   const ref = useRef(null);
+  // Opens to the right of the button unless that would leave the window.
+  const [alignRight, setAlignRight] = useState(false);
   const shown = items.filter((item) => !item.hidden);
 
   useEffect(() => {
@@ -32,6 +37,12 @@ export default function MoreMenu({ label = "More", items, disabled = false }) {
     <details
       ref={ref}
       className="qb-more"
+      onToggle={() => {
+        const menu = ref.current;
+        if (!menu?.open) return;
+        const { left } = menu.getBoundingClientRect();
+        setAlignRight(left + MENU_WIDTH > window.innerWidth);
+      }}
       onKeyDown={(event) => {
         if (event.key === "Escape" && ref.current?.open) {
           close();
@@ -43,7 +54,7 @@ export default function MoreMenu({ label = "More", items, disabled = false }) {
         {label} <span aria-hidden="true">▾</span>
       </summary>
 
-      <div className="qb-more-menu">
+      <div className={"qb-more-menu" + (alignRight ? " is-right" : "")}>
         {shown.map((item) => (
           <button
             key={item.label}

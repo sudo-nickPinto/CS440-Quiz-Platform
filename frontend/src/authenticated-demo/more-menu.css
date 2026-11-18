@@ -33,6 +33,15 @@
   outline-offset: 2px;
 }
 
+/* On the quiz page it sits with uppercase .qb-btn buttons. */
+.qp .qv-actions .qb-more > summary {
+  padding: 9px 18px;
+  color: var(--ink);
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
 .qp .qb-more[open] > summary {
   transform: translate(3px, 3px);
   box-shadow: none;
@@ -41,7 +50,7 @@
 .qp .qb-more > .qb-more-menu {
   position: absolute;
   top: calc(100% + 10px);
-  right: 0;
+  left: 0;
   z-index: 40;
   display: grid;
   min-width: 230px;
@@ -49,6 +58,11 @@
   background: var(--paper);
   box-shadow: var(--shadow);
   animation: qb-drop 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.qp .qb-more > .qb-more-menu.is-right {
+  right: 0;
+  left: auto;
 }
 
 .qp .qb-more > .qb-more-menu > button.qb-more-item {

@@ -171,7 +171,7 @@ export default function ClassesPage() {
             />
           </label>
 
-          <label>
+          <label className="cl-semester-field">
             Semester
             <input
               type="text"
