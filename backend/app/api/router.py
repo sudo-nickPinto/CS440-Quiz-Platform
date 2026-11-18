@@ -17,6 +17,7 @@ from app.api.routes.question_bank import router as question_bank_router
 from app.api.routes.responses import router as responses_router
 from app.api.routes.session_history import router as session_history_router
 from app.api.routes.sessions import router as sessions_router
+from app.api.routes.trash import router as trash_router
 
 api_router = APIRouter()
 
@@ -37,3 +38,4 @@ api_router.include_router(question_bank_router)
 api_router.include_router(responses_router)
 api_router.include_router(session_history_router)
 api_router.include_router(sessions_router)
+api_router.include_router(trash_router)

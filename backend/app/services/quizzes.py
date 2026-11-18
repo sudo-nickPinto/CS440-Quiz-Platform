@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, aliased, selectinload
 from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models.account import Account
-from app.models.classes import ClassMembership, ClassRole, MembershipStatus
+from app.models.classes import Class, ClassMembership, ClassRole, MembershipStatus
 from app.models.quiz import (
     AnswerChoice,
     CollaboratorEventType,
@@ -116,7 +116,8 @@ def _check_text_limits(
 def _quiz_query(quiz_id: int):
     return (
         select(Quiz)
-        .where(Quiz.quiz_id == quiz_id)
+        # A quiz in the trash looks missing; services/trash.py restores it.
+        .where(Quiz.quiz_id == quiz_id, Quiz.deleted_at.is_(None))
         .options(
             selectinload(Quiz.versions)
             .selectinload(QuizVersion.questions)
@@ -510,8 +511,11 @@ def list_quizzes(
             (ClassMembership.class_id == Quiz.class_id)
             & (ClassMembership.account_id == account.account_id),
         )
+        .join(Class, Class.class_id == Quiz.class_id)
         .where(
             ClassMembership.status == MembershipStatus.ACTIVE,
+            Quiz.deleted_at.is_(None),
+            Class.deleted_at.is_(None),
             or_(
                 Quiz.author_id == account.account_id,
                 collaborator_access,
@@ -573,7 +577,7 @@ def list_class_quizzes(
         QuizCollaborator.account_id == account.account_id,
         QuizCollaborator.revoked_at.is_(None),
     )
-    condition = Quiz.class_id == class_id
+    condition = and_(Quiz.class_id == class_id, Quiz.deleted_at.is_(None))
     if mine or membership.role != ClassRole.ORGANIZER:
         condition = and_(
             condition,
@@ -841,6 +845,7 @@ def _lock_class_quiz_for_update(
         .where(
             Quiz.quiz_id == quiz_id,
             Quiz.class_id == class_id,
+            Quiz.deleted_at.is_(None),
         )
         .with_for_update()
         .execution_options(populate_existing=True)
@@ -859,6 +864,8 @@ def _require_quiz_editor(
 ) -> None:
     _require_current_active_account(db, account, lock=lock_access)
     if quiz.class_id is not None:
+        # 404 while the quiz's class is in the trash.
+        get_class(db, quiz.class_id)
         _require_active_class_member(
             db,
             account,

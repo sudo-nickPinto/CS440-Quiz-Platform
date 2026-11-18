@@ -111,7 +111,12 @@ def _visible_submissions(
         .join(Quiz, Quiz.quiz_id == QuizVersion.quiz_id)
         .join(_submitter, _submitter.account_id == QuizSubmission.submitted_by_id)
         .outerjoin(_decider, _decider.account_id == QuizSubmission.decided_by_id)
-        .where(QuizSubmission.class_id == class_id, Quiz.class_id == class_id)
+        .where(
+            QuizSubmission.class_id == class_id,
+            Quiz.class_id == class_id,
+            # Requests for a trashed quiz come back if the quiz is restored.
+            Quiz.deleted_at.is_(None),
+        )
     )
     if not access.is_organizer:
         statement = statement.where(

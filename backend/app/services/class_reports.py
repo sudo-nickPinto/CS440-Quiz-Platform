@@ -67,6 +67,7 @@ def get_class_session_results(
         session is None
         or session.class_id != class_id
         or session.status != LiveSessionStatus.COMPLETED
+        or session.deleted_at is not None
     ):
         raise APIError(404, "session_not_found", "Session not found.")
 
@@ -250,6 +251,7 @@ def get_class_student_results(
         .where(
             LiveSession.class_id == class_id,
             LiveSession.status == LiveSessionStatus.COMPLETED,
+            LiveSession.deleted_at.is_(None),
         )
     ).all()
 

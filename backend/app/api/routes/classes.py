@@ -12,6 +12,7 @@ from app.services.classes import (
     leave_class,
     list_classes,
     rotate_class_code,
+    unarchive_class,
     update_class,
 )
 
@@ -80,6 +81,15 @@ def archive_class_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> ClassResponse:
     return archive_class(db, account, class_id)
+
+
+@router.post("/{class_id}/unarchive", response_model=ClassResponse)
+def unarchive_class_route(
+    class_id: int,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> ClassResponse:
+    return unarchive_class(db, account, class_id)
 
 
 @router.delete("/{class_id}/membership", status_code=status.HTTP_204_NO_CONTENT)
