@@ -121,25 +121,40 @@ class EmailService:
 
     # -- Messages --------------------------------------------------------
 
+    def added_to_class(self, to: str, class_name: str, class_id: int) -> OutgoingEmail:
+        """Sent when an organizer adds someone who already has an account.
+        They are a student straight away; there is nothing to accept."""
+        return OutgoingEmail(
+            to=to,
+            subject=f"You've been added to {class_name} on {APP_NAME}",
+            body="\n".join(
+                [
+                    "Hello,",
+                    "",
+                    f"Your instructor added you to {class_name} on {APP_NAME}, "
+                    "the class quiz app.",
+                    "",
+                    f"Open the class: {self.app_url}/app/classes/{class_id}",
+                    "",
+                    f"- {APP_NAME}",
+                ]
+            ),
+        )
+
     def roster_invitation(
         self,
         to: str,
         class_name: str,
         *,
-        has_account: bool,
+        has_account: bool = False,
         join_code: str | None = None,
     ) -> OutgoingEmail:
-        if has_account:
-            steps = (
-                f"Sign in at {self.app_url}/app/classes and press Accept "
-                "under Class invitations."
-            )
-        else:
-            steps = (
-                f"Create your {APP_NAME} account at {self.app_url} with this "
-                f"email address ({to}). The invitation will be waiting on "
-                "your Classes page."
-            )
+        """Sent to a roster email that has no account yet."""
+        steps = (
+            f"Create your {APP_NAME} account at {self.app_url} with this "
+            f"email address ({to}). You'll be in the class as soon as you "
+            "sign up."
+        )
         lines = [
             "Hello,",
             "",

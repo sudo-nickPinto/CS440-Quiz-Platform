@@ -7,14 +7,12 @@ from app.models.classes import MembershipStatus
 
 
 class RosterRowOutcome(str, Enum):
-    # Matched an account that has now been invited (an email goes out).
-    INVITED = "invited"
+    # Matched an account, which is now a student (an email goes out).
+    ADDED = "added"
     # Matched an account that was waiting on a join request; it is approved.
     APPROVED = "approved"
     # Matched an account that is already a student or organizer.
     ALREADY_IN_CLASS = "already_in_class"
-    # Matched an account that already has an invitation waiting.
-    ALREADY_INVITED = "already_invited"
     # No account yet. Saved; if the row has an email, signing up with it and
     # joining is approved automatically. Otherwise their request waits.
     EXPECTED = "expected"

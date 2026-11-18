@@ -359,7 +359,7 @@ def _activate(membership: ClassMembership, organizer_id: int, now: datetime) -> 
     membership.decided_at = now
 
 
-def _invite(
+def _add(
     db: Session,
     class_id: int,
     account_id: int,
@@ -367,11 +367,13 @@ def _invite(
     invited_by_id: int | None,
     now: datetime,
 ) -> ClassMembership:
+    """Make the account a student. An organizer chose them (roster or
+    + Add student), so there is no invitation to accept."""
     if membership is None:
         membership = ClassMembership(class_id=class_id, account_id=account_id)
         db.add(membership)
     membership.role = ClassRole.MEMBER
-    membership.status = MembershipStatus.INVITED
+    membership.status = MembershipStatus.ACTIVE
     membership.joined_via = JoinedVia.INVITE
     membership.invited_by_id = invited_by_id
     membership.decided_by_id = invited_by_id
@@ -541,9 +543,6 @@ def import_roster(
         if status == MembershipStatus.ACTIVE:
             result.outcome = RosterRowOutcome.ALREADY_IN_CLASS
             result.message = None
-        elif status == MembershipStatus.INVITED:
-            result.outcome = RosterRowOutcome.ALREADY_INVITED
-            result.message = None
         elif status == MembershipStatus.REMOVED:
             result.outcome = RosterRowOutcome.REMOVED
             result.message = (
@@ -555,16 +554,14 @@ def import_roster(
             result.message = None
             messages.append(email.join_approved(match.email, class_.name, class_id))
         else:
-            memberships[match.account_id] = _invite(
+            # No membership, an older pending invitation, or they left or
+            # were turned down before: the roster puts them in the class.
+            memberships[match.account_id] = _add(
                 db, class_id, match.account_id, membership, account.account_id, now
             )
-            result.outcome = RosterRowOutcome.INVITED
+            result.outcome = RosterRowOutcome.ADDED
             result.message = None
-            messages.append(
-                email.roster_invitation(
-                    match.email, class_.name, has_account=True, join_code=code
-                )
-            )
+            messages.append(email.added_to_class(match.email, class_.name, class_id))
         _note_moved_link(result, moved_from)
 
     if dry_run:
@@ -587,11 +584,20 @@ def import_roster(
 def roster_invitation_email(
     db: Session, email: EmailService, class_id: int, address: str
 ) -> OutgoingEmail:
-    """The invitation email for someone invited one at a time (+ Add student)."""
+    """The email for someone invited one at a time with the older invite
+    route (``POST /invites``), which still waits for them to accept."""
     class_ = _load_class(db, class_id)
     return email.roster_invitation(
-        address, class_.name, has_account=True, join_code=_invite_code(class_)
+        address, class_.name, join_code=_invite_code(class_)
     )
+
+
+def added_email(
+    db: Session, email: EmailService, class_id: int, address: str
+) -> OutgoingEmail:
+    """The email for someone added with + Add student."""
+    class_ = _load_class(db, class_id)
+    return email.added_to_class(address, class_.name, class_id)
 
 
 def list_roster(
@@ -659,10 +665,10 @@ def find_roster_entry(
 
 
 def claim_roster_invitations(db: Session, account_id: int, email: str) -> int:
-    """Turn roster rows that list this new account's email into invitations.
+    """Put a new account in every class whose roster lists its email.
 
-    Called once, when an account is created. Returns how many invitations
-    were added. Commits.
+    Called once, when an account is created (the email is verified by then).
+    Returns how many classes they were added to. Commits.
     """
     entries = db.scalars(
         select(ClassRosterEntry)
@@ -684,7 +690,7 @@ def claim_roster_invitations(db: Session, account_id: int, email: str) -> int:
             )
         )
         if membership is None:
-            _invite(db, entry.class_id, account_id, None, entry.imported_by_id, now)
+            _add(db, entry.class_id, account_id, None, entry.imported_by_id, now)
             added += 1
     if entries:
         db.commit()

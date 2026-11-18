@@ -4,7 +4,8 @@ QuizBurg sends three emails of its own, all through one service, `EmailService` 
 
 | Email | Sent when |
 |---|---|
-| Roster invitation | An organizer invites someone with **+ Add student**, or a roster import invites an account or a listed email address without an account |
+| Added to class | An organizer adds someone who has an account, with **+ Add student** or a roster import. They are a student right away |
+| Roster invitation | A roster row lists an email that has no account yet: it asks them to sign up with that address |
 | Join approved | An organizer approves a join request (one, **Accept all**, or a roster import that matches the person) |
 | Join rejected | An organizer rejects a join request |
 
