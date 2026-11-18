@@ -98,6 +98,7 @@ def _to_response(
     return ClassResponse(
         class_id=class_.class_id,
         name=class_.name,
+        semester=class_.semester,
         created_by_id=class_.created_by_id,
         join_code=_format_join_code(class_.join_code) if may_view_code else None,
         joining_open=class_.joining_open,
@@ -145,6 +146,7 @@ def create_class(
 
     class_ = Class(
         name=payload.name,
+        semester=payload.semester,
         created_by_id=account.account_id,
         join_code=code,
         memberships=[membership],
@@ -176,6 +178,8 @@ def list_classes(
                     MembershipStatus.REQUESTED,
                 )
             ),
+            # Trashed classes are listed by GET /trash instead.
+            Class.deleted_at.is_(None),
         )
         .order_by(Class.created_at.desc(), Class.class_id.desc())
     ).all()
@@ -204,6 +208,8 @@ def update_class(
 
     if "name" in payload.model_fields_set:
         class_.name = payload.name
+    if "semester" in payload.model_fields_set:
+        class_.semester = payload.semester
     if "joining_open" in payload.model_fields_set:
         class_.joining_open = payload.joining_open
     _commit(db, "class_update_failed", "Could not update the class.")
@@ -255,6 +261,32 @@ def archive_class(
     return _access_response(access)
 
 
+def unarchive_class(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+) -> ClassResponse:
+    """Make an archived class active again.
+
+    Archiving threw the old code away, so the class gets a new one. Joining
+    opens again; code joins still wait for an organizer to approve them.
+    """
+    access = require_class_organizer(db, account, class_id)
+    class_ = access.class_
+    if class_.archived_at is None:
+        return _access_response(access)
+
+    class_.join_code = _generate_unique_code(
+        db,
+        error_code="class_unarchive_failed",
+        error_message="Could not unarchive the class.",
+    )
+    class_.joining_open = True
+    class_.archived_at = None
+    _commit(db, "class_unarchive_failed", "Could not unarchive the class.")
+    return _access_response(access)
+
+
 def _check_join_rate(account_id: int) -> None:
     now = monotonic()
     with _join_attempts_lock:
@@ -279,7 +311,7 @@ def join_class(
     class_ = db.scalar(
         select(Class).where(Class.join_code == payload.code).with_for_update()
     )
-    if class_ is None:
+    if class_ is None or class_.deleted_at is not None:
         raise APIError(404, "class_code_not_found", "No class has that code.")
     if class_.archived_at is not None or not class_.joining_open:
         raise APIError(

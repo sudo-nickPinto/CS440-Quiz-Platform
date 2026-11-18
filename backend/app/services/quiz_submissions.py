@@ -62,7 +62,10 @@ def _version_and_quiz(
     row = db.execute(
         select(QuizVersion, Quiz)
         .join(Quiz, Quiz.quiz_id == QuizVersion.quiz_id)
-        .where(QuizVersion.quiz_version_id == quiz_version_id)
+        .where(
+            QuizVersion.quiz_version_id == quiz_version_id,
+            Quiz.deleted_at.is_(None),
+        )
     ).one_or_none()
     if row is None:
         return None
@@ -378,6 +381,7 @@ def _approved_versions_statement(class_id: int):
             QuizVersion.published_at.is_not(None),
             Quiz.class_id == class_id,
             Quiz.status != QuizStatus.ARCHIVED,
+            Quiz.deleted_at.is_(None),
             ~newer_published,
         )
     )

@@ -117,7 +117,12 @@ def _session_rows(db: Session, class_id: int, statuses) -> list:
             Result,
             Result.session_participant_id == SessionParticipant.session_participant_id,
         )
-        .where(LiveSession.class_id == class_id, LiveSession.status.in_(statuses))
+        .where(
+            LiveSession.class_id == class_id,
+            LiveSession.status.in_(statuses),
+            # A session the host moved to the trash doesn't count anywhere.
+            LiveSession.deleted_at.is_(None),
+        )
         .group_by(
             LiveSession.session_id,
             LiveSession.status,
@@ -307,6 +312,7 @@ def _class_scores(
         .where(
             LiveSession.class_id == class_id,
             LiveSession.status == LiveSessionStatus.COMPLETED,
+            LiveSession.deleted_at.is_(None),
         )
     ).all()
 

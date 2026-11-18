@@ -46,7 +46,8 @@ def require_active_faculty(account: CurrentAccount) -> None:
 
 def get_class(db: Session, class_id: int) -> Class:
     class_ = db.get(Class, class_id)
-    if class_ is None:
+    # A class in the trash looks missing everywhere except the trash routes.
+    if class_ is None or class_.deleted_at is not None:
         raise APIError(404, "class_not_found", "Class not found.")
     return class_
 
