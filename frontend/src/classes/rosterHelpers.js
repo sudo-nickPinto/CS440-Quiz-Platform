@@ -3,11 +3,10 @@
 
 // What happened to one roster row, in the order the summary lists them.
 export const ROSTER_OUTCOMES = {
-  invited: { label: "Invited", tone: "good" },
+  added: { label: "Added", tone: "good" },
   approved: { label: "Request approved", tone: "good" },
   expected: { label: "No account yet", tone: "wait" },
   name_match: { label: "Same name, check email", tone: "warn" },
-  already_invited: { label: "Already invited", tone: "none" },
   already_in_class: { label: "Already in class", tone: "none" },
   ambiguous: { label: "Same name as others", tone: "warn" },
   removed: { label: "Removed earlier", tone: "warn" },
@@ -28,7 +27,7 @@ export function rosterSummary(counts) {
 
 // True when importing would change anything (and so is worth a button).
 export function rosterHasChanges(counts) {
-  return ["invited", "approved", "expected", "ambiguous", "name_match"].some(
+  return ["added", "approved", "expected", "ambiguous", "name_match"].some(
     (key) => counts?.[key] > 0,
   );
 }
@@ -41,19 +40,20 @@ export function rosterName(row) {
   return last || first || "—";
 }
 
-// What a suggestion's existing class membership means for "+ Invite".
+// What a suggestion's existing class membership means for "Add". A
+// pending invitation from before can still be added (it becomes membership).
 export function suggestionStatus(status) {
   switch (status) {
     case "ACTIVE":
-      return { label: "Already a student", canInvite: false };
+      return { label: "Already a student", canAdd: false };
     case "INVITED":
-      return { label: "Invited", canInvite: false };
+      return { label: "Invited", canAdd: true };
     case "REQUESTED":
-      return { label: "Waiting for approval", canInvite: false };
+      return { label: "Waiting for approval", canAdd: false };
     case "REMOVED":
-      return { label: "Removed earlier", canInvite: true };
+      return { label: "Removed earlier", canAdd: true };
     default:
-      return { label: null, canInvite: true };
+      return { label: null, canAdd: true };
   }
 }
 

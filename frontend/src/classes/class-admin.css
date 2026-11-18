@@ -1482,11 +1482,109 @@
   }
 }
 
-/* "+ Add student": Invite one / Import roster switch, name and email
-   suggestions, and the roster preview. */
-.qp .cl-dlg .cl-dlg-tabs {
-  margin: 12px 18px 0;
-  align-self: flex-start;
+/* "+ Add student" pop-up: wide, plain paper, Add student / Add roster
+   switch, search results, and the roster drop area and preview. */
+.qp .cl-dlg.cl-dlg-wide {
+  width: min(900px, calc(100vw - 24px));
+  max-height: min(780px, calc(100vh - 32px));
+}
+
+.qp .cl-add-tabs {
+  display: flex;
+  padding: 16px 20px 0;
+}
+
+.qp .cl-add-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+}
+
+.qp .cl-add-search {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qp .cl-add-note {
+  font-weight: 700;
+}
+
+.qp .cl-dlg-wide .cl-dlg-error {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+.qp .cl-drop {
+  display: grid;
+  gap: 6px;
+  place-items: center;
+  padding: 36px 20px;
+  border: 3px dashed var(--ink);
+  background: var(--paper);
+  text-align: center;
+  cursor: pointer;
+}
+
+.qp .cl-drop strong {
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
+.qp .cl-drop small {
+  color: var(--gray);
+}
+
+.qp .cl-drop:hover,
+.qp .cl-drop.is-over {
+  background: var(--sky-wash);
+  border-color: var(--navy);
+}
+
+.qp .cl-drop:focus-within {
+  outline: 3px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.qp .cl-roster-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 700;
+}
+
+/* Two-option switches (Admin / User, Quizzes / Students, Add student /
+   Add roster): blue when the first is picked, orange for the second,
+   in logo order (QUIZ | BURG). */
+.qp .cl-view-switch.is-duo button:first-of-type[aria-pressed="true"] {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.qp .cl-view-switch.is-duo button:last-of-type[aria-pressed="true"] {
+  background: var(--orange-deep);
+  color: var(--paper);
+}
+
+.qp .cl-view-switch.is-duo button[aria-pressed="true"]::before {
+  background: var(--paper);
+}
+
+.qp .cl-view-switch.is-duo .cl-badge {
+  margin-left: 6px;
+  border-width: 2px;
+  font-size: 11px;
+}
+
+.qp .cl-view-switch.is-duo button[aria-pressed="true"] .cl-badge {
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .qp .cl-suggest {
@@ -1513,33 +1611,9 @@
 }
 
 .qp .cl-roster {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* The whole panel scrolls; its parts keep their natural height. */
-.qp .cl-roster > * {
-  flex-shrink: 0;
-}
-
-.qp .cl-file {
-  position: relative;
-  align-self: flex-start;
-  cursor: pointer;
-}
-
-/* The real input covers the styled label, so it stays keyboard-usable. */
-.qp .cl-file input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.qp .cl-file:focus-within {
-  outline: 3px solid var(--navy);
-  outline-offset: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .qp .cl-roster-table {
@@ -1592,17 +1666,17 @@
   color: var(--ink);
 }
 
-/* Approvals → Quizzes / Students */
-.qp .cl-subtabs {
-  display: flex;
-  padding: 12px 20px 0;
-}
-
-.qp .cl-subtabs .cl-badge {
-  margin-left: 6px;
-}
-
 @media (max-width: 560px) {
+  /* The student ID column is left out on phones; the name and result fit. */
+  .qp .cl-page .cl-roster-table th:nth-child(2),
+  .qp .cl-page .cl-roster-table td:nth-child(2) {
+    display: none;
+  }
+
+  .qp .cl-outcome {
+    white-space: normal;
+  }
+
   .qp .cl-suggest li {
     grid-template-columns: minmax(0, 1fr) auto;
   }

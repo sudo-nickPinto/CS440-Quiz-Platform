@@ -72,6 +72,7 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
   const sessions = useClassSessions(classInfo.id, 1);
 
   const memory = `class:${classInfo.id}:students`;
+  const [query, setQuery] = useRemembered(`${memory}:query`, "");
   const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "average", {
     isValid: (key) => key in MEMBER_SORTS,
   });
@@ -138,9 +139,12 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
 
   const rows = membersWithStats(resource.data, stats.data, sortKey);
   const ranks = studentRanks(rows);
-  // No search box: the list is one class. To find anyone in QuizBurg, use
-  // "+ Add student", which searches every account.
-  const visible = rows;
+  // Searches this class's list, like the search bar on every other tab.
+  // "+ Add student" is the search across every QuizBurg account.
+  const needle = query.trim().toLowerCase();
+  const visible = rows.filter((member) =>
+    `${member.display_name ?? ""} ${member.email}`.toLowerCase().includes(needle),
+  );
   const studentTotal = rows.filter((row) => row.role !== "ORGANIZER").length;
 
   return (
@@ -148,6 +152,16 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
       <ConfirmDialog confirmer={confirmer} />
 
       <div className="cl-toolbar">
+        <label className="cl-search">
+          <span className="cl-sr">Search students</span>
+          <input
+            type="search"
+            placeholder="Search students…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+
         <label className="cl-sort">
           <span className="cl-sr">Sort students</span>
           <select
@@ -342,10 +356,11 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
               <tr>
                 <td colSpan={6}>
                   <div className="cl-state" role="status">
-                    <h2>No students yet</h2>
+                    <h2>{needle ? "No matches" : "No students yet"}</h2>
                     <p>
-                      Share the class code, import the roster or use + Add
-                      student.
+                      {needle
+                        ? "Try another search."
+                        : "Share the class code or use + Add student."}
                     </p>
                   </div>
                 </td>

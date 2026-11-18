@@ -804,7 +804,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
 // pending first by default. Members follow their own requests in My quizzes.
 const APPROVAL_COLUMNS = ["", "", "cl-wide", "cl-wide", "", "cl-go-cell"];
 
-function SubmissionsTable({ classInfo, onChange }) {
+function SubmissionsTable({ classInfo, onChange, switcher = null }) {
   const api = useApi();
   const action = useAction();
   const memory = `class:${classInfo.id}:approvals`;
@@ -876,6 +876,7 @@ function SubmissionsTable({ classInfo, onChange }) {
                 setPage(1);
               }}
             />
+            {switcher}
           </>
         }
         rows={resource.data.items.map((item) => {
@@ -949,7 +950,8 @@ function SubmissionsTable({ classInfo, onChange }) {
 }
 
 // Approvals has two lists: quizzes sent for approval, and people who asked
-// to join with the class code. Each sub-tab shows its own waiting count.
+// to join with the class code. The Quizzes / Students switch sits in each
+// list's toolbar, just left of the counter, and shows its waiting counts.
 const APPROVAL_TABS = ["Quizzes", "Students"];
 
 function ApprovalsSection({ classInfo, dashboard }) {
@@ -964,39 +966,43 @@ function ApprovalsSection({ classInfo, dashboard }) {
     Students: ready ? (dashboard.data.pending_join_request_count ?? 0) : 0,
   };
 
-  return (
-    <>
-      <div className="cl-subtabs">
-        <div
-          className="cl-view-switch"
-          role="group"
-          aria-label="Approval lists"
+  const switcher = (
+    <div
+      className="cl-view-switch is-duo"
+      role="group"
+      aria-label="Approval lists"
+    >
+      {APPROVAL_TABS.map((label) => (
+        <button
+          key={label}
+          type="button"
+          aria-pressed={tab === label}
+          onClick={() => setTab(label)}
         >
-          {APPROVAL_TABS.map((label) => (
-            <button
-              key={label}
-              type="button"
-              aria-pressed={tab === label}
-              onClick={() => setTab(label)}
-            >
-              {label}
-              {waiting[label] > 0 && (
-                <span className="cl-badge">
-                  {waiting[label]}
-                  <span className="cl-sr"> waiting</span>
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
+          {label}
+          {waiting[label] > 0 && (
+            <span className="cl-badge">
+              {waiting[label]}
+              <span className="cl-sr"> waiting</span>
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
 
-      {tab === "Students" ? (
-        <JoinRequestsTable classInfo={classInfo} onChange={dashboard.reload} />
-      ) : (
-        <SubmissionsTable classInfo={classInfo} onChange={dashboard.reload} />
-      )}
-    </>
+  return tab === "Students" ? (
+    <JoinRequestsTable
+      classInfo={classInfo}
+      onChange={dashboard.reload}
+      switcher={switcher}
+    />
+  ) : (
+    <SubmissionsTable
+      classInfo={classInfo}
+      onChange={dashboard.reload}
+      switcher={switcher}
+    />
   );
 }
 
@@ -1282,7 +1288,7 @@ function ClassWorkspace({ classInfo, onChange }) {
         {/* Last in the bar, so it stays in the same spot in both views. */}
         {showAdminLayout && (
           <div
-            className="cl-view-switch"
+            className="cl-view-switch is-duo"
             role="group"
             aria-label="Dashboard view"
           >

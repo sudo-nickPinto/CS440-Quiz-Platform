@@ -65,56 +65,26 @@ function useStudentSuggestions(classId, text) {
   return query && result.query === query ? result.items : [];
 }
 
-// "+ Add student" pop-up: invite one person (with name and email
-// suggestions from the whole app), import the registrar's roster, and see or
-// cancel the invitations still waiting to be accepted.
+// "+ Add student" pop-up with two tabs:
+// - Add student: search every QuizBurg account by name or email and add
+//   them. Someone with an account is in the class right away (there is no
+//   invitation to accept).
+// - Add roster: drop in the registrar's class list, check the preview,
+//   then import it.
 export function AddStudentDialog({ classInfo, onClose, onChange }) {
   const ref = useRef(null);
-  const api = useApi();
-  const action = useAction();
-  const invites = useResource(`/classes/${classInfo.id}/invites`);
-  const [text, setText] = useState("");
+  const [tab, setTab] = useState("student");
   const [added, setAdded] = useState(0);
-  const [tab, setTab] = useState("invite");
-  const suggestions = useStudentSuggestions(classInfo.id, text);
-  const listId = useId();
 
   useEffect(() => {
     const dialog = ref.current;
     if (dialog && !dialog.open) dialog.showModal();
   }, []);
 
-  async function inviteEmail(email) {
-    const sent = await action.run(() =>
-      api(`/classes/${classInfo.id}/invites`, {
-        method: "POST",
-        body: JSON.stringify({ email: email.trim() }),
-      }),
-    );
-    if (sent) {
-      setText("");
-      setAdded((count) => count + 1);
-      invites.reload();
-    }
-  }
-
-  async function cancel(invitation) {
-    const done = await action.run(async () => {
-      await api(`/classes/${classInfo.id}/invites/${invitation.account_id}`, {
-        method: "DELETE",
-      });
-      return true;
-    });
-    if (done) invites.reload();
-  }
-
-  const pending = Array.isArray(invites.data) ? invites.data : [];
-  const closed = classInfo.archived;
-
   return (
     <dialog
       ref={ref}
-      className="cl-dlg"
+      className="cl-dlg cl-dlg-wide"
       aria-labelledby="cl-add-title"
       onCancel={(event) => {
         event.preventDefault();
@@ -126,8 +96,9 @@ export function AddStudentDialog({ classInfo, onClose, onChange }) {
       }}
     >
       <div className="cl-dlg-top">
-        <span>
-          Add student{classInfo.code && <> · <b>{classInfo.code}</b></>}
+        <span id="cl-add-title">
+          Add to {classInfo.name}
+          {classInfo.code && <> · <b>{classInfo.code}</b></>}
         </span>
         <button
           type="button"
@@ -139,172 +110,54 @@ export function AddStudentDialog({ classInfo, onClose, onChange }) {
         </button>
       </div>
 
-      <div className="cl-view-switch cl-dlg-tabs" role="group" aria-label="Add how">
-        <button
-          type="button"
-          aria-pressed={tab === "invite"}
-          onClick={() => setTab("invite")}
+      <div className="cl-add-tabs">
+        <div
+          className="cl-view-switch is-duo"
+          role="group"
+          aria-label="Add a student or a roster"
         >
-          Invite one
-        </button>
-        <button
-          type="button"
-          aria-pressed={tab === "roster"}
-          onClick={() => setTab("roster")}
-        >
-          Import roster
-        </button>
+          <button
+            type="button"
+            aria-pressed={tab === "student"}
+            onClick={() => setTab("student")}
+          >
+            Add student
+          </button>
+          <button
+            type="button"
+            aria-pressed={tab === "roster"}
+            onClick={() => setTab("roster")}
+          >
+            Add roster
+          </button>
+        </div>
       </div>
 
-      {tab === "roster" ? (
-        <RosterImport
-          classInfo={classInfo}
-          onImported={() => {
-            invites.reload();
-            onChange?.();
-          }}
-        />
-      ) : (
-        <>
-          <form
-            className="cl-dlg-head"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void inviteEmail(text);
+      <div className="cl-add-body">
+        {classInfo.archived ? (
+          <p className="cl-add-note">
+            This class is archived, so no one new can join.
+          </p>
+        ) : tab === "roster" ? (
+          <RosterImport classInfo={classInfo} onImported={onChange} />
+        ) : (
+          <StudentSearch
+            classInfo={classInfo}
+            onAdded={() => {
+              setAdded((count) => count + 1);
+              onChange?.();
             }}
-          >
-            <h2 id="cl-add-title">Add a student to this class</h2>
-            <div className="cl-dlg-row">
-              <label className="cl-search">
-                <span className="cl-sr">Name or email</span>
-                <input
-                  type="text"
-                  inputMode="email"
-                  placeholder="Start typing a name or email…"
-                  value={text}
-                  autoFocus
-                  autoComplete="off"
-                  required
-                  role="combobox"
-                  aria-expanded={suggestions.length > 0}
-                  aria-controls={listId}
-                  aria-autocomplete="list"
-                  disabled={action.busy || closed}
-                  onChange={(event) => setText(event.target.value)}
-                />
-              </label>
-              <button
-                type="submit"
-                className="cl-add-one"
-                disabled={action.busy || closed || !text.includes("@")}
-                title="Invite this email address"
-              >
-                + Invite
-              </button>
-            </div>
-
-            {suggestions.length > 0 && (
-              <ul className="cl-suggest" id={listId} role="listbox" aria-label="Suggestions">
-                {suggestions.map((person) => {
-                  const status = suggestionStatus(person.membership_status);
-                  return (
-                    <li key={person.account_id} role="option" aria-selected="false">
-                      <span className="cl-pav" aria-hidden="true">
-                        {initials(personName(person))}
-                      </span>
-                      <span>
-                        <strong className="cl-pname">{personName(person)}</strong>
-                        <small className="cl-pmail">{person.email}</small>
-                      </span>
-                      {status.canInvite ? (
-                        <button
-                          type="button"
-                          className="cl-secondary"
-                          disabled={action.busy || closed}
-                          onClick={() => void inviteEmail(person.email)}
-                        >
-                          Invite
-                        </button>
-                      ) : (
-                        <span className="cl-tag is-me">{status.label}</span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-
-            <p>
-              {closed
-                ? "This class is archived, so no one new can join."
-                : "Suggestions come from everyone with a QuizBurg account. They get an email and accept from their Classes page" +
-                  (classInfo.code && classInfo.joiningOpen
-                    ? `, or they can ask to join with code ${classInfo.code}.`
-                    : ".")}
-            </p>
-            {action.error && (
-              <p className="cl-dlg-error" role="alert">
-                {action.error.message}
-              </p>
-            )}
-          </form>
-
-          <div className="cl-dlg-sub">
-            <span>Waiting to accept</span>
-            <span>
-              {pending.length} {pending.length === 1 ? "person" : "people"}
-            </span>
-          </div>
-
-          <div className="cl-people">
-            {invites.loading ? (
-              <p className="cl-dlg-empty" role="status">
-                Loading invitations…
-              </p>
-            ) : invites.error ? (
-              <p className="cl-dlg-empty" role="alert">
-                {invites.error.message}{" "}
-                <button type="button" onClick={invites.reload}>
-                  Retry
-                </button>
-              </p>
-            ) : pending.length === 0 ? (
-              <p className="cl-dlg-empty">No pending invitations.</p>
-            ) : (
-              pending.map((invitation) => (
-                <div className="cl-person" key={invitation.account_id}>
-                  <span className="cl-pav" aria-hidden="true">
-                    {initials(personName(invitation))}
-                  </span>
-                  <span>
-                    <strong className="cl-pname">{personName(invitation)}</strong>
-                    {invitation.display_name &&
-                      invitation.display_name !== invitation.email && (
-                        <small className="cl-pmail">{invitation.email}</small>
-                      )}
-                  </span>
-                  <button
-                    type="button"
-                    className="cl-secondary"
-                    disabled={action.busy}
-                    onClick={() => void cancel(invitation)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </>
-      )}
+          />
+        )}
+      </div>
 
       <div className="cl-dlg-foot">
         <span aria-live="polite">
           {added === 0 ? (
-            "Nobody invited yet"
+            "Nobody added yet"
           ) : (
             <>
-              <b>{added}</b> invited
+              <b>{added}</b> added
             </>
           )}
         </span>
@@ -316,14 +169,118 @@ export function AddStudentDialog({ classInfo, onClose, onChange }) {
   );
 }
 
-// Upload the registrar's class list: a preview first (nothing saved), then
-// the import itself.
+// Add student tab: the search box, and only the results under it.
+function StudentSearch({ classInfo, onAdded }) {
+  const api = useApi();
+  const action = useAction();
+  const [text, setText] = useState("");
+  const [justAdded, setJustAdded] = useState({});
+  const suggestions = useStudentSuggestions(classInfo.id, text);
+  const listId = useId();
+  const typedEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text.trim());
+
+  async function add(email) {
+    const person = await action.run(() =>
+      api(`/classes/${classInfo.id}/students`, {
+        method: "POST",
+        body: JSON.stringify({ email: email.trim() }),
+      }),
+    );
+    if (person) {
+      setJustAdded((map) => ({ ...map, [person.account_id]: true }));
+      onAdded();
+    }
+  }
+
+  return (
+    <form
+      className="cl-add-search"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (typedEmail) void add(text);
+      }}
+    >
+      <div className="cl-dlg-row">
+        <label className="cl-search">
+          <span className="cl-sr">Search by name or email</span>
+          <input
+            type="text"
+            inputMode="email"
+            placeholder="Search by name or email…"
+            value={text}
+            autoFocus
+            autoComplete="off"
+            role="combobox"
+            aria-expanded={suggestions.length > 0}
+            aria-controls={listId}
+            aria-autocomplete="list"
+            disabled={action.busy}
+            onChange={(event) => setText(event.target.value)}
+          />
+        </label>
+        {typedEmail && (
+          <button type="submit" className="cl-add-one" disabled={action.busy}>
+            + Add
+          </button>
+        )}
+      </div>
+
+      {action.error && (
+        <p className="cl-dlg-error" role="alert">
+          {action.error.message}
+        </p>
+      )}
+
+      {suggestions.length > 0 && (
+        <ul
+          className="cl-suggest"
+          id={listId}
+          role="listbox"
+          aria-label="Matching accounts"
+        >
+          {suggestions.map((person) => {
+            const status = justAdded[person.account_id]
+              ? { label: "Added", canAdd: false }
+              : suggestionStatus(person.membership_status);
+            return (
+              <li key={person.account_id} role="option" aria-selected="false">
+                <span className="cl-pav" aria-hidden="true">
+                  {initials(personName(person))}
+                </span>
+                <span>
+                  <strong className="cl-pname">{personName(person)}</strong>
+                  <small className="cl-pmail">{person.email}</small>
+                </span>
+                {status.canAdd ? (
+                  <button
+                    type="button"
+                    className="cl-secondary"
+                    disabled={action.busy}
+                    onClick={() => void add(person.email)}
+                  >
+                    Add
+                  </button>
+                ) : (
+                  <span className="cl-tag is-me">{status.label}</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </form>
+  );
+}
+
+// Add roster tab: drop the registrar's class list (CSV or Excel), see a
+// preview (nothing saved), then import it.
 function RosterImport({ classInfo, onImported }) {
   const api = useApi();
   const action = useAction();
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [done, setDone] = useState(null);
+  const [dragging, setDragging] = useState(false);
 
   function send(chosen, dryRun) {
     return api(
@@ -336,9 +293,7 @@ function RosterImport({ classInfo, onImported }) {
     );
   }
 
-  async function choose(event) {
-    const chosen = event.target.files?.[0] ?? null;
-    event.target.value = "";
+  async function choose(chosen) {
     setFile(chosen);
     setPreview(null);
     setDone(null);
@@ -359,25 +314,40 @@ function RosterImport({ classInfo, onImported }) {
   const shown = done ?? preview;
 
   return (
-    <div className="cl-dlg-head cl-roster">
-      <h2 id="cl-add-title">Import the class roster</h2>
-      <p>
-        Upload the class list from the registrar (CSV or Excel) with an ID and
-        a Name column written Last,First. Students who already have an account
-        are invited by email. Everyone else is remembered: when they ask to
-        join with the class code, they are approved automatically.
-      </p>
-
-      <label className="cl-button cl-secondary cl-file">
-        {file ? "Choose another file" : "Choose roster file"}
+    <div className="cl-roster">
+      <label
+        className={`cl-drop${dragging ? " is-over" : ""}`}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          const dropped = event.dataTransfer.files?.[0];
+          if (dropped && !action.busy) void choose(dropped);
+        }}
+      >
         <input
+          className="cl-sr"
           type="file"
           accept={ROSTER_ACCEPT}
-          disabled={action.busy || classInfo.archived}
-          onChange={(event) => void choose(event)}
+          disabled={action.busy}
+          onChange={(event) => {
+            const chosen = event.target.files?.[0] ?? null;
+            event.target.value = "";
+            void choose(chosen);
+          }}
         />
+        <strong>
+          {file ? file.name : "Drop the roster file here"}
+        </strong>
+        <span>
+          {file ? "Drop another file, or click to choose one" : "or click to choose one"}
+        </span>
+        <small>CSV or Excel from the registrar, with ID and Name (Last,First).</small>
       </label>
-      {file && <small className="cl-pmail">{file.name}</small>}
 
       {action.busy && (
         <p role="status">{preview ? "Importing…" : "Reading the roster…"}</p>
@@ -386,14 +356,14 @@ function RosterImport({ classInfo, onImported }) {
 
       {shown && (
         <>
-          <p role="status" aria-live="polite">
-            {done ? "Imported: " : "Preview: "}
-            {rosterSummary(shown.counts) || "nothing to change"}
-            {done && ` · ${done.emails_sent} ${done.emails_sent === 1 ? "email" : "emails"} sent`}
-          </p>
-
-          {preview && (
-            <div className="cl-actions">
+          <div className="cl-roster-bar">
+            <p role="status" aria-live="polite">
+              {done ? "Imported: " : "Preview: "}
+              {rosterSummary(shown.counts) || "nothing to change"}
+              {done &&
+                ` · ${done.emails_sent} ${done.emails_sent === 1 ? "email" : "emails"} sent`}
+            </p>
+            {preview && (
               <button
                 type="button"
                 className="cl-add-one"
@@ -403,8 +373,8 @@ function RosterImport({ classInfo, onImported }) {
                 Import {preview.rows.length}{" "}
                 {preview.rows.length === 1 ? "row" : "rows"}
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
           <div className="cl-table-wrap cl-roster-table">
             <table className="cl-table">
@@ -439,7 +409,6 @@ function RosterImport({ classInfo, onImported }) {
               </tbody>
             </table>
           </div>
-
         </>
       )}
     </div>
@@ -447,7 +416,7 @@ function RosterImport({ classInfo, onImported }) {
 }
 
 // Approvals → Students: people who asked to join with the class code.
-export function JoinRequestsTable({ classInfo, onChange }) {
+export function JoinRequestsTable({ classInfo, onChange, switcher = null }) {
   const api = useApi();
   const action = useAction();
   const requests = useResource(`/classes/${classInfo.id}/join-requests`);
@@ -488,14 +457,17 @@ export function JoinRequestsTable({ classInfo, onChange }) {
         emptyTitle="No one is waiting"
         emptyText="When someone joins with the class code, they show up here until you accept them."
         controls={
-          <button
-            type="button"
-            className="cl-decide is-approve"
-            disabled={action.busy || classInfo.archived || items.length === 0}
-            onClick={() => void decide("approve-all")}
-          >
-            Accept all
-          </button>
+          <>
+            <button
+              type="button"
+              className="cl-decide is-approve"
+              disabled={action.busy || classInfo.archived || items.length === 0}
+              onClick={() => void decide("approve-all")}
+            >
+              Accept all
+            </button>
+            {switcher}
+          </>
         }
         rows={items.map((item) => ({
           key: item.account_id,

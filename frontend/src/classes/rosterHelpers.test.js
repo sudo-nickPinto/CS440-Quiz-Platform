@@ -13,8 +13,8 @@ import {
 describe("rosterSummary", () => {
   it("lists non-zero outcomes in a fixed order", () => {
     expect(
-      rosterSummary({ skipped: 1, invited: 3, expected: 2, already_in_class: 0 }),
-    ).toBe("3 invited · 2 no account yet · 1 skipped");
+      rosterSummary({ skipped: 1, added: 3, expected: 2, already_in_class: 0 }),
+    ).toBe("3 added · 2 no account yet · 1 skipped");
   });
 
   it("is empty for no counts", () => {
@@ -49,10 +49,11 @@ describe("suggestions", () => {
     expect(suggestionQuery("  maya   riv ")).toBe("maya riv");
   });
 
-  it("only offers invites to people not already in the class", () => {
-    expect(suggestionStatus("ACTIVE").canInvite).toBe(false);
+  it("only offers Add to people not already in the class", () => {
+    expect(suggestionStatus("ACTIVE").canAdd).toBe(false);
+    expect(suggestionStatus("INVITED").canAdd).toBe(true);
     expect(suggestionStatus("REQUESTED").label).toBe("Waiting for approval");
-    expect(suggestionStatus(null)).toEqual({ label: null, canInvite: true });
+    expect(suggestionStatus(null)).toEqual({ label: null, canAdd: true });
   });
 });
 
