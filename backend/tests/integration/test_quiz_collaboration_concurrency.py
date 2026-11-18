@@ -1,13 +1,16 @@
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
 
+import pytest
 from sqlalchemy import select, text
 
 from app.errors import APIError
+from app.models.account import Account
 from app.models.quiz import Question, QuestionBankItem, Quiz, QuizStatus, QuizVersion
+from app.schemas.question_bank import CsvImportRequest, CsvImportRow
 from app.schemas.quiz import QuestionCreate, QuestionUpdate, QuizPublish
 from app.services import quizzes as quiz_service
-from app.services.question_bank import add_from_bank
+from app.services.question_bank import add_from_bank, import_csv
 from app.services.quizzes import (
     add_class_quiz_question,
     archive_quiz,
@@ -293,9 +296,11 @@ def test_edit_waiting_before_publish_updates_new_draft_not_published_version(
         assert versions[1].questions[0].question_text == "Must not reach published"
 
 
-def test_bank_import_waiting_before_publish_cannot_mutate_published_version(
+@pytest.mark.parametrize("import_kind", ["bank", "csv"])
+def test_import_after_auth_snapshot_cannot_mutate_published_version(
     mysql_quiz_client,
     monkeypatch,
+    import_kind,
 ) -> None:
     client, owner, _, class_id, quiz = _setup_shared_quiz(mysql_quiz_client)
     with client.app.state.database.session_factory() as db:
@@ -311,13 +316,37 @@ def test_bank_import_waiting_before_publish_cannot_mutate_published_version(
     def import_question():
         with client.app.state.database.session_factory() as db:
             try:
-                add_from_bank(
-                    db,
-                    owner,
-                    class_id,
-                    quiz["quiz_id"],
-                    [bank_question_id],
-                )
+                # Match the real request lifecycle: authentication reads the
+                # account before the service reaches the quiz lock. Under
+                # MySQL REPEATABLE READ this establishes an older snapshot.
+                assert db.scalar(
+                    select(Account.account_id).where(
+                        Account.account_id == owner.account_id
+                    )
+                ) == owner.account_id
+                if import_kind == "bank":
+                    add_from_bank(
+                        db,
+                        owner,
+                        class_id,
+                        quiz["quiz_id"],
+                        [bank_question_id],
+                    )
+                else:
+                    import_csv(
+                        db,
+                        owner,
+                        class_id,
+                        quiz["quiz_id"],
+                        CsvImportRequest(
+                            rows=[
+                                CsvImportRow(
+                                    row_number=2,
+                                    question=_new_question("CSV question"),
+                                )
+                            ]
+                        ),
+                    )
                 return "imported"
             except APIError as exc:
                 return exc.code

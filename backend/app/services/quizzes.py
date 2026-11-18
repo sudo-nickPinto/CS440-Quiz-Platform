@@ -829,19 +829,25 @@ def _lock_class_quiz_for_update(
     class_id: int,
     quiz_id: int,
 ) -> Quiz:
-    """Lock and reload a class quiz before choosing its editable version."""
-    locked_id = db.scalar(
-        select(Quiz.quiz_id)
+    """Lock and refresh a class quiz before choosing its editable version.
+
+    MySQL locking reads use the latest committed row under REPEATABLE READ,
+    unlike a later ordinary SELECT, which may still use a snapshot established
+    earlier in the request.  Load the entity through the locking read itself so
+    status and revision checks cannot observe stale pre-publication state.
+    """
+    quiz = db.scalar(
+        select(Quiz)
         .where(
             Quiz.quiz_id == quiz_id,
             Quiz.class_id == class_id,
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
-    if locked_id is None:
+    if quiz is None:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
-    db.expire_all()
-    return _class_quiz(db, class_id, quiz_id)
+    return quiz
 
 
 def _require_quiz_editor(
