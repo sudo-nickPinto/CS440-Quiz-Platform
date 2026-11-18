@@ -282,9 +282,12 @@ function RosterImport({ classInfo, onImported }) {
   const [done, setDone] = useState(null);
   const [dragging, setDragging] = useState(false);
 
-  function send(chosen, dryRun) {
+  // confirmRemovals: the organizer saw, in the preview, who a corrected
+  // email will remove from the class, and is importing anyway.
+  function send(chosen, dryRun, confirmRemovals = false) {
     return api(
-      `/classes/${classInfo.id}/roster/import?dry_run=${dryRun ? "true" : "false"}`,
+      `/classes/${classInfo.id}/roster/import?dry_run=${dryRun}` +
+        `&confirm_removals=${confirmRemovals}`,
       {
         method: "POST",
         body: chosen,
@@ -303,7 +306,8 @@ function RosterImport({ classInfo, onImported }) {
   }
 
   async function confirm() {
-    const result = await action.run(() => send(file, false));
+    const confirmRemovals = (preview?.removals?.length ?? 0) > 0;
+    const result = await action.run(() => send(file, false, confirmRemovals));
     if (result) {
       setDone(result);
       setPreview(null);
@@ -312,6 +316,7 @@ function RosterImport({ classInfo, onImported }) {
   }
 
   const shown = done ?? preview;
+  const removals = shown?.removals ?? [];
 
   return (
     <div className="cl-roster">
@@ -362,19 +367,50 @@ function RosterImport({ classInfo, onImported }) {
               {rosterSummary(shown.counts) || "nothing to change"}
               {done &&
                 ` · ${done.emails_sent} ${done.emails_sent === 1 ? "email" : "emails"} sent`}
+              {done && removals.length > 0 && ` · ${removals.length} removed`}
             </p>
             {preview && (
               <button
                 type="button"
                 className="cl-add-one"
-                disabled={action.busy || !rosterHasChanges(preview.counts)}
+                disabled={
+                  action.busy ||
+                  (!rosterHasChanges(preview.counts) && removals.length === 0)
+                }
                 onClick={() => void confirm()}
               >
-                Import {preview.rows.length}{" "}
-                {preview.rows.length === 1 ? "row" : "rows"}
+                {removals.length > 0
+                  ? `Import and remove ${removals.length}`
+                  : `Import ${preview.rows.length} ${
+                      preview.rows.length === 1 ? "row" : "rows"
+                    }`}
               </button>
             )}
           </div>
+
+          {removals.length > 0 && (
+            <div className="cl-roster-warn" role={preview ? "alert" : "status"}>
+              <strong>
+                {preview
+                  ? "Corrected emails will remove these people from the class:"
+                  : "Removed from the class:"}
+              </strong>
+              <ul>
+                {removals.map((person) => (
+                  <li key={person.account_id}>
+                    {person.display_name} ({person.email}), row ID{" "}
+                    {person.student_number}
+                  </li>
+                ))}
+              </ul>
+              {preview && (
+                <small>
+                  They were added because of a wrong email in an earlier
+                  import. Their past results stay.
+                </small>
+              )}
+            </div>
+          )}
 
           <div className="cl-table-wrap cl-roster-table">
             <table className="cl-table">
