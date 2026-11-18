@@ -40,12 +40,25 @@ class RosterImportRow(BaseModel):
     message: str | None = None
 
 
+class RosterRemoval(BaseModel):
+    """Someone a corrected roster email moves a row away from, whose access
+    to the class came from being added (roster or + Add student)."""
+
+    account_id: int
+    display_name: str
+    email: str
+    student_number: str
+
+
 class RosterImportResponse(BaseModel):
     dry_run: bool
     rows: list[RosterImportRow]
     # How many rows ended with each outcome, by outcome value.
     counts: dict[str, int]
     emails_sent: int
+    # People removed from the class because a corrected email moved their
+    # row to someone else. In a preview: people who will be removed.
+    removals: list[RosterRemoval] = []
 
 
 class RosterEntryResponse(BaseModel):

@@ -36,6 +36,7 @@ def _import_in_worker(
     content: bytes,
     email: EmailService,
     dry_run: bool,
+    confirm_removals: bool,
 ):
     """Runs in a worker thread with its own database session.
 
@@ -43,7 +44,15 @@ def _import_in_worker(
     and closed here, in the worker, rather than borrowing the request's.
     """
     with request.app.state.database.session_factory() as db:
-        return import_roster(db, account, class_id, content, email, dry_run=dry_run)
+        return import_roster(
+            db,
+            account,
+            class_id,
+            content,
+            email,
+            dry_run=dry_run,
+            confirm_removals=confirm_removals,
+        )
 
 
 @router.post("/roster/import", response_model=RosterImportResponse)
@@ -52,6 +61,9 @@ async def import_roster_route(
     request: Request,
     background_tasks: BackgroundTasks,
     dry_run: bool = Query(default=False),
+    # Allow removing people a corrected email moves a row away from (the
+    # preview lists them in `removals`).
+    confirm_removals: bool = Query(default=False),
     account: CurrentAccount = Depends(get_active_account),
 ) -> RosterImportResponse:
     """The request body is the roster file itself (CSV or .xlsx), not a form.
@@ -67,7 +79,7 @@ async def import_roster_route(
                 413, "roster_file_too_large", "The roster file is larger than 2 MB."
             )
     email = _email(request)
-    response, messages = await run_in_threadpool(
+    response, messages, evictions = await run_in_threadpool(
         _import_in_worker,
         request,
         account,
@@ -75,9 +87,19 @@ async def import_roster_route(
         bytes(content),
         email,
         dry_run,
+        confirm_removals,
     )
     if messages:
         background_tasks.add_task(email.send_all, messages)
+    # After the commit: close removed students' live sockets in this class,
+    # as removing them from their report does.
+    for account_id, left_sessions in evictions:
+        background_tasks.add_task(
+            request.app.state.live_hub.evict_class_member,
+            class_id,
+            account_id,
+            left_sessions,
+        )
     return response
 
 

@@ -149,12 +149,24 @@ class EmailService:
         has_account: bool = False,
         join_code: str | None = None,
     ) -> OutgoingEmail:
-        """Sent to a roster email that has no account yet."""
-        steps = (
-            f"Create your {APP_NAME} account at {self.app_url} with this "
-            f"email address ({to}). You'll be in the class as soon as you "
-            "sign up."
-        )
+        """An invitation to join a class.
+
+        ``has_account=False``: a roster email with no account yet; they are
+        in the class as soon as they sign up with it.
+        ``has_account=True``: the older ``POST /invites`` route, which still
+        creates an invitation they accept on their Classes page.
+        """
+        if has_account:
+            steps = (
+                f"Sign in at {self.app_url}/app/classes and press Accept "
+                "under Class invitations."
+            )
+        else:
+            steps = (
+                f"Create your {APP_NAME} account at {self.app_url} with this "
+                f"email address ({to}). You'll be in the class as soon as you "
+                "sign up."
+            )
         lines = [
             "Hello,",
             "",
