@@ -163,6 +163,7 @@ def list_taken_sessions(
         .where(
             SessionParticipant.account_id == account.account_id,
             LiveSession.status == LiveSessionStatus.COMPLETED,
+            LiveSession.deleted_at.is_(None),
             _visible_session_class(account),
         )
     )
@@ -230,7 +231,11 @@ def list_quiz_hosting_history(
 ) -> dict:
     quiz = db.get(Quiz, quiz_id)
 
-    if quiz is None or quiz.author_id != account.account_id:
+    if (
+        quiz is None
+        or quiz.author_id != account.account_id
+        or quiz.deleted_at is not None
+    ):
         raise APIError(
             404,
             "quiz_not_found",
@@ -246,6 +251,8 @@ def list_quiz_hosting_history(
                 LiveSessionStatus.CANCELLED,
             ]
         ),
+        # Sessions the host moved to the trash are listed by GET /trash.
+        LiveSession.deleted_at.is_(None),
         _visible_session_class(account),
     )
 

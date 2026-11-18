@@ -120,7 +120,7 @@ def create_session(
         raise PROBLEMS["class_archived"].error()
 
     quiz = db.get(Quiz, quiz_id)
-    if quiz is None or quiz.class_id != class_id:
+    if quiz is None or quiz.class_id != class_id or quiz.deleted_at is not None:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
 
     # The same checks drive the Host button (QuizResponse.hosting), so the

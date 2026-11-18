@@ -81,6 +81,8 @@ class Quiz(Base):
         default=QuizVisibility.PRIVATE,
         server_default=QuizVisibility.PRIVATE.value,
     )
+    # Migration 0017: set while the quiz is in the trash (services/trash.py).
+    deleted_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
     created_at: Mapped[datetime] = mapped_column(
         DATETIME(fsp=3), nullable=False, server_default=func.now()
     )

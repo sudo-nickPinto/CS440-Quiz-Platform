@@ -221,6 +221,11 @@ The quiz's owner only. Sets `status` to `ARCHIVED`.
 
 Errors: `403 quiz_access_denied` (an organizer who isn't the owner), `404 quiz_not_found`, `500 quiz_archive_failed`.
 
+### `POST /quizzes/{quiz_id}/trash` and `POST /quizzes/{quiz_id}/restore` → `204`
+Move the quiz to the trash, or bring it back. The quiz's owner only, while an active member of its class. A trashed quiz looks missing everywhere else (`404 quiz_not_found`), and open editors are disconnected. See [The trash](#semesters-archiving-and-the-trash).
+
+Errors: `404 quiz_not_found` (anyone but the owner), `409 quiz_has_live_session` (a session of it is in the lobby or running), `409 class_in_trash` (restore the class first).
+
 ### V3 class quiz drafts and collaborators
 
 `POST /classes/{class_id}/quizzes` creates a private draft owned by the caller.
@@ -617,6 +622,39 @@ For the + Add student list: one page of active accounts anywhere in QuizBurg: pe
 
 ### `DELETE /classes/{class_id}/membership` → `403`
 Self-service class departure is disabled. This route always returns `class_self_leave_disabled`; an organizer must remove the member through `DELETE /classes/{class_id}/members/{account_id}`.
+
+### Semesters, archiving and the trash
+
+- **Semester:** `POST /classes` and `PATCH /classes/{class_id}` take an optional `"semester": "Fall 2026"` (at most 30 characters; blank or `null` means none). `ClassResponse` includes `semester`. The same course in another semester is a separate class, so names don't have to be unique.
+- **`POST /classes/{class_id}/archive` → `200 ClassResponse`:** organizers only. Clears the code and closes joining; reports stay.
+- **`POST /classes/{class_id}/unarchive` → `200 ClassResponse`:** organizers only. The class gets a new code and joining opens again. Unarchiving an active class changes nothing.
+
+Nothing in the trash is really deleted: the row gets a `deleted_at` and restoring clears it (migration `0017`). Moving and restoring are idempotent and return `204`.
+
+| Route | Who | Errors |
+|---|---|---|
+| `POST /classes/{class_id}/trash`, `.../restore` | Active faculty organizers of the class | `404 class_not_found`, `403 not_class_organizer`, `409 class_has_live_session` |
+| `POST /quizzes/{quiz_id}/trash`, `.../restore` | The quiz's owner | See [Quizzes](#post-quizzesquiz_idtrash-and-post-quizzesquiz_idrestore--204) |
+| `POST /sessions/{session_id}/trash`, `.../restore` | The session's host, once it is `COMPLETED` or `CANCELLED` | `404 session_not_found`, `409 session_not_ended`, `409 class_in_trash` |
+
+While something is in the trash:
+
+- a class answers `404 class_not_found` to everyone, its code can't be used to join, and it leaves `GET /classes`;
+- a quiz answers `404 quiz_not_found` and leaves the class's quiz lists, approval queue and approved quizzes;
+- a session leaves `GET /quizzes/{quiz_id}/history`, `GET /me/sessions/taken`, and every class report, export and grade.
+
+#### `GET /trash` → `200 TrashResponse`
+What the caller can restore, newest first: `classes` (classes they organize), `quizzes` (quizzes they own) and `sessions` (sessions they hosted).
+
+```json
+{
+  "classes": [{ "class_id": 4, "name": "CS 440", "semester": "Fall 2026", "archived": false, "deleted_at": "…" }],
+  "quizzes": [{ "quiz_id": 9, "title": "Week 3", "class_id": 4, "class_name": "CS 440", "class_in_trash": false, "deleted_at": "…" }],
+  "sessions": [{ "session_id": 31, "quiz_id": 9, "quiz_title": "Week 3", "class_id": 4, "class_name": "CS 440", "class_in_trash": false, "status": "COMPLETED", "ended_at": "…", "deleted_at": "…" }]
+}
+```
+
+`class_in_trash` means the quiz's or session's class is in the trash too; restore the class first.
 
 ### Class reports
 Built from the class's `COMPLETED` sessions only; open sessions never count. Scores are each player's `result.total_score`.

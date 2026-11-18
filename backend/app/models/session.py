@@ -103,6 +103,9 @@ class LiveSession(Base):
         INTEGER(unsigned=True),
         ForeignKey("account.account_id", ondelete="RESTRICT"),
     )
+    # Migration 0017: set while the session is in the host's trash. Trashed
+    # sessions are left out of hosting history and class reports and grades.
+    deleted_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
 
     participants: Mapped[list[SessionParticipant]] = relationship(
         back_populates="session", passive_deletes=True
