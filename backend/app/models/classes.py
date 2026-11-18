@@ -36,6 +36,10 @@ class MembershipStatus(str, Enum):
     ACTIVE = "ACTIVE"
     LEFT = "LEFT"
     REMOVED = "REMOVED"
+    # Used the class code or link and waits for an organizer (0016).
+    REQUESTED = "REQUESTED"
+    # An organizer turned the join request down (0016).
+    REJECTED = "REJECTED"
 
 
 class JoinedVia(str, Enum):
@@ -147,3 +151,46 @@ class ClassMembership(Base):
 
     class_: Mapped[Class] = relationship(back_populates="memberships")
     account: Mapped[Account] = relationship(foreign_keys=[account_id])
+
+
+class ClassRosterEntry(Base):
+    """A student from an imported roster file (migration 0016).
+
+    The registrar's file has a student ID and "Last,First" name, and usually
+    no email, so `account_id` stays NULL until the student is matched.
+    """
+
+    __tablename__ = "class_roster_entry"
+    __table_args__ = (
+        UniqueConstraint("class_id", "student_number", name="uq_class_roster_student"),
+        Index("idx_class_roster_email", "email"),
+        Index("idx_class_roster_account", "account_id"),
+    )
+
+    entry_id: Mapped[int] = mapped_column(INTEGER(unsigned=True), primary_key=True)
+    class_id: Mapped[int] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("class.class_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    student_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320))
+    account_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="SET NULL"),
+    )
+    imported_by_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("account.account_id", ondelete="SET NULL"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DATETIME(fsp=3), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DATETIME(fsp=3),
+        nullable=False,
+        server_default=func.now(),
+        server_onupdate=func.now(),
+    )

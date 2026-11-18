@@ -1,4 +1,5 @@
 import json
+import logging
 import unicodedata
 import urllib.request
 
@@ -8,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.avatars import is_valid_avatar_key
 from app.errors import APIError
+
+logger = logging.getLogger(__name__)
 
 COLUMNS = (
     "account_id, email, display_name, first_name, last_name, avatar_key, "
@@ -70,6 +73,7 @@ def get_or_create_account(db: Session, domain: str, sub: str, token: str) -> dic
         raise APIError(403, "email_not_verified", "Please verify your email address, then log in again.")
     name = (profile.get("name") or email)[:100]
 
+    created_id = None
     try:
         existing = _by_email(db, email)
         if existing:
@@ -80,6 +84,7 @@ def get_or_create_account(db: Session, domain: str, sub: str, token: str) -> dic
                 {"sub": sub, "email": email, "name": name},
             )
             _add_identity(db, sub, result.lastrowid)
+            created_id = result.lastrowid
         db.commit()
     except IntegrityError:
         # A parallel first request for this login or email got there first.
@@ -98,7 +103,23 @@ def get_or_create_account(db: Session, domain: str, sub: str, token: str) -> dic
         if account:
             return account
         raise
+    if created_id is not None:
+        _claim_roster_invitations(db, created_id, email)
     return _by_sub(db, sub)
+
+
+def _claim_roster_invitations(db: Session, account_id: int, email: str) -> None:
+    """Show invitations from imported rosters that listed this email.
+
+    A failure here must not stop the person signing in, so it is logged.
+    """
+    from app.services.class_roster import claim_roster_invitations
+
+    try:
+        claim_roster_invitations(db, account_id, email)
+    except Exception:
+        db.rollback()
+        logger.exception("Could not add roster invitations for a new account")
 
 
 def clean_name(value: str, label: str) -> str:

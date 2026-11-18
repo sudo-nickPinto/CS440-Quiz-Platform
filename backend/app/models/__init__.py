@@ -10,6 +10,7 @@ from app.models.classes import (
     Class,
     ClassMembership,
     ClassRole,
+    ClassRosterEntry,
     JoinedVia,
     MembershipStatus,
 )
@@ -50,6 +51,7 @@ __all__ = [
     "Class",
     "ClassMembership",
     "ClassRole",
+    "ClassRosterEntry",
     "JoinedVia",
     "MembershipStatus",
     "Question",

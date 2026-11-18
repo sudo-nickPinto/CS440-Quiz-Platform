@@ -38,6 +38,7 @@ from app.schemas.class_dashboard import (
 from app.schemas.quiz import ClassQuizSort
 from app.services.quizzes import list_class_quizzes as list_my_class_quizzes
 from app.services.class_approvals import approval_counts
+from app.services.class_roster import count_join_requests
 from app.services.class_authorization import (
     ClassAccess,
     require_class_member,
@@ -487,6 +488,9 @@ def get_class_dashboard(
         my_quizzes=my_quizzes.items,
         my_quiz_count=my_quizzes.pagination.total_items,
         pending_submission_count=pending_count,
+        pending_join_request_count=(
+            count_join_requests(db, class_id) if organizer else 0
+        ),
         approved_quiz_count=approved_count,
     )
 

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
+from app.services.class_roster import roster_invitation_email
 from app.schemas.class_membership import (
     ClassInviteCreate,
     ClassMemberResponse,
@@ -46,10 +47,17 @@ def list_class_invites_route(
 def create_class_invite_route(
     class_id: int,
     payload: ClassInviteCreate,
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> ClassMemberResponse:
-    return create_class_invite(db, account, class_id, payload)
+    invited = create_class_invite(db, account, class_id, payload)
+    email = request.app.state.email
+    background_tasks.add_task(
+        email.send_all, [roster_invitation_email(db, email, class_id, invited.email)]
+    )
+    return invited
 
 
 @router.delete("/invites/{account_id}", status_code=status.HTTP_204_NO_CONTENT)

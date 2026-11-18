@@ -71,6 +71,9 @@ def test_membership_enums_match_migration_0006() -> None:
         "ACTIVE",
         "LEFT",
         "REMOVED",
+        # Join requests waiting for, or turned down by, an organizer (0016).
+        "REQUESTED",
+        "REJECTED",
     ]
     assert [via.value for via in JoinedVia] == [
         "CREATOR",

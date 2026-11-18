@@ -533,7 +533,11 @@ Extra errors: `403 results_export_denied` (a participant), `500 results_incomple
 How the class features fit together is in [CLASSES.md](CLASSES.md); the original design is [CLASS_APPROVAL.md](CLASS_APPROVAL.md). Class-aware session routes are listed under [Sessions](#sessions) above.
 
 ### `POST /classes/join` → `200 ClassResponse`
-Join a class by its code. Body: `{"code": "ABCD-2345"}`. Case, spaces and the dash don't matter. The caller becomes an active `MEMBER` (`joined_via: CODE`). A pending invite or an earlier membership they left is reactivated. The invite link `/app/join/class/{code}` in the frontend calls this route.
+Ask to join a class by its code. Body: `{"code": "ABCD-2345"}`. Case, spaces and the dash don't matter. The invite link `/app/join/class/{code}` in the frontend calls this route.
+
+- Usually the caller's membership becomes `REQUESTED` (`joined_via: CODE`) and an organizer approves or rejects it under **Approvals → Students** (see [Rosters and join requests](#rosters-and-join-requests)). A `REQUESTED` membership gives no access to the class.
+- The caller becomes `ACTIVE` straight away when an organizer already chose them: they have a pending invite, or a row of the imported roster is theirs by email (the row lists their sign-in email, which is verified, or was linked to their account by an earlier email match). A roster row with the same **name** doesn't count, since anyone can edit their profile name: that request stays `REQUESTED`, and the organizer sees the row as `roster_name_match`.
+- Asking again while a request is pending returns the same `REQUESTED` response. Someone whose request was rejected, or who left, can ask again.
 
 | Status | Code | When |
 |---|---|---|
@@ -542,6 +546,43 @@ Join a class by its code. Body: `{"code": "ABCD-2345"}`. Case, spaces and the da
 | 404 | `class_code_not_found` | No class has that code |
 | 409 | `already_class_member` | Already an active member |
 | 429 | `too_many_join_attempts` | More than 10 tries in a minute from one account (counted per server process) |
+
+### Rosters and join requests
+
+Organizer-only (`404 class_not_found` for outsiders, `403 not_class_organizer` for students). Emails go out after the change is saved; see [EMAIL.md](EMAIL.md).
+
+#### `POST /classes/{class_id}/roster/import?dry_run=false` → `200 RosterImportResponse`
+The request body is the roster file itself (`Content-Type: text/csv` or the `.xlsx` type), not a form. The registrar's export works as is: an `ID` column and a `Name` column written `Last,First Middle`; other columns are ignored. `First Name`/`Last Name` columns and an optional `Email` column are also understood. CSV or `.xlsx`, at most 2 MB and 2,000 students.
+
+Each row is saved (re-importing updates rows by student ID). Only an email ties a row to an account: the row's `Email` matches an account's sign-in email, or the row was linked by email in an earlier import. A first and last name match is only reported (`name_match`), never acted on, because profile names can be edited. When a row's email in the file differs from the account it was linked to (a corrected email), the email wins: the row moves to the account with that email, or is unlinked if none has it. The previously linked account's invitation or membership is left alone, and the row's `message` names it so the organizer can remove it if it was a mistake. `rows[].outcome` says what happened:
+
+| Outcome | Meaning |
+|---|---|
+| `invited` | Matched an account; it now has an invitation, and a roster invitation email was sent |
+| `approved` | Matched someone with a pending join request; approved, and an approval email was sent |
+| `already_in_class` / `already_invited` | Nothing to do |
+| `expected` | No account yet. With an email in the row, the invitation goes to that address, appears when they sign up with it, and their code join is approved automatically. Without one, their code join waits for an organizer like any other |
+| `name_match` | One account has this name, but nothing ties it to the row by email. `account_id`/`account_name` and the `message` (with that account's email) let the organizer check; nothing is invited or approved |
+| `ambiguous` | Several accounts have this name; saved like `expected`, add the right one with + Add student |
+| `removed` | An organizer removed them earlier; left alone |
+| `skipped` | The row has no ID, no `Last,First` name, a repeated ID or a bad email (`message` says which) |
+
+With `dry_run=true` nothing is saved or sent: the response previews the import. Errors: `422 roster_columns_missing`, `422 roster_file_empty`, `422 roster_file_unreadable`, `413 roster_file_too_large`, `413 roster_too_many_rows`, `409 class_archived`.
+
+#### `GET /classes/{class_id}/roster` → `200 RosterEntryResponse[]`
+The imported rows, by last name, with `membership_status` of the matched account (or `null`).
+
+#### `GET /classes/{class_id}/join-requests` → `200 JoinRequestResponse[]`
+People waiting for approval, oldest first: `account_id`, `email`, `display_name`, `requested_at`, and `roster_name_match` (`student_number`, `first_name`, `last_name`) when exactly one unmatched roster row has their name, as a hint for the organizer. It's never approved automatically. The dashboard's `pending_join_request_count` counts them.
+
+#### `POST /classes/{class_id}/join-requests/{account_id}/approve` / `.../reject` → `200 {"approved": n, "rejected": n}`
+Approve (the person becomes an `ACTIVE` `MEMBER`) or reject (`REJECTED`) one request, and email them. `404 join_request_not_found` if it isn't pending. Approving in an archived class is `409 class_archived`.
+
+#### `POST /classes/{class_id}/join-requests/approve-all` → `200 {"approved": n, "rejected": 0}`
+"Accept all": approves every pending request.
+
+#### `GET /classes/{class_id}/student-suggestions?q=...` → `200 StudentSuggestion[]`
+For the + Add student search: up to 8 active accounts anywhere in QuizBurg whose email, first name, last name or a word of their name starts with `q` (2+ characters, otherwise `[]`). Each has `account_id`, `email`, `display_name` and their `membership_status` in this class (or `null`).
 
 ### `DELETE /classes/{class_id}/membership` → `403`
 Self-service class departure is disabled. This route always returns `class_self_leave_disabled`; an organizer must remove the member through `DELETE /classes/{class_id}/members/{account_id}`.
