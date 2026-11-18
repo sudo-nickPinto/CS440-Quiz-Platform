@@ -47,6 +47,7 @@ from app.schemas.quiz import (
 )
 from app.services.class_authorization import get_class, get_class_membership
 from app.services.hosting import quiz_hosting, quiz_hosting_many
+from app.services.question_bank import snapshot_question
 
 
 # Longest question and answer text a host screen can show (see the editor's
@@ -454,6 +455,12 @@ def create_quiz(
     )
     db.add(quiz)
     try:
+        db.flush()
+        for question in version.questions:
+            snapshot_question(
+                db, question, owner_id=account.account_id, class_id=class_id,
+                quiz_id=quiz.quiz_id,
+            )
         db.commit()
     except SQLAlchemyError as exc:
         db.rollback()
@@ -822,19 +829,25 @@ def _lock_class_quiz_for_update(
     class_id: int,
     quiz_id: int,
 ) -> Quiz:
-    """Lock and reload a class quiz before choosing its editable version."""
-    locked_id = db.scalar(
-        select(Quiz.quiz_id)
+    """Lock and refresh a class quiz before choosing its editable version.
+
+    MySQL locking reads use the latest committed row under REPEATABLE READ,
+    unlike a later ordinary SELECT, which may still use a snapshot established
+    earlier in the request.  Load the entity through the locking read itself so
+    status and revision checks cannot observe stale pre-publication state.
+    """
+    quiz = db.scalar(
+        select(Quiz)
         .where(
             Quiz.quiz_id == quiz_id,
             Quiz.class_id == class_id,
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
-    if locked_id is None:
+    if quiz is None:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
-    db.expire_all()
-    return _class_quiz(db, class_id, quiz_id)
+    return quiz
 
 
 def _require_quiz_editor(
@@ -1088,6 +1101,10 @@ def update_class_quiz_question(
             for choice_order, choice in enumerate(payload.choices, start=1)
         ]
         db.flush()
+        snapshot_question(
+            db, question, owner_id=quiz.author_id, class_id=class_id,
+            quiz_id=quiz_id,
+        )
         db.expire(question)
         quiz_revision = db.scalar(
             select(Quiz.revision).where(Quiz.quiz_id == quiz_id)
@@ -1154,6 +1171,10 @@ def update_class_quiz_default_time(
             question.time_limit_seconds = payload.time_limit_seconds
             question.revision += 1
             question.updated_at = now
+            snapshot_question(
+                db, question, owner_id=quiz.author_id, class_id=class_id,
+                quiz_id=quiz_id,
+            )
         quiz.revision += 1
         quiz.updated_at = now
         db.flush()
@@ -1234,6 +1255,10 @@ def add_class_quiz_question(
         quiz.status = QuizStatus.DRAFT
         quiz.updated_at = now
         db.flush()
+        snapshot_question(
+            db, question, owner_id=quiz.author_id, class_id=class_id,
+            quiz_id=quiz_id,
+        )
         response = QuestionUpdateResponse(
             quiz_id=quiz_id,
             quiz_revision=quiz.revision,
@@ -1322,6 +1347,11 @@ def update_class_quiz(
     quiz.status = QuizStatus.DRAFT
     try:
         db.flush()
+        for question in draft.questions:
+            snapshot_question(
+                db, question, owner_id=quiz.author_id, class_id=class_id,
+                quiz_id=quiz_id,
+            )
         response = QuizResponse(
             quiz_id=quiz.quiz_id,
             author_id=quiz.author_id,

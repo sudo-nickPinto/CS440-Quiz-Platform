@@ -1,12 +1,16 @@
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
 
+import pytest
 from sqlalchemy import select, text
 
 from app.errors import APIError
-from app.models.quiz import Question, Quiz, QuizStatus, QuizVersion
+from app.models.account import Account
+from app.models.quiz import Question, QuestionBankItem, Quiz, QuizStatus, QuizVersion
+from app.schemas.question_bank import CsvImportRequest, CsvImportRow
 from app.schemas.quiz import QuestionCreate, QuestionUpdate, QuizPublish
 from app.services import quizzes as quiz_service
+from app.services.question_bank import add_from_bank, import_csv
 from app.services.quizzes import (
     add_class_quiz_question,
     archive_quiz,
@@ -166,6 +170,19 @@ def test_different_questions_commit_concurrently_on_mysql(
             "Owner changed first",
             "Editor changed second",
         ]
+        banked = db.scalars(
+            select(QuestionBankItem)
+            .where(
+                QuestionBankItem.bank_question_id.in_(
+                    [question.bank_question_id for question in stored]
+                )
+            )
+            .order_by(QuestionBankItem.source_question_id)
+        ).all()
+        assert [item.question_text for item in banked] == [
+            "Owner changed first",
+            "Editor changed second",
+        ]
 
 
 def test_append_and_existing_question_edit_commit_concurrently_on_mysql(
@@ -277,6 +294,90 @@ def test_edit_waiting_before_publish_updates_new_draft_not_published_version(
         assert versions[0].questions[0].question_text == "First question?"
         assert versions[1].published_at is None
         assert versions[1].questions[0].question_text == "Must not reach published"
+
+
+@pytest.mark.parametrize("import_kind", ["bank", "csv"])
+def test_import_after_auth_snapshot_cannot_mutate_published_version(
+    mysql_quiz_client,
+    monkeypatch,
+    import_kind,
+) -> None:
+    client, owner, _, class_id, quiz = _setup_shared_quiz(mysql_quiz_client)
+    with client.app.state.database.session_factory() as db:
+        bank_question_id = db.scalar(
+            select(QuestionBankItem.bank_question_id)
+            .where(QuestionBankItem.source_quiz_id == quiz["quiz_id"])
+            .order_by(QuestionBankItem.bank_question_id)
+        )
+    lock_requested, allow_lock = (
+        _pause_first_question_save_before_quiz_lock(monkeypatch)
+    )
+
+    def import_question():
+        with client.app.state.database.session_factory() as db:
+            try:
+                # Match the real request lifecycle: authentication reads the
+                # account before the service reaches the quiz lock. Under
+                # MySQL REPEATABLE READ this establishes an older snapshot.
+                assert db.scalar(
+                    select(Account.account_id).where(
+                        Account.account_id == owner.account_id
+                    )
+                ) == owner.account_id
+                if import_kind == "bank":
+                    add_from_bank(
+                        db,
+                        owner,
+                        class_id,
+                        quiz["quiz_id"],
+                        [bank_question_id],
+                    )
+                else:
+                    import_csv(
+                        db,
+                        owner,
+                        class_id,
+                        quiz["quiz_id"],
+                        CsvImportRequest(
+                            rows=[
+                                CsvImportRow(
+                                    row_number=2,
+                                    question=_new_question("CSV question"),
+                                )
+                            ]
+                        ),
+                    )
+                return "imported"
+            except APIError as exc:
+                return exc.code
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        pending_import = executor.submit(import_question)
+        try:
+            assert lock_requested.wait(timeout=10)
+            with client.app.state.database.session_factory() as db:
+                published = publish_class_quiz(
+                    db,
+                    owner,
+                    class_id,
+                    quiz["quiz_id"],
+                    QuizPublish(expected_revision=quiz["revision"]),
+                )
+        finally:
+            allow_lock.set()
+        outcome = pending_import.result(timeout=30)
+
+    assert published.status == QuizStatus.PUBLISHED
+    assert outcome == "quiz_not_editable"
+    with client.app.state.database.session_factory() as db:
+        versions = db.scalars(
+            select(QuizVersion)
+            .where(QuizVersion.quiz_id == quiz["quiz_id"])
+            .order_by(QuizVersion.version_number)
+        ).all()
+        assert len(versions) == 1
+        assert versions[0].published_at is not None
+        assert len(versions[0].questions) == 2
 
 
 def test_archive_wins_before_question_lock_without_being_undone(
