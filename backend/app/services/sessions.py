@@ -38,7 +38,7 @@ def _generate_join_code() -> str:
 
 def _load_session(db: Session, session_id: int) -> LiveSession:
     session = db.get(LiveSession, session_id)
-    if session is None:
+    if session is None or session.deleted_at is not None:
         raise APIError(404, "session_not_found", "Session not found.")
     return session
 

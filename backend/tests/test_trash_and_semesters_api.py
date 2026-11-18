@@ -472,6 +472,8 @@ def test_host_trashes_a_mistaken_session_from_history_and_grades(lifecycle) -> N
     report = client.get(f"/classes/{class_id}/sessions/{mistake}/results")
     assert report.status_code == 404
     for path_ in (
+        f"/sessions/{mistake}",
+        f"/sessions/{mistake}/participants",
         f"/sessions/{mistake}/results",
         f"/sessions/{mistake}/report",
         f"/sessions/{mistake}/results/export.csv",
