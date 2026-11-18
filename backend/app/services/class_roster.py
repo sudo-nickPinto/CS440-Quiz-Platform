@@ -379,6 +379,22 @@ def _invite(
     return membership
 
 
+def _note_moved_link(row: RosterImportRow, previous: Account | None) -> None:
+    """Tell the organizer a corrected email moved this row off an account.
+
+    That account's invitation or membership is left alone: it may be right
+    for another reason, and removing people is the organizer's call.
+    """
+    if previous is None:
+        return
+    note = (
+        f"This row was linked to {previous.display_name} ({previous.email}) "
+        "until its email changed. Their invitation or membership wasn't "
+        "changed; remove it under Students if it was a mistake."
+    )
+    row.message = f"{row.message} {note}" if row.message else note
+
+
 def import_roster(
     db: Session,
     account: CurrentAccount,
@@ -430,15 +446,26 @@ def import_roster(
 
         entry = entries.get(item.student_number)
 
-        # Only verifiable matches act on an account: a link made earlier
-        # (by email), or the email in this file. Sign-in emails are verified;
-        # names aren't, since anyone can edit theirs, so a name match is
-        # only reported to the organizer (NAME_MATCH) and changes nothing.
+        # Only verifiable matches act on an account: the email in this file,
+        # or, when the file has no email for the row, a link made earlier (by
+        # email). Sign-in emails are verified; names aren't, since anyone can
+        # edit theirs, so a name match is only reported to the organizer
+        # (NAME_MATCH) and changes nothing.
+        linked_id = entry.account_id if entry is not None else None
         match: Account | None = None
-        if entry is not None and entry.account_id is not None:
-            match = by_id.get(entry.account_id)
-        if match is None and item.email:
+        # The account this row was linked to until this file's email moved
+        # it elsewhere (a corrected email). Left as it is, but reported.
+        moved_from: Account | None = None
+        unlink = False
+        if item.email:
             match = by_email.get(item.email)
+            if linked_id is not None and (
+                match is None or match.account_id != linked_id
+            ):
+                unlink = True
+                moved_from = by_id.get(linked_id)
+        elif linked_id is not None:
+            match = by_id.get(linked_id)
         name_match: Account | None = None
         ambiguous = False
         if match is None:
@@ -470,6 +497,8 @@ def import_roster(
         entry.imported_by_id = account.account_id
 
         if match is None:
+            if unlink:
+                entry.account_id = None
             if name_match is not None:
                 result.outcome = RosterRowOutcome.NAME_MATCH
                 result.account_id = name_match.account_id
@@ -500,6 +529,7 @@ def import_roster(
                         item.email, class_.name, has_account=False, join_code=code
                     )
                 )
+            _note_moved_link(result, moved_from)
             continue
 
         entry.account_id = match.account_id
@@ -535,6 +565,7 @@ def import_roster(
                     match.email, class_.name, has_account=True, join_code=code
                 )
             )
+        _note_moved_link(result, moved_from)
 
     if dry_run:
         db.rollback()

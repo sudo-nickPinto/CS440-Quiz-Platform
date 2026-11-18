@@ -366,6 +366,82 @@ def test_reimport_without_emails_keeps_earlier_email_links(roster_client) -> Non
     assert outbox(client) == []
 
 
+
+def _roster_row(client, class_id: int, student_number: str):
+    with client.app.state.database.session_factory() as db:
+        return db.scalar(
+            select(ClassRosterEntry).where(
+                ClassRosterEntry.class_id == class_id,
+                ClassRosterEntry.student_number == student_number,
+            )
+        )
+
+
+def test_corrected_email_rematches_the_row_to_that_account(roster_client) -> None:
+    """Review regression: ID 6100001 was imported with Maya's email, then the
+    organizer corrects it to Lin's. The row must follow the email to Lin
+    (invited), not keep reporting Maya as already invited."""
+    client, identities, class_id = roster_client
+    upload(client, class_id, b"ID,Name,Email\n6100001,\"Rivera,Maya\",riverma01@gettysburg.edu\n")
+    outbox(client).clear()
+
+    corrected = b"ID,Name,Email\n6100001,\"Rivera,Maya\",chenli01@gettysburg.edu\n"
+    row = upload(client, class_id, corrected).json()["rows"][0]
+
+    assert row["outcome"] == "invited"
+    assert row["account_id"] == identities["lin"].account_id
+    assert row["email"] == "chenli01@gettysburg.edu"
+    # The organizer is told the row moved off Maya.
+    assert PEOPLE["maya"][0] in row["message"]
+    assert membership(client, class_id, identities["lin"].account_id).status == (
+        MembershipStatus.INVITED
+    )
+    assert [message.to for message in outbox(client)] == ["chenli01@gettysburg.edu"]
+    stored = _roster_row(client, class_id, "6100001")
+    assert (stored.email, stored.account_id) == (
+        "chenli01@gettysburg.edu",
+        identities["lin"].account_id,
+    )
+    # Maya's invitation is left for the organizer to decide on.
+    assert membership(client, class_id, identities["maya"].account_id).status == (
+        MembershipStatus.INVITED
+    )
+
+
+def test_corrected_email_without_an_account_unlinks_the_row(roster_client) -> None:
+    client, identities, class_id = roster_client
+    upload(client, class_id, b"ID,Name,Email\n6100001,\"Rivera,Maya\",riverma01@gettysburg.edu\n")
+    outbox(client).clear()
+
+    corrected = b"ID,Name,Email\n6100001,\"Rivera,Maya\",maya.rivera@gettysburg.edu\n"
+    row = upload(client, class_id, corrected).json()["rows"][0]
+
+    # Maya still has this name, so she's offered as a hint only; the row
+    # itself is no longer tied to her account.
+    assert row["outcome"] == "name_match"
+    assert row["account_id"] == identities["maya"].account_id
+    assert "until its email changed" in row["message"]
+    stored = _roster_row(client, class_id, "6100001")
+    assert (stored.email, stored.account_id) == ("maya.rivera@gettysburg.edu", None)
+    # The invitation goes to the corrected address.
+    assert [message.to for message in outbox(client)] == ["maya.rivera@gettysburg.edu"]
+
+
+def test_corrected_email_dry_run_previews_without_saving(roster_client) -> None:
+    client, identities, class_id = roster_client
+    upload(client, class_id, b"ID,Name,Email\n6100001,\"Rivera,Maya\",riverma01@gettysburg.edu\n")
+    outbox(client).clear()
+
+    corrected = b"ID,Name,Email\n6100001,\"Rivera,Maya\",chenli01@gettysburg.edu\n"
+    response = upload(client, class_id, corrected, dry_run=True).json()
+
+    assert response["rows"][0]["outcome"] == "invited"
+    assert response["rows"][0]["account_id"] == identities["lin"].account_id
+    assert outbox(client) == []
+    stored = _roster_row(client, class_id, "6100001")
+    assert stored.account_id == identities["maya"].account_id
+    assert membership(client, class_id, identities["lin"].account_id) is None
+
 def test_import_approves_pending_request_and_skips_members(roster_client) -> None:
     client, identities, class_id = roster_client
     act_as(client, identities["maya"])

@@ -554,7 +554,7 @@ Organizer-only (`404 class_not_found` for outsiders, `403 not_class_organizer` f
 #### `POST /classes/{class_id}/roster/import?dry_run=false` → `200 RosterImportResponse`
 The request body is the roster file itself (`Content-Type: text/csv` or the `.xlsx` type), not a form. The registrar's export works as is: an `ID` column and a `Name` column written `Last,First Middle`; other columns are ignored. `First Name`/`Last Name` columns and an optional `Email` column are also understood. CSV or `.xlsx`, at most 2 MB and 2,000 students.
 
-Each row is saved (re-importing updates rows by student ID). Only an email ties a row to an account: the row's `Email` matches an account's sign-in email, or the row was linked by email in an earlier import. A first and last name match is only reported (`name_match`), never acted on, because profile names can be edited. `rows[].outcome` says what happened:
+Each row is saved (re-importing updates rows by student ID). Only an email ties a row to an account: the row's `Email` matches an account's sign-in email, or the row was linked by email in an earlier import. A first and last name match is only reported (`name_match`), never acted on, because profile names can be edited. When a row's email in the file differs from the account it was linked to (a corrected email), the email wins: the row moves to the account with that email, or is unlinked if none has it. The previously linked account's invitation or membership is left alone, and the row's `message` names it so the organizer can remove it if it was a mistake. `rows[].outcome` says what happened:
 
 | Outcome | Meaning |
 |---|---|
