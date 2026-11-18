@@ -71,7 +71,7 @@ Code: `join_class` and `leave_class` in `backend/app/services/classes.py`; roste
 
 ## 6. History, reports and grades
 
-Every number below comes from the class's **completed** sessions (`live_session.class_id` set, status `COMPLETED`), using each player's final `result` row. Open sessions never show up in a class.
+Every number below comes from the class's **completed** sessions (`live_session.class_id` set, status `COMPLETED`), using each player's final `result` row. Open sessions never show up in a class, and neither do sessions the host moved to the trash (section 7).
 
 | Where | Who | What |
 |---|---|---|
@@ -96,9 +96,22 @@ Every number below comes from the class's **completed** sessions (`live_session.
 
 Code: `backend/app/services/class_dashboard.py` and the report tables in `frontend/src/classes/ClassPage.jsx`.
 
-## 7. Deploying
+## 7. Semesters, archiving and the trash
 
-Migration `0007_session_class` must be applied to the production database before the new backend starts, and so must `0016_class_roster` (join requests and rosters). Apply it the same way as earlier migrations (`ulugbek-err/migrations/README.md`), then redeploy as described in [DEPLOYMENT.md](DEPLOYMENT.md):
+- **Semesters:** a class has an optional semester label ("Fall 2026"), set when it's created or with **✎ Edit** next to the class name. The same course in a new semester is a new class with its own code, roster and grades: on the old class, **More → New semester…** opens a form with the name filled in and the next semester suggested. The class list and class page show the semester next to the name.
+- **Archiving:** **More → Archive class…** asks the organizer to type the class name first, so it can't be pressed by accident. An archived class keeps its reports and grades but stops its code, new joins, new quizzes and new sessions. It gets its own grayed-out look: the **Archived classes** filter on the class list (the other filters show active classes only), a gray card, and a gray class page with an "Archived" banner.
+- **Unarchiving:** the banner's **Unarchive class** button (or **More → Unarchive class…**) makes the class active again with a new code. Joining is open; code joins still wait for an organizer.
+- **The trash:** "deleting" moves something to the trash, where it can be restored from **Classes → Trash**. Nothing is really deleted.
+  - A **class** (organizers: **More → Move to trash…**) disappears for everyone, with its quizzes and reports, until an organizer restores it.
+  - A **quiz** (its owner: the quiz page's **More → Move to trash…**) leaves the class's lists and approval queue.
+  - A **hosted session** (its host: **Delete** on a row of the quiz's **Hosting history**) leaves the hosting history, the students' "quizzes taken", and the class's reports, attendance and grades. That's how a session hosted by mistake stops counting.
+  - Something running live can't be trashed; end it first.
+
+Code: `backend/app/services/trash.py` (and the `deleted_at` filters it lists), `unarchive_class` in `backend/app/services/classes.py`; `frontend/src/classes/ClassLifecycle.jsx`, `TrashPanel.jsx` and `frontend/src/authenticated-demo/MoreMenu.jsx`.
+
+## 8. Deploying
+
+Migration `0007_session_class` must be applied to the production database before the new backend starts, and so must `0016_class_roster` (join requests and rosters) and `0017_trash_and_semester` (the trash and semesters). Apply it the same way as earlier migrations (`ulugbek-err/migrations/README.md`), then redeploy as described in [DEPLOYMENT.md](DEPLOYMENT.md):
 
 ```bash
 docker compose --env-file deploy/.env up --build -d

@@ -20,7 +20,9 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0012_question_revision` | Adds per-question optimistic revisions so collaborators can save different questions concurrently |
 | `0013_session_answer_correction` | Adds session-specific correct-answer overrides, score revisions, and an append-only correction audit log |
 | `0014_faculty_access` | Adds `faculty_access_event`: an append-only history of faculty status granted or removed in the app (issue #116). Faculty status itself is still `account.account_type = 'ADMINISTRATOR'` |
+| `0015_question_bank` | Adds `question_bank_item` (reusable copies of a person's questions) and `question.bank_question_id`, which points a question at its bank copy |
 | `0016_class_roster` | Adds `REQUESTED` and `REJECTED` to `class_membership.status` (joining with the class code now waits for an organizer) and the `class_roster_entry` table for roster files imported by organizers |
+| `0017_trash_and_semester` | Adds `deleted_at` to `class`, `quiz` and `live_session` for the trash (set while something is in the trash; nothing is really deleted), and `class.semester` ("Fall 2026") so the same course can run again each semester as its own class |
 
 Each migration comes in two files:
 
@@ -79,10 +81,11 @@ See [`../LOCAL_DATABASE_SETUP.md`](../LOCAL_DATABASE_SETUP.md). It sets up a MyS
 - **Reordering questions or answers:** two questions in the same version can't have the same position, and neither can two answers to the same question. To swap two of them, move one to a temporary position first, or renumber them all in one `UPDATE`.
 - **Replacing a question's answers:** delete the old answers before adding the new ones. If the new ones are added first, they clash with the old ones that have the same position, and the database rejects them.
 - **Sessions and groups:** leave `live_session.group_id` empty for the MVP. Use `live_session.class_id` (0007) for the session's class.
-- **Classes:** use `class` and `class_membership`, not the old `course_group` and `group_membership`. Classes are archived, never deleted: a class with members can't be deleted.
+- **Classes:** use `class` and `class_membership`, not the old `course_group` and `group_membership`. Classes are archived, never deleted: a class with members can't be deleted. Archiving can be undone (`POST /classes/{id}/unarchive`).
+- **The trash (0017):** "deleting" a class, a quiz or a hosted session sets its `deleted_at`, and restoring sets it back to `NULL`. Rows are never really deleted. Code that lists or reports on classes, quizzes or sessions must leave out rows with `deleted_at` set. The shared loaders already do (`get_class` in `class_authorization.py`, `_quiz_query` in `quizzes.py`); new queries that read `live_session` directly need `LiveSession.deleted_at.is_(None)`. See `backend/app/services/trash.py`.
 - **Quizzes and classes:** `quiz.class_id` (0008) is the class that owns the quiz. Every new quiz gets one. It's only allowed to be empty for quizzes made before V3. See "Quizzes without a class" below.
 - **Quiz submissions:** `quiz.class_id` is authoritative. `quiz_submission.class_id` (0010) repeats it only for indexes and uniqueness, so the backend must verify they match before inserting. Submission rows are audit history and their foreign keys use `RESTRICT`.
-- **Deleting quizzes:** you can't delete a quiz that has already been played. Set its `status` to `'ARCHIVED'` instead.
+- **Deleting quizzes:** you can't delete a quiz that has already been played. Set its `status` to `'ARCHIVED'`, or move it to the trash (`deleted_at`), instead.
 - **Rules the database doesn't check:** some rules have to be checked in the backend code. They're listed at the top of `0003_live_sessions.up.sql` and in the "Rules the backend has to check" section of `ER_Diagram.md`.
 
 ## Quizzes without a class
