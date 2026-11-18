@@ -24,6 +24,7 @@ from app.models.quiz import (
 from app.models.quiz_submission import QuizSubmission
 from app.schemas.pagination import PageInfo, SortOrder
 from app.schemas.quiz import (
+    CollaboratorSuggestion,
     ClassQuizListItem,
     ClassQuizListPage,
     ClassQuizSort,
@@ -1536,6 +1537,70 @@ def list_quiz_collaborators(
     return [
         _collaborator_response(collaborator, target)
         for collaborator, target in rows
+    ]
+
+
+COLLABORATOR_SUGGESTION_LIMIT = 8
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def suggest_quiz_collaborators(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    quiz_id: int,
+    query: str,
+) -> list[CollaboratorSuggestion]:
+    """People in the quiz's class whose name or email starts with the query,
+    for the Add collaborator search. Only they can be added as editors.
+
+    Owner only, like the rest of collaborator management. Needs at least two
+    characters; the owner themselves is left out.
+    """
+    _require_collaborator_owner(db, account, class_id, quiz_id)
+    needle = " ".join(query.split()).lower()
+    if len(needle) < 2:
+        return []
+    prefix = _escape_like(needle) + "%"
+    word = "% " + prefix
+    matches = db.scalars(
+        select(Account)
+        .join(ClassMembership, ClassMembership.account_id == Account.account_id)
+        .where(
+            ClassMembership.class_id == class_id,
+            ClassMembership.status == MembershipStatus.ACTIVE,
+            Account.is_active.is_(True),
+            Account.account_id != account.account_id,
+            or_(
+                func.lower(Account.email).like(prefix, escape="\\"),
+                func.lower(Account.display_name).like(prefix, escape="\\"),
+                func.lower(Account.display_name).like(word, escape="\\"),
+                func.lower(Account.first_name).like(prefix, escape="\\"),
+                func.lower(Account.last_name).like(prefix, escape="\\"),
+            ),
+        )
+        .order_by(Account.display_name, Account.account_id)
+        .limit(COLLABORATOR_SUGGESTION_LIMIT)
+    ).all()
+    editors = set(
+        db.scalars(
+            select(QuizCollaborator.account_id).where(
+                QuizCollaborator.quiz_id == quiz_id,
+                QuizCollaborator.revoked_at.is_(None),
+            )
+        )
+    )
+    return [
+        CollaboratorSuggestion(
+            account_id=match.account_id,
+            email=match.email,
+            display_name=match.display_name,
+            is_collaborator=match.account_id in editors,
+        )
+        for match in matches
     ]
 
 
