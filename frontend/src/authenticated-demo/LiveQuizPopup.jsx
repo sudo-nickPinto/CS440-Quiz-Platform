@@ -113,17 +113,33 @@ export default function LiveQuizPopup() {
   }
 
   const request = live && {
-    label: "Live now",
+    className: "qb-confirm-live",
+    label: (
+      <>
+        <span className="qb-live-dot" aria-hidden="true" />
+        Live now
+      </>
+    ),
     title: "A quiz is live",
-    confirmLabel: join.busy ? "Joining…" : "Join",
+    confirmLabel: join.busy ? (
+      "Joining…"
+    ) : (
+      <>
+        Join now <span aria-hidden="true">→</span>
+      </>
+    ),
     cancelLabel: "Dismiss",
     busy: join.busy,
     details: (
       <>
         <div className="qb-live-popup">
+          {live.class_name && (
+            <p className="qb-live-popup-class">{live.class_name}</p>
+          )}
           <p className="qb-live-popup-quiz">{live.quiz_title}</p>
-          <p>{live.class_name}</p>
-          <p>Hosted by {live.host_name}</p>
+          {live.host_name && (
+            <p className="qb-live-popup-host">Hosted by {live.host_name}</p>
+          )}
         </div>
         <RequestError error={join.error} />
       </>

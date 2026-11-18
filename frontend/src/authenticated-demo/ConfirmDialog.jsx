@@ -4,7 +4,8 @@ import { useEffect, useId, useRef } from "react";
 // every confirmation. Pair it with useConfirm() from ./useConfirm.js.
 // Optional request fields for dialogs that act before closing (the live-quiz
 // popup): `details`, extra content under the message (say an error), and
-// `busy`, which disables both buttons and ignores Escape and the backdrop.
+// `busy`, which disables both buttons and ignores Escape and the backdrop,
+// and `className`, an extra class on the <dialog> for a restyled variant.
 export default function ConfirmDialog({ confirmer }) {
   if (!confirmer.request) return null;
 
@@ -19,6 +20,7 @@ function Dialog({
   cancelLabel = "Cancel",
   details = null,
   busy = false,
+  className = "",
   onSettle,
 }) {
   const ref = useRef(null);
@@ -32,7 +34,7 @@ function Dialog({
   return (
     <dialog
       ref={ref}
-      className="qb-confirm"
+      className={className ? `qb-confirm ${className}` : "qb-confirm"}
       aria-labelledby={titleId}
       aria-busy={busy || undefined}
       onCancel={(event) => {

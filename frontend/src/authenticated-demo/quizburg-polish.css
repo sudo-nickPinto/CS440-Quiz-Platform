@@ -153,29 +153,6 @@
   font-size: 15px;
 }
 
-/* Live-quiz popup (LiveQuizPopup.jsx): the quiz, class and host under the
-   title, and a failed join's error. */
-.qb-confirm-body .qb-live-popup {
-  margin-top: 14px;
-  padding: 12px 14px;
-  border: var(--b-thin);
-  background: var(--sand);
-}
-
-.qb-confirm-body .qb-live-popup p {
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-
-.qb-confirm-body .qb-live-popup .qb-live-popup-quiz {
-  margin-bottom: 4px;
-  font: 20px/1.25 "Archivo Black", sans-serif;
-}
-
-.qb-confirm-body .qb-live-popup p:last-child {
-  color: var(--gray);
-}
-
 .qb-confirm .qp-error {
   margin-top: 16px;
   padding: 12px 14px;
@@ -246,6 +223,125 @@
 @media (max-width: 640px) {
   .qb-confirm-actions > * {
     flex: 1 1 140px;
+  }
+}
+
+/* Live-quiz popup (LiveQuizPopup.jsx). Time-sensitive, so it is bigger than
+   a confirm and wears the class page's orange LIVE bar (.cl-live in
+   classes/classes.css): a deep-orange band with the pulsing paper dot, then
+   the quiz on an apricot card and a wide Join button. */
+.qb-confirm.qb-confirm-live {
+  width: min(640px, calc(100% - 24px));
+  max-width: none;
+  max-height: calc(100dvh - 24px);
+  box-shadow: 10px 10px 0 var(--ink);
+}
+
+.qb-confirm-live .qb-confirm-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 24px 0;
+  background: var(--orange-deep);
+  color: var(--paper);
+  font: 400 14px/1.2 "Archivo Black", sans-serif;
+  letter-spacing: 0.1em;
+}
+
+.qb-confirm-live .qb-confirm-top > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.qb-live-dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--paper);
+  background: var(--paper);
+  animation: qb-live-pulse 1.6s ease-in-out infinite;
+}
+
+.qb-confirm-live .qb-confirm-body {
+  padding: 0 24px 28px;
+}
+
+/* The title sits in the same orange band as the LIVE label. */
+.qb-confirm-live .qb-confirm-body h2 {
+  margin: 0 -24px 24px;
+  padding: 8px 24px 22px;
+  border-bottom: var(--b);
+  background: var(--orange-deep);
+  color: var(--paper);
+  font-size: clamp(32px, 7vw, 46px);
+  font-weight: 400;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.qb-confirm-body .qb-live-popup {
+  display: grid;
+  gap: 6px;
+  padding: 20px 22px;
+  border: var(--b);
+  border-left: 10px solid var(--orange-deep);
+  background: var(--apricot);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.qb-confirm-body .qb-live-popup p {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.qb-confirm-body .qb-live-popup .qb-live-popup-class {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qb-confirm-body .qb-live-popup .qb-live-popup-quiz {
+  font: 400 clamp(24px, 5vw, 30px)/1.15 "Archivo Black", sans-serif;
+}
+
+.qb-confirm-body .qb-live-popup .qb-live-popup-host {
+  color: var(--gray);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* Dismiss | Join now: Join takes two thirds and is the big target. */
+.qb-confirm-live .qb-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 14px;
+  margin-top: 26px;
+}
+
+.qb-confirm-live .qb-btn {
+  gap: 10px;
+  min-height: 60px;
+  padding: 12px 16px;
+}
+
+.qb-confirm-live .qb-btn:not(.qb-btn-paper) {
+  font: 400 20px/1.1 "Archivo Black", sans-serif;
+  letter-spacing: 0.04em;
+  box-shadow: 5px 5px 0 var(--ink);
+}
+
+@keyframes qb-live-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qb-live-dot,
+  .qb-confirm.qb-confirm-live[open] {
+    animation: none;
   }
 }
 
