@@ -36,6 +36,7 @@ import { useAction, useApi, useResource } from "./rest";
 import RequestError from "./RequestError";
 import ConfirmDialog from "./ConfirmDialog";
 import { useConfirm } from "./useConfirm";
+import MoreMenu from "./MoreMenu";
 import {
   AutoGrowTextarea,
   CharCount,
@@ -1618,6 +1619,24 @@ export function QuizViewer() {
     0,
   );
 
+  async function trashQuiz() {
+    const sure = await confirmer.confirm({
+      label: "Move to trash",
+      title: `Move “${quiz.version.title}” to the trash?`,
+      message:
+        "It leaves the class and can't be edited or hosted. Past sessions " +
+        "and results stay saved. Restore it any time from Classes → Trash.",
+      confirmLabel: "Move to trash",
+      cancelLabel: "Keep it",
+    });
+    if (!sure) return;
+    const done = await action.run(async () => {
+      await api(`/quizzes/${quiz.quiz_id}/trash`, { method: "POST" });
+      return true;
+    });
+    if (done) navigate(classPagePath(quiz.class_id), { replace: true });
+  }
+
   async function archiveQuiz() {
     const sure = await confirmer.confirm({
       label: "Archive quiz",
@@ -1692,17 +1711,6 @@ export function QuizViewer() {
             </Link>
           )}
 
-          {canShare && (
-            <button
-              type="button"
-              className="qb-btn qb-btn-paper"
-              disabled={action.busy}
-              onClick={() => void archiveQuiz()}
-            >
-              Archive
-            </button>
-          )}
-
           {mine && (
             <Link
               className="qb-btn qb-btn-paper"
@@ -1710,6 +1718,24 @@ export function QuizViewer() {
             >
               Hosting history
             </Link>
+          )}
+
+          {mine && quiz.class_id && (
+            <MoreMenu
+              disabled={action.busy}
+              items={[
+                {
+                  label: "Archive quiz…",
+                  onSelect: () => void archiveQuiz(),
+                  hidden: !canShare,
+                },
+                {
+                  label: "Move to trash…",
+                  onSelect: () => void trashQuiz(),
+                  danger: true,
+                },
+              ]}
+            />
           )}
 
           {quiz.status !== "ARCHIVED" && (

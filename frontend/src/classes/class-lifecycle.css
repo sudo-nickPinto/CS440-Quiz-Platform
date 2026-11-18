@@ -1,0 +1,235 @@
+/* Class lifecycle: semesters, archived classes (grayed out), the archive
+   and new-semester dialogs, and the trash (ClassLifecycle.jsx,
+   TrashPanel.jsx). */
+
+/* ---------- Semester labels ---------- */
+.qp .cl-chip.cl-chip-semester {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.qp .cl-card-semester {
+  color: var(--navy);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.qp .cl-page .cl-rename-semester {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-page .cl-rename-semester input {
+  width: 12em;
+  min-height: 34px;
+  padding: 4px 8px;
+  border: var(--b-thin);
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ---------- Archived classes: their own grayed-out look ---------- */
+.qp .cl-card.cl-card-archived {
+  background: var(--sand);
+  filter: grayscale(1);
+}
+
+.qp .cl-card-archived .cl-card-banner {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--sand),
+    var(--sand) 10px,
+    var(--paper) 10px,
+    var(--paper) 20px
+  );
+}
+
+.qp .cl-card-flag {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 5px 9px;
+  border-bottom: var(--b-thin);
+  border-left: var(--b-thin);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* The class page: the header and banner keep their color (Unarchive and
+   the More menu live there); everything under them goes gray. */
+.qp .cl-page.is-archived .cl-classbar {
+  background: var(--sand);
+}
+
+.qp .cl-page.is-archived > :not(.cl-classbar, .cl-archived-banner, dialog) {
+  filter: grayscale(1);
+}
+
+.qp .cl-archived-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 14px 20px;
+  border-bottom: var(--b);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--paper),
+    var(--paper) 10px,
+    var(--sand) 10px,
+    var(--sand) 20px
+  );
+}
+
+.qp .cl-archived-banner p {
+  max-width: 70ch;
+  font-weight: 600;
+}
+
+.qp .cl-archived-banner b {
+  margin-right: 6px;
+  padding: 3px 9px;
+  border: var(--b-thin);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-archived-banner button {
+  padding: 8px 18px;
+  background: var(--orange-deep);
+  color: var(--paper);
+}
+
+.qp .cl-archived-banner button:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+/* ---------- Archive / new-semester dialogs ---------- */
+.qb-confirm .cl-confirm-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.qb-confirm .cl-confirm-field input {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+}
+
+.qb-confirm .cl-confirm-field input:focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 2px;
+}
+
+.qb-confirm .cl-feedback {
+  margin-top: 14px;
+}
+
+/* ---------- Trash ---------- */
+.qp .cl-trash-toggle[aria-expanded="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.qp .cl-inline-panel.cl-trash {
+  align-items: stretch;
+  background: var(--paper);
+}
+
+.qp .cl-trash > p,
+.qp .cl-trash > .cl-feedback,
+.qp .cl-trash > .qp-error {
+  flex-basis: 100%;
+}
+
+.qp .cl-trash-empty {
+  color: var(--gray);
+}
+
+.qp .cl-trash-group {
+  flex-basis: 100%;
+}
+
+.qp .cl-trash-group h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-trash-group ul {
+  margin: 0;
+  padding: 0;
+  border: var(--b);
+  list-style: none;
+}
+
+.qp .cl-trash-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  border-bottom: var(--b-thin);
+  background: var(--paper);
+}
+
+.qp .cl-trash-row:last-child {
+  border-bottom: 0;
+}
+
+.qp .cl-trash-row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.qp .cl-trash-row small {
+  color: var(--gray);
+  font-size: 13px;
+}
+
+.qp .cl-trash-row small.cl-trash-blocked {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+.qp .cl-trash-row button {
+  flex: none;
+  padding: 6px 16px;
+  background: var(--paper);
+  color: var(--navy);
+}
+
+.qp .cl-trash-row button:hover:not(:disabled) {
+  filter: var(--hover-shade);
+}
+
+@media (max-width: 640px) {
+  .qp .cl-trash-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,93 @@
+/* "More ▾" menu (MoreMenu.jsx): styled like the account menu's drop-down. */
+
+.qp .qb-more {
+  position: relative;
+}
+
+.qp .qb-more > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 18px;
+  border: var(--b);
+  box-shadow: 3px 3px 0 var(--ink);
+  background: var(--paper);
+  color: var(--navy);
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.qp .qb-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.qp .qb-more > summary:hover {
+  filter: var(--hover-shade);
+}
+
+.qp .qb-more > summary:focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 2px;
+}
+
+.qp .qb-more[open] > summary {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+.qp .qb-more > .qb-more-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  min-width: 230px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  animation: qb-drop 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.qp .qb-more > .qb-more-menu > button.qb-more-item {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-bottom: var(--b-thin);
+  box-shadow: none;
+  background: var(--paper);
+  color: var(--ink);
+  font: 700 15px "Space Grotesk", sans-serif;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.qp .qb-more > .qb-more-menu > button.qb-more-item:last-child {
+  border-bottom: 0;
+}
+
+.qp .qb-more > .qb-more-menu > button.qb-more-item:hover:not(:disabled) {
+  background: var(--sand);
+  filter: none;
+}
+
+.qp .qb-more > .qb-more-menu > button.qb-more-item.is-danger {
+  color: var(--color-danger);
+}
+
+.qp .qb-more > .qb-more-menu > button.qb-more-item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp .qb-more > .qb-more-menu {
+    animation: none;
+  }
+}

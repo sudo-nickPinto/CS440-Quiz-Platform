@@ -90,6 +90,49 @@
   outline-offset: 2px;
 }
 
+/* Hosting history has one more column: Delete (moves the session to the
+   trash). The base grid is in quizburg-polish.css. */
+.qp .qh.is-host .qh-head,
+.qp .qh.is-host .qh-row {
+  grid-template-columns: 96px minmax(0, 1fr) 160px 84px 96px;
+}
+
+.qp .qh .qh-trash {
+  align-self: center;
+  justify-self: center;
+  min-height: 38px;
+  padding: 6px 12px;
+  border: var(--b-thin);
+  background: var(--paper);
+  box-shadow: 2px 2px 0 var(--ink);
+  color: var(--color-danger);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.qp .qh .qh-trash:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}
+
+.qp .qh .qh-trash:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .qp .qh.is-host .qh-row {
+    grid-template-columns: 70px minmax(0, 1fr) 66px 80px;
+  }
+
+  .qp .qh .qh-trash {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+}
+
 @media (max-width: 640px) {
   .qp .qh-heading,
   .qp .qh-card {
