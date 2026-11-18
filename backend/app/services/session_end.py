@@ -484,7 +484,7 @@ def get_final_results(
     """
     session = db.get(LiveSession, session_id)
 
-    if session is None:
+    if session is None or session.deleted_at is not None:
         raise APIError(404, "session_not_found", "Session not found.")
 
     if session.class_id is not None:

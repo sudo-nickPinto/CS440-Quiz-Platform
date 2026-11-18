@@ -471,6 +471,14 @@ def test_host_trashes_a_mistaken_session_from_history_and_grades(lifecycle) -> N
     assert students["Zoe"]["attendance_rate"] == 1
     report = client.get(f"/classes/{class_id}/sessions/{mistake}/results")
     assert report.status_code == 404
+    for path_ in (
+        f"/sessions/{mistake}/results",
+        f"/sessions/{mistake}/report",
+        f"/sessions/{mistake}/results/export.csv",
+    ):
+        direct = client.get(path_)
+        assert direct.status_code == 404, path_
+        assert error_code(direct) == "session_not_found"
     act_as(client, amy)
     assert [s["session_id"] for s in client.get("/me/sessions/taken").json()["items"]] == [real]
 

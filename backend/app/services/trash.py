@@ -9,7 +9,10 @@ classes, quizzes and sessions, so moving one to the trash sets its
 - a quiz looks missing (quizzes._quiz_query) and leaves its class's quiz
   lists, approval queue and hostable quizzes;
 - a session leaves hosting history, "quizzes taken", and the class's
-  reports and grades.
+  reports and grades, and direct results/report/export/correction URLs
+  look like the session is missing;
+- a quiz's questions leave collaborator and organizer question-bank
+  views (the owner's own bank copies stay).
 
 Who may move what:
 - a class: its active faculty organizers;
