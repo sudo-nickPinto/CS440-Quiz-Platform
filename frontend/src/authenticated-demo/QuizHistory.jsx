@@ -1,8 +1,10 @@
 import { useRemembered } from "./remember";
 import { Link, useParams } from "react-router";
 
+import ConfirmDialog from "./ConfirmDialog";
 import RequestError from "./RequestError";
-import { useResource } from "./rest";
+import { useAction, useApi, useResource } from "./rest";
+import { useConfirm } from "./useConfirm";
 import "./quiz-history.css";
 
 const PAGE_SIZE = 20;
@@ -41,8 +43,36 @@ function HistoryList({ endpoint, host, backTo }) {
   const items = resource.data?.items ?? [];
   const quizTitle = items[0]?.quiz_title;
 
+  const api = useApi();
+  const action = useAction();
+  const confirmer = useConfirm();
+
+  // A session hosted by mistake goes to the trash (Classes → Trash), which
+  // also takes it out of the class's reports and grades.
+  async function trashSession(session) {
+    const sure = await confirmer.confirm({
+      label: "Delete session",
+      title: `Delete session #${session.session_id}?`,
+      message:
+        "It leaves this history and the class's reports and grades. You can " +
+        "restore it any time from Classes → Trash.",
+      confirmLabel: "Move to trash",
+      cancelLabel: "Keep it",
+    });
+    if (!sure) return;
+    const done = await action.run(async () => {
+      await api(`/sessions/${session.session_id}/trash`, { method: "POST" });
+      return true;
+    });
+    if (done) resource.reload();
+  }
+
   return (
-    <section className="qh" aria-label={host ? "Hosting history" : "Quizzes taken"}>
+    <section
+      className={"qh" + (host ? " is-host" : "")}
+      aria-label={host ? "Hosting history" : "Quizzes taken"}
+    >
+      <ConfirmDialog confirmer={confirmer} />
       <header className="qe-bar qh-bar">
         <Link className="qe-back" to={backTo}>
           <span aria-hidden="true">←</span>
@@ -81,6 +111,7 @@ function HistoryList({ endpoint, host, backTo }) {
         <span>Session</span>
         <span className="qh-wide">Status</span>
         <span />
+        {host && <span />}
       </div>
 
       {resource.loading && (
@@ -90,6 +121,7 @@ function HistoryList({ endpoint, host, backTo }) {
       )}
 
       <RequestError error={resource.error} retry={resource.reload} />
+      <RequestError error={action.error} />
 
       {!resource.loading && !resource.error && (
         <>
@@ -161,6 +193,18 @@ function HistoryList({ endpoint, host, backTo }) {
                     >
                       <span aria-hidden="true">→</span>
                     </Link>
+                  )}
+
+                  {host && (
+                    <button
+                      type="button"
+                      className="qh-trash"
+                      disabled={action.busy}
+                      aria-label={`Delete session ${session.session_id}`}
+                      onClick={() => void trashSession(session)}
+                    >
+                      Delete
+                    </button>
                   )}
                 </article>
               );
