@@ -196,3 +196,16 @@ def test_report_uses_session_override_and_exposes_audit(db):
     ] == [10, 11]
     assert report["corrections"][0]["correction_mode"] == "ADD"
     assert report["corrections"][0]["corrected_choice_ids"] == [10, 11]
+
+
+def test_trashed_session_cannot_be_corrected(db):
+    session = db.get(LiveSession, 1)
+    session.deleted_at = NOW
+    db.commit()
+
+    with pytest.raises(APIError) as error:
+        correct_session_answer(
+            db, ORGANIZER, 1, 1, 11, SessionCorrectionMode.REPLACE, 0
+        )
+    assert error.value.code == "session_not_found"
+
