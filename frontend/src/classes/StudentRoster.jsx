@@ -12,9 +12,9 @@ import {
   rosterHasChanges,
   rosterName,
   rosterSummary,
-  suggestionQuery,
   suggestionStatus,
 } from "./rosterHelpers";
+import { useSuggestions } from "./useSuggestions";
 
 function personName(person) {
   return person.display_name || person.email;
@@ -30,39 +30,6 @@ const WHEN = new Intl.DateTimeFormat(undefined, {
 function when(value) {
   const parsed = value ? new Date(value) : null;
   return parsed && !Number.isNaN(parsed.getTime()) ? WHEN.format(parsed) : "—";
-}
-
-// Names and emails from every QuizBurg account, as the organizer types.
-function useStudentSuggestions(classId, text) {
-  const api = useApi();
-  const query = suggestionQuery(text);
-  const [result, setResult] = useState({ query: "", items: [] });
-
-  useEffect(() => {
-    if (!query) return undefined;
-    const controller = new AbortController();
-    // Wait for a pause in typing before asking.
-    const timer = window.setTimeout(async () => {
-      try {
-        const items = await api(
-          `/classes/${classId}/student-suggestions?q=${encodeURIComponent(query)}`,
-          { signal: controller.signal },
-        );
-        if (!controller.signal.aborted) {
-          setResult({ query, items: Array.isArray(items) ? items : [] });
-        }
-      } catch {
-        // Suggestions are a convenience; typing a full email still works.
-        if (!controller.signal.aborted) setResult({ query, items: [] });
-      }
-    }, 250);
-    return () => {
-      controller.abort();
-      window.clearTimeout(timer);
-    };
-  }, [api, classId, query]);
-
-  return query && result.query === query ? result.items : [];
 }
 
 // "+ Add student" pop-up with two tabs:
@@ -175,7 +142,11 @@ function StudentSearch({ classInfo, onAdded }) {
   const action = useAction();
   const [text, setText] = useState("");
   const [justAdded, setJustAdded] = useState({});
-  const suggestions = useStudentSuggestions(classInfo.id, text);
+  // Names and emails from every QuizBurg account, as the organizer types.
+  const suggestions = useSuggestions(
+    `/classes/${classInfo.id}/student-suggestions`,
+    text,
+  );
   const listId = useId();
   const typedEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text.trim());
 
