@@ -11,6 +11,14 @@ import { useConfirm } from "../authenticated-demo/useConfirm";
 import { useFileDownload } from "../authenticated-demo/useFileDownload";
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import ClassLiveButton from "./ClassLiveButton";
+import MoreMenu from "../authenticated-demo/MoreMenu";
+import {
+  ArchiveClassDialog,
+  ArchivedBanner,
+  NewSemesterDialog,
+  SemesterOptions,
+  TrashClassDialog,
+} from "./ClassLifecycle";
 import {
   ADMIN_SECTIONS,
   approvalLabel,
@@ -1076,42 +1084,69 @@ function ClassWorkspace({ classInfo, onChange }) {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(classInfo.name);
+  const [semesterDraft, setSemesterDraft] = useState(classInfo.semester ?? "");
+  // "archive" or "semester" while that dialog is open.
+  const [lifecycleDialog, setLifecycleDialog] = useState(null);
   const manage = useAction();
+  const navigate = useNavigate();
+
+  function cancelRename() {
+    setNameDraft(classInfo.name);
+    setSemesterDraft(classInfo.semester ?? "");
+    setEditing(false);
+  }
 
   async function saveName(event) {
     event.preventDefault();
     const name = nameDraft.trim();
     if (!name) return;
-    if (name === classInfo.name) {
+    const semester = semesterDraft.trim() || null;
+    const changes = {};
+    if (name !== classInfo.name) changes.name = name;
+    if (semester !== (classInfo.semester ?? null)) changes.semester = semester;
+    if (Object.keys(changes).length === 0) {
       setEditing(false);
       return;
     }
     const saved = await manage.run(async () => {
       await api(`/classes/${classInfo.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(changes),
       });
       return true;
     });
     if (saved) onChange();
   }
 
-  async function archiveClass() {
-    const confirmed = await confirmer.confirm({
-      label: "Archive class",
-      title: `Archive ${classInfo.name}?`,
-      message:
-        "The class code stops working and no new sessions can start. " +
-        "Reports stay available. There is no restore action yet.",
-      confirmLabel: "Archive class",
-    });
-    if (!confirmed) return;
-
-    const archived = await manage.run(async () => {
-      await api(`/classes/${classInfo.id}/archive`, { method: "POST" });
+  async function lifecycleAction(path) {
+    const done = await manage.run(async () => {
+      await api(`/classes/${classInfo.id}/${path}`, { method: "POST" });
       return true;
     });
-    if (archived) onChange();
+    if (done) setLifecycleDialog(null);
+    return done;
+  }
+
+  async function archiveClass() {
+    if (await lifecycleAction("archive")) onChange();
+  }
+
+  async function unarchiveClass() {
+    const confirmed = await confirmer.confirm({
+      label: "Unarchive class",
+      title: `Unarchive ${classInfo.name}?`,
+      message:
+        "The class becomes active again with a new class code, and students " +
+        "can ask to join. Quizzes and sessions can start again.",
+      confirmLabel: "Unarchive class",
+    });
+    if (confirmed && (await lifecycleAction("unarchive"))) onChange();
+  }
+
+  async function trashClass() {
+    if (await lifecycleAction("trash")) {
+      navigate("/app/classes", { replace: true });
+    }
   }
 
   const adminView = showAdminLayout && view === "admin";
@@ -1150,12 +1185,62 @@ function ClassWorkspace({ classInfo, onChange }) {
     setTimeout(() => setCopied(false), 1600);
   }
 
+  if (classInfo.archived && !showAdminLayout) {
+    return (
+      <section className="cl-page is-archived" aria-labelledby="class-heading">
+        <p>
+          <Link to="/app/classes">← Classes</Link>
+        </p>
+        <h1 id="class-heading">{classInfo.name}</h1>
+        <p>
+          This class is archived. Only its organizers can open quizzes,
+          reports and grades.
+        </p>
+      </section>
+    );
+  }
+
+  const semesters = classInfo.semesters ?? [];
+  const heading =
+    semesters.length > 1 && classInfo.semester
+      ? classInfo.semester
+      : classInfo.name;
+
   return (
     <section
-      className={`cl-page${adminView ? "" : " is-user-view"}`}
+      className={`cl-page${adminView ? "" : " is-user-view"}${
+        classInfo.archived ? " is-archived" : ""
+      }`}
       aria-labelledby="class-heading"
     >
       <ConfirmDialog confirmer={confirmer} />
+
+      {lifecycleDialog === "archive" && (
+        <ArchiveClassDialog
+          classInfo={classInfo}
+          busy={manage.busy}
+          error={manage.error}
+          onCancel={() => setLifecycleDialog(null)}
+          onConfirm={() => void archiveClass()}
+        />
+      )}
+
+      {lifecycleDialog === "trash" && (
+        <TrashClassDialog
+          classInfo={classInfo}
+          busy={manage.busy}
+          error={manage.error}
+          onCancel={() => setLifecycleDialog(null)}
+          onConfirm={() => void trashClass()}
+        />
+      )}
+
+      {lifecycleDialog === "semester" && (
+        <NewSemesterDialog
+          classInfo={classInfo}
+          onClose={() => setLifecycleDialog(null)}
+        />
+      )}
 
       <div className="cl-classbar">
         <Link className="cl-button cl-secondary" to="/app/classes">
@@ -1171,6 +1256,12 @@ function ClassWorkspace({ classInfo, onChange }) {
             >
               {classInfo.roleLabel || "Class"}
             </span>
+
+            {classInfo.semester && (
+              <span className="cl-chip cl-chip-semester">
+                {classInfo.semester}
+              </span>
+            )}
 
             {classInfo.canManage && classInfo.code && (
               <button
@@ -1210,13 +1301,26 @@ function ClassWorkspace({ classInfo, onChange }) {
                       event.preventDefault();
                       event.currentTarget.form.requestSubmit();
                     }
-                    if (event.key === "Escape") {
-                      setNameDraft(classInfo.name);
-                      setEditing(false);
-                    }
+                    if (event.key === "Escape") cancelRename();
                   }}
                 />
               </label>
+              <label className="cl-rename-semester">
+                Semester
+                <input
+                  type="text"
+                  list="class-rename-semester-options"
+                  value={semesterDraft}
+                  maxLength={30}
+                  placeholder="Fall 2026"
+                  disabled={manage.busy}
+                  onChange={(event) => setSemesterDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") cancelRename();
+                  }}
+                />
+              </label>
+              <SemesterOptions id="class-rename-semester-options" />
               <span className="cl-rename-actions">
                 <button
                   type="submit"
@@ -1229,10 +1333,7 @@ function ClassWorkspace({ classInfo, onChange }) {
                   type="button"
                   className="cl-edit-name"
                   disabled={manage.busy}
-                  onClick={() => {
-                    setNameDraft(classInfo.name);
-                    setEditing(false);
-                  }}
+                  onClick={cancelRename}
                 >
                   Cancel
                 </button>
@@ -1240,13 +1341,28 @@ function ClassWorkspace({ classInfo, onChange }) {
             </form>
           ) : (
             <div className="cl-title-row">
-              <h1 id="class-heading">{classInfo.name}</h1>
+              <h1 id="class-heading">{heading}</h1>
+              {semesters.length > 1 && (
+                <nav className="cl-semester-toggle" aria-label="Semesters">
+                  {semesters.map((item) => (
+                    <Link
+                      key={item.class_id}
+                      to={`/app/classes/${item.class_id}`}
+                      aria-current={
+                        item.class_id === classInfo.id ? "page" : undefined
+                      }
+                    >
+                      {item.semester || "No semester"}
+                    </Link>
+                  ))}
+                </nav>
+              )}
               {adminView && !classInfo.archived && (
                 <button
                   type="button"
                   className="cl-edit-name"
-                  aria-label={`Edit class name ${classInfo.name}`}
-                  title="Edit class name"
+                  aria-label={`Edit class name and semester for ${classInfo.name}`}
+                  title="Edit class name and semester"
                   onClick={() => setEditing(true)}
                 >
                   ✎ Edit
@@ -1281,16 +1397,32 @@ function ClassWorkspace({ classInfo, onChange }) {
               {csv.busy ? "Preparing…" : "Export grades"}
             </button>
 
-            {!classInfo.archived && (
-              <button
-                type="button"
-                className="cl-secondary cl-danger"
-                disabled={manage.busy}
-                onClick={() => void archiveClass()}
-              >
-                Archive
-              </button>
-            )}
+            {/* Archive and trash sit behind More, away from the everyday
+                buttons, and archiving asks for the class name. */}
+            <MoreMenu
+              disabled={manage.busy}
+              items={[
+                {
+                  label: "New semester",
+                  onSelect: () => setLifecycleDialog("semester"),
+                },
+                {
+                  label: "Archive class",
+                  onSelect: () => setLifecycleDialog("archive"),
+                  hidden: classInfo.archived,
+                },
+                {
+                  label: "Unarchive class",
+                  onSelect: () => void unarchiveClass(),
+                  hidden: !classInfo.archived,
+                },
+                {
+                  label: "Move to trash",
+                  onSelect: () => setLifecycleDialog("trash"),
+                  danger: true,
+                },
+              ]}
+            />
           </div>
         )}
 
@@ -1333,10 +1465,16 @@ function ClassWorkspace({ classInfo, onChange }) {
       <ClassLiveButton classId={classInfo.id} />
 
       {classInfo.archived && (
-        <p className="cl-section-note">This class is archived.</p>
+        <ArchivedBanner
+          classInfo={classInfo}
+          busy={manage.busy}
+          onUnarchive={() => void unarchiveClass()}
+        />
       )}
 
-      <RequestError error={csv.error || manage.error} />
+      <RequestError
+        error={lifecycleDialog ? csv.error : csv.error || manage.error}
+      />
 
       <div className="cl-section-tabs">
         <div role="group" aria-label="Class sections">

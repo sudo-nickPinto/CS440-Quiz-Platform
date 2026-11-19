@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useRemembered } from "../authenticated-demo/remember";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { useAction, useApi } from "../authenticated-demo/rest";
 import { useClassesResource } from "./classResources";
 import { ClassCard, ResourceMessage } from "./ClassUI";
+import { SemesterOptions } from "./ClassLifecycle";
+import { semesterFor } from "./semesters";
+import "./class-lifecycle.css";
 import { useAccount } from "../authenticated-demo/account";
 
 export default function ClassesPage() {
@@ -22,6 +25,7 @@ export default function ClassesPage() {
 
   const account = useAccount();
   const canCreateClass = account.is_active === true && account.role === "ADMIN";
+  const [semester, setSemester] = useState(() => semesterFor());
 
   const ready = resource.status === "ready";
   const records = ready ? resource.data : [];
@@ -45,9 +49,10 @@ export default function ClassesPage() {
       item.name.toLowerCase().includes(query.trim().toLowerCase()),
     )
     .filter((item) => {
-      if (filter === "managed") return item.canManage;
-      if (filter === "member") return !item.canManage;
       if (filter === "archived") return item.archived;
+      if (filter === "active") return !item.archived;
+      if (filter === "managed") return item.canManage && !item.archived;
+      if (filter === "member") return !item.canManage && !item.archived;
       return true;
     })
     // Always alphabetical; the list is short and people scan it by name.
@@ -68,7 +73,7 @@ export default function ClassesPage() {
     const created = await action.run(() =>
       api("/classes", {
         method: "POST",
-        body: JSON.stringify({ name: trimmedName }),
+        body: JSON.stringify({ name: trimmedName, semester: semester.trim() }),
       }),
     );
 
@@ -188,6 +193,20 @@ export default function ClassesPage() {
               disabled={action.busy}
             />
           </label>
+
+          <label className="cl-semester-field">
+            Semester
+            <input
+              type="text"
+              list="class-semester-options"
+              value={semester}
+              onChange={(event) => setSemester(event.target.value)}
+              placeholder="Fall 2026"
+              maxLength={30}
+              disabled={action.busy}
+            />
+          </label>
+          <SemesterOptions id="class-semester-options" />
 
           <button type="submit" disabled={action.busy || !name.trim()}>
             {action.busy ? "Saving…" : "Create class →"}
@@ -313,19 +332,47 @@ export default function ClassesPage() {
           />
         </label>
 
-        <label>
-          <span className="cl-sr">Filter classes</span>
-          <select
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            disabled={!ready}
-          >
-            <option value="all">All classes</option>
-            <option value="managed">Classes I manage</option>
-            <option value="member">Classes I participate in</option>
-            <option value="archived">Archived classes</option>
-          </select>
-        </label>
+        <details className="cl-filter">
+          <summary>
+            {
+              {
+                all: "All classes",
+                active: "Active classes",
+                managed: "Classes I manage",
+                member: "Classes I participate in",
+                archived: "Archived classes",
+              }[filter]
+            }
+          </summary>
+          <div className="cl-filter-menu" role="listbox" aria-label="Filter classes">
+            {[
+              ["all", "All classes"],
+              ["active", "Active classes"],
+              ["managed", "Classes I manage"],
+              ["member", "Classes I participate in"],
+              ["archived", "Archived classes"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="option"
+                aria-selected={filter === value}
+                onClick={(event) => {
+                  setFilter(value);
+                  event.currentTarget.closest("details").open = false;
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </details>
+
+        {canCreateClass && (
+          <Link className="cl-trash-toggle" to="/app/classes/trash">
+            Trash
+          </Link>
+        )}
 
         {/* Not shown, but read out when a search or filter changes the list. */}
         <span className="cl-sr" aria-live="polite">
