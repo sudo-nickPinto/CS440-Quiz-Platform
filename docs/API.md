@@ -560,23 +560,23 @@ Ask to join a class by its code. Body: `{"code": "ABCD-2345"}`. Case, spaces and
 
 Organizer-only (`404 class_not_found` for outsiders, `403 not_class_organizer` for students). Emails go out after the change is saved; see [EMAIL.md](EMAIL.md).
 
-#### `POST /classes/{class_id}/roster/import?dry_run=false` → `200 RosterImportResponse`
+#### `POST /classes/{class_id}/roster/import?dry_run=false&confirm_removals=false` → `200 RosterImportResponse`
 The request body is the roster file itself (`Content-Type: text/csv` or the `.xlsx` type), not a form. The registrar's export works as is: an `ID` column and a `Name` column written `Last,First Middle`; other columns are ignored. `First Name`/`Last Name` columns and an optional `Email` column are also understood. CSV or `.xlsx`, at most 2 MB and 2,000 students.
 
-Each row is saved (re-importing updates rows by student ID). Only an email ties a row to an account: the row's `Email` matches an account's sign-in email, or the row was linked by email in an earlier import. A first and last name match is only reported (`name_match`), never acted on, because profile names can be edited. When a row's email in the file differs from the account it was linked to (a corrected email), the email wins: the row moves to the account with that email, or is unlinked if none has it. The previously linked account's invitation or membership is left alone, and the row's `message` names it so the organizer can remove it if it was a mistake. `rows[].outcome` says what happened:
+Each row is saved (re-importing updates rows by student ID). Only an email ties a row to an account: the row's `Email` matches an account's sign-in email, or the row was linked by email in an earlier import. A first and last name match is only reported (`name_match`), never acted on, because profile names can be edited. When a row's email in the file differs from the account it was linked to (a corrected email), the email wins: the row moves to the account with that email, or is unlinked if none has it. If the previously linked account is in the class only because a roster import added it (an active student with `joined_via: ROSTER`) and no other row still points at it, the correction removes it from the class (past results stay, and its live sockets are closed). That removal needs `confirm_removals=true`: without it the import is refused with `409 roster_import_needs_confirmation` (its `details` list the people) and nothing changes. A preview (`dry_run=true`) lists them in `removals` and in the row's `message`. Someone who joined another way (an accepted invitation or + Add student, both `INVITE`; the class code; or an organizer) keeps their access, and the row's `message` names them. Memberships a roster import adds are stored with `joined_via: ROSTER` (migration 0018). `rows[].outcome` says what happened:
 
 | Outcome | Meaning |
 |---|---|
-| `invited` | Matched an account; it now has an invitation, and a roster invitation email was sent |
+| `added` | Matched an account by email; they are now a student (no invitation to accept) and get a "You've been added" email. An older pending invitation is turned into membership too |
 | `approved` | Matched someone with a pending join request; approved, and an approval email was sent |
-| `already_in_class` / `already_invited` | Nothing to do |
-| `expected` | No account yet. With an email in the row, the invitation goes to that address, appears when they sign up with it, and their code join is approved automatically. Without one, their code join waits for an organizer like any other |
-| `name_match` | One account has this name, but nothing ties it to the row by email. `account_id`/`account_name` and the `message` (with that account's email) let the organizer check; nothing is invited or approved |
+| `already_in_class` | Nothing to do |
+| `expected` | No account yet. With an email in the row, an email asks them to sign up with that address, and they are in the class as soon as they do (their code join is approved automatically too). Without one, their code join waits for an organizer like any other |
+| `name_match` | One account has this name, but nothing ties it to the row by email. `account_id`/`account_name` and the `message` (with that account's email) let the organizer check; nobody is added or approved |
 | `ambiguous` | Several accounts have this name; saved like `expected`, add the right one with + Add student |
 | `removed` | An organizer removed them earlier; left alone |
 | `skipped` | The row has no ID, no `Last,First` name, a repeated ID or a bad email (`message` says which) |
 
-With `dry_run=true` nothing is saved or sent: the response previews the import. Errors: `422 roster_columns_missing`, `422 roster_file_empty`, `422 roster_file_unreadable`, `413 roster_file_too_large`, `413 roster_too_many_rows`, `409 class_archived`.
+With `dry_run=true` nothing is saved or sent: the response previews the import. Errors: `422 roster_columns_missing`, `422 roster_file_empty`, `422 roster_file_unreadable`, `413 roster_file_too_large`, `413 roster_too_many_rows`, `409 class_archived`, `409 roster_import_needs_confirmation`.
 
 #### `GET /classes/{class_id}/roster` → `200 RosterEntryResponse[]`
 The imported rows, by last name, with `membership_status` of the matched account (or `null`).
@@ -589,6 +589,11 @@ Approve (the person becomes an `ACTIVE` `MEMBER`) or reject (`REJECTED`) one req
 
 #### `POST /classes/{class_id}/join-requests/approve-all` → `200 {"approved": n, "rejected": 0}`
 "Accept all": approves every pending request.
+
+#### `POST /classes/{class_id}/students` → `201 ClassMemberResponse`
+**+ Add student.** Body: `{"email": "..."}` (case and spaces don't matter). The active account with that email becomes a student (`ACTIVE`, `MEMBER`, `joined_via: INVITE`) right away; there is no invitation to accept. They get a "You've been added" email. A pending invitation or an earlier removal is turned into membership. Errors: `404 account_not_found`, `409 already_class_member`, `409 class_archived`.
+
+The older `POST /classes/{class_id}/invites` still creates an `INVITED` membership that the person accepts; the app no longer uses it.
 
 #### `GET /classes/{class_id}/student-suggestions?q=...` → `200 StudentSuggestion[]`
 For the + Add student search: up to 8 active accounts anywhere in QuizBurg whose email, first name, last name or a word of their name starts with `q` (2+ characters, otherwise `[]`). Each has `account_id`, `email`, `display_name` and their `membership_status` in this class (or `null`).

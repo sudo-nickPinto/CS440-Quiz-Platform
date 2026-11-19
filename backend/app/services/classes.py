@@ -317,9 +317,10 @@ def join_class(
     roster_entry = (
         find_roster_entry(db, class_.class_id, person) if person is not None else None
     )
-    approved = roster_entry is not None or (
+    was_invited = (
         membership is not None and membership.status == MembershipStatus.INVITED
     )
+    approved = roster_entry is not None or was_invited
     if roster_entry is not None:
         roster_entry.account_id = account.account_id
 
@@ -335,7 +336,16 @@ def join_class(
         MembershipStatus.ACTIVE if approved else MembershipStatus.REQUESTED
     )
     membership.role = ClassRole.MEMBER
-    membership.joined_via = JoinedVia.CODE
+    # Preserve an independent invitation when both it and a roster row exist.
+    # Otherwise, a roster match is the reason this code join becomes active,
+    # and must remain identifiable if that roster entry is later corrected.
+    membership.joined_via = (
+        JoinedVia.INVITE
+        if was_invited
+        else JoinedVia.ROSTER
+        if roster_entry is not None
+        else JoinedVia.CODE
+    )
     membership.decided_by_id = account.account_id
     membership.decided_at = now
 

@@ -46,12 +46,14 @@ from app.models.classes import (
     JoinedVia,
     MembershipStatus,
 )
+from app.services.class_access import leave_class_sessions
 from app.schemas.class_roster import (
     JoinRequestDecisionResponse,
     JoinRequestResponse,
     RosterEntryResponse,
     RosterImportResponse,
     RosterImportRow,
+    RosterRemoval,
     RosterNameHint,
     RosterRowOutcome,
     StudentSuggestion,
@@ -359,7 +361,7 @@ def _activate(membership: ClassMembership, organizer_id: int, now: datetime) -> 
     membership.decided_at = now
 
 
-def _invite(
+def _add(
     db: Session,
     class_id: int,
     account_id: int,
@@ -367,12 +369,16 @@ def _invite(
     invited_by_id: int | None,
     now: datetime,
 ) -> ClassMembership:
+    """Make the account a student because of a roster row. The organizer
+    chose them, so there is no invitation to accept. ``joined_via`` is
+    ROSTER, so a corrected roster email can later tell this access apart
+    from an accepted invitation or "+ Add student" (both INVITE)."""
     if membership is None:
         membership = ClassMembership(class_id=class_id, account_id=account_id)
         db.add(membership)
     membership.role = ClassRole.MEMBER
-    membership.status = MembershipStatus.INVITED
-    membership.joined_via = JoinedVia.INVITE
+    membership.status = MembershipStatus.ACTIVE
+    membership.joined_via = JoinedVia.ROSTER
     membership.invited_by_id = invited_by_id
     membership.decided_by_id = invited_by_id
     membership.decided_at = now
@@ -380,19 +386,28 @@ def _invite(
 
 
 def _note_moved_link(row: RosterImportRow, previous: Account | None) -> None:
-    """Tell the organizer a corrected email moved this row off an account.
-
-    That account's invitation or membership is left alone: it may be right
-    for another reason, and removing people is the organizer's call.
-    """
+    """Tell the organizer a corrected email moved this row off an account
+    whose membership is kept (they joined some other way)."""
     if previous is None:
         return
     note = (
         f"This row was linked to {previous.display_name} ({previous.email}) "
-        "until its email changed. Their invitation or membership wasn't "
-        "changed; remove it under Students if it was a mistake."
+        "until its email changed. They joined the class another way, so they "
+        "keep their access; remove them from their report if that's wrong."
     )
     row.message = f"{row.message} {note}" if row.message else note
+
+
+def _removable(membership: ClassMembership | None) -> bool:
+    """Access a roster row gave: an active student whose membership a roster
+    import created (joined_via ROSTER). Accepted invitations, "+ Add
+    student", code joins and organizers are kept (review of #173)."""
+    return (
+        membership is not None
+        and membership.status == MembershipStatus.ACTIVE
+        and membership.role == ClassRole.MEMBER
+        and membership.joined_via == JoinedVia.ROSTER
+    )
 
 
 def import_roster(
@@ -403,11 +418,20 @@ def import_roster(
     email: EmailService,
     *,
     dry_run: bool,
-) -> tuple[RosterImportResponse, list[OutgoingEmail]]:
-    """Save the roster and invite or approve everyone it matches.
+    confirm_removals: bool = False,
+) -> tuple[RosterImportResponse, list[OutgoingEmail], list[tuple[int, list[int]]]]:
+    """Save the roster and add or approve everyone it matches.
 
     With ``dry_run`` nothing is saved or sent; the response shows what an
     import would do, so the organizer can check the file first.
+
+    A corrected email moves a row to another account. If the old account
+    is in the class only because it was added, it is removed, but only with
+    ``confirm_removals`` (the preview lists them first); otherwise the
+    import is refused with 409 ``roster_import_needs_confirmation``.
+
+    Returns the response, the emails to send, and for each removed account
+    the live sessions it left (so the route can close its sockets).
     """
     class_ = _require_organizer(db, account, class_id, lock=True)
     _require_open_class(class_)
@@ -429,6 +453,8 @@ def import_roster(
     code = _invite_code(class_)
     messages: list[OutgoingEmail] = []
     rows: list[RosterImportRow] = []
+    # (row, previous account) for every row a corrected email moved.
+    moves: list[tuple[RosterImportRow, Account]] = []
 
     for item in parsed.rows:
         result = RosterImportRow(
@@ -529,7 +555,8 @@ def import_roster(
                         item.email, class_.name, has_account=False, join_code=code
                     )
                 )
-            _note_moved_link(result, moved_from)
+            if moved_from is not None:
+                moves.append((result, moved_from))
             continue
 
         entry.account_id = match.account_id
@@ -541,9 +568,6 @@ def import_roster(
         if status == MembershipStatus.ACTIVE:
             result.outcome = RosterRowOutcome.ALREADY_IN_CLASS
             result.message = None
-        elif status == MembershipStatus.INVITED:
-            result.outcome = RosterRowOutcome.ALREADY_INVITED
-            result.message = None
         elif status == MembershipStatus.REMOVED:
             result.outcome = RosterRowOutcome.REMOVED
             result.message = (
@@ -551,21 +575,77 @@ def import_roster(
             )
         elif status == MembershipStatus.REQUESTED:
             _activate(membership, account.account_id, now)
+            # The pending code request becomes active only because the
+            # organizer's roster matched it. Record that provenance so a
+            # later roster correction can revoke the access it granted.
+            membership.joined_via = JoinedVia.ROSTER
             result.outcome = RosterRowOutcome.APPROVED
             result.message = None
             messages.append(email.join_approved(match.email, class_.name, class_id))
         else:
-            memberships[match.account_id] = _invite(
+            # No membership, an older pending invitation, or they left or
+            # were turned down before: the roster puts them in the class.
+            memberships[match.account_id] = _add(
                 db, class_id, match.account_id, membership, account.account_id, now
             )
-            result.outcome = RosterRowOutcome.INVITED
+            result.outcome = RosterRowOutcome.ADDED
             result.message = None
-            messages.append(
-                email.roster_invitation(
-                    match.email, class_.name, has_account=True, join_code=code
+            messages.append(email.added_to_class(match.email, class_.name, class_id))
+        if moved_from is not None:
+            moves.append((result, moved_from))
+
+    # Rows a corrected email moved off an account. If nothing else in the
+    # roster still points at that account and the row is the only reason it
+    # is in the class, its access goes (with the organizer's confirmation).
+    still_linked = {
+        entry.account_id for entry in entries.values() if entry.account_id is not None
+    }
+    removals: list[RosterRemoval] = []
+    evictions: list[tuple[int, list[int]]] = []
+    for result, previous in moves:
+        old = memberships.get(previous.account_id)
+        if previous.account_id in still_linked or not _removable(old):
+            _note_moved_link(result, previous)
+            continue
+        removals.append(
+            RosterRemoval(
+                account_id=previous.account_id,
+                display_name=previous.display_name,
+                email=previous.email,
+                student_number=result.student_number,
+            )
+        )
+        note = (
+            f"This row was linked to {previous.display_name} ({previous.email}) "
+            "until its email changed. "
+            + (
+                "They will be removed from the class (past results stay)."
+                if dry_run
+                else "They were removed from the class (past results stay)."
+            )
+        )
+        result.message = f"{result.message} {note}" if result.message else note
+        if not dry_run and confirm_removals:
+            old.status = MembershipStatus.REMOVED
+            old.decided_by_id = account.account_id
+            old.decided_at = now
+            evictions.append(
+                (
+                    previous.account_id,
+                    leave_class_sessions(db, class_id, previous.account_id, now),
                 )
             )
-        _note_moved_link(result, moved_from)
+
+    if removals and not dry_run and not confirm_removals:
+        db.rollback()
+        raise APIError(
+            409,
+            "roster_import_needs_confirmation",
+            "Corrected emails in this roster would remove "
+            + ", ".join(removal.display_name for removal in removals)
+            + " from the class. Check the preview, then import again to confirm.",
+            details=[removal.model_dump() for removal in removals],
+        )
 
     if dry_run:
         db.rollback()
@@ -578,20 +658,34 @@ def import_roster(
         counts[row.outcome.value] = counts.get(row.outcome.value, 0) + 1
     return (
         RosterImportResponse(
-            dry_run=dry_run, rows=rows, counts=counts, emails_sent=len(messages)
+            dry_run=dry_run,
+            rows=rows,
+            counts=counts,
+            emails_sent=len(messages),
+            removals=removals,
         ),
         messages,
+        evictions,
     )
 
 
 def roster_invitation_email(
     db: Session, email: EmailService, class_id: int, address: str
 ) -> OutgoingEmail:
-    """The invitation email for someone invited one at a time (+ Add student)."""
+    """The email for someone invited one at a time with the older invite
+    route (``POST /invites``), which still waits for them to accept."""
     class_ = _load_class(db, class_id)
     return email.roster_invitation(
         address, class_.name, has_account=True, join_code=_invite_code(class_)
     )
+
+
+def added_email(
+    db: Session, email: EmailService, class_id: int, address: str
+) -> OutgoingEmail:
+    """The email for someone added with + Add student."""
+    class_ = _load_class(db, class_id)
+    return email.added_to_class(address, class_.name, class_id)
 
 
 def list_roster(
@@ -659,10 +753,10 @@ def find_roster_entry(
 
 
 def claim_roster_invitations(db: Session, account_id: int, email: str) -> int:
-    """Turn roster rows that list this new account's email into invitations.
+    """Put a new account in every class whose roster lists its email.
 
-    Called once, when an account is created. Returns how many invitations
-    were added. Commits.
+    Called once, when an account is created (the email is verified by then).
+    Returns how many classes they were added to. Commits.
     """
     entries = db.scalars(
         select(ClassRosterEntry)
@@ -684,7 +778,7 @@ def claim_roster_invitations(db: Session, account_id: int, email: str) -> int:
             )
         )
         if membership is None:
-            _invite(db, entry.class_id, account_id, None, entry.imported_by_id, now)
+            _add(db, entry.class_id, account_id, None, entry.imported_by_id, now)
             added += 1
     if entries:
         db.commit()

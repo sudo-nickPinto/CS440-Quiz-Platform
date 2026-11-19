@@ -7,14 +7,12 @@ from app.models.classes import MembershipStatus
 
 
 class RosterRowOutcome(str, Enum):
-    # Matched an account that has now been invited (an email goes out).
-    INVITED = "invited"
+    # Matched an account, which is now a student (an email goes out).
+    ADDED = "added"
     # Matched an account that was waiting on a join request; it is approved.
     APPROVED = "approved"
     # Matched an account that is already a student or organizer.
     ALREADY_IN_CLASS = "already_in_class"
-    # Matched an account that already has an invitation waiting.
-    ALREADY_INVITED = "already_invited"
     # No account yet. Saved; if the row has an email, signing up with it and
     # joining is approved automatically. Otherwise their request waits.
     EXPECTED = "expected"
@@ -42,12 +40,25 @@ class RosterImportRow(BaseModel):
     message: str | None = None
 
 
+class RosterRemoval(BaseModel):
+    """Someone a corrected roster email moves a row away from, whose access
+    to the class came from being added (roster or + Add student)."""
+
+    account_id: int
+    display_name: str
+    email: str
+    student_number: str
+
+
 class RosterImportResponse(BaseModel):
     dry_run: bool
     rows: list[RosterImportRow]
     # How many rows ended with each outcome, by outcome value.
     counts: dict[str, int]
     emails_sent: int
+    # People removed from the class because a corrected email moved their
+    # row to someone else. In a preview: people who will be removed.
+    removals: list[RosterRemoval] = []
 
 
 class RosterEntryResponse(BaseModel):

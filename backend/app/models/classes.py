@@ -45,7 +45,11 @@ class MembershipStatus(str, Enum):
 class JoinedVia(str, Enum):
     CREATOR = "CREATOR"
     CODE = "CODE"
+    # An invitation they accepted, or "+ Add student".
     INVITE = "INVITE"
+    # Added by an imported roster row, or a roster email they signed up
+    # with (0018). Only these can be undone by a corrected roster email.
+    ROSTER = "ROSTER"
 
 
 class Class(Base):

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
-from app.services.class_roster import roster_invitation_email
+from app.services.class_roster import added_email, roster_invitation_email
 from app.schemas.class_membership import (
     ClassInviteCreate,
     ClassMemberResponse,
@@ -11,6 +11,7 @@ from app.schemas.class_membership import (
 )
 from app.services.class_memberships import (
     accept_class_invite,
+    add_class_student,
     cancel_class_invite,
     create_class_invite,
     decline_class_invite,
@@ -30,6 +31,26 @@ def list_class_members_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> list[ClassMemberResponse]:
     return list_class_members(db, account, class_id)
+
+
+@router.post(
+    "/students", response_model=ClassMemberResponse, status_code=status.HTTP_201_CREATED
+)
+def add_class_student_route(
+    class_id: int,
+    payload: ClassInviteCreate,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> ClassMemberResponse:
+    """+ Add student: the account is a student right away and gets an email."""
+    added = add_class_student(db, account, class_id, payload)
+    email = request.app.state.email
+    background_tasks.add_task(
+        email.send_all, [added_email(db, email, class_id, added.email)]
+    )
+    return added
 
 
 @router.get("/invites", response_model=list[ClassMemberResponse])

@@ -79,6 +79,8 @@ def test_membership_enums_match_migration_0006() -> None:
         "CREATOR",
         "CODE",
         "INVITE",
+        # Added by an imported roster (0018).
+        "ROSTER",
     ]
 
 
