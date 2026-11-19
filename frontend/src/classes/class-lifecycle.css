@@ -1,3 +1,92 @@
+.qp .cl-filter {
+  position: relative;
+}
+
+.qp .cl-filter > summary {
+  list-style: none;
+  cursor: pointer;
+  border: 1px solid var(--line, #d7d2c8);
+  background: var(--paper, #fff);
+  border-radius: 8px;
+  padding: 0.45rem 0.75rem;
+}
+
+.qp .cl-filter > summary::-webkit-details-marker {
+  display: none;
+}
+
+.qp .cl-filter-menu {
+  position: absolute;
+  z-index: 5;
+  margin-top: 4px;
+  min-width: 14rem;
+  padding: 0.35rem;
+  background: var(--paper, #fff);
+  border: 1px solid var(--line, #d7d2c8);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.qp .cl-filter-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+}
+
+.qp .cl-filter-menu button[aria-selected="true"] {
+  background: var(--hover-shade, #f3efe6);
+}
+
+.qp .cl-semester-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.qp .cl-semester-toggle a {
+  border: 1px solid var(--line, #d7d2c8);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  text-decoration: none;
+}
+
+.qp .cl-semester-toggle a[aria-current="page"] {
+  background: var(--ink, #1d2a3a);
+  color: var(--paper, #fff);
+}
+
+.qp .qh-more {
+  position: relative;
+}
+
+.qp .qh-more > summary {
+  cursor: pointer;
+  list-style: none;
+  border: 0;
+  background: transparent;
+  font-size: 1.2rem;
+}
+
+.qp .qh-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.qp .qh-more button {
+  position: absolute;
+  right: 0;
+  z-index: 2;
+  white-space: nowrap;
+  background: var(--paper, #fff);
+  border: 1px solid var(--line, #d7d2c8);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+}
+
 /* Class lifecycle: semesters, archived classes (grayed out), the archive
    and new-semester dialogs, and the trash (ClassLifecycle.jsx,
    TrashPanel.jsx). */

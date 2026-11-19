@@ -17,6 +17,7 @@ import {
   ArchivedBanner,
   NewSemesterDialog,
   SemesterOptions,
+  TrashClassDialog,
 } from "./ClassLifecycle";
 import {
   ADMIN_SECTIONS,
@@ -1143,16 +1144,7 @@ function ClassWorkspace({ classInfo, onChange }) {
   }
 
   async function trashClass() {
-    const confirmed = await confirmer.confirm({
-      label: "Move to trash",
-      title: `Move ${classInfo.name} to the trash?`,
-      message:
-        "Everyone in the class loses access to it, its quizzes and its " +
-        "reports. Nothing is deleted: restore it any time from Classes → Trash.",
-      confirmLabel: "Move to trash",
-      cancelLabel: "Keep it",
-    });
-    if (confirmed && (await lifecycleAction("trash"))) {
+    if (await lifecycleAction("trash")) {
       navigate("/app/classes", { replace: true });
     }
   }
@@ -1193,6 +1185,27 @@ function ClassWorkspace({ classInfo, onChange }) {
     setTimeout(() => setCopied(false), 1600);
   }
 
+  if (classInfo.archived && !showAdminLayout) {
+    return (
+      <section className="cl-page is-archived" aria-labelledby="class-heading">
+        <p>
+          <Link to="/app/classes">← Classes</Link>
+        </p>
+        <h1 id="class-heading">{classInfo.name}</h1>
+        <p>
+          This class is archived. Only its organizers can open quizzes,
+          reports and grades.
+        </p>
+      </section>
+    );
+  }
+
+  const semesters = classInfo.semesters ?? [];
+  const heading =
+    semesters.length > 1 && classInfo.semester
+      ? classInfo.semester
+      : classInfo.name;
+
   return (
     <section
       className={`cl-page${adminView ? "" : " is-user-view"}${
@@ -1209,6 +1222,16 @@ function ClassWorkspace({ classInfo, onChange }) {
           error={manage.error}
           onCancel={() => setLifecycleDialog(null)}
           onConfirm={() => void archiveClass()}
+        />
+      )}
+
+      {lifecycleDialog === "trash" && (
+        <TrashClassDialog
+          classInfo={classInfo}
+          busy={manage.busy}
+          error={manage.error}
+          onCancel={() => setLifecycleDialog(null)}
+          onConfirm={() => void trashClass()}
         />
       )}
 
@@ -1318,7 +1341,22 @@ function ClassWorkspace({ classInfo, onChange }) {
             </form>
           ) : (
             <div className="cl-title-row">
-              <h1 id="class-heading">{classInfo.name}</h1>
+              <h1 id="class-heading">{heading}</h1>
+              {semesters.length > 1 && (
+                <nav className="cl-semester-toggle" aria-label="Semesters">
+                  {semesters.map((item) => (
+                    <Link
+                      key={item.class_id}
+                      to={`/app/classes/${item.class_id}`}
+                      aria-current={
+                        item.class_id === classInfo.id ? "page" : undefined
+                      }
+                    >
+                      {item.semester || "No semester"}
+                    </Link>
+                  ))}
+                </nav>
+              )}
               {adminView && !classInfo.archived && (
                 <button
                   type="button"
@@ -1365,22 +1403,22 @@ function ClassWorkspace({ classInfo, onChange }) {
               disabled={manage.busy}
               items={[
                 {
-                  label: "New semester…",
+                  label: "New semester",
                   onSelect: () => setLifecycleDialog("semester"),
                 },
                 {
-                  label: "Archive class…",
+                  label: "Archive class",
                   onSelect: () => setLifecycleDialog("archive"),
                   hidden: classInfo.archived,
                 },
                 {
-                  label: "Unarchive class…",
+                  label: "Unarchive class",
                   onSelect: () => void unarchiveClass(),
                   hidden: !classInfo.archived,
                 },
                 {
-                  label: "Move to trash…",
-                  onSelect: () => void trashClass(),
+                  label: "Move to trash",
+                  onSelect: () => setLifecycleDialog("trash"),
                   danger: true,
                 },
               ]}
@@ -1434,7 +1472,9 @@ function ClassWorkspace({ classInfo, onChange }) {
         />
       )}
 
-      <RequestError error={csv.error || manage.error} />
+      <RequestError
+        error={lifecycleDialog ? csv.error : csv.error || manage.error}
+      />
 
       <div className="cl-section-tabs">
         <div role="group" aria-label="Class sections">

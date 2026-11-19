@@ -1,3 +1,31 @@
+.qp .qh-more {
+  position: relative;
+}
+
+.qp .qh-more > summary {
+  cursor: pointer;
+  list-style: none;
+  background: transparent;
+  border: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.qp .qh-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.qp .qh-more button {
+  position: absolute;
+  right: 0;
+  z-index: 2;
+  white-space: nowrap;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+}
+
 .qp .qh {
   padding: clamp(16px, 3vw, 32px);
   background: var(--paper);

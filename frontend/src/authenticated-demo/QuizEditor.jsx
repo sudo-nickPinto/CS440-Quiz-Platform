@@ -1751,7 +1751,7 @@ export function QuizViewer() {
                   hidden: !canShare,
                 },
                 {
-                  label: "Move to trash…",
+                  label: "Move to trash",
                   onSelect: () => void trashQuiz(),
                   danger: true,
                 },

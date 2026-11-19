@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useRemembered } from "../authenticated-demo/remember";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { useAction, useApi } from "../authenticated-demo/rest";
 import { useClassesResource } from "./classResources";
 import { ClassCard, ResourceMessage } from "./ClassUI";
 import { SemesterOptions } from "./ClassLifecycle";
-import TrashPanel from "./TrashPanel";
 import { semesterFor } from "./semesters";
+import "./class-lifecycle.css";
 import { useAccount } from "../authenticated-demo/account";
 
 export default function ClassesPage() {
@@ -49,11 +49,10 @@ export default function ClassesPage() {
       item.name.toLowerCase().includes(query.trim().toLowerCase()),
     )
     .filter((item) => {
-      // Archived classes have their own (grayed-out) view.
       if (filter === "archived") return item.archived;
-      if (item.archived) return false;
-      if (filter === "managed") return item.canManage;
-      if (filter === "member") return !item.canManage;
+      if (filter === "active") return !item.archived;
+      if (filter === "managed") return item.canManage && !item.archived;
+      if (filter === "member") return !item.canManage && !item.archived;
       return true;
     })
     // Always alphabetical; the list is short and people scan it by name.
@@ -333,29 +332,47 @@ export default function ClassesPage() {
           />
         </label>
 
-        <label>
-          <span className="cl-sr">Filter classes</span>
-          <select
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            disabled={!ready}
-          >
-            <option value="all">All active classes</option>
-            <option value="managed">Classes I manage</option>
-            <option value="member">Classes I participate in</option>
-            <option value="archived">Archived classes</option>
-          </select>
-        </label>
+        <details className="cl-filter">
+          <summary>
+            {
+              {
+                all: "All classes",
+                active: "Active classes",
+                managed: "Classes I manage",
+                member: "Classes I participate in",
+                archived: "Archived classes",
+              }[filter]
+            }
+          </summary>
+          <div className="cl-filter-menu" role="listbox" aria-label="Filter classes">
+            {[
+              ["all", "All classes"],
+              ["active", "Active classes"],
+              ["managed", "Classes I manage"],
+              ["member", "Classes I participate in"],
+              ["archived", "Archived classes"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="option"
+                aria-selected={filter === value}
+                onClick={(event) => {
+                  setFilter(value);
+                  event.currentTarget.closest("details").open = false;
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </details>
 
-        <button
-          type="button"
-          className="cl-trash-toggle"
-          aria-expanded={panel === "trash"}
-          aria-controls="class-trash-panel"
-          onClick={() => togglePanel("trash")}
-        >
-          Trash
-        </button>
+        {canCreateClass && (
+          <Link className="cl-trash-toggle" to="/app/classes/trash">
+            Trash
+          </Link>
+        )}
 
         {/* Not shown, but read out when a search or filter changes the list. */}
         <span className="cl-sr" aria-live="polite">
@@ -364,10 +381,6 @@ export default function ClassesPage() {
             : ""}
         </span>
       </div>
-
-      {panel === "trash" && (
-        <TrashPanel onRestored={resource.reload} onClose={() => setPanel(null)} />
-      )}
 
       {!ready ? (
         <ResourceMessage resource={resource} />

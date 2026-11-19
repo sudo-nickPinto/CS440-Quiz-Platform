@@ -25,8 +25,8 @@ export function ArchivedBanner({ classInfo, busy, onUnarchive }) {
       <p>
         <b>Archived</b>{" "}
         {classInfo.semester ? `${classInfo.semester}. ` : ""}
-        Reports and grades are still here, but no one can join and no new
-        quizzes or sessions can start.
+        Students can see the class on their list, but only organizers can
+        open its quizzes, reports and grades. You can unarchive it later.
       </p>
 
       {classInfo.canManage && (
@@ -45,8 +45,8 @@ function useModal(ref) {
   }, [ref]);
 }
 
-// Archiving is easy to undo now, but it still stops the class code, so the
-// organizer types the class name first.
+// Archive is easy to undo. Moving a class to the trash is the step that
+// asks for the class name.
 export function ArchiveClassDialog({
   classInfo,
   busy,
@@ -55,11 +55,7 @@ export function ArchiveClassDialog({
   onConfirm,
 }) {
   const ref = useRef(null);
-  const [typed, setTyped] = useState("");
   useModal(ref);
-
-  const matches =
-    typed.trim().toLowerCase() === classInfo.name.trim().toLowerCase();
 
   return (
     <dialog
@@ -79,30 +75,15 @@ export function ArchiveClassDialog({
         className="qb-confirm-body"
         onSubmit={(event) => {
           event.preventDefault();
-          if (matches) onConfirm();
+          onConfirm();
         }}
       >
         <h2 id="cl-archive-title">Archive {classInfo.name}?</h2>
         <p>
           The class code stops working and no new quizzes or sessions can
-          start. Reports and grades stay available, and you can unarchive the
-          class later from More.
+          start. Students can still see the class, but only organizers can
+          open quizzes, reports and grades. You can unarchive it later.
         </p>
-
-        <label className="cl-confirm-field">
-          <span>
-            Type <b>{classInfo.name}</b> to confirm
-          </span>
-          <input
-            type="text"
-            value={typed}
-            onChange={(event) => setTyped(event.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            autoFocus
-            disabled={busy}
-          />
-        </label>
 
         {error && (
           <p className="cl-feedback cl-error" role="alert">
@@ -119,7 +100,7 @@ export function ArchiveClassDialog({
           >
             Keep it active
           </button>
-          <button type="submit" className="qb-btn" disabled={busy || !matches}>
+          <button type="submit" className="qb-btn" disabled={busy}>
             {busy ? "Archiving…" : "Archive class"}
           </button>
         </div>
@@ -128,25 +109,27 @@ export function ArchiveClassDialog({
   );
 }
 
-// The same course again in another semester: a separate class with its own
-// code, students and grades. The old class keeps its history.
+// Another empty semester of this same course. The name stays; only the
+// semester is chosen.
 export function NewSemesterDialog({ classInfo, onClose }) {
   const ref = useRef(null);
   const api = useApi();
   const action = useAction();
   const navigate = useNavigate();
-  const [name, setName] = useState(classInfo.name);
-  const [semester, setSemester] = useState(() =>
-    nextSemester(classInfo.semester),
-  );
+  const options = semesterOptions();
+  const suggested = nextSemester(classInfo.semester);
+  const [semester, setSemester] = useState(suggested);
+  const [custom, setCustom] = useState(false);
   useModal(ref);
 
   async function create(event) {
     event.preventDefault();
+    const label = semester.trim();
+    if (!label) return;
     const created = await action.run(() =>
-      api("/classes", {
+      api(`/classes/${classInfo.id}/semesters`, {
         method: "POST",
-        body: JSON.stringify({ name: name.trim(), semester: semester.trim() }),
+        body: JSON.stringify({ semester: label }),
       }),
     );
     if (created) navigate(`/app/classes/${created.class_id}`);
@@ -169,37 +152,47 @@ export function NewSemesterDialog({ classInfo, onClose }) {
       <form className="qb-confirm-body" onSubmit={create}>
         <h2 id="cl-semester-title">Start a new semester</h2>
         <p>
-          A new class with its own code, students and grades.{" "}
-          {classInfo.name}
-          {classInfo.semester ? ` (${classInfo.semester})` : ""} keeps its
-          history; archive it when its semester is over.
+          {classInfo.name} gets another semester with its own code. It starts
+          empty: no students and no quizzes. This semester keeps its history.
         </p>
 
         <label className="cl-confirm-field">
-          <span>Class name</span>
-          <input
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            maxLength={100}
-            required
-            disabled={action.busy}
-          />
-        </label>
-
-        <label className="cl-confirm-field">
           <span>Semester</span>
-          <input
-            type="text"
-            list="cl-new-semester-options"
-            value={semester}
-            onChange={(event) => setSemester(event.target.value)}
-            maxLength={30}
-            placeholder="Spring 2027"
+          <select
+            value={custom ? "custom" : semester}
             disabled={action.busy}
-          />
+            onChange={(event) => {
+              if (event.target.value === "custom") {
+                setCustom(true);
+                setSemester("");
+              } else {
+                setCustom(false);
+                setSemester(event.target.value);
+              }
+            }}
+          >
+            {[...new Set([suggested, ...options])].map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+            <option value="custom">Other…</option>
+          </select>
         </label>
-        <SemesterOptions id="cl-new-semester-options" />
+        {custom && (
+          <label className="cl-confirm-field">
+            <span>Custom semester</span>
+            <input
+              type="text"
+              value={semester}
+              onChange={(event) => setSemester(event.target.value)}
+              maxLength={30}
+              required
+              autoFocus
+              disabled={action.busy}
+            />
+          </label>
+        )}
 
         {action.error && (
           <p className="cl-feedback cl-error" role="alert">
@@ -219,9 +212,78 @@ export function NewSemesterDialog({ classInfo, onClose }) {
           <button
             type="submit"
             className="qb-btn"
-            disabled={action.busy || !name.trim()}
+            disabled={action.busy || !semester.trim()}
           >
-            {action.busy ? "Creating…" : "Create class"}
+            {action.busy ? "Creating…" : "Start semester"}
+          </button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+export function TrashClassDialog({ classInfo, busy, error, onCancel, onConfirm }) {
+  const ref = useRef(null);
+  const [typed, setTyped] = useState("");
+  useModal(ref);
+  const matches =
+    typed.trim().toLowerCase() === classInfo.name.trim().toLowerCase();
+
+  return (
+    <dialog
+      ref={ref}
+      className="qb-confirm cl-lifecycle-dialog"
+      aria-labelledby="cl-trash-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!busy) onCancel();
+      }}
+    >
+      <div className="qb-confirm-top">
+        <span>Move to trash</span>
+      </div>
+      <form
+        className="qb-confirm-body"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (matches) onConfirm();
+        }}
+      >
+        <h2 id="cl-trash-title">Move {classInfo.name} to the trash?</h2>
+        <p>
+          Everyone loses access until you restore it. After 30 days it is
+          deleted permanently and cannot be restored.
+        </p>
+        <label className="cl-confirm-field">
+          <span>
+            Type <b>{classInfo.name}</b> to confirm
+          </span>
+          <input
+            type="text"
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            autoFocus
+            disabled={busy}
+          />
+        </label>
+        {error && (
+          <p className="cl-feedback cl-error" role="alert">
+            {error.message}
+          </p>
+        )}
+        <div className="qb-confirm-actions">
+          <button
+            type="button"
+            className="qb-btn qb-btn-paper"
+            disabled={busy}
+            onClick={onCancel}
+          >
+            Keep it
+          </button>
+          <button type="submit" className="qb-btn" disabled={busy || !matches}>
+            {busy ? "Moving…" : "Move to trash"}
           </button>
         </div>
       </form>

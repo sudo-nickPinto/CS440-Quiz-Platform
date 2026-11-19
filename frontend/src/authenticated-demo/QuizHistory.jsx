@@ -196,15 +196,18 @@ function HistoryList({ endpoint, host, backTo }) {
                   )}
 
                   {host && (
-                    <button
-                      type="button"
-                      className="qh-trash"
-                      disabled={action.busy}
-                      aria-label={`Delete session ${session.session_id}`}
-                      onClick={() => void trashSession(session)}
-                    >
-                      Delete
-                    </button>
+                    <details className="qh-more">
+                      <summary aria-label={`Options for session ${session.session_id}`}>
+                        ⋯
+                      </summary>
+                      <button
+                        type="button"
+                        disabled={action.busy}
+                        onClick={() => void trashSession(session)}
+                      >
+                        Move to trash
+                      </button>
+                    </details>
                   )}
                 </article>
               );

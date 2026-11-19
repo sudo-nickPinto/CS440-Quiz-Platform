@@ -10,6 +10,7 @@ import {
 } from "react-router";
 import Avatar from "../avatars/Avatar";
 import ClassesPage from "../classes/ClassesPage";
+import TrashPage from "../classes/TrashPage";
 import ClassPage from "../classes/ClassPage";
 import JoinClassPage from "../classes/JoinClassPage";
 import SubmissionPreviewPage from "../classes/SubmissionPreview";
@@ -184,6 +185,7 @@ export default function PreviewApp({ onSignOut }) {
           <main id="app-main" className="qp-frame" ref={main} tabIndex={-1}>
             <Routes>
               <Route path="classes" element={<ClassesPage />} />
+              <Route path="classes/trash" element={<TrashPage />} />
 
               <Route
                 path="classes/:classId"
