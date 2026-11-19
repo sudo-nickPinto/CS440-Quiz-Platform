@@ -369,14 +369,16 @@ def _add(
     invited_by_id: int | None,
     now: datetime,
 ) -> ClassMembership:
-    """Make the account a student. An organizer chose them (roster or
-    + Add student), so there is no invitation to accept."""
+    """Make the account a student because of a roster row. The organizer
+    chose them, so there is no invitation to accept. ``joined_via`` is
+    ROSTER, so a corrected roster email can later tell this access apart
+    from an accepted invitation or "+ Add student" (both INVITE)."""
     if membership is None:
         membership = ClassMembership(class_id=class_id, account_id=account_id)
         db.add(membership)
     membership.role = ClassRole.MEMBER
     membership.status = MembershipStatus.ACTIVE
-    membership.joined_via = JoinedVia.INVITE
+    membership.joined_via = JoinedVia.ROSTER
     membership.invited_by_id = invited_by_id
     membership.decided_by_id = invited_by_id
     membership.decided_at = now
@@ -397,13 +399,14 @@ def _note_moved_link(row: RosterImportRow, previous: Account | None) -> None:
 
 
 def _removable(membership: ClassMembership | None) -> bool:
-    """Access a roster row could have given: an active student an organizer
-    added (roster or + Add student). Code joins and organizers are kept."""
+    """Access a roster row gave: an active student whose membership a roster
+    import created (joined_via ROSTER). Accepted invitations, "+ Add
+    student", code joins and organizers are kept (review of #173)."""
     return (
         membership is not None
         and membership.status == MembershipStatus.ACTIVE
         and membership.role == ClassRole.MEMBER
-        and membership.joined_via == JoinedVia.INVITE
+        and membership.joined_via == JoinedVia.ROSTER
     )
 
 

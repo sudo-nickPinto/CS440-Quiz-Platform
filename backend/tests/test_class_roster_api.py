@@ -320,7 +320,8 @@ def test_email_import_adds_matches_and_saves_the_rest(roster_client) -> None:
         stored = membership(client, class_id, identities[name].account_id)
         # Added straight away: no invitation to accept.
         assert stored.status == MembershipStatus.ACTIVE
-        assert stored.joined_via == JoinedVia.INVITE
+        # Marked as added by the roster, so a corrected email can undo it.
+        assert stored.joined_via == JoinedVia.ROSTER
     assert membership(client, class_id, identities["jae_a"].account_id) is None
 
     sent = {message.to: message for message in outbox(client)}
@@ -466,6 +467,53 @@ def test_corrected_email_dry_run_previews_the_removal(roster_client) -> None:
         MembershipStatus.ACTIVE
     )
     assert membership(client, class_id, identities["lin"].account_id) is None
+
+
+def test_corrected_email_keeps_a_student_who_accepted_an_invitation(
+    roster_client,
+) -> None:
+    """Review of #173: invite Maya, she accepts, a roster row then matches
+    her email, and the organizer corrects that row to Lin's email. Maya is
+    in the class because she accepted the invitation, not because of the
+    row, so confirming removals must leave her ACTIVE."""
+    client, identities, class_id = roster_client
+    invited = client.post(
+        f"/classes/{class_id}/invites", json={"email": PEOPLE["maya"][0]}
+    )
+    assert invited.status_code == 201
+    act_as(client, identities["maya"])
+    assert client.post(f"/classes/{class_id}/invite/accept").status_code == 200
+    act_as(client, identities["organizer"])
+
+    first = upload(client, class_id, MAYA_ROW).json()
+    assert first["rows"][0]["outcome"] == "already_in_class"
+
+    body = upload(client, class_id, TO_LIN, confirm_removals=True).json()
+
+    assert body["removals"] == []
+    assert "joined the class another way" in body["rows"][0]["message"]
+    kept = membership(client, class_id, identities["maya"].account_id)
+    assert kept.status == MembershipStatus.ACTIVE
+    assert kept.joined_via == JoinedVia.INVITE
+    assert membership(client, class_id, identities["lin"].account_id).status == (
+        MembershipStatus.ACTIVE
+    )
+
+
+def test_corrected_email_keeps_someone_added_with_add_student(roster_client) -> None:
+    client, identities, class_id = roster_client
+    added = client.post(
+        f"/classes/{class_id}/students", json={"email": PEOPLE["maya"][0]}
+    )
+    assert added.status_code == 201
+    upload(client, class_id, MAYA_ROW)
+
+    body = upload(client, class_id, TO_LIN, confirm_removals=True).json()
+
+    assert body["removals"] == []
+    assert membership(client, class_id, identities["maya"].account_id).status == (
+        MembershipStatus.ACTIVE
+    )
 
 
 def test_corrected_email_keeps_someone_who_joined_another_way(roster_client) -> None:
