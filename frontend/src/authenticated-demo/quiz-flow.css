@@ -337,6 +337,18 @@
   padding: 9px 18px;
 }
 
+.qp .qv-actions .qv-options-menu,
+.qp .qv-actions .qv-options-menu[open] {
+  position: relative;
+  align-self: center;
+}
+
+.qp .qv-actions .qv-options-menu .ui-row-options {
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(260px, 78vw);
+}
+
 /* Header: the title with the status pill beside it, the description
    under them; kept slim so the Add collaborator cell stays small. */
 .qp .qv-titlebox {
@@ -485,6 +497,11 @@
     display: flex;
     flex: 1 1 140px;
     justify-content: center;
+  }
+
+  .qp .qv-actions .qv-options-menu {
+    justify-self: end;
+    align-self: stretch;
   }
 }
 

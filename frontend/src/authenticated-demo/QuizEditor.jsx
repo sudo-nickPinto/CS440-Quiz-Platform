@@ -56,6 +56,7 @@ import QuizCollaboratorDialog, {
 } from "./QuizCollaboratorDialog";
 import { QuizFlowButton, QuizFlowTrack } from "./QuizFlowPanel";
 import QuestionBankDialog from "./QuestionBankDialog";
+import OptionsMenu from "./OptionsMenu";
 import "./quiz-flow.css";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -1732,43 +1733,12 @@ export function QuizViewer() {
         <QuizFlowTrack flow={flow} />
 
         <div className="qv-actions">
-          {quiz.class_id && (
-            <button
-              type="button"
-              className="qb-btn qb-btn-paper"
-              disabled={action.busy}
-              onClick={() => void duplicateQuiz()}
-            >
-              {action.busy ? "Copying…" : "Duplicate quiz"}
-            </button>
-          )}
-
           {quiz.can_edit && quiz.status !== "ARCHIVED" && (
             <Link
               className="qb-btn qb-btn-paper"
               to={`/app/quizzes/${quiz.quiz_id}/edit`}
             >
               Edit quiz
-            </Link>
-          )}
-
-          {canShare && (
-            <button
-              type="button"
-              className="qb-btn qb-btn-paper"
-              disabled={action.busy}
-              onClick={() => void archiveQuiz()}
-            >
-              Archive
-            </button>
-          )}
-
-          {mine && (
-            <Link
-              className="qb-btn qb-btn-paper"
-              to={`/app/quizzes/${quiz.quiz_id}/reports`}
-            >
-              Hosting history
             </Link>
           )}
 
@@ -1811,6 +1781,35 @@ export function QuizViewer() {
                 </Link>
               </div>
             )}
+
+          {(quiz.class_id || mine || canShare) && (
+            <OptionsMenu className="qv-options-menu">
+              {mine && (
+                <Link to={`/app/quizzes/${quiz.quiz_id}/reports`}>
+                  Hosting history
+                </Link>
+              )}
+              {quiz.class_id && (
+                <button
+                  type="button"
+                  disabled={action.busy}
+                  onClick={() => void duplicateQuiz()}
+                >
+                  {action.busy ? "Duplicating…" : "Duplicate quiz"}
+                </button>
+              )}
+              {canShare && (
+                <button
+                  type="button"
+                  className="ui-danger"
+                  disabled={action.busy}
+                  onClick={() => void archiveQuiz()}
+                >
+                  Archive quiz
+                </button>
+              )}
+            </OptionsMenu>
+          )}
         </div>
       </div>
 
