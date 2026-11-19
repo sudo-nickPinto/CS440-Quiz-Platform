@@ -71,7 +71,7 @@ def _load_context(
     if lock:
         session_query = session_query.with_for_update()
     session = db.scalar(session_query)
-    if session is None:
+    if session is None or session.deleted_at is not None:
         raise APIError(404, "session_not_found", "Session not found.")
     if session.status != LiveSessionStatus.COMPLETED:
         raise APIError(

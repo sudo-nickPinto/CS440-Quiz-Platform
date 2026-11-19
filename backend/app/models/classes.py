@@ -66,6 +66,14 @@ class Class(Base):
 
     class_id: Mapped[int] = mapped_column(INTEGER(unsigned=True), primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Migration 0017: "Fall 2026". Each semester of a course is its own class;
+    # NULL on classes made before semesters existed.
+    semester: Mapped[str | None] = mapped_column(String(30))
+    # Migration 0019: later semesters point at the first class of the course.
+    parent_class_id: Mapped[int | None] = mapped_column(
+        INTEGER(unsigned=True),
+        ForeignKey("class.class_id", ondelete="RESTRICT"),
+    )
     created_by_id: Mapped[int] = mapped_column(
         INTEGER(unsigned=True),
         ForeignKey("account.account_id", ondelete="RESTRICT"),
@@ -77,6 +85,10 @@ class Class(Base):
         Boolean, nullable=False, default=True, server_default=text("TRUE")
     )
     archived_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
+    # Migration 0017: set while the class is in the trash (services/trash.py).
+    deleted_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
+    # Migration 0019: set once the trash entry is retired and cannot be restored.
+    purged_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
     created_at: Mapped[datetime] = mapped_column(
         DATETIME(fsp=3), nullable=False, server_default=func.now()
     )

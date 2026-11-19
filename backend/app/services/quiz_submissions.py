@@ -16,7 +16,11 @@ from app.schemas.quiz_submission import (
     QuizSubmissionDecision,
     QuizSubmissionResponse,
 )
-from app.services.class_authorization import ClassAccess, require_class_member
+from app.services.class_authorization import (
+    ClassAccess,
+    require_class_content,
+    require_class_member,
+)
 
 
 def _now() -> datetime:
@@ -62,7 +66,10 @@ def _version_and_quiz(
     row = db.execute(
         select(QuizVersion, Quiz)
         .join(Quiz, Quiz.quiz_id == QuizVersion.quiz_id)
-        .where(QuizVersion.quiz_version_id == quiz_version_id)
+        .where(
+            QuizVersion.quiz_version_id == quiz_version_id,
+            Quiz.deleted_at.is_(None),
+        )
     ).one_or_none()
     if row is None:
         return None
@@ -125,7 +132,7 @@ def create_quiz_submission(
     class_id: int,
     payload: QuizSubmissionCreate,
 ) -> QuizSubmissionResponse:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     _require_unarchived_class(access.class_)
     version, quiz = _load_visible_version(
         db, account, class_id, payload.quiz_version_id
@@ -165,7 +172,7 @@ def list_quiz_submissions(
     account: CurrentAccount,
     class_id: int,
 ) -> list[QuizSubmissionResponse]:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     statement = select(QuizSubmission).where(QuizSubmission.class_id == class_id)
     if not access.is_organizer:
         statement = statement.where(
@@ -230,7 +237,7 @@ def decide_quiz_submission(
     submission_id: int,
     payload: QuizSubmissionDecision,
 ) -> QuizSubmissionResponse:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     submission = _load_visible_submission(
         db, account, access, class_id, submission_id
     )
@@ -378,6 +385,7 @@ def _approved_versions_statement(class_id: int):
             QuizVersion.published_at.is_not(None),
             Quiz.class_id == class_id,
             Quiz.status != QuizStatus.ARCHIVED,
+            Quiz.deleted_at.is_(None),
             ~newer_published,
         )
     )
@@ -388,7 +396,7 @@ def list_approved_quizzes(
     account: CurrentAccount,
     class_id: int,
 ) -> list[ApprovedQuizResponse]:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     _require_unarchived_class(access.class_)
     rows = db.execute(
         _approved_versions_statement(class_id).order_by(
