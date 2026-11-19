@@ -106,6 +106,8 @@ class LiveSession(Base):
     # Migration 0017: set while the session is in the host's trash. Trashed
     # sessions are left out of hosting history and class reports and grades.
     deleted_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
+    # Migration 0019: set once the trash entry is retired and cannot be restored.
+    purged_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
 
     participants: Mapped[list[SessionParticipant]] = relationship(
         back_populates="session", passive_deletes=True

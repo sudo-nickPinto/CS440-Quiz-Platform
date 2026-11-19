@@ -83,6 +83,8 @@ class Quiz(Base):
     )
     # Migration 0017: set while the quiz is in the trash (services/trash.py).
     deleted_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
+    # Migration 0019: set once the trash entry is retired and cannot be restored.
+    purged_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=3))
     created_at: Mapped[datetime] = mapped_column(
         DATETIME(fsp=3), nullable=False, server_default=func.now()
     )

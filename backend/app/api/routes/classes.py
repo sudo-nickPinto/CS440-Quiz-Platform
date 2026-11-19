@@ -3,10 +3,17 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
-from app.schemas.classes import ClassCreate, ClassJoin, ClassResponse, ClassUpdate
+from app.schemas.classes import (
+    ClassCreate,
+    ClassJoin,
+    ClassResponse,
+    ClassSemesterCreate,
+    ClassUpdate,
+)
 from app.services.classes import (
     archive_class,
     create_class,
+    create_semester,
     get_class,
     join_class,
     leave_class,
@@ -81,6 +88,20 @@ def archive_class_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> ClassResponse:
     return archive_class(db, account, class_id)
+
+
+@router.post(
+    "/{class_id}/semesters",
+    response_model=ClassResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_semester_route(
+    class_id: int,
+    payload: ClassSemesterCreate,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> ClassResponse:
+    return create_semester(db, account, class_id, payload)
 
 
 @router.post("/{class_id}/unarchive", response_model=ClassResponse)

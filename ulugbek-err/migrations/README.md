@@ -24,6 +24,7 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0016_class_roster` | Adds `REQUESTED` and `REJECTED` to `class_membership.status` (joining with the class code now waits for an organizer) and the `class_roster_entry` table for roster files imported by organizers |
 | `0017_trash_and_semester` | Adds `deleted_at` to `class`, `quiz` and `live_session` for the trash (set while something is in the trash; nothing is really deleted), and `class.semester` ("Fall 2026") so the same course can run again each semester as its own class |
 | `0018_roster_membership_source` | Adds `ROSTER` to `class_membership.joined_via` for students a roster import added, so a corrected roster email only removes access the roster gave (not an accepted invitation) |
+| `0019_trash_expiry_and_semester_family` | Adds `purged_at` so a trashed class, quiz or session can be retired (by hand, or 30 days after `deleted_at`) and `class.parent_class_id` so later semesters of a course stay linked |
 
 Each migration comes in two files:
 

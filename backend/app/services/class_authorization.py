@@ -86,6 +86,26 @@ def require_class_member(
     )
 
 
+def require_class_content(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+) -> ClassAccess:
+    """Like require_class_member, but an archived class is organizers-only.
+
+    Students keep the class on their list. Quizzes, reports, the dashboard
+    and old sessions stay closed until an organizer unarchives it.
+    """
+    access = require_class_member(db, account, class_id)
+    if access.class_.archived_at is not None and not access.is_organizer:
+        raise APIError(
+            403,
+            "class_archived",
+            "This class is archived. Only its organizers can open it.",
+        )
+    return access
+
+
 def require_class_organizer(
     db: Session,
     account: CurrentAccount,

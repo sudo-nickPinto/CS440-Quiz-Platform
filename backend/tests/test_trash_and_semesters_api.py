@@ -1,7 +1,7 @@
 """Semesters, unarchiving, and the trash (migration 0017)."""
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -519,3 +519,86 @@ def test_only_the_host_trashes_a_session(lifecycle) -> None:
         response = client.post(f"/sessions/{session_id}/trash")
         assert response.status_code == 404, name
         assert client.get("/trash").json()["sessions"] == []
+
+
+def test_students_cannot_open_an_archived_class(lifecycle) -> None:
+    client, identities, class_id = lifecycle
+    create_quiz(client, class_id)
+    assert client.post(f"/classes/{class_id}/archive").status_code == 200
+
+    act_as(client, identities["amy"])
+    assert client.get(f"/classes/{class_id}").status_code == 200
+    for path in (
+        f"/classes/{class_id}/quizzes",
+        f"/classes/{class_id}/dashboard",
+    ):
+        blocked = client.get(path)
+        assert blocked.status_code == 403, path
+        assert error_code(blocked) == "class_archived"
+
+    act_as(client, identities["prof"])
+    assert client.get(f"/classes/{class_id}/quizzes").status_code == 200
+
+
+def test_new_semester_is_empty_and_linked_to_the_course(lifecycle) -> None:
+    client, identities, class_id = lifecycle
+    create_quiz(client, class_id)
+
+    created = client.post(
+        f"/classes/{class_id}/semesters", json={"semester": "Spring 2027"}
+    )
+    assert created.status_code == 201, created.json()
+    body = created.json()
+    assert body["name"] == "CS 440"
+    assert body["semester"] == "Spring 2027"
+    assert body["parent_class_id"] == class_id
+    assert body["class_id"] != class_id
+    assert {item["class_id"] for item in body["semesters"]} == {
+        class_id,
+        body["class_id"],
+    }
+    assert client.get(f"/classes/{body['class_id']}/quizzes").json()["items"] == []
+
+    again = client.post(
+        f"/classes/{class_id}/semesters", json={"semester": "spring 2027"}
+    )
+    assert again.status_code == 409
+    assert error_code(again) == "semester_exists"
+
+    act_as(client, identities["amy"])
+    visible = {item["class_id"] for item in client.get("/classes").json()}
+    assert body["class_id"] not in visible
+    assert class_id in visible
+
+
+def test_trash_shows_days_left_and_expires_after_30_days(lifecycle) -> None:
+    client, identities, class_id = lifecycle
+    quiz_id = create_quiz(client, class_id)
+    assert client.post(f"/quizzes/{quiz_id}/trash").status_code == 204
+
+    fresh = client.get("/trash").json()["quizzes"]
+    assert fresh[0]["days_left"] == 30
+    assert "expires_at" in fresh[0]
+
+    with client.app.state.database.session_factory() as db:
+        from app.models.quiz import Quiz
+
+        quiz = db.get(Quiz, quiz_id)
+        quiz.deleted_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=31)
+        db.commit()
+
+    assert client.get("/trash").json()["quizzes"] == []
+    gone = client.post(f"/quizzes/{quiz_id}/restore")
+    assert gone.status_code == 404
+    assert error_code(gone) == "quiz_not_found"
+
+
+def test_organizer_can_delete_a_trashed_class_permanently(lifecycle) -> None:
+    client, identities, class_id = lifecycle
+    assert client.post(f"/classes/{class_id}/trash").status_code == 204
+    purged = client.post("/trash/purge", json={"class_ids": [class_id]})
+    assert purged.status_code == 204, purged.json()
+    assert client.get("/trash").json()["classes"] == []
+    restore = client.post(f"/classes/{class_id}/restore")
+    assert restore.status_code == 404
+    assert error_code(restore) == "class_not_found"
