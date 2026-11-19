@@ -40,8 +40,11 @@ import {
 import { ClassStudents } from "./ClassManagement";
 import { AddStudentDialog, JoinRequestsTable } from "./StudentRoster";
 import {
+  CLASS_EVENTS,
+  SUBMISSION_EVENTS,
   useClassDashboard,
   useClassQuizzes,
+  useClassUpdates,
   useClassSubmissions,
   useClassResource,
   useClassSessions,
@@ -595,6 +598,8 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
     isValid: (key) => key in MY_QUIZ_SORTS,
   });
   const resource = useMyClassQuizzes(classInfo.id, page, sortKey);
+  // An organizer approving or rejecting changes the status shown here.
+  useClassUpdates(classInfo.id, SUBMISSION_EVENTS, resource.refresh);
   const pending = reportResource(resource);
   const canSubmit =
     classInfo.membershipStatus === "ACTIVE" && !classInfo.archived;
@@ -816,6 +821,8 @@ function SubmissionsTable({ classInfo, onChange, switcher = null }) {
     isValid: (key) => key in SUBMISSION_FILTERS,
   });
   const resource = useClassSubmissions(classInfo.id, page, sortKey, status);
+  // New requests, withdrawals and other organizers' decisions.
+  useClassUpdates(classInfo.id, SUBMISSION_EVENTS, resource.refresh);
   const pending = reportResource(resource);
 
   if (pending) return pending;
@@ -1014,6 +1021,8 @@ function ClassWorkspace({ classInfo, onChange }) {
   const [copied, setCopied] = useState(false);
   const csv = useFileDownload();
   const dashboard = useClassDashboard(classInfo.id);
+  // The Approvals badge and the class's counts and live sessions.
+  useClassUpdates(classInfo.id, CLASS_EVENTS, dashboard.refresh);
   const studentCount =
     dashboard.status === "ready" ? dashboard.data.student_count : null;
 

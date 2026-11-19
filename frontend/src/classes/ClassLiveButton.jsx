@@ -1,8 +1,12 @@
-import { useEffect } from "react";
 import { useNavigate } from "react-router";
 
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import RequestError from "../authenticated-demo/RequestError";
+import {
+  useCatchUp,
+  useNotifications,
+} from "../authenticated-demo/notifications";
+import { joinSession } from "../authenticated-demo/liveSessions";
 import { liveState } from "./classHelpers";
 
 const POLL_MS = 5000;
@@ -19,13 +23,16 @@ export default function ClassLiveButton({ classId }) {
   const api = useApi();
   const action = useAction();
   const navigate = useNavigate();
-  const { reload } = sessions;
+  const { reload, refresh } = sessions;
+
+  // A lobby opening in this class shows its button right away; the poll
+  // still covers sessions ending and moving to the next question.
+  useNotifications("session_live", (event) => {
+    if (Number(event?.class_id) === Number(classId)) refresh();
+  });
 
   // Check again as soon as the tab comes back, instead of waiting for a poll.
-  useEffect(() => {
-    window.addEventListener("focus", reload);
-    return () => window.removeEventListener("focus", reload);
-  }, [reload]);
+  useCatchUp(refresh);
 
   async function open(session) {
     if (session.left) return;
@@ -34,17 +41,10 @@ export default function ClassLiveButton({ classId }) {
       return;
     }
     if (!session.joined) {
-      const joined = await action.run(async () => {
-        try {
-          return await api(`/sessions/${session.session_id}/join`, {
-            method: "POST",
-          });
-        } catch (error) {
-          // Joined in another tab since the last poll: go straight in.
-          if (error.code === "session_already_joined") return true;
-          throw error;
-        }
-      });
+      // Joined in another tab since the last poll counts as joined.
+      const joined = await action.run(() =>
+        joinSession(api, session.session_id),
+      );
       if (!joined) return;
     }
     navigate(`/app/play/${session.session_id}`);

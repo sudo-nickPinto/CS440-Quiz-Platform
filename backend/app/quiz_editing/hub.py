@@ -6,9 +6,9 @@ from typing import Any, TypeVar
 
 from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel
-from starlette.concurrency import run_in_threadpool
 
 from app.auth import CurrentAccount
+from app.database import run_in_db_session
 from app.errors import APIError
 from app.live.protocol import CloseCode, encode
 
@@ -37,11 +37,7 @@ class QuizEditHub:
         self._quizzes: dict[int, set[QuizEditConnection]] = {}
 
     async def run_db(self, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
-        def call() -> T:
-            with self._app.state.database.session_factory() as db:
-                return fn(db, *args, **kwargs)
-
-        return await run_in_threadpool(call)
+        return await run_in_db_session(self._app, fn, *args, **kwargs)
 
     async def connect(self, connection: QuizEditConnection) -> None:
         self._quizzes.setdefault(connection.quiz_id, set()).add(connection)

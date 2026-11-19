@@ -10,6 +10,7 @@ from app.api.routes.faculty import router as faculty_router
 from app.api.routes.health import router as health_router
 from app.api.routes.live import router as live_router
 from app.api.routes.me import router as me_router
+from app.api.routes.notifications_live import router as notifications_live_router
 from app.api.routes.quizzes import router as quizzes_router
 from app.api.routes.quiz_submissions import router as quiz_submissions_router
 from app.api.routes.quiz_editing_live import router as quiz_editing_live_router
@@ -30,6 +31,7 @@ api_router.include_router(faculty_router)
 api_router.include_router(health_router)
 api_router.include_router(live_router)
 api_router.include_router(me_router)
+api_router.include_router(notifications_live_router)
 api_router.include_router(quizzes_router)
 api_router.include_router(quiz_submissions_router)
 api_router.include_router(quiz_editing_live_router)

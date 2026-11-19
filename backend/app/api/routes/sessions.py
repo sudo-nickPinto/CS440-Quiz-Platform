@@ -10,6 +10,7 @@ from app.services.session_report import (
 
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
+from app.notifications.events import notify_session_live
 from app.schemas.results import (
     FinalResults,
     ParticipantFinalResults,
@@ -45,14 +46,24 @@ router = APIRouter(tags=["sessions"])
     response_model=SessionResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_session_route(
+async def create_session_route(
     class_id: int,
     quiz_id: int,
-    db: Session = Depends(get_db),
+    request: Request,
+    background_tasks: BackgroundTasks,
     account: CurrentAccount = Depends(get_active_account),
 ) -> SessionResponse:
     # Every session belongs to a class; there are no open sessions.
-    return create_session(db, account, class_id, quiz_id)
+    hub = request.app.state.notification_hub
+    result = await hub.run_db(create_session, account, class_id, quiz_id)
+    # Runs after the response is sent; failures are logged, never raised.
+    background_tasks.add_task(
+        notify_session_live,
+        hub,
+        session_id=result.session_id,
+        actor_account_id=account.account_id,
+    )
+    return result
 
 
 @router.post(
