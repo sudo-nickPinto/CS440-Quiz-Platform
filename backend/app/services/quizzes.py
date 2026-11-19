@@ -191,7 +191,7 @@ def _require_active_membership(
         and not (account.is_admin and membership.role == ClassRole.ORGANIZER)
     ):
         raise APIError(
-            403,
+            409,
             "class_archived",
             "This class is archived. Only its organizers can open it.",
         )

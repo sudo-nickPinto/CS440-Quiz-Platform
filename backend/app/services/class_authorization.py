@@ -99,7 +99,7 @@ def require_class_content(
     access = require_class_member(db, account, class_id)
     if access.class_.archived_at is not None and not access.is_organizer:
         raise APIError(
-            403,
+            409,
             "class_archived",
             "This class is archived. Only its organizers can open it.",
         )
