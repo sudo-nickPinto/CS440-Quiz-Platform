@@ -533,7 +533,7 @@ def test_students_cannot_open_an_archived_class(lifecycle) -> None:
         f"/classes/{class_id}/dashboard",
     ):
         blocked = client.get(path)
-        assert blocked.status_code == 403, path
+        assert blocked.status_code == 409, path
         assert error_code(blocked) == "class_archived"
 
     act_as(client, identities["prof"])

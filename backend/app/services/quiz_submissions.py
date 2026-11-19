@@ -16,7 +16,11 @@ from app.schemas.quiz_submission import (
     QuizSubmissionDecision,
     QuizSubmissionResponse,
 )
-from app.services.class_authorization import ClassAccess, require_class_content
+from app.services.class_authorization import (
+    ClassAccess,
+    require_class_content,
+    require_class_member,
+)
 
 
 def _now() -> datetime:
@@ -308,7 +312,7 @@ def withdraw_quiz_submission(
     class_id: int,
     submission_id: int,
 ) -> None:
-    access = require_class_content(db, account, class_id)
+    access = require_class_member(db, account, class_id)
     submission = _load_visible_submission(
         db, account, access, class_id, submission_id
     )
