@@ -259,6 +259,7 @@ Collaborator management is owner-only:
 
 ```text
 GET    /classes/{class_id}/quizzes/{quiz_id}/collaborators
+GET    /classes/{class_id}/quizzes/{quiz_id}/collaborator-suggestions?q=...
 POST   /classes/{class_id}/quizzes/{quiz_id}/collaborators
 DELETE /classes/{class_id}/quizzes/{quiz_id}/collaborators/{account_id}
 ```
@@ -271,6 +272,14 @@ Every share and revocation is preserved in an append-only audit table, while
 revocation immediately blocks future draft reads and writes. Errors include `not_class_member`,
 `already_quiz_collaborator`, `quiz_owner_cannot_collaborate`,
 `collaborator_management_denied`, and `quiz_collaborator_not_found`.
+
+`collaborator-suggestions` powers the Add collaborator search, which updates
+as the owner types. It returns up to 8 active members of the quiz's class
+(never the owner, never anyone outside the class) whose email, first name,
+last name or a word of their name starts with `q`, as
+`{ account_id, email, display_name, is_collaborator }`. Fewer than two
+characters returns `[]`. Only the class's members are searchable, and only
+the quiz owner can call it.
 
 ## Quiz submissions and approvals
 

@@ -7,6 +7,7 @@ from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
 from app.schemas.pagination import SortOrder
 from app.schemas.quiz import (
+    CollaboratorSuggestion,
     ClassQuizListPage,
     ClassQuizSort,
     QuizCollaboratorCreate,
@@ -30,6 +31,7 @@ from app.services.quizzes import (
     list_quiz_collaborators,
     publish_class_quiz,
     revoke_quiz_collaborator,
+    suggest_quiz_collaborators,
     update_class_quiz,
     update_class_quiz_default_time,
     update_class_quiz_question,
@@ -238,6 +240,21 @@ def list_quiz_collaborators_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> list[QuizCollaboratorResponse]:
     return list_quiz_collaborators(db, account, class_id, quiz_id)
+
+
+@router.get(
+    "/{quiz_id}/collaborator-suggestions",
+    response_model=list[CollaboratorSuggestion],
+)
+def suggest_quiz_collaborators_route(
+    class_id: int,
+    quiz_id: int,
+    q: str = Query(default="", max_length=100),
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> list[CollaboratorSuggestion]:
+    """Add collaborator search: people in this class matching the query."""
+    return suggest_quiz_collaborators(db, account, class_id, quiz_id, q)
 
 
 @router.post(

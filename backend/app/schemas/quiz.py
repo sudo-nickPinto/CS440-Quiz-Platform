@@ -125,6 +125,16 @@ class QuizCollaboratorCreate(QuizRequestModel):
         return value
 
 
+class CollaboratorSuggestion(BaseModel):
+    """Someone in the quiz's class the owner could add as an editor."""
+
+    account_id: int
+    email: str
+    display_name: str
+    # Already an editor of this quiz (shown, but can't be added again).
+    is_collaborator: bool
+
+
 class QuizCollaboratorResponse(BaseModel):
     quiz_id: int
     account_id: int
