@@ -36,7 +36,11 @@ from app.schemas.class_dashboard import (
 )
 from app.schemas.pagination import PageInfo, SortOrder
 from app.schemas.quiz import QuizVersionResponse
-from app.services.class_authorization import ClassAccess, require_class_content
+from app.services.class_authorization import (
+    ClassAccess,
+    require_class_content,
+    require_class_member,
+)
 from app.services.hosting import quiz_hosting_many
 from app.services.quiz_submissions import (
     _approved_versions_statement as approved_versions_statement,
@@ -244,7 +248,9 @@ def list_class_approved_quizzes(
     sort: ApprovedQuizSort,
     order: SortOrder,
 ) -> ClassApprovedQuizPage:
-    access = require_class_content(db, account, class_id)
+    # An archived class still lists these. Hosting is already refused
+    # (can_host false, class_archived) instead of hiding the page.
+    access = require_class_member(db, account, class_id)
     author = aliased(Account)
     approver = aliased(Account)
     statement = (
