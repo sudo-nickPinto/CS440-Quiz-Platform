@@ -24,7 +24,8 @@ from app.services.class_authorization import (
     require_class_member,
     require_class_organizer,
 )
-from app.models.account import AccountRole, effective_role
+from app.models.account import Account, AccountRole, effective_role
+from app.services.class_roster import find_roster_entry
 
 CLASS_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CLASS_CODE_LENGTH = 8
@@ -168,7 +169,12 @@ def list_classes(
         .where(
             ClassMembership.account_id == account.account_id,
             ClassMembership.status.in_(
-                (MembershipStatus.ACTIVE, MembershipStatus.INVITED)
+                (
+                    MembershipStatus.ACTIVE,
+                    MembershipStatus.INVITED,
+                    # Waiting for an organizer to approve a join request.
+                    MembershipStatus.REQUESTED,
+                )
             ),
         )
         .order_by(Class.created_at.desc(), Class.class_id.desc())
@@ -277,7 +283,7 @@ def join_class(
         raise APIError(404, "class_code_not_found", "No class has that code.")
     if class_.archived_at is not None or not class_.joining_open:
         raise APIError(
-            403, "class_joining_closed", "This class isn't accepting new members."
+            403, "class_joining_closed", "This class isn't accepting new students."
         )
 
     membership = db.scalar(
@@ -288,31 +294,60 @@ def join_class(
         )
         .with_for_update()
     )
-    if membership is None:
-        membership = ClassMembership(
-            class_id=class_.class_id,
-            account_id=account.account_id,
-            role=ClassRole.MEMBER,
-            status=MembershipStatus.ACTIVE,
-            joined_via=JoinedVia.CODE,
-        )
-        db.add(membership)
-    elif membership.status == MembershipStatus.ACTIVE:
+    if membership is not None and membership.status == MembershipStatus.ACTIVE:
         raise APIError(409, "already_class_member", "You're already in this class.")
-    elif membership.status == MembershipStatus.REMOVED:
+    if membership is not None and membership.status == MembershipStatus.REMOVED:
         # Only an organizer can undo a removal, by inviting them again.
         raise APIError(
             403,
             "class_member_removed",
             "You were removed from this class. Ask an organizer to invite you.",
         )
-    else:
-        # A pending invite or a past membership; the code works for both.
-        membership.status = MembershipStatus.ACTIVE
-        membership.role = ClassRole.MEMBER
-        membership.joined_via = JoinedVia.CODE
-        membership.decided_by_id = account.account_id
-        membership.decided_at = _utc_now_milliseconds()
+    if membership is not None and membership.status == MembershipStatus.REQUESTED:
+        # Asking twice changes nothing; the request is still waiting.
+        return _to_response(class_, membership)
+
+    # Using the code is a request an organizer approves (Approvals ->
+    # Students). Someone already invited, or on the imported roster by their
+    # verified email (or an earlier link), was chosen by an organizer, so
+    # they are in straight away. A roster name alone doesn't count: names
+    # can be edited, so that request waits for an organizer.
+    now = _utc_now_milliseconds()
+    person = db.get(Account, account.account_id)
+    roster_entry = (
+        find_roster_entry(db, class_.class_id, person) if person is not None else None
+    )
+    was_invited = (
+        membership is not None and membership.status == MembershipStatus.INVITED
+    )
+    approved = roster_entry is not None or was_invited
+    if roster_entry is not None:
+        roster_entry.account_id = account.account_id
+
+    if membership is None:
+        membership = ClassMembership(
+            class_id=class_.class_id,
+            account_id=account.account_id,
+            role=ClassRole.MEMBER,
+            joined_via=JoinedVia.CODE,
+        )
+        db.add(membership)
+    membership.status = (
+        MembershipStatus.ACTIVE if approved else MembershipStatus.REQUESTED
+    )
+    membership.role = ClassRole.MEMBER
+    # Preserve an independent invitation when both it and a roster row exist.
+    # Otherwise, a roster match is the reason this code join becomes active,
+    # and must remain identifiable if that roster entry is later corrected.
+    membership.joined_via = (
+        JoinedVia.INVITE
+        if was_invited
+        else JoinedVia.ROSTER
+        if roster_entry is not None
+        else JoinedVia.CODE
+    )
+    membership.decided_by_id = account.account_id
+    membership.decided_at = now
 
     try:
         db.commit()

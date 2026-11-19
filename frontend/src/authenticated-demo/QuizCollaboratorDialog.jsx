@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import ConfirmDialog from "./ConfirmDialog";
 import { useAction, useApi, useResource } from "./rest";
 import { useConfirm } from "./useConfirm";
+import { useSuggestions } from "../classes/useSuggestions";
+import { isEditorNow, withEditorChange } from "./collaboratorStatus";
 import "../classes/class-admin.css";
 
 function initials(name) {
@@ -32,9 +34,9 @@ export function AddCollaboratorCell({ onOpen }) {
   );
 }
 
-// "+ Add collaborator" pop-up on the quiz page: invite a class member by
-// email to edit the quiz, and see or remove the current editors. Same look
-// as the class page's "+ Add member" pop-up (AddMemberDialog).
+// "+ Add collaborator" pop-up on the quiz page: search the people in this
+// class by name or email (results update as you type, like "+ Add student"),
+// add one as an editor, and see or remove the current editors.
 export default function QuizCollaboratorDialog({ quiz, onClose }) {
   const ref = useRef(null);
   const api = useApi();
@@ -42,16 +44,34 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
   const confirmer = useConfirm();
   const path = `/classes/${quiz.class_id}/quizzes/${quiz.quiz_id}/collaborators`;
   const people = useResource(path);
-  const [email, setEmail] = useState("");
+  const [text, setText] = useState("");
   const [added, setAdded] = useState(0);
+  // Who was added (true) or removed (false) in this pop-up, by account id,
+  // so a search result shows "Editor" or "Add" right away, before the
+  // search is asked again.
+  const [editorChanges, setEditorChanges] = useState({});
+  // Raised after an add or remove so the search results are fetched again.
+  const [searchRevision, setSearchRevision] = useState(0);
+  const suggestions = useSuggestions(
+    `/classes/${quiz.class_id}/quizzes/${quiz.quiz_id}/collaborator-suggestions`,
+    text,
+    { revision: searchRevision },
+  );
+
+  function editorsChanged(accountId, isEditor) {
+    setEditorChanges((changes) => withEditorChange(changes, accountId, isEditor));
+    setSearchRevision((revision) => revision + 1);
+    people.reload();
+  }
+  const listId = useId();
+  const typedEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text.trim());
 
   useEffect(() => {
     const dialog = ref.current;
     if (dialog && !dialog.open) dialog.showModal();
   }, []);
 
-  async function invite(event) {
-    event.preventDefault();
+  async function addEditor(email) {
     const normalized = email.trim().toLowerCase();
     if (!normalized) return;
     const collaborator = await action.run(() =>
@@ -61,9 +81,8 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
       }),
     );
     if (collaborator) {
-      setEmail("");
       setAdded((count) => count + 1);
-      people.reload();
+      editorsChanged(collaborator.account_id, true);
     }
   }
 
@@ -81,7 +100,8 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
       await api(`${path}/${collaborator.account_id}`, { method: "DELETE" });
       return true;
     });
-    if (done) people.reload();
+    // Their search result goes back to "Add", so they can be re-added.
+    if (done) editorsChanged(collaborator.account_id, false);
   }
 
   const editors = Array.isArray(people.data) ? people.data : [];
@@ -116,33 +136,85 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
           </button>
         </div>
 
-        <form className="cl-dlg-head" onSubmit={invite}>
+        <form
+          className="cl-dlg-head"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (typedEmail) void addEditor(text);
+          }}
+        >
           <h2 id="qv-collab-title">Who else can edit this quiz?</h2>
           <div className="cl-dlg-row">
             <label className="cl-search">
-              <span className="cl-sr">Class member email</span>
+              <span className="cl-sr">Search this class by name or email</span>
               <input
-                type="email"
-                placeholder="A class member's account email…"
-                value={email}
+                type="text"
+                inputMode="email"
+                placeholder="Search this class by name or email…"
+                value={text}
                 autoFocus
-                required
-                autoComplete="email"
+                autoComplete="off"
+                role="combobox"
+                aria-expanded={suggestions.length > 0}
+                aria-controls={listId}
+                aria-autocomplete="list"
                 disabled={action.busy}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => setText(event.target.value)}
               />
             </label>
-            <button
-              type="submit"
-              className="cl-add-one"
-              disabled={action.busy || !email.trim()}
-            >
-              + Invite
-            </button>
+            {typedEmail && (
+              <button
+                type="submit"
+                className="cl-add-one"
+                disabled={action.busy}
+              >
+                + Add
+              </button>
+            )}
           </div>
+
+          {suggestions.length > 0 && (
+            <ul
+              className="cl-suggest"
+              id={listId}
+              role="listbox"
+              aria-label="People in this class"
+            >
+              {suggestions.map((person) => {
+                const editor = isEditorNow(person, editorChanges);
+                return (
+                  <li
+                    key={person.account_id}
+                    role="option"
+                    aria-selected="false"
+                  >
+                    <span className="cl-pav" aria-hidden="true">
+                      {initials(person.display_name)}
+                    </span>
+                    <span>
+                      <strong className="cl-pname">{person.display_name}</strong>
+                      <small className="cl-pmail">{person.email}</small>
+                    </span>
+                    {editor ? (
+                      <span className="cl-tag is-me">Editor</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="cl-secondary"
+                        disabled={action.busy}
+                        onClick={() => void addEditor(person.email)}
+                      >
+                        Add
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
           <p>
-            They need to be an active member of this class. Editors can change
-            the questions and answers.
+            Only people in this class can be added. Editors can change the
+            questions and answers.
           </p>
           {action.error && (
             <p className="cl-dlg-error" role="alert">
@@ -198,10 +270,10 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
         <div className="cl-dlg-foot">
           <span aria-live="polite">
             {added === 0 ? (
-              "Nobody invited yet"
+              "Nobody added yet"
             ) : (
               <>
-                <b>{added}</b> invited
+                <b>{added}</b> added
               </>
             )}
           </span>

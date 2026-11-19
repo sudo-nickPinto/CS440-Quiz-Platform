@@ -37,10 +37,14 @@ import {
   ReportTable,
   ScoreMeter,
 } from "./ReportTable";
-import { AddMemberDialog, ClassStudents } from "./ClassManagement";
+import { ClassStudents } from "./ClassManagement";
+import { AddStudentDialog, JoinRequestsTable } from "./StudentRoster";
 import {
+  CLASS_EVENTS,
+  SUBMISSION_EVENTS,
   useClassDashboard,
   useClassQuizzes,
+  useClassUpdates,
   useClassSubmissions,
   useClassResource,
   useClassSessions,
@@ -594,6 +598,8 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
     isValid: (key) => key in MY_QUIZ_SORTS,
   });
   const resource = useMyClassQuizzes(classInfo.id, page, sortKey);
+  // An organizer approving or rejecting changes the status shown here.
+  useClassUpdates(classInfo.id, SUBMISSION_EVENTS, resource.refresh);
   const pending = reportResource(resource);
   const canSubmit =
     classInfo.membershipStatus === "ACTIVE" && !classInfo.archived;
@@ -803,7 +809,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
 // pending first by default. Members follow their own requests in My quizzes.
 const APPROVAL_COLUMNS = ["", "", "cl-wide", "cl-wide", "", "cl-go-cell"];
 
-function SubmissionsTable({ classInfo, onChange }) {
+function SubmissionsTable({ classInfo, onChange, switcher = null }) {
   const api = useApi();
   const action = useAction();
   const memory = `class:${classInfo.id}:approvals`;
@@ -815,6 +821,8 @@ function SubmissionsTable({ classInfo, onChange }) {
     isValid: (key) => key in SUBMISSION_FILTERS,
   });
   const resource = useClassSubmissions(classInfo.id, page, sortKey, status);
+  // New requests, withdrawals and other organizers' decisions.
+  useClassUpdates(classInfo.id, SUBMISSION_EVENTS, resource.refresh);
   const pending = reportResource(resource);
 
   if (pending) return pending;
@@ -852,7 +860,7 @@ function SubmissionsTable({ classInfo, onChange }) {
         emptyTitle={
           status === "PENDING" ? "Nothing to review" : "No submissions"
         }
-        emptyText="When a member sends a quiz for approval, it shows up here."
+        emptyText="When a student sends a quiz for approval, it shows up here."
         pagination={resource.data.pagination}
         onPageChange={setPage}
         controls={
@@ -875,6 +883,7 @@ function SubmissionsTable({ classInfo, onChange }) {
                 setPage(1);
               }}
             />
+            {switcher}
           </>
         }
         rows={resource.data.items.map((item) => {
@@ -947,6 +956,63 @@ function SubmissionsTable({ classInfo, onChange }) {
   );
 }
 
+// Approvals has two lists: quizzes sent for approval, and people who asked
+// to join with the class code. The Quizzes / Students switch sits in each
+// list's toolbar, just left of the counter, and shows its waiting counts.
+const APPROVAL_TABS = ["Quizzes", "Students"];
+
+function ApprovalsSection({ classInfo, dashboard }) {
+  const [tab, setTab] = useRemembered(
+    `class:${classInfo.id}:approvals-tab`,
+    "Quizzes",
+    { isValid: (value) => APPROVAL_TABS.includes(value) },
+  );
+  const ready = dashboard.status === "ready";
+  const waiting = {
+    Quizzes: ready ? dashboard.data.pending_submission_count : 0,
+    Students: ready ? (dashboard.data.pending_join_request_count ?? 0) : 0,
+  };
+
+  const switcher = (
+    <div
+      className="cl-view-switch is-duo"
+      role="group"
+      aria-label="Approval lists"
+    >
+      {APPROVAL_TABS.map((label) => (
+        <button
+          key={label}
+          type="button"
+          aria-pressed={tab === label}
+          onClick={() => setTab(label)}
+        >
+          {label}
+          {waiting[label] > 0 && (
+            <span className="cl-badge">
+              {waiting[label]}
+              <span className="cl-sr"> waiting</span>
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+
+  return tab === "Students" ? (
+    <JoinRequestsTable
+      classInfo={classInfo}
+      onChange={dashboard.reload}
+      switcher={switcher}
+    />
+  ) : (
+    <SubmissionsTable
+      classInfo={classInfo}
+      onChange={dashboard.reload}
+      switcher={switcher}
+    />
+  );
+}
+
 function ClassWorkspace({ classInfo, onChange }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const showAdminLayout = classInfo.canManage === true;
@@ -955,6 +1021,8 @@ function ClassWorkspace({ classInfo, onChange }) {
   const [copied, setCopied] = useState(false);
   const csv = useFileDownload();
   const dashboard = useClassDashboard(classInfo.id);
+  // The Approvals badge and the class's counts and live sessions.
+  useClassUpdates(classInfo.id, CLASS_EVENTS, dashboard.refresh);
   const studentCount =
     dashboard.status === "ready" ? dashboard.data.student_count : null;
 
@@ -1063,8 +1131,12 @@ function ClassWorkspace({ classInfo, onChange }) {
       setSearchParams(next, { replace: true });
     }
   }, [view, activeSection, showAdminLayout, searchParams, setSearchParams]);
+  // Quizzes waiting for approval plus people waiting to join.
   const pendingApprovals =
-    dashboard.status === "ready" ? dashboard.data.pending_submission_count : 0;
+    dashboard.status === "ready"
+      ? dashboard.data.pending_submission_count +
+        (dashboard.data.pending_join_request_count ?? 0)
+      : 0;
 
   function changeView(nextView) {
     setView(nextView);
@@ -1193,7 +1265,7 @@ function ClassWorkspace({ classInfo, onChange }) {
               disabled={classInfo.archived}
               onClick={() => setAddOpen(true)}
             >
-              + Add member
+              + Add student
             </button>
 
             <button
@@ -1225,7 +1297,7 @@ function ClassWorkspace({ classInfo, onChange }) {
         {/* Last in the bar, so it stays in the same spot in both views. */}
         {showAdminLayout && (
           <div
-            className="cl-view-switch"
+            className="cl-view-switch is-duo"
             role="group"
             aria-label="Dashboard view"
           >
@@ -1251,9 +1323,10 @@ function ClassWorkspace({ classInfo, onChange }) {
       </div>
 
       {adminView && addOpen && (
-        <AddMemberDialog
+        <AddStudentDialog
           classInfo={classInfo}
           onClose={() => setAddOpen(false)}
+          onChange={dashboard.reload}
         />
       )}
 
@@ -1309,7 +1382,7 @@ function ClassWorkspace({ classInfo, onChange }) {
           onChange={onChange}
         />
       ) : activeSection === "Approvals" ? (
-        <SubmissionsTable classInfo={classInfo} onChange={dashboard.reload} />
+        <ApprovalsSection classInfo={classInfo} dashboard={dashboard} />
       ) : activeSection === "My quizzes" ? (
         <PresentTable
           classInfo={classInfo}

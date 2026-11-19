@@ -7,8 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.config import Settings, get_settings
 from app.database import Database
+from app.emails import EmailService
 from app.errors import register_error_handlers
 from app.live import LiveHub
+from app.notifications import NotificationHub
 from app.quiz_editing import QuizEditHub
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         yield
         await application.state.live_hub.shutdown()
         await application.state.quiz_edit_hub.shutdown()
+        await application.state.notification_hub.shutdown()
         application.state.database.dispose()
 
     application = FastAPI(
@@ -42,8 +45,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.settings = settings
+    application.state.email = EmailService.from_settings(settings)
     application.state.live_hub = LiveHub(application)
     application.state.quiz_edit_hub = QuizEditHub(application)
+    application.state.notification_hub = NotificationHub(application)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

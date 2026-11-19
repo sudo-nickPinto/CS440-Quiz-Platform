@@ -37,6 +37,19 @@ class Settings(BaseSettings):
     live_abandon_after_seconds: int = 900
     live_abandon_check_seconds: int = 60
 
+    # The app's own emails (roster invitations, join approvals/rejections).
+    # See app/emails.py and docs/EMAIL.md. "log" only writes them to the log.
+    email_backend: str = "log"
+    email_from: str = "QuizBurg <no-reply@quizburg.local>"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_starttls: bool = True
+    smtp_timeout_seconds: int = 10
+    # Where links in emails point: the frontend's address.
+    app_base_url: str = "http://localhost:5173"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: object) -> object:

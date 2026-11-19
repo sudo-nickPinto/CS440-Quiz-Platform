@@ -69,6 +69,7 @@ def cleanup_database(app) -> None:
         "live_session",
         "answer_choice",
         "question",
+        "question_bank_item",
         "quiz_submission",
         "quiz_version",
         "quiz_collaborator_event",
@@ -77,6 +78,8 @@ def cleanup_database(app) -> None:
         "quiz",
         # After quiz and live_session, which both point at class (0007, 0008).
         "class_membership",
+        # Points at class and account (0016).
+        "class_roster_entry",
         "class",
         "group_membership",
         "course_group",

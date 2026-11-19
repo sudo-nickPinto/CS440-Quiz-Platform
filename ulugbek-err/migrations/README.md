@@ -20,6 +20,8 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0012_question_revision` | Adds per-question optimistic revisions so collaborators can save different questions concurrently |
 | `0013_session_answer_correction` | Adds session-specific correct-answer overrides, score revisions, and an append-only correction audit log |
 | `0014_faculty_access` | Adds `faculty_access_event`: an append-only history of faculty status granted or removed in the app (issue #116). Faculty status itself is still `account.account_type = 'ADMINISTRATOR'` |
+| `0016_class_roster` | Adds `REQUESTED` and `REJECTED` to `class_membership.status` (joining with the class code now waits for an organizer) and the `class_roster_entry` table for roster files imported by organizers |
+| `0018_roster_membership_source` | Adds `ROSTER` to `class_membership.joined_via` for students a roster import added, so a corrected roster email only removes access the roster gave (not an accepted invitation). 0017 is taken by an open branch |
 
 Each migration comes in two files:
 

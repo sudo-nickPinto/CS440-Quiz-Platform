@@ -13,12 +13,21 @@ export function useApi() {
 
 export function useResource(path, pollMs = 0) {
   const api = useApi()
-  const [request, setRequest] = useState({ revision: 0, preserveData: false })
-  const key = `${path}:${request.revision}`
+  // floor: the oldest revision refresh() may keep showing. reload() raises
+  // it, so a refresh that lands while a reload is loading (e.g. the pushed
+  // event for this tab's own action) can't bring back the pre-reload data.
+  const [request, setRequest] = useState({
+    revision: 0,
+    preserveData: false,
+    floor: 0,
+  })
+  const { revision } = request
+  const key = `${path}:${revision}`
 
   const [result, setResult] = useState({
     key: null,
     path: null,
+    revision: -1,
     data: null,
     error: null,
   })
@@ -28,6 +37,7 @@ export function useResource(path, pollMs = 0) {
       setRequest((value) => ({
         revision: value.revision + 1,
         preserveData: false,
+        floor: value.revision + 1,
       })),
     [],
   )
@@ -40,6 +50,7 @@ export function useResource(path, pollMs = 0) {
       setRequest((value) => ({
         revision: value.revision + 1,
         preserveData: true,
+        floor: value.floor,
       })),
     [],
   )
@@ -59,11 +70,11 @@ export function useResource(path, pollMs = 0) {
         })
 
         if (!controller.signal.aborted) {
-          setResult({ key, path, data, error: null })
+          setResult({ key, path, revision, data, error: null })
         }
       } catch (error) {
         if (!controller.signal.aborted) {
-          setResult({ key, path, data: null, error })
+          setResult({ key, path, revision, data: null, error })
         }
 
         if (error.status >= 400 && error.status < 500) {
@@ -90,11 +101,15 @@ export function useResource(path, pollMs = 0) {
       controller.abort()
       window.clearTimeout(timer)
     }
-  }, [api, path, key, pollMs])
+  }, [api, path, key, revision, pollMs])
 
   const current = path && result.key === key
   const previousForPath =
-    request.preserveData && path && result.path === path && result.data
+    request.preserveData &&
+    path &&
+    result.path === path &&
+    result.revision >= request.floor &&
+    result.data
   const refreshing = Boolean(path) && !current && Boolean(previousForPath)
 
   return {

@@ -1039,3 +1039,64 @@ def test_class_quiz_list_skips_collaborators_without_access(
     listed = client.get(f"/classes/{class_id}/quizzes?mine=true")
     assert listed.status_code == 200
     assert listed.json()["items"][0]["collaborator_names"] == []
+
+
+def _suggest(client: TestClient, class_id: int, quiz_id: int, q: str):
+    return client.get(
+        f"/classes/{class_id}/quizzes/{quiz_id}/collaborator-suggestions",
+        params={"q": q},
+    )
+
+
+def test_collaborator_suggestions_list_classmates_as_you_type(
+    collaboration_client,
+) -> None:
+    client, class_id, owner, editor, outsider = collaboration_client
+    quiz_id = _create(client, class_id)["quiz_id"]
+
+    by_name = _suggest(client, class_id, quiz_id, "ed").json()
+    by_email = _suggest(client, class_id, quiz_id, "editor@ex").json()
+
+    assert by_name == [
+        {
+            "account_id": editor.account_id,
+            "email": "editor@example.com",
+            "display_name": "Editor",
+            "is_collaborator": False,
+        }
+    ]
+    assert by_email == by_name
+    # Not the owner, and not people outside the class.
+    assert _suggest(client, class_id, quiz_id, "ow").json() == []
+    assert _suggest(client, class_id, quiz_id, "out").json() == []
+    # One character, or only wildcards, finds nothing.
+    assert _suggest(client, class_id, quiz_id, "e").json() == []
+    assert _suggest(client, class_id, quiz_id, "%%").json() == []
+
+
+def test_collaborator_suggestions_mark_current_editors(collaboration_client) -> None:
+    client, class_id, owner, editor, outsider = collaboration_client
+    quiz_id = _create(client, class_id)["quiz_id"]
+    added = client.post(
+        f"/classes/{class_id}/quizzes/{quiz_id}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+    assert added.status_code == 201
+
+    suggestions = _suggest(client, class_id, quiz_id, "ed").json()
+
+    assert suggestions[0]["is_collaborator"] is True
+
+
+def test_only_the_owner_gets_collaborator_suggestions(collaboration_client) -> None:
+    client, class_id, owner, editor, outsider = collaboration_client
+    quiz_id = _create(client, class_id)["quiz_id"]
+
+    client.app.dependency_overrides[get_active_account] = lambda: editor
+    as_editor = _suggest(client, class_id, quiz_id, "ow")
+    client.app.dependency_overrides[get_active_account] = lambda: outsider
+    as_outsider = _suggest(client, class_id, quiz_id, "ed")
+
+    assert as_editor.status_code == 403
+    assert as_editor.json()["error"]["code"] == "collaborator_management_denied"
+    assert as_outsider.status_code == 404

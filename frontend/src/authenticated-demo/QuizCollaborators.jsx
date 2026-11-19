@@ -117,7 +117,7 @@ export default function QuizCollaborators({ quiz, embedded = false }) {
 
         <div className="qv-collaborator-panel">
           <p className="qv-collaborator-help">
-            Invite an active member of this class by email.
+            Invite a student or organizer of this class by email.
           </p>
 
           <InviteContainer
@@ -125,7 +125,7 @@ export default function QuizCollaborators({ quiz, embedded = false }) {
             onSubmit={embedded ? undefined : invite}
             onKeyDown={embedded ? inviteOnEnter : undefined}
           >
-            <label htmlFor="collaborator-email">Class member email</label>
+            <label htmlFor="collaborator-email">Email of someone in this class</label>
             <div>
               <input
                 id="collaborator-email"

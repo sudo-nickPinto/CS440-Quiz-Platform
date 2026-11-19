@@ -43,6 +43,10 @@ import {
   TimePicker,
 } from "./EditorParts";
 import { useQuizCollaboration } from "./useQuizCollaboration";
+import {
+  useNotifications,
+  useNotificationsReconnect,
+} from "./notifications";
 import { classPagePath } from "../classes/classPaths";
 import NewQuizClassPicker from "../classes/NewQuizClassPicker";
 import HostQuizButton from "./HostQuizButton";
@@ -1582,6 +1586,23 @@ export function QuizViewer() {
 
   const resource = useResource(validId ? `/quizzes/${quizId}` : null);
   const flow = useQuizFlow(resource.data ?? null, account.account_id);
+
+  // Approval status changes made elsewhere (an organizer deciding, the
+  // owner sending or withdrawing in another tab) update the page in place.
+  const { refresh: refreshQuiz } = resource;
+  const { refresh: refreshFlow } = flow;
+  useNotifications("submission_changed", (event) => {
+    if (validId && Number(event?.quiz_id) === Number(quizId)) {
+      refreshQuiz();
+      refreshFlow();
+    }
+  });
+  useNotificationsReconnect(() => {
+    if (validId) {
+      refreshQuiz();
+      refreshFlow();
+    }
+  });
 
   // Opened from a class page (or straight after saving): the back link
   // returns to that class. A warning from the editor (saved, but not sent)

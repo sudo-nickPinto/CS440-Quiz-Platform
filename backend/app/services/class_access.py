@@ -114,5 +114,5 @@ def require_session_class_member(
         raise APIError(
             403,
             "not_class_member",
-            "Only active members of this class can take part in the session.",
+            "Only students in this class can take part in the session.",
         )

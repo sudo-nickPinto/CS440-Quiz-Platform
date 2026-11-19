@@ -135,6 +135,7 @@ Auth added two modules (`auth.py`, `accounts.py`), one route module (`routes/me.
 | `App.jsx` | Reads login state from `useAuth0()`, session restore, logout, shows login page or lobby. A "no session" error from the silent check stays hidden; after a Sign in / Create account click it shows a message. |
 | `components/LandingPage.jsx` | Sign in and Create account buttons in the header, hero and closing section. Each goes straight to Auth0 (Create account adds `screen_hint: 'signup'`), pinned to the email/password connection. Google is also disabled for the app in Auth0, so email/password is the only connection and there is no Google button. |
 | `components/AccountGate.jsx` | Calls `/me` once logged in (creating the account on first login), then shows the verify-email, deactivated or profile setup screen if needed before the lobby. |
+| `components/VerifyEmailConfirmPage.jsx`, `verifyEmailLink.js` | The public `/verify-email` page the verification email links to, and the check on the Auth0 link it carries (section 10). |
 | `components/ProfileSetupScreen.jsx`, `components/ProfileForm.jsx` | The one-time "Make it yours" screen: first name, last name and a preset avatar, saved with `PATCH /me`. The same form backs Edit profile (`/app/profile`). |
 | `avatars/` | `Avatar` (preset tile or initials), `AvatarPicker`, and the figure/color catalog. |
 | `api.js` | `apiFetch(path, getToken, options)`: attaches the bearer token and throws `error.message` from the error body. Also `PASSWORD_CONNECTION` (`'Username-Password-Authentication'`), which every interactive `loginWithRedirect` passes as `connection`. |
@@ -212,7 +213,7 @@ Every error has the shape `{"error": {"code": "...", "message": "..."}}`; the fr
 
 **Several logins, one account.** A new login with the same verified email as an existing account lands on that `account` (this is how older Google-made accounts pick up an email/password login). `account.auth0_sub` is only the first login and is not used for lookups.
 
-**Email verification happens once.** Auth0 marks an email verified when the user clicks the link in the verification email, and it stays verified. Users are not asked again. How often they must *log in* is a separate setting (Auth0 session lifetime, tenant settings > Advanced for the SSO session, and the application's refresh-token/absolute lifetime).
+**Email verification happens once.** Auth0 marks an email verified when the user presses "Confirm my email" on the page the verification email links to (section 10), and it stays verified. Users are not asked again. How often they must *log in* is a separate setting (Auth0 session lifetime, tenant settings > Advanced for the SSO session, and the application's refresh-token/absolute lifetime).
 
 **Signup collects names after Auth0.** Auth0's page asks only for email and password. Adding fields to Auth0's own signup form needs a paid plan and a custom domain. After the email is verified, the app shows a one-time profile setup screen for first name, last name and a preset avatar. Accounts made before this feature see it once, with names prefilled from `display_name` when that isn't an email address. Saving sets `display_name` to "First Last".
 
@@ -220,11 +221,43 @@ Every error has the shape `{"error": {"code": "...", "message": "..."}}`; the fr
 
 **Forgot password.** Auth0's hosted login page has a "Forgot password?" link for the email/password connection and sends the reset email. There is no code for it in this repo.
 
-**Email sender.** Verification and password-reset emails use the same sender (`QuizBurg <gcbquizburg@gmail.com>`) and are customized templates in the Auth0 tenant (subjects "Verify your email for QuizBurg" and "Reset your QuizBurg password"). This is set in Auth0, not in this repo.
+**Email sender.** Verification and password-reset emails use the same sender (`QuizBurg <gcbquizburg@gmail.com>`) and are customized templates in the Auth0 tenant (subjects "Verify your email for QuizBurg" and "Reset your QuizBurg password"). They are set in Auth0; the verification email's body is also kept in `docs/auth0/` (section 10).
 - *If emails stop arriving:* check the Auth0 logs for failed-notification (`fn`) events. The usual cause is a revoked or changed Gmail app password; generate a new one and update the email provider in Auth0.
 - *Rollback:* deleting the custom email provider returns the tenant to Auth0's built-in test sender, which is rate-limited.
 
-## 10. Adding a protected route
+## 10. Email verification needs a click
+
+**Why.** Auth0 marks an email verified as soon as its verification link (`https://<tenant>/u/email-verification?ticket=…`) is loaded; a plain page load is enough. gettysburg.edu mail goes through Microsoft 365, whose Safe Links scanner opens the links in a message before the student sees it. From 2026-11-15 on, all 7 gettysburg.edu verifications in the Auth0 logs came from Microsoft data-centre addresses 40 to 108 seconds after sign-up, so those accounts were verified without the student opening the email (issue #154). Auth0's docs name the same risk: "email verification links can lead to accidental verification by email scanners".
+
+**How.** The verification email links to our page, `https://quizburg.us.reclaim.cloud/verify-email#<Auth0 link, percent-encoded>`. Loading the page sends nothing to Auth0's verification link: it shows a "Confirm my email" button, and only a click opens the link. Scanners load pages but don't press buttons. The Auth0 link travels in the URL fragment (after `#`), which browsers never send to a server, so it isn't in our access logs and a request for our page can't verify anyone.
+
+The page (`VerifyEmailConfirmPage.jsx`, check in `verifyEmailLink.js`) reads everything after the first `#`, decodes it if it is percent-encoded (what the template sends; a raw link also works), and shows the button only when the link is `https`, on exactly the `VITE_AUTH0_DOMAIN` host with no port or user name, on the path `/u/email-verification`, and has a non-empty `ticket`. Anything else shows "This link doesn't work", so the page can't be used to send people to another site. It looks the same whether or not someone is signed in, and it never redirects by itself.
+
+**The template.** `docs/auth0/verify_email.html` is the body to apply to Auth0's `verify_email` template, and `docs/auth0/verify_email.previous.html` is the body it replaces. Both links become `https://quizburg.us.reclaim.cloud/verify-email#{{ url | url_encode }}` (`url_encode` is one of the filters Auth0 supports in email templates), the visible fallback link shows only the short page address, because scanners also follow URLs written out as text (so the line above it says "click this link instead" rather than asking people to copy and paste it), and one sentence tells the reader to press Confirm my email. Sender, subject, syntax, link lifetime (5 days) and enabled state stay as they are.
+
+Apply it only after the page is deployed, or emails will point at a page that doesn't exist yet. With the Auth0 CLI logged into the tenant (`auth0 login`), from the repo root:
+
+```bash
+# Apply: changes only the body
+jq -n --rawfile body docs/auth0/verify_email.html '{body: ($body | rtrimstr("\n"))}' \
+  | auth0 api patch "email-templates/verify_email"
+
+# Confirm what is live (no output means it matches)
+auth0 api get "email-templates/verify_email" | jq -r .body | diff - docs/auth0/verify_email.html
+```
+
+Then sign up once with a Gmail address and once with a gettysburg.edu address. Each account must stay unverified until "Confirm my email" is pressed: the Auth0 logs should show the success-verification (`sv`) event only after the click, from the student's own browser.
+
+**Rollback.** Re-apply the previous body; the page can stay deployed, since nothing links to it then:
+
+```bash
+jq -n --rawfile body docs/auth0/verify_email.previous.html '{body: ($body | rtrimstr("\n"))}' \
+  | auth0 api patch "email-templates/verify_email"
+```
+
+**Limit.** A scanner that runs the page and presses its button would still verify the address. Before this change there was no button to press, so the logs can't tell us yet whether Microsoft's scanner does that; an `sv` event from a Microsoft address within a couple of minutes of a sign-up would mean it does.
+
+## 11. Adding a protected route
 
 ```python
 # backend/app/api/routes/quizzes.py
@@ -243,7 +276,7 @@ Then `include_router` it in `app/api/router.py`. For database access add `db: Se
 
 Use `current_user` instead if you only need the token's claims and no database row.
 
-## 11. Next steps
+## 12. Next steps
 
 Login, token verification, account creation and linking of login methods all work locally. What is left, in the order we should do it:
 
@@ -267,7 +300,7 @@ Login, token verification, account creation and linking of login methods all wor
 11. Render the mermaid diagrams in this file once on GitHub to confirm they display.
 12. The root README says the backend runs on port 8000, but the frontend `.env.example` expects 8001.
 
-## 12. Done so far
+## 13. Done so far
 
 - Auth0 email/password login (Google sign-in removed), token verified in FastAPI (`auth.py`).
 - First login creates an `account` row; later logins reuse it (`accounts.py`).

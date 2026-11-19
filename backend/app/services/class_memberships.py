@@ -52,7 +52,7 @@ def _load_membership(
         statement = statement.with_for_update()
     membership = db.scalar(statement)
     if membership is None:
-        raise APIError(404, "class_member_not_found", "Class member not found.")
+        raise APIError(404, "class_member_not_found", "Student not found in this class.")
     return membership
 
 
@@ -197,7 +197,7 @@ def create_class_invite(
         raise APIError(
             409,
             "already_class_member",
-            "That account is already an active class member.",
+            "That person is already a student in this class.",
         )
     if membership and membership.status == MembershipStatus.INVITED:
         raise APIError(409, "invite_already_exists", "That account is already invited.")
@@ -230,12 +230,73 @@ def create_class_invite(
         raise APIError(
             409,
             "invite_already_exists",
-            "That account already has a membership or invitation.",
+            "That person is already in this class or invited.",
         ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
         raise APIError(
             500, "class_invite_create_failed", "Could not create the class invite."
+        ) from exc
+
+    return _to_response(_load_membership(db, class_id, target.account_id))
+
+
+def add_class_student(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    payload: ClassInviteCreate,
+) -> ClassMemberResponse:
+    """+ Add student: an existing account becomes a student right away.
+
+    There is no invitation to accept (the professor's rule). Someone removed
+    earlier can be added back this way; that is the organizer's decision.
+    """
+    _require_class_organizer(db, account, class_id, lock_class=True)
+    class_ = _load_class(db, class_id)
+    if class_.archived_at is not None:
+        raise APIError(409, "class_archived", "This class is archived.")
+    target = db.scalar(
+        select(Account).where(
+            func.lower(Account.email) == payload.email,
+            Account.is_active.is_(True),
+        )
+    )
+    if target is None:
+        raise APIError(404, "account_not_found", "No account has that email address.")
+
+    membership = db.scalar(
+        _membership_statement(class_id, target.account_id).with_for_update()
+    )
+    if membership and membership.status == MembershipStatus.ACTIVE:
+        raise APIError(
+            409,
+            "already_class_member",
+            "That person is already in this class.",
+        )
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if membership is None:
+        membership = ClassMembership(class_id=class_id, account_id=target.account_id)
+        db.add(membership)
+    membership.role = ClassRole.MEMBER
+    membership.status = MembershipStatus.ACTIVE
+    membership.joined_via = JoinedVia.INVITE
+    membership.invited_by_id = account.account_id
+    membership.decided_by_id = account.account_id
+    membership.decided_at = now
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise APIError(
+            409, "already_class_member", "That person is already in this class."
+        ) from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise APIError(
+            500, "class_student_add_failed", "Could not add the student."
         ) from exc
 
     return _to_response(_load_membership(db, class_id, target.account_id))
@@ -317,7 +378,7 @@ def update_class_member(
         raise APIError(
             409,
             "class_member_not_active",
-            "Class member is not active.",
+            "That person is no longer in this class.",
         )
 
     new_role = payload.role
@@ -352,7 +413,7 @@ def update_class_member(
         _commit(
             db,
             "class_member_update_failed",
-            "Could not update the class member.",
+            "Could not update the student.",
         )
 
     return _to_response(_load_membership(db, class_id, account_id))
@@ -366,7 +427,7 @@ def remove_class_member(
     _require_class_organizer(db, account, class_id, lock_class=True)
     membership = _load_membership(db, class_id, account_id, lock=True)
     if membership.status != MembershipStatus.ACTIVE:
-        raise APIError(409, "class_member_not_active", "Class member is not active.")
+        raise APIError(409, "class_member_not_active", "That person is no longer in this class.")
 
     _protect_last_organizer(db, membership)
     membership.status = MembershipStatus.REMOVED
@@ -380,6 +441,6 @@ def remove_class_member(
     _commit(
         db,
         "class_member_remove_failed",
-        "Could not remove the class member.",
+        "Could not remove the student.",
     )
     return left_sessions

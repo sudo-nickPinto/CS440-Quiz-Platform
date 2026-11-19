@@ -5,7 +5,7 @@ What the class features do today, and where the code for each one lives. The des
 ## 1. Concepts
 
 - **Class:** a group of people who play quizzes together. Table `class` (migration `0006_classes`).
-- **Membership:** one `class_membership` row per person per class, with a `role` (`ORGANIZER` or `MEMBER`) and a `status` (`INVITED`, `ACTIVE`, `LEFT` or `REMOVED`). Only `ACTIVE` rows count for anything.
+- **Membership:** one `class_membership` row per person per class, with a `role` (`ORGANIZER` or `MEMBER`) and a `status` (`INVITED`, `ACTIVE`, `LEFT`, `REMOVED`, `REQUESTED` or `REJECTED`). Only `ACTIVE` rows count for anything. In the app, `MEMBER`s are called **students**.
 - **Organizer:** an active faculty member with the `ORGANIZER` role. Organizers manage the class and can host any approved quiz in it. Faculty status alone gives no access to a class.
 - **Class session:** every session belongs to a class through `live_session.class_id` (migration `0007_session_class`). Only active members of that class can join or answer, even if they have the code. There are no open sessions any more.
 - **Old sessions with no class:** sessions from before V3 may have `class_id = NULL`. They are read-only history: nobody can join or answer in them.
@@ -58,14 +58,16 @@ Code: `backend/app/services/class_access.py` (`may_play`, `require_session_class
 
 ## 5. Joining and leaving
 
-- **By code:** on **Classes → Join**, the member types the code an organizer gave them (`ABCD-2345`; the dash and case don't matter). That calls `POST /classes/join`.
-- **By link:** an organizer can share `/app/join/class/ABCD-2345` (shown in **Settings → Class code**). Opening it joins straight away. Signed-out visitors sign in first and come back to the link.
-- **By invite:** organizers can still invite by email from **Members**.
+- **By code:** on **Classes → Join**, the student types the code an organizer gave them (`ABCD-2345`; the dash and case don't matter). That calls `POST /classes/join` and creates a **join request**: the student sees "Waiting for approval" until an organizer accepts or rejects it under **Approvals → Students** (one at a time or **Accept all**). The student gets an email either way.
+- **By link:** an organizer can share `/app/join/class/ABCD-2345`. Opening it sends the same join request. Signed-out visitors sign in first and come back to the link.
+- **By + Add student:** organizers add one person, picking from names and emails of every QuizBurg account as they type. Someone with an account is a student right away (the professor's rule: there is no invitation to accept) and gets a "You've been added" email.
+- **By roster:** **+ Add student → Import roster** takes the registrar's class list (CSV or `.xlsx`: `ID`, `Name` as `Last,First`, ...). A preview shows what will happen first. Rows with an email are matched to accounts by that email: those students are added straight away and emailed, and anyone not signed up yet is emailed and added as soon as they sign up with that address. The registrar's usual export has no emails, so its rows are only matched by name as a hint ("Same name as …") and those students' code joins wait for an organizer. Details in [API.md](API.md#rosters-and-join-requests).
+- **Skipping the queue:** a code join is approved at once when the person has a pending invite or matches the imported roster by email. A name match isn't enough, since anyone can change their profile name; the organizer sees it as a hint on the request.
 - **Who can't join:** turning the code off, or archiving the class, stops new joins. Someone an organizer removed can't come back with the code; they need a new invite.
-- **Removal:** members cannot leave a class themselves. An organizer removes them from **Admin view → Members**, which preserves their historical results and immediately removes access.
+- **Removal:** students cannot leave a class themselves. An organizer removes them with **Remove from class** on the student's full report (**Students → the student's name**), which preserves their historical results and immediately removes access.
 - **Rate limit:** each account gets 10 join attempts a minute, counted in memory per server process.
 
-Code: `join_class` and `leave_class` in `backend/app/services/classes.py`, `frontend/src/classes/ClassesPage.jsx`, `frontend/src/classes/JoinClassPage.jsx`.
+Code: `join_class` and `leave_class` in `backend/app/services/classes.py`; rosters, join requests and suggestions in `backend/app/services/class_roster.py`; emails in `backend/app/emails.py`; `frontend/src/classes/ClassesPage.jsx`, `frontend/src/classes/JoinClassPage.jsx`.
 
 ## 6. History, reports and grades
 
@@ -96,7 +98,7 @@ Code: `backend/app/services/class_dashboard.py` and the report tables in `fronte
 
 ## 7. Deploying
 
-Migration `0007_session_class` must be applied to the production database before the new backend starts. Nothing after 0007 needs a migration. Apply it the same way as earlier migrations (`ulugbek-err/migrations/README.md`), then redeploy as described in [DEPLOYMENT.md](DEPLOYMENT.md):
+Migration `0007_session_class` must be applied to the production database before the new backend starts, and so must `0016_class_roster` (join requests and rosters). Apply it the same way as earlier migrations (`ulugbek-err/migrations/README.md`), then redeploy as described in [DEPLOYMENT.md](DEPLOYMENT.md):
 
 ```bash
 docker compose --env-file deploy/.env up --build -d
