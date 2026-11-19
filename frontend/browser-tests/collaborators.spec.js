@@ -83,6 +83,9 @@ test("a collaborator can be added, removed and added again from the search", asy
   const results = dialog.getByRole("listbox", { name: "People in this class" });
   const maya = results.getByRole("option", { name: /Maya Rivera/ });
   const addMaya = maya.getByRole("button", { name: "Add", exact: true });
+  await expect(addMaya).toBeVisible();
+  // Searches made for the typing alone.
+  const typedSearches = state.searches;
 
   // Add: the result turns into "Editor" and Maya is in the editors list.
   await addMaya.click();
@@ -105,6 +108,9 @@ test("a collaborator can be added, removed and added again from the search", asy
 
   expect(state.adds).toBe(2);
   expect(state.removes).toBe(1);
-  // The search was asked again after each change, not only when typing.
-  await expect.poll(() => state.searches).toBeGreaterThanOrEqual(4);
+  // The search is asked again after changes, not only when typing. Quick
+  // changes in a row can share one refresh (the search waits for a pause),
+  // so this checks for a refresh rather than one per change.
+  await expect.poll(() => state.searches).toBeGreaterThan(typedSearches);
+  await expect(maya.getByText("Editor", { exact: true })).toBeVisible();
 });
