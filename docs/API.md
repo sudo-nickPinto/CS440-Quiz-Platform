@@ -625,11 +625,12 @@ Self-service class departure is disabled. This route always returns `class_self_
 
 ### Semesters, archiving and the trash
 
-- **Semester:** `POST /classes` and `PATCH /classes/{class_id}` take an optional `"semester": "Fall 2026"` (at most 30 characters; blank or `null` means none). `ClassResponse` includes `semester`. The same course in another semester is a separate class, so names don't have to be unique.
+- **Semester:** `POST /classes` and `PATCH /classes/{class_id}` take an optional `"semester": "Fall 2026"` (at most 30 characters; blank or `null` means none). `ClassResponse` includes `semester`, `parent_class_id` and `semesters` (every semester of that course the caller can be sent to). `POST /classes/{class_id}/semesters` with `{"semester": "Spring 2027"}` starts the next semester: same course name, new code, the same organizers, and no students or quizzes. A repeated label is `409 semester_exists`.
+- **Archived classes:** a student who was a member can still see the class on `GET /classes` and `GET /classes/{class_id}`, but quizzes, the dashboard, reports and other class content return `403 class_archived`. Organizers can still open it.
 - **`POST /classes/{class_id}/archive` → `200 ClassResponse`:** organizers only. Clears the code and closes joining; reports stay.
 - **`POST /classes/{class_id}/unarchive` → `200 ClassResponse`:** organizers only. The class gets a new code and joining opens again. Unarchiving an active class changes nothing.
 
-Nothing in the trash is really deleted: the row gets a `deleted_at` and restoring clears it (migration `0017`). Moving and restoring are idempotent and return `204`.
+Moving something to the trash sets `deleted_at` (migration `0017`). Restoring clears it. After 30 days, or when someone permanently deletes it (`POST /trash/purge`), `purged_at` is set (migration `0019`): it leaves the trash and cannot be restored. The row stays, because old results still point at it. Moving and restoring are idempotent and return `204`. Each trash item includes `expires_at` and `days_left`. `POST /trash/restore` and `POST /trash/purge` take `{ "class_ids": [], "quiz_ids": [], "session_ids": [] }`.
 
 | Route | Who | Errors |
 |---|---|---|

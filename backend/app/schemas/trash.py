@@ -11,6 +11,8 @@ class TrashedClass(BaseModel):
     semester: str | None
     archived: bool
     deleted_at: datetime
+    expires_at: datetime
+    days_left: int
 
 
 class TrashedQuiz(BaseModel):
@@ -21,6 +23,8 @@ class TrashedQuiz(BaseModel):
     # The quiz's class is in the trash too, so restore the class first.
     class_in_trash: bool
     deleted_at: datetime
+    expires_at: datetime
+    days_left: int
 
 
 class TrashedSession(BaseModel):
@@ -33,6 +37,16 @@ class TrashedSession(BaseModel):
     status: LiveSessionStatus
     ended_at: datetime | None
     deleted_at: datetime
+    expires_at: datetime
+    days_left: int
+
+
+class TrashSelection(BaseModel):
+    """Ids to restore or permanently delete together. Unknown ids are skipped."""
+
+    class_ids: list[int] = []
+    quiz_ids: list[int] = []
+    session_ids: list[int] = []
 
 
 class TrashResponse(BaseModel):

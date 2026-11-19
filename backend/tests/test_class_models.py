@@ -29,11 +29,13 @@ def test_class_table_matches_migration_0006() -> None:
         "name",
         # 0017: semester label and the trash.
         "semester",
+        "parent_class_id",
         "created_by_id",
         "join_code",
         "joining_open",
         "archived_at",
         "deleted_at",
+        "purged_at",
         "created_at",
         "updated_at",
     ]

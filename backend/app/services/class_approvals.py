@@ -36,7 +36,7 @@ from app.schemas.class_dashboard import (
 )
 from app.schemas.pagination import PageInfo, SortOrder
 from app.schemas.quiz import QuizVersionResponse
-from app.services.class_authorization import ClassAccess, require_class_member
+from app.services.class_authorization import ClassAccess, require_class_content
 from app.services.hosting import quiz_hosting_many
 from app.services.quiz_submissions import (
     _approved_versions_statement as approved_versions_statement,
@@ -167,7 +167,7 @@ def list_class_submissions(
     order: SortOrder,
     status: SubmissionStatus | None,
 ) -> ClassSubmissionPage:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     statement = _visible_submissions(access, account, class_id)
     if status is not None:
         statement = statement.where(QuizSubmission.status == status)
@@ -209,7 +209,7 @@ def get_class_submission_preview(
     db: Session, account: CurrentAccount, class_id: int, submission_id: int
 ) -> ClassSubmissionPreview:
     """The submitted version itself, for organizers and the submitter."""
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     row = db.execute(
         _visible_submissions(access, account, class_id).where(
             QuizSubmission.submission_id == submission_id
@@ -244,7 +244,7 @@ def list_class_approved_quizzes(
     sort: ApprovedQuizSort,
     order: SortOrder,
 ) -> ClassApprovedQuizPage:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     author = aliased(Account)
     approver = aliased(Account)
     statement = (

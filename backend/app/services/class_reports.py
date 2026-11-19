@@ -33,7 +33,7 @@ from app.models.session import (
     SessionQuestion,
     SessionQuestionStatus,
 )
-from app.services.class_authorization import require_class_member
+from app.services.class_authorization import require_class_content
 from app.services.class_dashboard import (
     _class_students,
     _is_organizer,
@@ -59,7 +59,7 @@ def get_class_session_results(
     class_id: int,
     session_id: int,
 ) -> dict:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     session = db.get(LiveSession, session_id)
     # Other classes' sessions, open sessions and unfinished sessions all look
     # missing here, so the URL can't be used to probe them.
@@ -101,7 +101,7 @@ def get_class_quiz_results(
     class_id: int,
     quiz_id: int,
 ) -> dict:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     organizer = _is_organizer(access)
 
     sessions, _ = _session_summaries(
@@ -180,7 +180,7 @@ def get_class_student_results(
     class_id: int,
     account_id: int,
 ) -> dict:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     organizer = _is_organizer(access)
     if not organizer and account_id != account.account_id:
         raise APIError(

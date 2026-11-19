@@ -41,7 +41,7 @@ from app.services.class_approvals import approval_counts
 from app.services.class_roster import count_join_requests
 from app.services.class_authorization import (
     ClassAccess,
-    require_class_member,
+    require_class_content,
     require_class_organizer,
 )
 from app.services.spreadsheet import safe_cell
@@ -399,7 +399,7 @@ def list_class_quizzes(
     sort: QuizSort,
     order: SortOrder,
 ) -> ClassQuizPage:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     sessions, rows = _session_summaries(
         db, account, class_id, access, (LiveSessionStatus.COMPLETED,)
     )
@@ -424,7 +424,7 @@ def list_class_sessions(
     order: SortOrder,
     q: str | None = None,
 ) -> ClassSessionPage:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     sessions, _ = _session_summaries(
         db, account, class_id, access, (LiveSessionStatus.COMPLETED,)
     )
@@ -446,7 +446,7 @@ def get_class_dashboard(
     account: CurrentAccount,
     class_id: int,
 ) -> ClassDashboardResponse:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     organizer = _is_organizer(access)
     completed, rows = _session_summaries(
         db, account, class_id, access, (LiveSessionStatus.COMPLETED,)

@@ -173,16 +173,28 @@ def _require_active_membership(
     db: Session,
     account: CurrentAccount,
     class_id: int,
+    *,
+    content: bool = True,
 ) -> ClassMembership:
     """The caller's ACTIVE membership in the class, or 404 class_not_found.
 
     V3 has no app-wide authority over classes: being an Admin (faculty)
     doesn't let anyone into a class they aren't an active member of.
     """
-    get_class(db, class_id)
+    class_ = get_class(db, class_id)
     membership = get_class_membership(db, class_id, account.account_id)
     if membership is None or membership.status != MembershipStatus.ACTIVE:
         raise APIError(404, "class_not_found", "Class not found.")
+    if (
+        content
+        and class_.archived_at is not None
+        and not (account.is_admin and membership.role == ClassRole.ORGANIZER)
+    ):
+        raise APIError(
+            403,
+            "class_archived",
+            "This class is archived. Only its organizers can open it.",
+        )
     return membership
 
 
@@ -432,7 +444,7 @@ def create_quiz(
     The draft can't be hosted until it's published, and publishing doesn't
     approve it for hosting either.
     """
-    _require_active_membership(db, account, class_id)
+    _require_active_membership(db, account, class_id, content=False)
     if get_class(db, class_id).archived_at is not None:
         raise APIError(
             409, "class_archived", "An archived class cannot get new quizzes."

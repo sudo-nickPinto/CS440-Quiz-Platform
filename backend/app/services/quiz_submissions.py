@@ -16,7 +16,7 @@ from app.schemas.quiz_submission import (
     QuizSubmissionDecision,
     QuizSubmissionResponse,
 )
-from app.services.class_authorization import ClassAccess, require_class_member
+from app.services.class_authorization import ClassAccess, require_class_content
 
 
 def _now() -> datetime:
@@ -128,7 +128,7 @@ def create_quiz_submission(
     class_id: int,
     payload: QuizSubmissionCreate,
 ) -> QuizSubmissionResponse:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     _require_unarchived_class(access.class_)
     version, quiz = _load_visible_version(
         db, account, class_id, payload.quiz_version_id
@@ -168,7 +168,7 @@ def list_quiz_submissions(
     account: CurrentAccount,
     class_id: int,
 ) -> list[QuizSubmissionResponse]:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     statement = select(QuizSubmission).where(QuizSubmission.class_id == class_id)
     if not access.is_organizer:
         statement = statement.where(
@@ -233,7 +233,7 @@ def decide_quiz_submission(
     submission_id: int,
     payload: QuizSubmissionDecision,
 ) -> QuizSubmissionResponse:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     submission = _load_visible_submission(
         db, account, access, class_id, submission_id
     )
@@ -308,7 +308,7 @@ def withdraw_quiz_submission(
     class_id: int,
     submission_id: int,
 ) -> None:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     submission = _load_visible_submission(
         db, account, access, class_id, submission_id
     )
@@ -392,7 +392,7 @@ def list_approved_quizzes(
     account: CurrentAccount,
     class_id: int,
 ) -> list[ApprovedQuizResponse]:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     _require_unarchived_class(access.class_)
     rows = db.execute(
         _approved_versions_statement(class_id).order_by(

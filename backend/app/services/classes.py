@@ -4,7 +4,7 @@ import secrets
 from threading import Lock
 from time import monotonic
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,14 @@ from app.models.classes import (
     JoinedVia,
     MembershipStatus,
 )
-from app.schemas.classes import ClassCreate, ClassJoin, ClassResponse, ClassUpdate
+from app.schemas.classes import (
+    ClassCreate,
+    ClassJoin,
+    ClassResponse,
+    ClassSemester,
+    ClassSemesterCreate,
+    ClassUpdate,
+)
 from app.services.class_authorization import (
     ClassAccess,
     require_active_faculty,
@@ -78,9 +85,39 @@ def _format_join_code(code: str | None) -> str | None:
     return f"{code[:4]}-{code[4:]}"
 
 
+def _family_links(db: Session, classes: list[Class]) -> dict[int, list[ClassSemester]]:
+    """Every semester of each course, including the class itself."""
+    if not classes:
+        return {}
+    roots = {class_.parent_class_id or class_.class_id for class_ in classes}
+    rows = db.scalars(
+        select(Class)
+        .where(
+            Class.deleted_at.is_(None),
+            or_(Class.class_id.in_(roots), Class.parent_class_id.in_(roots)),
+        )
+        .order_by(Class.created_at, Class.class_id)
+    ).all()
+    grouped: dict[int, list[ClassSemester]] = defaultdict(list)
+    for row in rows:
+        root = row.parent_class_id or row.class_id
+        grouped[root].append(
+            ClassSemester(
+                class_id=row.class_id,
+                semester=row.semester,
+                archived=row.archived_at is not None,
+            )
+        )
+    return {
+        class_.class_id: grouped.get(class_.parent_class_id or class_.class_id, [])
+        for class_ in classes
+    }
+
+
 def _to_response(
     class_: Class,
     membership: ClassMembership | None,
+    semesters: list[ClassSemester] | None = None,
 ) -> ClassResponse:
     active_membership = (
         membership
@@ -99,6 +136,8 @@ def _to_response(
         class_id=class_.class_id,
         name=class_.name,
         semester=class_.semester,
+        parent_class_id=class_.parent_class_id,
+        semesters=semesters or [],
         created_by_id=class_.created_by_id,
         join_code=_format_join_code(class_.join_code) if may_view_code else None,
         joining_open=class_.joining_open,
@@ -112,8 +151,13 @@ def _to_response(
     )
 
 
-def _access_response(access: ClassAccess) -> ClassResponse:
-    return _to_response(access.class_, access.membership)
+def _access_response(db: Session, access: ClassAccess) -> ClassResponse:
+    links = _family_links(db, [access.class_])
+    return _to_response(
+        access.class_,
+        access.membership,
+        links.get(access.class_.class_id, []),
+    )
 
 
 def _commit(db: Session, code: str, message: str) -> None:
@@ -155,7 +199,8 @@ def create_class(
     db.add(class_)
     _commit(db, "class_create_failed", "Could not create the class.")
 
-    return _to_response(class_, membership)
+    links = _family_links(db, [class_])
+    return _to_response(class_, membership, links.get(class_.class_id, []))
 
 
 def list_classes(
@@ -184,7 +229,11 @@ def list_classes(
         .order_by(Class.created_at.desc(), Class.class_id.desc())
     ).all()
 
-    return [_to_response(class_, membership) for class_, membership in rows]
+    links = _family_links(db, [class_ for class_, _ in rows])
+    return [
+        _to_response(class_, membership, links.get(class_.class_id, []))
+        for class_, membership in rows
+    ]
 
 
 def get_class(
@@ -192,7 +241,7 @@ def get_class(
     account: CurrentAccount,
     class_id: int,
 ) -> ClassResponse:
-    return _access_response(require_class_member(db, account, class_id))
+    return _access_response(db, require_class_member(db, account, class_id))
 
 
 def update_class(
@@ -213,7 +262,7 @@ def update_class(
     if "joining_open" in payload.model_fields_set:
         class_.joining_open = payload.joining_open
     _commit(db, "class_update_failed", "Could not update the class.")
-    return _access_response(access)
+    return _access_response(db, access)
 
 
 def rotate_class_code(
@@ -241,7 +290,7 @@ def rotate_class_code(
         "class_code_update_failed",
         "Could not update the class code.",
     )
-    return _access_response(access)
+    return _access_response(db, access)
 
 
 def archive_class(
@@ -252,13 +301,13 @@ def archive_class(
     access = require_class_organizer(db, account, class_id)
     class_ = access.class_
     if class_.archived_at is not None:
-        return _access_response(access)
+        return _access_response(db, access)
 
     class_.archived_at = _utc_now_milliseconds()
     class_.joining_open = False
     class_.join_code = None
     _commit(db, "class_archive_failed", "Could not archive the class.")
-    return _access_response(access)
+    return _access_response(db, access)
 
 
 def unarchive_class(
@@ -274,7 +323,7 @@ def unarchive_class(
     access = require_class_organizer(db, account, class_id)
     class_ = access.class_
     if class_.archived_at is None:
-        return _access_response(access)
+        return _access_response(db, access)
 
     class_.join_code = _generate_unique_code(
         db,
@@ -284,7 +333,79 @@ def unarchive_class(
     class_.joining_open = True
     class_.archived_at = None
     _commit(db, "class_unarchive_failed", "Could not unarchive the class.")
-    return _access_response(access)
+    return _access_response(db, access)
+
+
+def create_semester(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    payload: ClassSemesterCreate,
+) -> ClassResponse:
+    """Another empty semester of this course, managed from the same class.
+
+    It keeps the course name and gets its own code. Students and quizzes
+    are not copied. The organizers of the semester you started from are.
+    """
+    access = require_class_organizer(db, account, class_id)
+    source = access.class_
+    root_id = source.parent_class_id or source.class_id
+    label = payload.semester.casefold()
+    siblings = db.scalars(
+        select(Class).where(
+            Class.deleted_at.is_(None),
+            or_(Class.class_id == root_id, Class.parent_class_id == root_id),
+        )
+    ).all()
+    if any((row.semester or "").strip().casefold() == label for row in siblings):
+        raise APIError(
+            409,
+            "semester_exists",
+            "This course already has that semester.",
+        )
+
+    organizers = db.scalars(
+        select(ClassMembership).where(
+            ClassMembership.class_id == source.class_id,
+            ClassMembership.status == MembershipStatus.ACTIVE,
+            ClassMembership.role == ClassRole.ORGANIZER,
+        )
+    ).all()
+    organizer_ids = {row.account_id for row in organizers}
+    organizer_ids.add(account.account_id)
+
+    code = _generate_unique_code(
+        db,
+        error_code="semester_create_failed",
+        error_message="Could not start the new semester.",
+    )
+    created = Class(
+        name=source.name,
+        semester=payload.semester,
+        parent_class_id=root_id,
+        created_by_id=account.account_id,
+        join_code=code,
+        memberships=[
+            ClassMembership(
+                account_id=organizer_id,
+                role=ClassRole.ORGANIZER,
+                status=MembershipStatus.ACTIVE,
+                joined_via=(
+                    JoinedVia.CREATOR
+                    if organizer_id == account.account_id
+                    else JoinedVia.INVITE
+                ),
+            )
+            for organizer_id in organizer_ids
+        ],
+    )
+    db.add(created)
+    _commit(db, "semester_create_failed", "Could not start the new semester.")
+    membership = next(
+        row for row in created.memberships if row.account_id == account.account_id
+    )
+    links = _family_links(db, [created])
+    return _to_response(created, membership, links.get(created.class_id, []))
 
 
 def _check_join_rate(account_id: int) -> None:
@@ -337,7 +458,8 @@ def join_class(
         )
     if membership is not None and membership.status == MembershipStatus.REQUESTED:
         # Asking twice changes nothing; the request is still waiting.
-        return _to_response(class_, membership)
+        links = _family_links(db, [class_])
+        return _to_response(class_, membership, links.get(class_.class_id, []))
 
     # Using the code is a request an organizer approves (Approvals ->
     # Students). Someone already invited, or on the imported roster by their
@@ -392,7 +514,8 @@ def join_class(
     except SQLAlchemyError as exc:
         db.rollback()
         raise APIError(500, "class_join_failed", "Could not join the class.") from exc
-    return _to_response(class_, membership)
+    links = _family_links(db, [class_])
+    return _to_response(class_, membership, links.get(class_.class_id, []))
 
 
 def leave_class(

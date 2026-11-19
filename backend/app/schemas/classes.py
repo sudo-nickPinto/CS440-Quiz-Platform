@@ -59,6 +59,21 @@ class ClassUpdate(ClassRequestModel):
         return self
 
 
+class ClassSemesterCreate(ClassRequestModel):
+    semester: str = Field(min_length=1, max_length=30)
+
+    @field_validator("semester", mode="before")
+    @classmethod
+    def normalize_semester(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class ClassSemester(BaseModel):
+    class_id: int
+    semester: str | None
+    archived: bool
+
+
 class ClassJoin(ClassRequestModel):
     code: str = Field(min_length=1, max_length=20)
 
@@ -75,6 +90,8 @@ class ClassResponse(BaseModel):
     class_id: int
     name: str
     semester: str | None = None
+    parent_class_id: int | None = None
+    semesters: list[ClassSemester] = []
     created_by_id: int
     join_code: str | None
     joining_open: bool

@@ -3,11 +3,13 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
-from app.schemas.trash import TrashResponse
+from app.schemas.trash import TrashResponse, TrashSelection
 from app.services.trash import (
     list_trash,
+    purge_selected,
     restore_class,
     restore_quiz,
+    restore_selected,
     restore_session,
     trash_class,
     trash_quiz,
@@ -27,6 +29,26 @@ def list_trash_route(
 ) -> TrashResponse:
     response.headers["Cache-Control"] = "no-store"
     return list_trash(db, account)
+
+
+@router.post("/trash/restore", status_code=NO_CONTENT)
+def restore_selected_route(
+    payload: TrashSelection,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> Response:
+    restore_selected(db, account, payload)
+    return Response(status_code=NO_CONTENT)
+
+
+@router.post("/trash/purge", status_code=NO_CONTENT)
+def purge_selected_route(
+    payload: TrashSelection,
+    db: Session = Depends(get_db),
+    account: CurrentAccount = Depends(get_active_account),
+) -> Response:
+    purge_selected(db, account, payload)
+    return Response(status_code=NO_CONTENT)
 
 
 @router.post("/classes/{class_id}/trash", status_code=NO_CONTENT)
