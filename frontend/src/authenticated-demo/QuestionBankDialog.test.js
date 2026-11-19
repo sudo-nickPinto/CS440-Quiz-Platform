@@ -27,4 +27,16 @@ describe("question-bank editor conversion", () => {
     expect(converted.id).toEqual(expect.any(String));
     expect(converted.options).not.toBe(bankItem.choices);
   });
+
+  it("rejects multi-correct content instead of silently dropping correct answers", () => {
+    expect(() => toEditorQuestion({
+      question_text: "Select both prime numbers",
+      explanation: "",
+      choices: [
+        { choice_text: "2", is_correct: true },
+        { choice_text: "3", is_correct: true },
+        { choice_text: "4", is_correct: false },
+      ],
+    })).toThrow("exactly one correct answer");
+  });
 });

@@ -1050,6 +1050,14 @@ export function QuizEditor({
         <div className="qe-strip">
           <JumpChips ids={ids} current={current} />
 
+          <button
+            type="button"
+            className="qe-bank-button"
+            onClick={() => setQuestionBankOpen(true)}
+          >
+            Question bank
+          </button>
+
           <TimePicker
             title="Time per question"
             label={`Time per question: ${editor.defaultTime} seconds. Change`}
@@ -1446,10 +1454,6 @@ export function QuizEditor({
           >
             <span aria-hidden="true">+</span> Add question
           </button>
-          <button type="button" className="qe-addq qe-bank-button" onClick={() => setQuestionBankOpen(true)}>
-            Question bank
-          </button>
-
           <RequestError error={requestError} />
 
           {conflict && (
@@ -1552,9 +1556,7 @@ export function QuizEditor({
     <QuestionBankDialog
       open={questionBankOpen}
       classId={editing ? existingQuiz.class_id : Number(classId)}
-      quizId={editing ? existingQuiz.quiz_id : null}
       onClose={() => setQuestionBankOpen(false)}
-      onReload={onReload}
       onAdd={(questions) => edit({ ...editorRef.current, questions: [...editorRef.current.questions, ...questions] })}
     />
 

@@ -3,9 +3,10 @@ import { useApi } from "./rest";
 import RequestError from "./RequestError";
 import { toEditorQuestion } from "./questionBankModel";
 
-export default function QuestionBankDialog({ open, classId, quizId, onClose, onAdd, onReload }) {
+export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
   const api = useApi();
   const onCloseRef = useRef(onClose);
+  const csvInputRef = useRef(null);
   const [scope, setScope] = useState("class");
   const [search, setSearch] = useState("");
   const [items, setItems] = useState([]);
@@ -80,15 +81,8 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
     if (!selected.size) return;
     setBusy(true); setError(null);
     try {
-      if (quizId) {
-        await api(`/classes/${classId}/quizzes/${quizId}/questions/from-bank`, {
-          method: "POST", body: JSON.stringify({ bank_question_ids: [...selected] }),
-        });
-        onReload?.(); closeDialog();
-      } else {
-        onAdd(items.filter((item) => selected.has(item.bank_question_id)).map(toEditorQuestion));
-        closeDialog();
-      }
+      onAdd(items.filter((item) => selected.has(item.bank_question_id)).map(toEditorQuestion));
+      closeDialog();
     } catch (failure) { setError(failure); }
     finally { setBusy(false); }
   }
@@ -112,20 +106,8 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
     if (!chosen.length) return;
     setBusy(true); setError(null);
     try {
-      if (quizId) {
-        await api(`/classes/${classId}/quizzes/${quizId}/questions/csv`, {
-          method: "POST",
-          body: JSON.stringify({
-            rows: chosen.map(({ row_number, question }) => ({ row_number, question })),
-            save_unselected_to_bank: false,
-            bank_only_rows: [],
-          }),
-        });
-        onReload?.(); closeDialog();
-      } else {
-        onAdd(chosen.map((row) => toEditorQuestion({ ...row.question, question_text: row.question.question_text })));
-        closeDialog();
-      }
+      onAdd(chosen.map((row) => toEditorQuestion(row.question)));
+      closeDialog();
     } catch (failure) { setError(failure); }
     finally { setBusy(false); }
   }
@@ -133,8 +115,13 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
   async function exportCsv() {
     setBusy(true); setError(null);
     try {
-      const ids = selected.size ? `&${[...selected].map((id) => `ids=${id}`).join("&")}` : "";
-      const text = await api(`/classes/${classId}/question-bank/export.csv?scope=${scope}${ids}`);
+      const params = new URLSearchParams({ scope });
+      if (selected.size) {
+        [...selected].forEach((id) => params.append("ids", id));
+      } else if (search.trim()) {
+        params.set("search", search.trim());
+      }
+      const text = await api(`/classes/${classId}/question-bank/export.csv?${params}`);
       const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
       const link = document.createElement("a"); link.href = url; link.download = "question-bank.csv";
       document.body.appendChild(link); link.click(); link.remove();
@@ -153,8 +140,30 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
             <option value="class">Current class + mine</option><option value="mine">My questions across classes</option>
           </select>
           <button type="button" onClick={exportCsv} disabled={busy}>Export CSV</button>
+          <button type="button" onClick={() => csvInputRef.current?.click()} disabled={busy}>Import CSV</button>
+          <input
+            ref={csvInputRef}
+            className="ui-sr"
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(event) => void readCsv(event.target.files?.[0])}
+          />
         </div>
         <RequestError error={error} />
+        {preview && <section className="qb-csv-preview" aria-label={`CSV preview for ${csvFileName}`}>
+          <div className="qb-csv-status">
+            <strong>{preview.valid_count} valid</strong>
+            <span>{preview.invalid_count} invalid</span>
+          </div>
+          {preview.rows.map((row) => row.valid ? (
+            <label className="qb-csv-row" key={row.row_number}>
+              <input type="checkbox" checked={csvSelected.has(row.row_number)} onChange={() => toggle(setCsvSelected, row.row_number)} />
+              <span className="qb-csv-check" aria-hidden="true">✓</span>
+              <span><small>Row {row.row_number}</small><strong>{row.question.question_text}</strong></span>
+            </label>
+          ) : <p className="qb-csv-error" role="alert" key={row.row_number}>Row {row.row_number}: {row.errors.join(" ")}</p>)}
+          <button type="button" className="qb-btn qb-btn-orange" disabled={!csvSelected.size || busy} onClick={importCsv}>Import selected ({csvSelected.size})</button>
+        </section>}
         <div className="qb-bank-list" aria-busy={loading}>
           {loading ? <p>Loading questions…</p> : items.length ? items.map((item) => (
             <article
@@ -197,30 +206,6 @@ export default function QuestionBankDialog({ open, classId, quizId, onClose, onA
           )) : <p>No matching questions.</p>}
         </div>
         <button className="qb-btn qb-btn-blue" type="button" disabled={!selected.size || busy} onClick={addSelected}>Add selected ({selected.size})</button>
-
-        <details className="qb-csv">
-          <summary>Import CSV</summary>
-          <p className="qb-csv-help">Columns: question_text, explanation, choice_a–choice_d, correct_choices.</p>
-          <label className="qb-csv-file">
-            <span>Choose CSV</span>
-            <strong>{csvFileName || "No file selected"}</strong>
-            <input type="file" accept=".csv,text/csv" onChange={(e) => readCsv(e.target.files?.[0])} />
-          </label>
-          {preview && <div className="qb-csv-preview">
-            <div className="qb-csv-status">
-              <strong>{preview.valid_count} valid</strong>
-              <span>{preview.invalid_count} invalid</span>
-            </div>
-            {preview.rows.map((row) => row.valid ? (
-              <label className="qb-csv-row" key={row.row_number}>
-                <input type="checkbox" checked={csvSelected.has(row.row_number)} onChange={() => toggle(setCsvSelected, row.row_number)} />
-                <span className="qb-csv-check" aria-hidden="true">✓</span>
-                <span><small>Row {row.row_number}</small><strong>{row.question.question_text}</strong></span>
-              </label>
-            ) : <p className="qb-csv-error" role="alert" key={row.row_number}>Row {row.row_number}: {row.errors.join(" ")}</p>)}
-            <button type="button" className="qb-btn qb-btn-orange" disabled={!csvSelected.size || busy} onClick={importCsv}>Import selected ({csvSelected.size})</button>
-          </div>}
-        </details>
       </section>
     </div>
   );
