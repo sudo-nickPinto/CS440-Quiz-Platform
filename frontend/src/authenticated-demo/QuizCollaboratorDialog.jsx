@@ -4,6 +4,7 @@ import ConfirmDialog from "./ConfirmDialog";
 import { useAction, useApi, useResource } from "./rest";
 import { useConfirm } from "./useConfirm";
 import { useSuggestions } from "../classes/useSuggestions";
+import { isEditorNow, withEditorChange } from "./collaboratorStatus";
 import "../classes/class-admin.css";
 
 function initials(name) {
@@ -45,12 +46,23 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
   const people = useResource(path);
   const [text, setText] = useState("");
   const [added, setAdded] = useState(0);
-  // Accounts added in this pop-up, so their suggestion shows "Editor" at once.
-  const [justAdded, setJustAdded] = useState({});
+  // Who was added (true) or removed (false) in this pop-up, by account id,
+  // so a search result shows "Editor" or "Add" right away, before the
+  // search is asked again.
+  const [editorChanges, setEditorChanges] = useState({});
+  // Raised after an add or remove so the search results are fetched again.
+  const [searchRevision, setSearchRevision] = useState(0);
   const suggestions = useSuggestions(
     `/classes/${quiz.class_id}/quizzes/${quiz.quiz_id}/collaborator-suggestions`,
     text,
+    { revision: searchRevision },
   );
+
+  function editorsChanged(accountId, isEditor) {
+    setEditorChanges((changes) => withEditorChange(changes, accountId, isEditor));
+    setSearchRevision((revision) => revision + 1);
+    people.reload();
+  }
   const listId = useId();
   const typedEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text.trim());
 
@@ -69,9 +81,8 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
       }),
     );
     if (collaborator) {
-      setJustAdded((map) => ({ ...map, [collaborator.account_id]: true }));
       setAdded((count) => count + 1);
-      people.reload();
+      editorsChanged(collaborator.account_id, true);
     }
   }
 
@@ -89,7 +100,8 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
       await api(`${path}/${collaborator.account_id}`, { method: "DELETE" });
       return true;
     });
-    if (done) people.reload();
+    // Their search result goes back to "Add", so they can be re-added.
+    if (done) editorsChanged(collaborator.account_id, false);
   }
 
   const editors = Array.isArray(people.data) ? people.data : [];
@@ -169,8 +181,7 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
               aria-label="People in this class"
             >
               {suggestions.map((person) => {
-                const editor =
-                  person.is_collaborator || justAdded[person.account_id];
+                const editor = isEditorNow(person, editorChanges);
                 return (
                   <li
                     key={person.account_id}

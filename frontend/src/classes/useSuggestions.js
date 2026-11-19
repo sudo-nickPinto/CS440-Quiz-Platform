@@ -7,7 +7,11 @@ import { suggestionQuery } from "./rosterHelpers";
 // After a short pause in typing it asks `${path}?q=...` and returns the
 // matches; under two characters it returns []. A failed request also
 // returns [] (typing a full email still works). `path` null turns it off.
-export function useSuggestions(path, text, delayMs = 250) {
+//
+// Raise `revision` to ask again for the same text, after something changed
+// what the results say (someone added or removed). The current results stay
+// on screen until the new ones arrive, so the list doesn't flicker.
+export function useSuggestions(path, text, { revision = 0, delayMs = 250 } = {}) {
   const api = useApi();
   const query = path ? suggestionQuery(text) : "";
   const [result, setResult] = useState({ key: "", items: [] });
@@ -32,7 +36,7 @@ export function useSuggestions(path, text, delayMs = 250) {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [api, path, query, key, delayMs]);
+  }, [api, path, query, key, delayMs, revision]);
 
   return query && result.key === key ? result.items : [];
 }
