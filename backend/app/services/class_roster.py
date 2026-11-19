@@ -575,6 +575,10 @@ def import_roster(
             )
         elif status == MembershipStatus.REQUESTED:
             _activate(membership, account.account_id, now)
+            # The pending code request becomes active only because the
+            # organizer's roster matched it. Record that provenance so a
+            # later roster correction can revoke the access it granted.
+            membership.joined_via = JoinedVia.ROSTER
             result.outcome = RosterRowOutcome.APPROVED
             result.message = None
             messages.append(email.join_approved(match.email, class_.name, class_id))

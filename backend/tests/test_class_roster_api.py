@@ -447,6 +447,30 @@ def test_confirmed_correction_moves_access_to_the_right_account(roster_client) -
     )
 
 
+def test_roster_approval_of_pending_request_is_removed_after_correction(
+    roster_client,
+) -> None:
+    """A code request approved solely by a roster match remains roster-based."""
+    client, identities, class_id = roster_client
+    act_as(client, identities["maya"])
+    assert join(client, identities["maya"]).json()["membership_status"] == "REQUESTED"
+    act_as(client, identities["organizer"])
+
+    assert upload(client, class_id, MAYA_ROW).json()["rows"][0]["outcome"] == "approved"
+    approved = membership(client, class_id, identities["maya"].account_id)
+    assert approved.status == MembershipStatus.ACTIVE
+    assert approved.joined_via == JoinedVia.ROSTER
+
+    body = upload(client, class_id, TO_LIN, confirm_removals=True).json()
+
+    assert [item["account_id"] for item in body["removals"]] == [
+        identities["maya"].account_id
+    ]
+    assert membership(client, class_id, identities["maya"].account_id).status == (
+        MembershipStatus.REMOVED
+    )
+
+
 def test_corrected_email_dry_run_previews_the_removal(roster_client) -> None:
     client, identities, class_id = roster_client
     upload(client, class_id, MAYA_ROW)
@@ -776,6 +800,7 @@ def test_roster_email_match_is_approved_on_join(roster_client) -> None:
 
     assert response.json()["membership_status"] == "ACTIVE"
     assert _ivana_row(client).account_id == ivana.account_id
+    assert membership(client, class_id, ivana.account_id).joined_via == JoinedVia.ROSTER
 
 
 def test_approve_reject_and_accept_all_send_emails(roster_client) -> None:
