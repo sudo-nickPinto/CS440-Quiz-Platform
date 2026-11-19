@@ -155,7 +155,7 @@ export function approvalLabel(status) {
 
 // Admin view tabs, left to right. "Students" is the roster (students with
 // their scores, plus co-organizers); "Presentations" shows class history by
-// session or by quiz. Members are added from the header's "+ Add member".
+// session or by quiz. Students are added from the header's "+ Add student".
 export const ADMIN_SECTIONS = ["Students", "Presentations", "Approvals"];
 // Maps a ?section= value onto the admin tabs, including the names of the
 // tabs that were merged or removed (Quizzes, Members, Settings).
@@ -301,7 +301,7 @@ export function initials(name) {
     .toUpperCase();
 }
 
-// Sort choices for the merged Members table (sorted in the browser).
+// Sort choices for the Students table (sorted in the browser).
 export const MEMBER_SORTS = {
   name: "Name A–Z",
   average: "Best average",

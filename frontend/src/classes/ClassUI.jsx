@@ -76,7 +76,7 @@ export function ClassCard({ item }) {
       }`}
     >
       <div className="cl-card-banner">
-        <span className="cl-role">{item.roleLabel || "Class member"}</span>
+        <span className="cl-role">{item.roleLabel || "Student"}</span>
 
         <span className="cl-card-code">{shortName(item.name)}</span>
       </div>

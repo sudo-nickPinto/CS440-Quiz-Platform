@@ -83,7 +83,7 @@ export function quizFlowState({ quiz, accountId, pending }) {
         ? edited
           ? "Waiting for an organizer. Your newer edits aren't part of this request; send them once it's decided."
           : "Waiting for an organizer to approve it."
-        : `${pending.submitter_name ?? "A member"} sent this for approval.`,
+        : `${pending.submitter_name ?? "A student"} sent this for approval.`,
     };
   }
 
