@@ -7,6 +7,7 @@ import { Auth0Context } from "@auth0/auth0-react";
 import { BrowserRouter, Route, Routes } from "react-router";
 
 import PreviewApp from "../../src/authenticated-demo/PreviewApp";
+import VerifyEmailConfirmPage from "../../src/components/VerifyEmailConfirmPage";
 import "../../src/index.css";
 import "../../src/styles/theme.css";
 
@@ -20,6 +21,7 @@ createRoot(document.getElementById("root")).render(
   <Auth0Context.Provider value={auth}>
     <BrowserRouter>
       <Routes>
+        <Route path="/verify-email" element={<VerifyEmailConfirmPage />} />
         <Route path="/app/*" element={<PreviewApp onSignOut={() => {}} />} />
         <Route path="*" element={<h1>Test harness: open an /app/ URL</h1>} />
       </Routes>

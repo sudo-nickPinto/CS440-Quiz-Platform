@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
-import { Navigate, Route, Routes } from "react-router";
+import { Navigate, Route, Routes, useMatch } from "react-router";
 
 import LandingPage from "./components/LandingPage";
 import AuthenticatedDemo from "./authenticated-demo/PreviewApp";
 import AccountGate from "./components/AccountGate";
+import VerifyEmailConfirmPage from "./components/VerifyEmailConfirmPage";
 import { clearExplicitLogin, returnToState, wasExplicitLogin } from "./api";
 import "./App.css";
 
@@ -33,9 +34,14 @@ export default function App() {
   // click (not the silent check), read once before the flag is cleared.
   const [afterExplicitLogin] = useState(wasExplicitLogin);
 
+  // The page the verification email links to. It is public and must not
+  // redirect anywhere on its own, so it skips the session restore below and
+  // is rendered before the signed-in/signed-out branches.
+  const onVerifyEmailPage = useMatch("/verify-email") !== null;
+
   // Manage session restoration. Do not return JSX from this effect.
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || onVerifyEmailPage) return;
 
     // The flag only describes the redirect that led to this page load.
     clearExplicitLogin();
@@ -75,7 +81,7 @@ export default function App() {
     } catch {
       // Manual sign-in remains available if storage is blocked.
     }
-  }, [isLoading, isAuthenticated, error, loginWithRedirect]);
+  }, [isLoading, isAuthenticated, error, loginWithRedirect, onVerifyEmailPage]);
 
   function logOut() {
     try {
@@ -90,6 +96,10 @@ export default function App() {
         returnTo: window.location.origin,
       },
     });
+  }
+
+  if (onVerifyEmailPage) {
+    return <VerifyEmailConfirmPage />;
   }
 
   if (isLoading) {
