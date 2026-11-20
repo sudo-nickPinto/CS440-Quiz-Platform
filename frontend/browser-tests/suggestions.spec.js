@@ -8,7 +8,7 @@ const PEOPLE = Array.from({ length: 45 }, (_, index) => {
   const n = String(index + 1).padStart(2, "0");
   return {
     account_id: 100 + index,
-    email: `person${n}@gettysburg.edu`,
+    email: `person${n}.with.a.rather.long.address@students.gettysburg.edu`,
     display_name: `Person ${n}`,
     membership_status: null,
   };
@@ -82,4 +82,17 @@ test("typing filters the list without blanking it", async ({ page }) => {
   // Then the filtered list replaces them.
   await expect(options).toHaveCount(10);
   await expect(options.first()).toContainText("Person 10");
+});
+
+test("long emails stay on one line on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { dialog, options } = await openAddStudent(page);
+  await expect(options).toHaveCount(20);
+  const email = dialog.locator(".cl-pmail").first();
+  const fit = await email.evaluate((element) => ({
+    oneLine: element.getClientRects().length === 1,
+    cut: element.scrollWidth > element.clientWidth,
+    ellipsis: getComputedStyle(element).textOverflow,
+  }));
+  expect(fit).toEqual({ oneLine: true, cut: true, ellipsis: "ellipsis" });
 });

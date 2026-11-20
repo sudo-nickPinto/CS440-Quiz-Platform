@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import ConfirmDialog from "./ConfirmDialog";
-import { useAction, useApi, useResource } from "./rest";
+import { useAction, useApi } from "./rest";
 import { useConfirm } from "./useConfirm";
 import SuggestionList from "../classes/SuggestionList";
 import { useSuggestions } from "../classes/useSuggestions";
@@ -36,15 +36,15 @@ export function AddCollaboratorCell({ onOpen }) {
 }
 
 // "+ Add collaborator" pop-up on the quiz page, laid out like "+ Add student":
-// a scrolling list of the people in this class (filtered as you type), to add
-// one as an editor, and the current editors, to remove one.
+// one scrolling list of the people in this class, filtered as you type. The
+// quiz's collaborators come first, each with Remove; everyone else follows
+// with Add.
 export default function QuizCollaboratorDialog({ quiz, onClose }) {
   const ref = useRef(null);
   const api = useApi();
   const action = useAction();
   const confirmer = useConfirm();
   const path = `/classes/${quiz.class_id}/quizzes/${quiz.quiz_id}/collaborators`;
-  const people = useResource(path);
   const [text, setText] = useState("");
   const [added, setAdded] = useState(0);
   // Who was added (true) or removed (false) in this pop-up, by account id,
@@ -62,7 +62,6 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
   function editorsChanged(accountId, isEditor) {
     setEditorChanges((changes) => withEditorChange(changes, accountId, isEditor));
     setSearchRevision((revision) => revision + 1);
-    people.reload();
   }
   const listId = useId();
   const typedEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text.trim());
@@ -105,7 +104,6 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
     if (done) editorsChanged(collaborator.account_id, false);
   }
 
-  const editors = Array.isArray(people.data) ? people.data : [];
 
   return (
     // The class page's dialog styles live under .cl-page.
@@ -200,12 +198,22 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
                     <span className="cl-pav" aria-hidden="true">
                       {initials(person.display_name)}
                     </span>
-                    <span>
-                      <strong className="cl-pname">{person.display_name}</strong>
+                    <span className="cl-pwho">
+                      <strong className="cl-pname">
+                        {person.display_name}
+                        {editor && <span className="cl-tag is-me">Editor</span>}
+                      </strong>
                       <small className="cl-pmail">{person.email}</small>
                     </span>
                     {editor ? (
-                      <span className="cl-tag is-me">Editor</span>
+                      <button
+                        type="button"
+                        className="cl-secondary"
+                        disabled={action.busy}
+                        onClick={() => void remove(person)}
+                      >
+                        Remove
+                      </button>
                     ) : (
                       <button
                         type="button"
@@ -221,50 +229,6 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
               }}
             />
           </form>
-        </div>
-
-        <div className="cl-dlg-sub">
-          <span>Editors</span>
-          <span>
-            {editors.length} {editors.length === 1 ? "person" : "people"}
-          </span>
-        </div>
-
-        <div className="cl-people" aria-live="polite">
-          {people.loading ? (
-            <p className="cl-dlg-empty" role="status">
-              Loading collaborators…
-            </p>
-          ) : people.error ? (
-            <p className="cl-dlg-empty" role="alert">
-              {people.error.message}{" "}
-              <button type="button" onClick={people.reload}>
-                Retry
-              </button>
-            </p>
-          ) : editors.length === 0 ? (
-            <p className="cl-dlg-empty">Only you can edit this quiz right now.</p>
-          ) : (
-            editors.map((person) => (
-              <div className="cl-person" key={person.account_id}>
-                <span className="cl-pav" aria-hidden="true">
-                  {initials(person.display_name)}
-                </span>
-                <span>
-                  <strong className="cl-pname">{person.display_name}</strong>
-                  <small className="cl-pmail">{person.email}</small>
-                </span>
-                <button
-                  type="button"
-                  className="cl-secondary"
-                  disabled={action.busy}
-                  onClick={() => void remove(person)}
-                >
-                  Remove
-                </button>
-              </div>
-            ))
-          )}
         </div>
 
         <div className="cl-dlg-foot">

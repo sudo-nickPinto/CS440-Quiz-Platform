@@ -1479,6 +1479,13 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* App.css gives every form and label a margin; here the search should
+     sit right under the tabs (or the title bar). */
+  margin-top: 0;
+}
+
+.qp .cl-add-search .cl-search {
+  margin: 0;
 }
 
 .qp .cl-add-note {
@@ -1591,6 +1598,23 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* One line per email, ending in "…" when it doesn't fit (phones). */
+.qp .cl-suggest .cl-pwho {
+  min-width: 0;
+}
+
+.qp .cl-suggest .cl-pmail {
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qp .cl-suggest .cl-pname .cl-tag {
+  margin-left: 8px;
+  vertical-align: 2px;
 }
 
 .qp .cl-suggest-note {

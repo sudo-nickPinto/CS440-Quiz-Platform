@@ -218,7 +218,7 @@ function StudentSearch({ classInfo, onAdded }) {
               <span className="cl-pav" aria-hidden="true">
                 {initials(personName(person))}
               </span>
-              <span>
+              <span className="cl-pwho">
                 <strong className="cl-pname">{personName(person)}</strong>
                 <small className="cl-pmail">{person.email}</small>
               </span>

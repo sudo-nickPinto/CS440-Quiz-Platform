@@ -45,7 +45,7 @@ export function rosterName(row) {
 export function suggestionStatus(status) {
   switch (status) {
     case "ACTIVE":
-      return { label: "Already a student", canAdd: false };
+      return { label: "In this class", canAdd: false };
     case "INVITED":
       return { label: "Invited", canAdd: true };
     case "REQUESTED":
