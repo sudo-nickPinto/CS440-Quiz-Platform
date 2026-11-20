@@ -473,29 +473,28 @@ def _csv_text(items: list[QuestionBankItem]) -> str:
     return out.getvalue()
 
 
-# Account-wide bank: every course the caller is an active member of.
+# Account-wide bank (the admin dashboard): every course the caller organizes.
 
 
-def _active_memberships(
-    db: Session, account: CurrentAccount
-) -> dict[int, ClassMembership]:
-    rows = db.scalars(select(ClassMembership).where(
+def _organized_class_ids(db: Session, account: CurrentAccount) -> list[int]:
+    """Courses where the caller is an active faculty organizer."""
+    if not account.is_admin:
+        return []
+    return sorted(db.scalars(select(ClassMembership.class_id).where(
         ClassMembership.account_id == account.account_id,
         ClassMembership.status == MembershipStatus.ACTIVE,
-    ))
-    return {membership.class_id: membership for membership in rows}
+        ClassMembership.role == ClassRole.ORGANIZER,
+    )))
 
 
-def _course_condition(account: CurrentAccount, class_id: int, *, is_organizer: bool):
-    """Current questions from one course that the caller may see there.
+def _course_condition(account: CurrentAccount, class_id: int):
+    """Current questions from one organized course that the caller may see.
 
-    The same rule as the class-scoped bank, limited to questions whose source
-    is this course: the caller's own, quizzes shared with them, and for
-    organizers the course's published quizzes.
+    The class bank's organizer rule, limited to questions whose source is
+    this course: the caller's own, quizzes shared with them, and the course's
+    published quizzes.
     """
-    visible = _visible_condition(
-        account, class_id, BankScope.CLASS, is_organizer=is_organizer
-    )
+    visible = _visible_condition(account, class_id, BankScope.CLASS, is_organizer=True)
     return (
         (QuestionBankItem.source_class_id == class_id)
         & QuestionBankItem.is_current.is_(True)
@@ -508,25 +507,19 @@ def _account_bank_condition(
     account: CurrentAccount,
     class_ids: list[int] | None = None,
 ):
-    memberships = _active_memberships(db, account)
     if class_ids is None:
-        class_ids = sorted(memberships)
-    elif any(class_id not in memberships for class_id in class_ids):
-        raise APIError(404, "class_not_found", "Class not found.")
+        class_ids = _organized_class_ids(db, account)
+    else:
+        # 404 for courses the caller isn't in, 403 for ones they don't organize.
+        from app.services.class_authorization import require_class_organizer
+
+        for class_id in class_ids:
+            require_class_organizer(db, account, class_id)
     if not class_ids:
         return None
     for class_id in class_ids:
-        _ensure_legacy_snapshots(
-            db, account, class_id,
-            is_organizer=memberships[class_id].role == ClassRole.ORGANIZER,
-        )
-    return or_(*(
-        _course_condition(
-            account, class_id,
-            is_organizer=memberships[class_id].role == ClassRole.ORGANIZER,
-        )
-        for class_id in class_ids
-    ))
+        _ensure_legacy_snapshots(db, account, class_id, is_organizer=True)
+    return or_(*(_course_condition(account, class_id) for class_id in class_ids))
 
 
 def _filtered_condition(
