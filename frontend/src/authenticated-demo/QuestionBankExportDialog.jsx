@@ -66,7 +66,7 @@ async function loadClassQuestions(api, classId) {
   const items = [];
   for (let page = 1; ; page += 1) {
     const result = await api(
-      `/question-bank/items?class_ids=${classId}&page=${page}&page_size=${PAGE_SIZE}`,
+      `/classes/${classId}/question-bank/items?page=${page}&page_size=${PAGE_SIZE}`,
     );
     items.push(...result.items);
     if (items.length >= result.pagination.total_items || !result.items.length) return items;
@@ -99,11 +99,13 @@ export default function QuestionBankExportDialog({ classId, className, onClose }
 
   useEffect(() => {
     let live = true;
-    Promise.all([api("/question-bank/sources"), loadClassQuestions(api, classId)])
-      .then(([sources, questions]) => {
+    Promise.all([
+      api(`/classes/${classId}/question-bank/quizzes`),
+      loadClassQuestions(api, classId),
+    ])
+      .then(([bank, questions]) => {
         if (!live) return;
-        const course = sources.courses.find((entry) => entry.class_id === classId);
-        setQuizzes(course?.quizzes ?? []);
+        setQuizzes(bank.quizzes);
         setItems(questions);
         setSelected(new Set(questions.map((question) => question.bank_question_id)));
       })
@@ -139,9 +141,9 @@ export default function QuestionBankExportDialog({ classId, className, onClose }
   }
 
   function download() {
-    void file.download("/question-bank/export.csv", plan.filename, {
+    void file.download(`/classes/${classId}/question-bank/download.csv`, plan.filename, {
       method: "POST",
-      body: { class_ids: [classId], bank_question_ids: ticked.map((item) => item.bank_question_id) },
+      body: { bank_question_ids: ticked.map((item) => item.bank_question_id) },
       filename: plan.filename,
     });
   }
