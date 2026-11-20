@@ -1962,43 +1962,31 @@
   width: min(240px, 80vw);
 }
 
-/* Wide screens: title block on the left; on the right the view switch with
-   the buttons under it, so the title keeps the width it needs. */
-@media (min-width: 1100px) {
+/* The buttons always sit right beside the Admin | User switch. On wide
+   screens that's on the title's line; otherwise the title gets its own row
+   and the buttons and switch share the row under it, on the right, so the
+   title isn't squeezed onto several lines. */
+@media (min-width: 1400px) {
   .qp .cl-classbar:has(> .cl-actions) {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    column-gap: 20px;
-    row-gap: 12px;
+    flex-wrap: nowrap;
   }
 
-  .qp .cl-classbar:has(> .cl-actions) > .cl-button,
   .qp .cl-classbar:has(> .cl-actions) > .cl-class-title {
-    grid-row: 1 / span 2;
-  }
-
-  .qp .cl-classbar:has(> .cl-actions) > .cl-view-switch {
-    grid-column: 3;
-    grid-row: 1;
-    justify-self: end;
+    flex: 1 1 auto;
   }
 
   .qp .cl-classbar:has(> .cl-actions) > .cl-actions {
-    grid-column: 3;
-    grid-row: 2;
-    justify-self: end;
+    flex: none;
+    flex-wrap: nowrap;
   }
 }
 
-/* Mid widths: the title takes the first row; the buttons and the view
-   switch share the next one. */
-@media (min-width: 761px) and (max-width: 1099px) {
+@media (min-width: 761px) and (max-width: 1399px) {
   .qp .cl-classbar:has(> .cl-actions) > .cl-class-title {
     flex-basis: calc(100% - 190px);
   }
 
-  .qp .cl-classbar:has(> .cl-actions) > .cl-view-switch {
+  .qp .cl-classbar:has(> .cl-actions) > .cl-actions {
     margin-left: auto;
   }
 }
