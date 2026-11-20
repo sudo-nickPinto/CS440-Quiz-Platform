@@ -4,7 +4,6 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
 import HostQuizButton from "../authenticated-demo/HostQuizButton";
 import QuizCard from "../authenticated-demo/QuizCard";
-import OptionsMenu from "../authenticated-demo/OptionsMenu";
 import { hostingState, showsHostControl } from "../authenticated-demo/hosting";
 import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import RequestError from "../authenticated-demo/RequestError";
@@ -593,8 +592,6 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
   const api = useApi();
   const account = useAccount();
   const action = useAction();
-  const navigate = useNavigate();
-  const confirmer = useConfirm();
   const memory = `class:${classInfo.id}:present`;
   const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "recent", {
@@ -629,36 +626,6 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
         return true;
       }),
     );
-  }
-
-  async function duplicateQuiz(quiz) {
-    const copied = await action.run(() =>
-      api(`/classes/${classInfo.id}/quizzes/${quiz.quiz_id}/duplicate`, {
-        method: "POST",
-      }),
-    );
-    if (copied?.quiz) {
-      navigate(`/app/quizzes/${copied.quiz.quiz_id}/edit`, {
-        state: { classId: classInfo.id },
-      });
-    }
-  }
-
-  async function archiveQuiz(quiz) {
-    const sure = await confirmer.confirm({
-      label: "Archive quiz",
-      title: `Archive “${quiz.title}”?`,
-      message:
-        "It will no longer be available to edit or host. Past sessions and results stay saved.",
-      confirmLabel: "Archive quiz",
-      cancelLabel: "Keep it",
-    });
-    if (!sure) return;
-    const done = await action.run(async () => {
-      await api(`/quizzes/${quiz.quiz_id}/archive`, { method: "PATCH" });
-      return true;
-    });
-    refresh(done);
   }
 
   function describe(quiz) {
@@ -725,46 +692,6 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
     );
   }
 
-  function quizActions(quiz, info) {
-    return (
-      <div className="cl-quiz-actions">
-        {!info.archived && (
-          <Link
-            className="cl-edit-quiz"
-            to={`/app/quizzes/${quiz.quiz_id}/edit`}
-            state={{ classId: classInfo.id }}
-          >
-            Edit
-          </Link>
-        )}
-        <OptionsMenu className="cl-quiz-options">
-          {info.owner && (
-            <Link to={`/app/quizzes/${quiz.quiz_id}/reports`}>
-              Hosting history
-            </Link>
-          )}
-          <button
-            type="button"
-            disabled={action.busy}
-            onClick={() => void duplicateQuiz(quiz)}
-          >
-            Duplicate quiz
-          </button>
-          {info.owner && !info.archived && (
-            <button
-              type="button"
-              className="ui-danger"
-              disabled={action.busy}
-              onClick={() => void archiveQuiz(quiz)}
-            >
-              Archive quiz
-            </button>
-          )}
-        </OptionsMenu>
-      </div>
-    );
-  }
-
   const shared = {
     caption: "My quizzes",
     rememberAs: memory,
@@ -800,7 +727,6 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
     return (
       <>
         <RequestError error={action.error} />
-        <ConfirmDialog confirmer={confirmer} />
         <ReportTable
           {...shared}
           tableClass="cl-rows cl-member-rows"
@@ -835,7 +761,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
                 <PeopleTags quiz={quiz} owner={info.owner} />,
                 <span className="cl-dim">{formatScore(quiz.question_count)}</span>,
                 <span className="cl-dim">{formatDate(quiz.updated_at)}</span>,
-                quizActions(quiz, info),
+                <GoLink to={info.to} label={`Open ${quiz.title}`} />,
               ],
             };
           })}
@@ -847,7 +773,6 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
   return (
     <>
       <RequestError error={action.error} />
-      <ConfirmDialog confirmer={confirmer} />
       <CardCollection
         {...shared}
         items={resource.data.items}
@@ -868,7 +793,6 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
               headline={`${quiz.question_count} ${
                 quiz.question_count === 1 ? "question" : "questions"
               }`}
-              actions={quizActions(quiz, info)}
             >
               <PeopleTags quiz={quiz} owner={owner} long />
               <p>Edited {formatDate(quiz.updated_at)}</p>
