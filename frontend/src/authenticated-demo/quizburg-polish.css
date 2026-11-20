@@ -2130,11 +2130,6 @@
 .qp .qe-bank-button:hover:not(:disabled) { background: var(--paper); }
 .qp .qe-bank-button:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: none; }
 @media (max-width: 640px) { .qp .qe-bank-button { height: 44px; padding: 0 10px; } }
-.qp .qe-strip .qe-options-menu,
-.qp .qe-strip .qe-options-menu[open] { position: relative; align-self: center; }
-.qp .qe-strip .qe-options-menu > summary { width: 46px; height: 42px; background: var(--sky-soft); }
-.qp .qe-strip .qe-options-menu .ui-row-options { top: calc(100% + 8px); right: 0; width: min(260px, 78vw); }
-@media (max-width: 640px) { .qp .qe-strip .qe-options-menu > summary { width: 42px; height: 44px; } }
 .qb-modal-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgb(0 0 0 / .55); display: grid; place-items: center; padding: 24px; }
 .qb-bank { width: min(900px, 100%); max-height: 90vh; overflow: auto; background: #fffaf2; border: 4px solid #222; box-shadow: 9px 9px 0 #222; padding: 24px; }
 .qb-bank > header { display: flex; justify-content: space-between; align-items: start; border-bottom: 3px solid #222; margin-bottom: 18px; }

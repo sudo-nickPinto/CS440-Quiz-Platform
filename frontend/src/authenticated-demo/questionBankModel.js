@@ -35,27 +35,38 @@ function csvCell(value) {
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-// Serializes the editor's current questions (including unsaved edits).
-export function editorQuestionsToCsv(questions) {
-  const rows = questions.map((question) => {
-    const choices = ["a", "b", "c", "d"].map((_, index) => question.options[index] ?? "");
+const CSV_CHOICE_LIMIT = 4;
+
+// Serializes a saved quiz's questions (API shape) in the import template.
+// Several correct answers are written as "A|C", which the importer reads.
+export function quizQuestionsToCsv(questions) {
+  const ordered = [...questions].sort((a, b) => a.question_order - b.question_order);
+  const tooMany = ordered.filter((question) => question.choices.length > CSV_CHOICE_LIMIT);
+  if (tooMany.length) {
+    throw new Error(
+      `CSV export supports at most ${CSV_CHOICE_LIMIT} choices per question; `
+      + `${tooMany.length} question(s) in this quiz have more.`,
+    );
+  }
+  const rows = ordered.map((question) => {
+    const choices = [...question.choices].sort((a, b) => a.choice_order - b.choice_order);
     return [
-      question.text,
+      question.question_text,
       question.explanation,
-      ...choices,
-      String.fromCharCode(65 + question.correct),
+      ...Array.from({ length: CSV_CHOICE_LIMIT }, (_, index) => choices[index]?.choice_text ?? ""),
+      choices.map((choice, index) => choice.is_correct ? String.fromCharCode(65 + index) : null)
+        .filter(Boolean).join("|"),
     ];
   });
   return [CSV_COLUMNS, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 
-// Downloads the editor's current questions as `<quiz-title>-questions.csv`.
+// Downloads a saved quiz's questions as `<quiz-title>-questions.csv`.
 export function downloadQuizQuestionsCsv(title, questions) {
+  const text = quizQuestionsToCsv(questions);
   const slug = (title ?? "").trim().toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const url = URL.createObjectURL(
-    new Blob([editorQuestionsToCsv(questions)], { type: "text/csv" }),
-  );
+  const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
   const link = document.createElement("a");
   link.href = url;
   link.download = `${slug || "quiz"}-questions.csv`;

@@ -1085,18 +1085,6 @@ export function QuizEditor({
               <span aria-hidden="true">▾</span>
             </span>
           </TimePicker>
-
-          <OptionsMenu className="qe-options-menu">
-            <button
-              type="button"
-              disabled={!editor.questions.length}
-              onClick={() =>
-                downloadQuizQuestionsCsv(editor.title, editor.questions)
-              }
-            >
-              Export questions (CSV)
-            </button>
-          </OptionsMenu>
         </div>
 
         {editing && (collaborationStatus !== "open" || remoteNotice) && (
@@ -1795,7 +1783,7 @@ export function QuizViewer() {
               </div>
             )}
 
-          {(quiz.class_id || mine || canShare) && (
+          {(quiz.class_id || mine || canShare || quiz.can_edit) && (
             <OptionsMenu className="qv-options-menu">
               {mine && (
                 <Link to={`/app/quizzes/${quiz.quiz_id}/reports`}>
@@ -1809,6 +1797,19 @@ export function QuizViewer() {
                   onClick={() => void duplicateQuiz()}
                 >
                   {action.busy ? "Duplicating…" : "Duplicate quiz"}
+                </button>
+              )}
+              {(mine || quiz.can_edit) && questions.length > 0 && (
+                <button
+                  type="button"
+                  disabled={action.busy}
+                  onClick={() =>
+                    void action.run(async () =>
+                      downloadQuizQuestionsCsv(quiz.version.title, questions),
+                    )
+                  }
+                >
+                  Export questions (CSV)
                 </button>
               )}
               {canShare && (
