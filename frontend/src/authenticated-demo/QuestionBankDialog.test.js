@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toEditorQuestion } from "./questionBankModel";
+import { editorQuestionsToCsv, toEditorQuestion, unsupportedReason } from "./questionBankModel";
 
 
 describe("question-bank editor conversion", () => {
@@ -38,5 +38,25 @@ describe("question-bank editor conversion", () => {
         { choice_text: "4", is_correct: false },
       ],
     })).toThrow("exactly one correct answer");
+  });
+
+  it("flags multi-correct questions as unsupported so they can't be selected", () => {
+    const multi = { choices: [{ is_correct: true }, { is_correct: true }] };
+    const single = { choices: [{ is_correct: false }, { is_correct: true }] };
+    expect(unsupportedReason(multi)).toMatch("exactly one correct answer");
+    expect(unsupportedReason(single)).toBeNull();
+  });
+});
+
+describe("quiz CSV export", () => {
+  it("serializes the editor's questions in the import template format", () => {
+    const csv = editorQuestionsToCsv([
+      { text: "Pick, \"two\"", explanation: "", options: ["1", "2", "=3"], correct: 1 },
+    ]);
+
+    expect(csv).toBe(
+      "question_text,explanation,choice_a,choice_b,choice_c,choice_d,correct_choices\r\n"
+      + "\"Pick, \"\"two\"\"\",,1,2,'=3,,B\r\n",
+    );
   });
 });

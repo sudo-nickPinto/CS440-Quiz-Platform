@@ -1561,6 +1561,8 @@ export function QuizEditor({
     <QuestionBankDialog
       open={questionBankOpen}
       classId={editing ? existingQuiz.class_id : Number(classId)}
+      quizTitle={editor.title}
+      quizQuestions={editor.questions}
       onClose={() => setQuestionBankOpen(false)}
       onAdd={(questions) => edit({ ...editorRef.current, questions: [...editorRef.current.questions, ...questions] })}
     />

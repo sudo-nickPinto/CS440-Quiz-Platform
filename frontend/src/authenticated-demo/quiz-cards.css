@@ -157,6 +157,13 @@
   font-weight: 800;
   text-decoration: none;
 }
+/* An open menu must sit above the following rows. The row cells get a hover
+   filter (which creates a stacking context), so raise the whole open row. */
+.qp .cl-quiz-actions:has(.ui-row-menu[open]),
+.qp .cl-rows tbody tr:has(.ui-row-menu[open]) > td {
+  position: relative;
+  z-index: 20;
+}
 .qp .cl-quiz-actions .ui-row-menu,
 .qp .cl-quiz-actions .ui-row-menu[open] {
   position: relative;

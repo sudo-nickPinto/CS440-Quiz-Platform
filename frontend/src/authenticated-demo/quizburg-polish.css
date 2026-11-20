@@ -2111,8 +2111,25 @@
   box-shadow: none;
 }
 
-.qp .qe-bank-button { margin-left: auto; min-height: 52px; border: var(--b-thin); background: var(--paper); box-shadow: var(--shadow-sm); padding: 10px 16px; color: var(--navy); font: 13px "Archivo Black", sans-serif; text-transform: uppercase; cursor: pointer; }
-.qp .qe-bank-button:hover:not(:disabled) { background: var(--sky-soft); }
+/* Matches the neighbouring Time per question button (.qe-tpbtn). */
+.qp .qe-bank-button {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  height: 42px;
+  padding: 0 14px;
+  border: var(--b);
+  background: var(--sky-soft);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--navy);
+  font: inherit;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.qp .qe-bank-button:hover:not(:disabled) { background: var(--paper); }
+.qp .qe-bank-button:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: none; }
+@media (max-width: 640px) { .qp .qe-bank-button { height: 44px; padding: 0 10px; } }
 .qb-modal-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgb(0 0 0 / .55); display: grid; place-items: center; padding: 24px; }
 .qb-bank { width: min(900px, 100%); max-height: 90vh; overflow: auto; background: #fffaf2; border: 4px solid #222; box-shadow: 9px 9px 0 #222; padding: 24px; }
 .qb-bank > header { display: flex; justify-content: space-between; align-items: start; border-bottom: 3px solid #222; margin-bottom: 18px; }
@@ -2133,6 +2150,9 @@
 .qb-bank-copy { min-width: 0; align-self: center; display: flex; flex-direction: column; justify-content: center; gap: 2px; line-height: 1.2; }
 .qb-bank-copy strong { overflow-wrap: anywhere; }
 .qb-bank-copy small { color: #666; }
+.qb-bank-row.is-unsupported { background: #f3efe8; box-shadow: none; }
+.qb-bank-row.is-unsupported .qb-bank-select { cursor: not-allowed; opacity: .75; }
+.qb-bank-copy small.qb-bank-unsupported { color: #9a3412; font-weight: 700; }
 .qp button.qb-bank-expand { grid-row: 1; align-self: center; justify-self: center; width: 30px; min-width: 0; min-height: 30px; height: 30px; display: grid; place-items: center; margin: 0; border: 0 !important; background: transparent !important; box-shadow: none !important; color: var(--navy); padding: 0; cursor: pointer; transform: none; }
 .qp button.qb-bank-expand:hover:not(:disabled) { border: 0 !important; background: transparent !important; box-shadow: none !important; filter: none; color: var(--orange-deep); transform: none; }
 .qb-bank-expand:focus-visible { outline: 3px solid #c84b08; outline-offset: 2px; }

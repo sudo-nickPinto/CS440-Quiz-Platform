@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApi } from "./rest";
 import RequestError from "./RequestError";
-import { toEditorQuestion } from "./questionBankModel";
+import { editorQuestionsToCsv, toEditorQuestion, unsupportedReason } from "./questionBankModel";
 
-export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
+export default function QuestionBankDialog({ open, classId, quizTitle, quizQuestions, onClose, onAdd }) {
   const api = useApi();
   const onCloseRef = useRef(onClose);
   const csvInputRef = useRef(null);
@@ -66,7 +66,13 @@ export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
     return () => window.clearTimeout(timer);
   }, [api, classId, open, scope, search]);
 
-  const validCsvRows = useMemo(() => preview?.rows.filter((row) => row.valid) ?? [], [preview]);
+  // Rows the editor can't represent (e.g. several correct answers) are shown
+  // as invalid so they can't be ticked and don't block the other rows.
+  const csvRows = useMemo(() => (preview?.rows ?? []).map((row) => {
+    const reason = row.valid ? unsupportedReason(row.question) : null;
+    return reason ? { ...row, valid: false, errors: [reason] } : row;
+  }), [preview]);
+  const validCsvRows = useMemo(() => csvRows.filter((row) => row.valid), [csvRows]);
   if (!open) return null;
 
   function toggle(setter, id) {
@@ -96,7 +102,9 @@ export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
         method: "POST", body: JSON.stringify({ csv_text: text }),
       });
       setPreview(result);
-      setCsvSelected(new Set(result.rows.filter((row) => row.valid).map((row) => row.row_number)));
+      setCsvSelected(new Set(result.rows
+        .filter((row) => row.valid && !unsupportedReason(row.question))
+        .map((row) => row.row_number)));
     } catch (failure) { setError(failure); setPreview(null); }
     finally { setBusy(false); }
   }
@@ -112,22 +120,14 @@ export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
     finally { setBusy(false); }
   }
 
-  async function exportCsv() {
-    setBusy(true); setError(null);
-    try {
-      const params = new URLSearchParams({ scope });
-      if (selected.size) {
-        [...selected].forEach((id) => params.append("ids", id));
-      } else if (search.trim()) {
-        params.set("search", search.trim());
-      }
-      const text = await api(`/classes/${classId}/question-bank/export.csv?${params}`);
-      const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
-      const link = document.createElement("a"); link.href = url; link.download = "question-bank.csv";
-      document.body.appendChild(link); link.click(); link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    } catch (failure) { setError(failure); }
-    finally { setBusy(false); }
+  // Exports the questions of the quiz open in the editor, not the bank.
+  function exportCsv() {
+    const text = editorQuestionsToCsv(quizQuestions);
+    const slug = (quizTitle ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+    const link = document.createElement("a"); link.href = url; link.download = `${slug || "quiz"}-questions.csv`;
+    document.body.appendChild(link); link.click(); link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   return (
@@ -139,7 +139,7 @@ export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
           <select aria-label="Question source" value={scope} onChange={(e) => setScope(e.target.value)}>
             <option value="class">Current class + mine</option><option value="mine">My questions across classes</option>
           </select>
-          <button type="button" onClick={exportCsv} disabled={busy}>Export CSV</button>
+          <button type="button" onClick={exportCsv} disabled={busy || !quizQuestions.length} title="Download this quiz's questions">Export CSV</button>
           <button type="button" onClick={() => csvInputRef.current?.click()} disabled={busy}>Import CSV</button>
           <input
             ref={csvInputRef}
@@ -152,10 +152,10 @@ export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
         <RequestError error={error} />
         {preview && <section className="qb-csv-preview" aria-label={`CSV preview for ${csvFileName}`}>
           <div className="qb-csv-status">
-            <strong>{preview.valid_count} valid</strong>
-            <span>{preview.invalid_count} invalid</span>
+            <strong>{validCsvRows.length} valid</strong>
+            <span>{csvRows.length - validCsvRows.length} invalid</span>
           </div>
-          {preview.rows.map((row) => row.valid ? (
+          {csvRows.map((row) => row.valid ? (
             <label className="qb-csv-row" key={row.row_number}>
               <input type="checkbox" checked={csvSelected.has(row.row_number)} onChange={() => toggle(setCsvSelected, row.row_number)} />
               <span className="qb-csv-check" aria-hidden="true">✓</span>
@@ -165,20 +165,24 @@ export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
           <button type="button" className="qb-btn qb-btn-orange" disabled={!csvSelected.size || busy} onClick={importCsv}>Import selected ({csvSelected.size})</button>
         </section>}
         <div className="qb-bank-list" aria-busy={loading}>
-          {loading ? <p>Loading questions…</p> : items.length ? items.map((item) => (
+          {loading ? <p>Loading questions…</p> : items.length ? items.map((item) => {
+            const reason = unsupportedReason(item);
+            return (
             <article
               key={item.bank_question_id}
-              className={`qb-bank-row${selected.has(item.bank_question_id) ? " is-selected" : ""}`}
+              className={`qb-bank-row${selected.has(item.bank_question_id) ? " is-selected" : ""}${reason ? " is-unsupported" : ""}`}
             >
               <label className="qb-bank-select">
                 <input
                   type="checkbox"
                   checked={selected.has(item.bank_question_id)}
+                  disabled={Boolean(reason)}
                   onChange={() => toggle(setSelected, item.bank_question_id)}
                 />
                 <span className="qb-bank-check" aria-hidden="true">✓</span>
                 <span className="qb-bank-copy">
                   <strong>{item.question_text}</strong>
+                  {reason && <small className="qb-bank-unsupported">{reason}</small>}
                 </span>
               </label>
               <button
@@ -203,7 +207,8 @@ export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
                 </ol>
               )}
             </article>
-          )) : <p>No matching questions.</p>}
+            );
+          }) : <p>No matching questions.</p>}
         </div>
         <button className="qb-btn qb-btn-blue" type="button" disabled={!selected.size || busy} onClick={addSelected}>Add selected ({selected.size})</button>
       </section>
