@@ -19,6 +19,7 @@ class QuestionBankItemResponse(BaseModel):
     bank_question_id: int
     owner_id: int
     source_class_id: int | None
+    source_quiz_id: int | None = None
     question_type: QuestionType
     question_text: str
     explanation: str | None
@@ -86,3 +87,51 @@ class CsvBankSaveResponse(BaseModel):
 
 class DuplicateQuizResponse(BaseModel):
     quiz: QuizResponse
+
+
+class BankSourceQuiz(BaseModel):
+    quiz_id: int
+    title: str
+    question_count: int
+
+
+class BankSourceCourse(BaseModel):
+    class_id: int
+    name: str
+    archived: bool
+    question_count: int
+    # Questions saved straight to the bank (e.g. from a CSV) have no quiz.
+    quizzes: list[BankSourceQuiz]
+
+
+class BankSourcesResponse(BaseModel):
+    courses: list[BankSourceCourse]
+
+
+def _unique_positive(value: list[int], label: str) -> list[int]:
+    if any(item < 1 for item in value) or len(value) != len(set(value)):
+        raise ValueError(f"{label} must be unique positive integers.")
+    return value
+
+
+class BankExportRequest(BaseModel):
+    """What to download from the account-wide bank.
+
+    Every question visible in ``class_ids`` (optionally one quiz, optionally a
+    search), or exactly ``bank_question_ids`` when given.
+    """
+
+    class_ids: list[int] = Field(min_length=1, max_length=200)
+    quiz_id: int | None = Field(default=None, ge=1)
+    search: str = Field(default="", max_length=200)
+    bank_question_ids: list[int] | None = Field(default=None, min_length=1, max_length=5000)
+
+    @field_validator("class_ids")
+    @classmethod
+    def unique_classes(cls, value: list[int]) -> list[int]:
+        return _unique_positive(value, "Class IDs")
+
+    @field_validator("bank_question_ids")
+    @classmethod
+    def unique_questions(cls, value: list[int] | None) -> list[int] | None:
+        return None if value is None else _unique_positive(value, "Question IDs")

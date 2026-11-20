@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
-from app.models.classes import ClassMembership, ClassRole, MembershipStatus
+from app.models.classes import Class, ClassMembership, ClassRole, MembershipStatus
 from app.models.quiz import (
     AnswerChoice,
     Question,
@@ -24,7 +24,11 @@ from app.models.quiz import (
 )
 from app.schemas.pagination import PageInfo
 from app.schemas.question_bank import (
+    BankExportRequest,
     BankScope,
+    BankSourceCourse,
+    BankSourceQuiz,
+    BankSourcesResponse,
     CsvBankSaveRequest,
     CsvBankSaveResponse,
     CsvImportRequest,
@@ -160,7 +164,8 @@ def _visible_condition(
 def _response(item: QuestionBankItem) -> QuestionBankItemResponse:
     return QuestionBankItemResponse(
         bank_question_id=item.bank_question_id, owner_id=item.owner_id,
-        source_class_id=item.source_class_id, question_type=item.question_type,
+        source_class_id=item.source_class_id, source_quiz_id=item.source_quiz_id,
+        question_type=item.question_type,
         question_text=item.question_text, explanation=item.explanation,
         choices=[AnswerChoiceCreate.model_validate(choice) for choice in item.choices_json],
         updated_at=item.updated_at,
@@ -440,6 +445,10 @@ def export_csv(db: Session, account: CurrentAccount, class_id: int, scope: BankS
     ) & QuestionBankItem.is_current.is_(True)
     if ids: condition = condition & QuestionBankItem.bank_question_id.in_(ids)
     items = list(db.scalars(select(QuestionBankItem).where(condition).order_by(QuestionBankItem.bank_question_id)))
+    return _csv_text(items)
+
+
+def _csv_text(items: list[QuestionBankItem]) -> str:
     unsupported = [
         item.bank_question_id for item in items if len(item.choices_json) > 4
     ]
@@ -462,3 +471,166 @@ def export_csv(db: Session, account: CurrentAccount, class_id: int, scope: BankS
             row[f"choice_{key}"] = safe(choices[index]["choice_text"]) if index < len(choices) else ""
         writer.writerow(row)
     return out.getvalue()
+
+
+# Account-wide bank: every course the caller is an active member of.
+
+
+def _active_memberships(
+    db: Session, account: CurrentAccount
+) -> dict[int, ClassMembership]:
+    rows = db.scalars(select(ClassMembership).where(
+        ClassMembership.account_id == account.account_id,
+        ClassMembership.status == MembershipStatus.ACTIVE,
+    ))
+    return {membership.class_id: membership for membership in rows}
+
+
+def _course_condition(account: CurrentAccount, class_id: int, *, is_organizer: bool):
+    """Current questions from one course that the caller may see there.
+
+    The same rule as the class-scoped bank, limited to questions whose source
+    is this course: the caller's own, quizzes shared with them, and for
+    organizers the course's published quizzes.
+    """
+    visible = _visible_condition(
+        account, class_id, BankScope.CLASS, is_organizer=is_organizer
+    )
+    return (
+        (QuestionBankItem.source_class_id == class_id)
+        & QuestionBankItem.is_current.is_(True)
+        & visible
+    )
+
+
+def _account_bank_condition(
+    db: Session,
+    account: CurrentAccount,
+    class_ids: list[int] | None = None,
+):
+    memberships = _active_memberships(db, account)
+    if class_ids is None:
+        class_ids = sorted(memberships)
+    elif any(class_id not in memberships for class_id in class_ids):
+        raise APIError(404, "class_not_found", "Class not found.")
+    if not class_ids:
+        return None
+    for class_id in class_ids:
+        _ensure_legacy_snapshots(
+            db, account, class_id,
+            is_organizer=memberships[class_id].role == ClassRole.ORGANIZER,
+        )
+    return or_(*(
+        _course_condition(
+            account, class_id,
+            is_organizer=memberships[class_id].role == ClassRole.ORGANIZER,
+        )
+        for class_id in class_ids
+    ))
+
+
+def _filtered_condition(
+    db: Session,
+    account: CurrentAccount,
+    class_ids: list[int],
+    *,
+    quiz_id: int | None,
+    search: str,
+):
+    condition = _account_bank_condition(db, account, class_ids)
+    if quiz_id is not None:
+        condition = condition & (QuestionBankItem.source_quiz_id == quiz_id)
+    if search.strip():
+        condition = condition & QuestionBankItem.question_text.ilike(f"%{search.strip()}%")
+    return condition
+
+
+def list_bank_sources(db: Session, account: CurrentAccount) -> BankSourcesResponse:
+    condition = _account_bank_condition(db, account)
+    if condition is None:
+        return BankSourcesResponse(courses=[])
+    counts = db.execute(
+        select(
+            QuestionBankItem.source_class_id,
+            QuestionBankItem.source_quiz_id,
+            func.count(),
+        )
+        .where(condition)
+        .group_by(QuestionBankItem.source_class_id, QuestionBankItem.source_quiz_id)
+    ).all()
+    if not counts:
+        return BankSourcesResponse(courses=[])
+    class_ids = {class_id for class_id, _, _ in counts}
+    quiz_ids = {quiz_id for _, quiz_id, _ in counts if quiz_id is not None}
+    courses = {
+        course.class_id: course
+        for course in db.scalars(select(Class).where(Class.class_id.in_(class_ids)))
+    }
+    quizzes = {
+        quiz.quiz_id: quiz
+        for quiz in db.scalars(
+            select(Quiz).where(Quiz.quiz_id.in_(quiz_ids)).options(selectinload(Quiz.versions))
+        )
+    } if quiz_ids else {}
+
+    grouped: dict[int, BankSourceCourse] = {}
+    for class_id, quiz_id, count in counts:
+        course = courses[class_id]
+        entry = grouped.setdefault(class_id, BankSourceCourse(
+            class_id=class_id, name=course.name, archived=course.archived_at is not None,
+            question_count=0, quizzes=[],
+        ))
+        entry.question_count += count
+        quiz = quizzes.get(quiz_id)
+        if quiz is not None and quiz.versions:
+            entry.quizzes.append(BankSourceQuiz(
+                quiz_id=quiz_id, title=quiz.versions[-1].title, question_count=count,
+            ))
+    for entry in grouped.values():
+        entry.quizzes.sort(key=lambda quiz: (quiz.title.lower(), quiz.quiz_id))
+    return BankSourcesResponse(courses=sorted(
+        grouped.values(), key=lambda course: (course.archived, course.name.lower())
+    ))
+
+
+def list_account_bank(
+    db: Session,
+    account: CurrentAccount,
+    class_ids: list[int],
+    *,
+    quiz_id: int | None,
+    search: str,
+    page: int,
+    page_size: int,
+) -> QuestionBankPage:
+    condition = _filtered_condition(
+        db, account, class_ids, quiz_id=quiz_id, search=search
+    )
+    total = db.scalar(select(func.count()).select_from(QuestionBankItem).where(condition)) or 0
+    items = list(db.scalars(
+        select(QuestionBankItem).where(condition)
+        .order_by(QuestionBankItem.updated_at.desc(), QuestionBankItem.bank_question_id.desc())
+        .limit(page_size).offset((page - 1) * page_size)
+    ))
+    return QuestionBankPage(items=[_response(item) for item in items], pagination=PageInfo(
+        page=page, page_size=page_size, total_items=total,
+        total_pages=ceil(total / page_size) if total else 0,
+    ))
+
+
+def export_account_csv(
+    db: Session, account: CurrentAccount, payload: BankExportRequest
+) -> str:
+    condition = _filtered_condition(
+        db, account, payload.class_ids, quiz_id=payload.quiz_id, search=payload.search
+    )
+    if payload.bank_question_ids is not None:
+        condition = condition & QuestionBankItem.bank_question_id.in_(
+            payload.bank_question_ids
+        )
+    items = list(db.scalars(
+        select(QuestionBankItem).where(condition).order_by(QuestionBankItem.bank_question_id)
+    ))
+    if payload.bank_question_ids is not None and len(items) != len(payload.bank_question_ids):
+        raise APIError(404, "bank_question_not_found", "A selected question is unavailable.")
+    return _csv_text(items)
