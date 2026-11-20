@@ -161,7 +161,7 @@ export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
               key={item.bank_question_id}
               className={`qb-bank-row${selected.has(item.bank_question_id) ? " is-selected" : ""}${reason ? " is-unsupported" : ""}`}
             >
-              <label className="qb-bank-select">
+              <label className="qb-bank-select" title={reason ?? undefined}>
                 <input
                   type="checkbox"
                   checked={selected.has(item.bank_question_id)}
@@ -171,7 +171,12 @@ export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
                 <span className="qb-bank-check" aria-hidden="true">✓</span>
                 <span className="qb-bank-copy">
                   <strong>{item.question_text}</strong>
-                  {reason && <small className="qb-bank-unsupported">{reason}</small>}
+                  {reason && (
+                    <small className="qb-bank-unsupported">
+                      Unselectable · multi-correct
+                      <span className="ui-sr"> ({reason})</span>
+                    </small>
+                  )}
                 </span>
               </label>
               <button

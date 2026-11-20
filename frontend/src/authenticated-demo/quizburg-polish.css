@@ -2151,9 +2151,13 @@
 .qb-bank-copy { min-width: 0; align-self: center; display: flex; flex-direction: column; justify-content: center; gap: 2px; line-height: 1.2; }
 .qb-bank-copy strong { overflow-wrap: anywhere; }
 .qb-bank-copy small { color: #666; }
+/* Multi-correct questions can't be added here: faded and slightly blurred,
+   with a small tag (the full reason is the tooltip). */
 .qb-bank-row.is-unsupported { background: #f3efe8; box-shadow: none; }
-.qb-bank-row.is-unsupported .qb-bank-select { cursor: not-allowed; opacity: .75; }
-.qb-bank-copy small.qb-bank-unsupported { color: #9a3412; font-weight: 700; }
+.qb-bank-row.is-unsupported .qb-bank-select { cursor: not-allowed; }
+.qb-bank-row.is-unsupported .qb-bank-check,
+.qb-bank-row.is-unsupported .qb-bank-copy strong { opacity: .5; filter: blur(.6px); }
+.qp .qb-bank-copy small.qb-bank-unsupported { justify-self: start; width: fit-content; margin-top: 3px; padding: 1px 7px; border: 1.5px solid #9a3412; background: #fff; color: #9a3412; font-size: 11px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; }
 .qp button.qb-bank-expand { grid-row: 1; align-self: center; justify-self: center; width: 30px; min-width: 0; min-height: 30px; height: 30px; display: grid; place-items: center; margin: 0; border: 0 !important; background: transparent !important; box-shadow: none !important; color: var(--navy); padding: 0; cursor: pointer; transform: none; }
 .qp button.qb-bank-expand:hover:not(:disabled) { border: 0 !important; background: transparent !important; box-shadow: none !important; filter: none; color: var(--orange-deep); transform: none; }
 .qb-bank-expand:focus-visible { outline: 3px solid #c84b08; outline-offset: 2px; }
