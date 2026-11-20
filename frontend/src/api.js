@@ -64,7 +64,10 @@ export async function apiFetch(path, getToken, options = {}) {
     headers,
   })
 
-  const body = await response.json().catch(() => null)
+  const contentType = response.headers.get('content-type') || ''
+  const body = contentType.includes('text/csv')
+    ? await response.text()
+    : await response.json().catch(() => null)
 
   if (!response.ok) {
     const details = body?.error?.details
