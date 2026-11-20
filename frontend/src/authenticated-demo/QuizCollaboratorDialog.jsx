@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import ConfirmDialog from "./ConfirmDialog";
 import { useAction, useApi, useResource } from "./rest";
 import { useConfirm } from "./useConfirm";
+import SuggestionList from "../classes/SuggestionList";
 import { useSuggestions } from "../classes/useSuggestions";
 import { isEditorNow, withEditorChange } from "./collaboratorStatus";
 import "../classes/class-admin.css";
@@ -34,9 +35,9 @@ export function AddCollaboratorCell({ onOpen }) {
   );
 }
 
-// "+ Add collaborator" pop-up on the quiz page: search the people in this
-// class by name or email (results update as you type, like "+ Add student"),
-// add one as an editor, and see or remove the current editors.
+// "+ Add collaborator" pop-up on the quiz page, laid out like "+ Add student":
+// a scrolling list of the people in this class (filtered as you type), to add
+// one as an editor, and the current editors, to remove one.
 export default function QuizCollaboratorDialog({ quiz, onClose }) {
   const ref = useRef(null);
   const api = useApi();
@@ -111,7 +112,7 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
     <div className="cl-page" style={{ display: "contents" }}>
       <dialog
         ref={ref}
-        className="cl-dlg"
+        className="cl-dlg cl-dlg-wide"
         aria-labelledby="qv-collab-title"
         onCancel={(event) => {
           event.preventDefault();
@@ -123,7 +124,7 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
         }}
       >
         <div className="cl-dlg-top">
-          <span>
+          <span id="qv-collab-title">
             Add collaborator · <b>{quiz.version.title}</b>
           </span>
           <button
@@ -136,51 +137,59 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
           </button>
         </div>
 
-        <form
-          className="cl-dlg-head"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (typedEmail) void addEditor(text);
-          }}
-        >
-          <h2 id="qv-collab-title">Who else can edit this quiz?</h2>
-          <div className="cl-dlg-row">
-            <label className="cl-search">
-              <span className="cl-sr">Search this class by name or email</span>
-              <input
-                type="text"
-                inputMode="email"
-                placeholder="Search this class by name or email…"
-                value={text}
-                autoFocus
-                autoComplete="off"
-                role="combobox"
-                aria-expanded={suggestions.length > 0}
-                aria-controls={listId}
-                aria-autocomplete="list"
-                disabled={action.busy}
-                onChange={(event) => setText(event.target.value)}
-              />
-            </label>
-            {typedEmail && (
-              <button
-                type="submit"
-                className="cl-add-one"
-                disabled={action.busy}
-              >
-                + Add
-              </button>
-            )}
-          </div>
+        <div className="cl-add-body">
+          <form
+            className="cl-add-search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (typedEmail) void addEditor(text);
+            }}
+          >
+            <div className="cl-dlg-row">
+              <label className="cl-search">
+                <span className="cl-sr">Search this class by name or email</span>
+                <input
+                  type="text"
+                  inputMode="email"
+                  placeholder="Search this class by name or email…"
+                  value={text}
+                  autoFocus
+                  autoComplete="off"
+                  role="combobox"
+                  aria-expanded={suggestions.items.length > 0}
+                  aria-controls={listId}
+                  aria-autocomplete="list"
+                  disabled={action.busy}
+                  onChange={(event) => setText(event.target.value)}
+                />
+              </label>
+              {typedEmail && (
+                <button
+                  type="submit"
+                  className="cl-add-one"
+                  disabled={action.busy}
+                >
+                  + Add
+                </button>
+              )}
+            </div>
 
-          {suggestions.length > 0 && (
-            <ul
-              className="cl-suggest"
+            {action.error && (
+              <p className="cl-dlg-error" role="alert">
+                {action.error.message}
+              </p>
+            )}
+
+            <SuggestionList
               id={listId}
-              role="listbox"
-              aria-label="People in this class"
-            >
-              {suggestions.map((person) => {
+              label="People in this class"
+              suggestions={suggestions}
+              emptyText={
+                text.trim()
+                  ? "No one in this class matches that search."
+                  : "No one else is in this class yet."
+              }
+              renderPerson={(person) => {
                 const editor = isEditorNow(person, editorChanges);
                 return (
                   <li
@@ -209,19 +218,10 @@ export default function QuizCollaboratorDialog({ quiz, onClose }) {
                     )}
                   </li>
                 );
-              })}
-            </ul>
-          )}
-          <p>
-            Only people in this class can be added. Editors can change the
-            questions and answers.
-          </p>
-          {action.error && (
-            <p className="cl-dlg-error" role="alert">
-              {action.error.message}
-            </p>
-          )}
-        </form>
+              }}
+            />
+          </form>
+        </div>
 
         <div className="cl-dlg-sub">
           <span>Editors</span>

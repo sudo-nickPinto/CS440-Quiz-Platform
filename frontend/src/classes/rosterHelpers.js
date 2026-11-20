@@ -57,12 +57,11 @@ export function suggestionStatus(status) {
   }
 }
 
-// Only ask the server once the search could match something.
+// The search sent to the server, with spaces tidied. Empty lists everyone.
 export function suggestionQuery(text) {
-  const query = String(text ?? "")
+  return String(text ?? "")
     .trim()
     .replace(/\s+/g, " ");
-  return query.length >= 2 ? query : "";
 }
 
 // Roster files: CSV or Excel. Older .xls files aren't supported.

@@ -75,7 +75,7 @@ test("a collaborator can be added, removed and added again from the search", asy
 
   await page.getByRole("button", { name: "Add collaborator" }).first().click();
   // By name: the remove confirmation is a second dialog.
-  const dialog = page.getByRole("dialog", { name: "Who else can edit this quiz?" });
+  const dialog = page.getByRole("dialog", { name: /^Add collaborator/ });
   await dialog
     .getByPlaceholder("Search this class by name or email…")
     .fill("riv");
