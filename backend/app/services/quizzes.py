@@ -1540,11 +1540,7 @@ def list_quiz_collaborators(
     ]
 
 
-COLLABORATOR_SUGGESTION_LIMIT = 8
-
-
-def _escape_like(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+COLLABORATOR_SUGGESTION_LIMIT = 8  # default page size
 
 
 def suggest_quiz_collaborators(
@@ -1553,20 +1549,22 @@ def suggest_quiz_collaborators(
     class_id: int,
     quiz_id: int,
     query: str,
+    *,
+    limit: int = COLLABORATOR_SUGGESTION_LIMIT,
+    offset: int = 0,
 ) -> list[CollaboratorSuggestion]:
-    """People in the quiz's class whose name or email starts with the query,
-    for the Add collaborator search. Only they can be added as editors.
+    """People in the quiz's class for the Add collaborator search, a page at a
+    time, alphabetically. Only they can be added as editors.
 
-    Owner only, like the rest of collaborator management. Needs at least two
-    characters; the owner themselves is left out.
+    An empty query lists everyone in the class; otherwise only names and
+    emails starting with the query. A page shorter than ``limit`` is the last
+    one. Owner only, like the rest of collaborator management; the owner
+    themselves is left out.
     """
+    from app.services.class_roster import name_or_email_starts_with
+
     _require_collaborator_owner(db, account, class_id, quiz_id)
-    needle = " ".join(query.split()).lower()
-    if len(needle) < 2:
-        return []
-    prefix = _escape_like(needle) + "%"
-    word = "% " + prefix
-    matches = db.scalars(
+    statement = (
         select(Account)
         .join(ClassMembership, ClassMembership.account_id == Account.account_id)
         .where(
@@ -1574,16 +1572,16 @@ def suggest_quiz_collaborators(
             ClassMembership.status == MembershipStatus.ACTIVE,
             Account.is_active.is_(True),
             Account.account_id != account.account_id,
-            or_(
-                func.lower(Account.email).like(prefix, escape="\\"),
-                func.lower(Account.display_name).like(prefix, escape="\\"),
-                func.lower(Account.display_name).like(word, escape="\\"),
-                func.lower(Account.first_name).like(prefix, escape="\\"),
-                func.lower(Account.last_name).like(prefix, escape="\\"),
-            ),
         )
+    )
+    matching = name_or_email_starts_with(query)
+    if matching is not None:
+        statement = statement.where(matching)
+    matches = db.scalars(
+        statement
         .order_by(Account.display_name, Account.account_id)
-        .limit(COLLABORATOR_SUGGESTION_LIMIT)
+        .limit(limit)
+        .offset(offset)
     ).all()
     editors = set(
         db.scalars(

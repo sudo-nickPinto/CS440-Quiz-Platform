@@ -1069,9 +1069,26 @@ def test_collaborator_suggestions_list_classmates_as_you_type(
     # Not the owner, and not people outside the class.
     assert _suggest(client, class_id, quiz_id, "ow").json() == []
     assert _suggest(client, class_id, quiz_id, "out").json() == []
-    # One character, or only wildcards, finds nothing.
-    assert _suggest(client, class_id, quiz_id, "e").json() == []
+    # One character searches too; only wildcards finds nothing.
+    assert _suggest(client, class_id, quiz_id, "e").json() == by_name
     assert _suggest(client, class_id, quiz_id, "%%").json() == []
+
+
+def test_collaborator_suggestions_list_the_class_a_page_at_a_time(
+    collaboration_client,
+) -> None:
+    client, class_id, owner, editor, outsider = collaboration_client
+    quiz_id = _create(client, class_id)["quiz_id"]
+    path = f"/classes/{class_id}/quizzes/{quiz_id}/collaborator-suggestions"
+
+    # An empty search lists the class (not the owner, not outsiders).
+    assert [item["account_id"] for item in _suggest(client, class_id, quiz_id, "").json()] == [
+        editor.account_id
+    ]
+    assert client.get(path, params={"limit": 1}).json()[0]["account_id"] == editor.account_id
+    assert client.get(path, params={"limit": 1, "offset": 1}).json() == []
+    for params in ({"limit": 0}, {"limit": 51}, {"offset": -1}):
+        assert client.get(path, params=params).status_code == 422, params
 
 
 def test_collaborator_suggestions_mark_current_editors(collaboration_client) -> None:

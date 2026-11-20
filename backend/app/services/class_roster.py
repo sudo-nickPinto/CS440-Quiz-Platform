@@ -64,7 +64,8 @@ MAX_ROSTER_BYTES = 2 * 1024 * 1024
 MAX_ROSTER_ROWS = 2000
 # How far down the file the header row may be (exports sometimes add a title).
 HEADER_SEARCH_ROWS = 10
-SUGGESTION_LIMIT = 8
+SUGGESTION_LIMIT = 8  # default page size
+SUGGESTION_MAX_LIMIT = 50
 XLSX_MAGIC = b"PK\x03\x04"
 
 # Header names we understand, after lowercasing and dropping everything that
@@ -913,34 +914,49 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def suggest_students(
-    db: Session, account: CurrentAccount, class_id: int, query: str
-) -> list[StudentSuggestion]:
-    """Accounts anywhere in QuizBurg whose name or email starts with the query.
-
-    Organizer only, because it shows other people's emails. Needs at least two
-    characters and returns a handful of results.
-    """
-    _require_organizer(db, account, class_id)
+def name_or_email_starts_with(query: str):
+    """Filter for accounts whose email, first or last name, or a word of their
+    name starts with the query. None for an empty query (everyone)."""
     needle = " ".join(query.split()).lower()
-    if len(needle) < 2:
-        return []
+    if not needle:
+        return None
     prefix = _escape_like(needle) + "%"
     word = "% " + prefix
+    return or_(
+        func.lower(Account.email).like(prefix, escape="\\"),
+        func.lower(Account.display_name).like(prefix, escape="\\"),
+        func.lower(Account.display_name).like(word, escape="\\"),
+        func.lower(Account.first_name).like(prefix, escape="\\"),
+        func.lower(Account.last_name).like(prefix, escape="\\"),
+    )
+
+
+def suggest_students(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    query: str,
+    *,
+    limit: int = SUGGESTION_LIMIT,
+    offset: int = 0,
+) -> list[StudentSuggestion]:
+    """Active accounts anywhere in QuizBurg, a page at a time, alphabetically.
+
+    An empty query lists everyone, so the pop-up shows people as soon as it
+    opens; otherwise only names and emails starting with the query. A page
+    shorter than ``limit`` is the last one. Organizer only, because it shows
+    other people's emails.
+    """
+    _require_organizer(db, account, class_id)
+    statement = select(Account).where(Account.is_active.is_(True))
+    matching = name_or_email_starts_with(query)
+    if matching is not None:
+        statement = statement.where(matching)
     matches = db.scalars(
-        select(Account)
-        .where(
-            Account.is_active.is_(True),
-            or_(
-                func.lower(Account.email).like(prefix, escape="\\"),
-                func.lower(Account.display_name).like(prefix, escape="\\"),
-                func.lower(Account.display_name).like(word, escape="\\"),
-                func.lower(Account.first_name).like(prefix, escape="\\"),
-                func.lower(Account.last_name).like(prefix, escape="\\"),
-            ),
-        )
+        statement
         .order_by(Account.display_name, Account.account_id)
-        .limit(SUGGESTION_LIMIT)
+        .limit(limit)
+        .offset(offset)
     ).all()
     statuses = {
         membership.account_id: membership.status
