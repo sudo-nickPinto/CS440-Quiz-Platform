@@ -1094,7 +1094,7 @@ export function QuizEditor({
                 downloadQuizQuestionsCsv(editor.title, editor.questions)
               }
             >
-              Download questions (CSV)
+              Export questions (CSV)
             </button>
           </OptionsMenu>
         </div>

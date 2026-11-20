@@ -129,7 +129,7 @@ export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
           <select aria-label="Question source" value={scope} onChange={(e) => setScope(e.target.value)}>
             <option value="class">Current class + mine</option><option value="mine">My questions across classes</option>
           </select>
-          <button type="button" onClick={() => csvInputRef.current?.click()} disabled={busy}>Import CSV</button>
+          <button type="button" onClick={() => csvInputRef.current?.click()} disabled={busy}>Import questions (CSV)</button>
           <input
             ref={csvInputRef}
             className="ui-sr"
