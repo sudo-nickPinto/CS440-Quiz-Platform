@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApi } from "./rest";
 import RequestError from "./RequestError";
-import { editorQuestionsToCsv, toEditorQuestion, unsupportedReason } from "./questionBankModel";
+import { toEditorQuestion, unsupportedReason } from "./questionBankModel";
 
-export default function QuestionBankDialog({ open, classId, quizTitle, quizQuestions, onClose, onAdd }) {
+export default function QuestionBankDialog({ open, classId, onClose, onAdd }) {
   const api = useApi();
   const onCloseRef = useRef(onClose);
   const csvInputRef = useRef(null);
@@ -120,16 +120,6 @@ export default function QuestionBankDialog({ open, classId, quizTitle, quizQuest
     finally { setBusy(false); }
   }
 
-  // Exports the questions of the quiz open in the editor, not the bank.
-  function exportCsv() {
-    const text = editorQuestionsToCsv(quizQuestions);
-    const slug = (quizTitle ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
-    const link = document.createElement("a"); link.href = url; link.download = `${slug || "quiz"}-questions.csv`;
-    document.body.appendChild(link); link.click(); link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  }
-
   return (
     <div className="qb-modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && closeDialog()}>
       <section className="qb-bank" role="dialog" aria-modal="true" aria-labelledby="bank-title">
@@ -139,7 +129,6 @@ export default function QuestionBankDialog({ open, classId, quizTitle, quizQuest
           <select aria-label="Question source" value={scope} onChange={(e) => setScope(e.target.value)}>
             <option value="class">Current class + mine</option><option value="mine">My questions across classes</option>
           </select>
-          <button type="button" onClick={exportCsv} disabled={busy || !quizQuestions.length} title="Download this quiz's questions">Export CSV</button>
           <button type="button" onClick={() => csvInputRef.current?.click()} disabled={busy}>Import CSV</button>
           <input
             ref={csvInputRef}

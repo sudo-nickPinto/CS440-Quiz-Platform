@@ -56,6 +56,7 @@ import QuizCollaboratorDialog, {
 } from "./QuizCollaboratorDialog";
 import { QuizFlowButton, QuizFlowTrack } from "./QuizFlowPanel";
 import QuestionBankDialog from "./QuestionBankDialog";
+import { downloadQuizQuestionsCsv } from "./questionBankModel";
 import OptionsMenu from "./OptionsMenu";
 import "./quiz-flow.css";
 
@@ -1084,6 +1085,18 @@ export function QuizEditor({
               <span aria-hidden="true">▾</span>
             </span>
           </TimePicker>
+
+          <OptionsMenu className="qe-options-menu">
+            <button
+              type="button"
+              disabled={!editor.questions.length}
+              onClick={() =>
+                downloadQuizQuestionsCsv(editor.title, editor.questions)
+              }
+            >
+              Download questions (CSV)
+            </button>
+          </OptionsMenu>
         </div>
 
         {editing && (collaborationStatus !== "open" || remoteNotice) && (
@@ -1561,8 +1574,6 @@ export function QuizEditor({
     <QuestionBankDialog
       open={questionBankOpen}
       classId={editing ? existingQuiz.class_id : Number(classId)}
-      quizTitle={editor.title}
-      quizQuestions={editor.questions}
       onClose={() => setQuestionBankOpen(false)}
       onAdd={(questions) => edit({ ...editorRef.current, questions: [...editorRef.current.questions, ...questions] })}
     />
