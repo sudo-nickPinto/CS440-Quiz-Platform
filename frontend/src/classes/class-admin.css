@@ -1933,25 +1933,75 @@
   }
 }
 
-/* Admin class header: with four actions beside it the class title was
-   squeezed onto two lines. On wider screens the actions get their own row
-   under the title, with Archive (the destructive one) set apart on the
-   right. Phones keep the wrapping layout above. */
-@media (min-width: 761px) {
+/* Admin class header: two everyday actions as buttons, and the rarer ones
+   (Export grades, Archive class) in a ⋯ menu, so the title isn't squeezed. */
+.qp .cl-classbar .cl-actions {
+  align-items: center;
+}
+
+.qp .cl-classbar .cl-class-options,
+.qp .cl-classbar .cl-class-options[open] {
+  position: relative;
+  align-self: stretch;
+}
+
+.qp .cl-classbar .cl-class-options > summary {
+  height: 100%;
+  min-height: 40px;
+}
+
+.qp .cl-classbar .cl-class-options .ui-row-options {
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(240px, 80vw);
+}
+
+/* Wide screens: title block on the left; on the right the view switch with
+   the buttons under it, so the title keeps the width it needs. */
+@media (min-width: 1100px) {
   .qp .cl-classbar:has(> .cl-actions) {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     column-gap: 20px;
-    row-gap: 16px;
+    row-gap: 12px;
+  }
+
+  .qp .cl-classbar:has(> .cl-actions) > .cl-button,
+  .qp .cl-classbar:has(> .cl-actions) > .cl-class-title {
+    grid-row: 1 / span 2;
+  }
+
+  .qp .cl-classbar:has(> .cl-actions) > .cl-view-switch {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
   }
 
   .qp .cl-classbar:has(> .cl-actions) > .cl-actions {
+    grid-column: 3;
     grid-row: 2;
-    grid-column: 2 / -1;
+    justify-self: end;
+  }
+}
+
+/* Mid widths: the title takes the first row; the buttons and the view
+   switch share the next one. */
+@media (min-width: 761px) and (max-width: 1099px) {
+  .qp .cl-classbar:has(> .cl-actions) > .cl-class-title {
+    flex-basis: calc(100% - 190px);
   }
 
-  .qp .cl-classbar > .cl-actions > .cl-danger {
+  .qp .cl-classbar:has(> .cl-actions) > .cl-view-switch {
     margin-left: auto;
+  }
+}
+
+/* Phones: the ⋯ often wraps to the start of a line, so open its menu to
+   the right, where there's room. */
+@media (max-width: 760px) {
+  .qp .cl-classbar .cl-class-options .ui-row-options {
+    right: auto;
+    left: 0;
   }
 }

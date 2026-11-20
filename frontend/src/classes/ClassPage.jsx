@@ -40,6 +40,7 @@ import {
 import { ClassStudents } from "./ClassManagement";
 import { AddStudentDialog, JoinRequestsTable } from "./StudentRoster";
 import QuestionBankExportDialog from "../authenticated-demo/QuestionBankExportDialog";
+import OptionsMenu from "../authenticated-demo/OptionsMenu";
 import {
   CLASS_EVENTS,
   SUBMISSION_EVENTS,
@@ -1279,29 +1280,31 @@ function ClassWorkspace({ classInfo, onChange }) {
               Question bank
             </button>
 
-            <button
-              type="button"
-              disabled={csv.busy}
-              onClick={() =>
-                void csv.download(
-                  `/classes/${classInfo.id}/grades/export.csv`,
-                  "class-grades.csv",
-                )
-              }
-            >
-              {csv.busy ? "Preparing…" : "Export grades"}
-            </button>
-
-            {!classInfo.archived && (
+            {/* Less frequent actions, like the quiz page's ⋯ menu. */}
+            <OptionsMenu className="cl-class-options">
               <button
                 type="button"
-                className="cl-secondary cl-danger"
-                disabled={manage.busy}
-                onClick={() => void archiveClass()}
+                disabled={csv.busy}
+                onClick={() =>
+                  void csv.download(
+                    `/classes/${classInfo.id}/grades/export.csv`,
+                    "class-grades.csv",
+                  )
+                }
               >
-                Archive
+                {csv.busy ? "Preparing…" : "Export grades"}
               </button>
-            )}
+              {!classInfo.archived && (
+                <button
+                  type="button"
+                  className="ui-danger"
+                  disabled={manage.busy}
+                  onClick={() => void archiveClass()}
+                >
+                  Archive class
+                </button>
+              )}
+            </OptionsMenu>
           </div>
         )}
 
