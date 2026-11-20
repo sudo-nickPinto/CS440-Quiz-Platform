@@ -36,7 +36,11 @@ from app.schemas.class_dashboard import (
 )
 from app.schemas.pagination import PageInfo, SortOrder
 from app.schemas.quiz import QuizVersionResponse
-from app.services.class_authorization import ClassAccess, require_class_member
+from app.services.class_authorization import (
+    ClassAccess,
+    require_class_content,
+    require_class_member,
+)
 from app.services.hosting import quiz_hosting_many
 from app.services.quiz_submissions import (
     _approved_versions_statement as approved_versions_statement,
@@ -111,7 +115,12 @@ def _visible_submissions(
         .join(Quiz, Quiz.quiz_id == QuizVersion.quiz_id)
         .join(_submitter, _submitter.account_id == QuizSubmission.submitted_by_id)
         .outerjoin(_decider, _decider.account_id == QuizSubmission.decided_by_id)
-        .where(QuizSubmission.class_id == class_id, Quiz.class_id == class_id)
+        .where(
+            QuizSubmission.class_id == class_id,
+            Quiz.class_id == class_id,
+            # Requests for a trashed quiz come back if the quiz is restored.
+            Quiz.deleted_at.is_(None),
+        )
     )
     if not access.is_organizer:
         statement = statement.where(
@@ -162,7 +171,7 @@ def list_class_submissions(
     order: SortOrder,
     status: SubmissionStatus | None,
 ) -> ClassSubmissionPage:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     statement = _visible_submissions(access, account, class_id)
     if status is not None:
         statement = statement.where(QuizSubmission.status == status)
@@ -204,7 +213,7 @@ def get_class_submission_preview(
     db: Session, account: CurrentAccount, class_id: int, submission_id: int
 ) -> ClassSubmissionPreview:
     """The submitted version itself, for organizers and the submitter."""
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     row = db.execute(
         _visible_submissions(access, account, class_id).where(
             QuizSubmission.submission_id == submission_id
@@ -239,6 +248,8 @@ def list_class_approved_quizzes(
     sort: ApprovedQuizSort,
     order: SortOrder,
 ) -> ClassApprovedQuizPage:
+    # An archived class still lists these. Hosting is already refused
+    # (can_host false, class_archived) instead of hiding the page.
     access = require_class_member(db, account, class_id)
     author = aliased(Account)
     approver = aliased(Account)

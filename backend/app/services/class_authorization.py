@@ -46,7 +46,8 @@ def require_active_faculty(account: CurrentAccount) -> None:
 
 def get_class(db: Session, class_id: int) -> Class:
     class_ = db.get(Class, class_id)
-    if class_ is None:
+    # A class in the trash looks missing everywhere except the trash routes.
+    if class_ is None or class_.deleted_at is not None:
         raise APIError(404, "class_not_found", "Class not found.")
     return class_
 
@@ -83,6 +84,26 @@ def require_class_member(
         membership=membership,
         is_faculty=account.is_admin,
     )
+
+
+def require_class_content(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+) -> ClassAccess:
+    """Like require_class_member, but an archived class is organizers-only.
+
+    Students keep the class on their list. Quizzes, reports, the dashboard
+    and old sessions stay closed until an organizer unarchives it.
+    """
+    access = require_class_member(db, account, class_id)
+    if access.class_.archived_at is not None and not access.is_organizer:
+        raise APIError(
+            409,
+            "class_archived",
+            "This class is archived. Only its organizers can open it.",
+        )
+    return access
 
 
 def require_class_organizer(

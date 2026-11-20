@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
-from app.models.classes import ClassMembership, ClassRole, MembershipStatus
+from app.models.classes import Class, ClassMembership, ClassRole, MembershipStatus
 from app.models.quiz import (
     AnswerChoice,
     Question,
@@ -83,6 +83,7 @@ def _collaborator_quiz_ids(account: CurrentAccount):
     return (
         select(QuizCollaborator.quiz_id)
         .join(source_quiz, source_quiz.quiz_id == QuizCollaborator.quiz_id)
+        .join(Class, Class.class_id == source_quiz.class_id)
         .join(
             ClassMembership,
             (ClassMembership.class_id == source_quiz.class_id)
@@ -92,6 +93,8 @@ def _collaborator_quiz_ids(account: CurrentAccount):
             QuizCollaborator.account_id == account.account_id,
             QuizCollaborator.revoked_at.is_(None),
             ClassMembership.status == MembershipStatus.ACTIVE,
+            source_quiz.deleted_at.is_(None),
+            Class.deleted_at.is_(None),
         )
     )
 
@@ -122,7 +125,13 @@ def _ensure_legacy_snapshots(
         select(Question, Quiz.author_id, Quiz.class_id, Quiz.quiz_id)
         .join(QuizVersion, QuizVersion.quiz_version_id == Question.quiz_version_id)
         .join(Quiz, Quiz.quiz_id == QuizVersion.quiz_id)
-        .where(or_(*conditions), Question.bank_question_id.is_(None))
+        .outerjoin(Class, Class.class_id == Quiz.class_id)
+        .where(
+            or_(*conditions),
+            Question.bank_question_id.is_(None),
+            Quiz.deleted_at.is_(None),
+            or_(Quiz.class_id.is_(None), Class.deleted_at.is_(None)),
+        )
         .options(selectinload(Question.choices))
     ).all()
     for question, owner_id, source_class_id, quiz_id in rows:
@@ -150,6 +159,7 @@ def _visible_condition(
         published_class_quiz_ids = select(Quiz.quiz_id).where(
             Quiz.class_id == class_id,
             Quiz.status == QuizStatus.PUBLISHED,
+            Quiz.deleted_at.is_(None),
         )
         conditions.append(
             QuestionBankItem.source_quiz_id.in_(published_class_quiz_ids)

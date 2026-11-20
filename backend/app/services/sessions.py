@@ -22,7 +22,7 @@ from app.schemas.session import (
     SessionResponse,
 )
 from app.services.class_access import may_play, require_session_class_member
-from app.services.class_authorization import require_class_member
+from app.services.class_authorization import require_class_content
 from app.services.hosting import PROBLEMS, check_hosting
 from app.services.quiz_submissions import require_approved_quiz_version
 
@@ -38,7 +38,7 @@ def _generate_join_code() -> str:
 
 def _load_session(db: Session, session_id: int) -> LiveSession:
     session = db.get(LiveSession, session_id)
-    if session is None:
+    if session is None or session.deleted_at is not None:
         raise APIError(404, "session_not_found", "Session not found.")
     return session
 
@@ -115,12 +115,12 @@ def create_session(
     of the class may host it; being a collaborator is not enough.
     """
     # People outside the class get the same 404 as a missing class.
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     if access.class_.archived_at is not None:
         raise PROBLEMS["class_archived"].error()
 
     quiz = db.get(Quiz, quiz_id)
-    if quiz is None or quiz.class_id != class_id:
+    if quiz is None or quiz.class_id != class_id or quiz.deleted_at is not None:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
 
     # The same checks drive the Host button (QuizResponse.hosting), so the
@@ -291,7 +291,7 @@ def get_session(
 ) -> SessionResponse:
     session = _load_session(db, session_id)
     if session.class_id is not None:
-        require_class_member(db, account, session.class_id)
+        require_class_content(db, account, session.class_id)
     permitted = session.host_id == account.account_id
     if not permitted:
         permitted = (
@@ -321,7 +321,7 @@ def list_session_participants(
     session = _load_session(db, session_id)
 
     if session.class_id is not None:
-        require_class_member(db, account, session.class_id)
+        require_class_content(db, account, session.class_id)
 
     if session.host_id != account.account_id:
         raise APIError(
@@ -351,7 +351,7 @@ def list_class_active_sessions(
 ) -> list[ClassActiveSessionResponse]:
     """Sessions in the lobby or running for a class, for its Live button."""
     # Outsiders get the same 404 as a missing class, so ids reveal nothing.
-    require_class_member(db, account, class_id)
+    require_class_content(db, account, class_id)
 
     question_count = (
         select(func.count(Question.question_id))

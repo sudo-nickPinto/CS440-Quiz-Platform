@@ -20,7 +20,7 @@ from app.models import (
 from app.schemas.live_question import QuestionClosedEvent
 from app.schemas.results import FinalResults, FinalStanding
 from app.services.live_questions import close_open_question_for_host
-from app.services.class_authorization import require_class_member
+from app.services.class_authorization import require_class_content
 
 ENDED_STATUSES = (LiveSessionStatus.COMPLETED, LiveSessionStatus.CANCELLED)
 
@@ -484,11 +484,11 @@ def get_final_results(
     """
     session = db.get(LiveSession, session_id)
 
-    if session is None:
+    if session is None or session.deleted_at is not None:
         raise APIError(404, "session_not_found", "Session not found.")
 
     if session.class_id is not None:
-        require_class_member(db, account, session.class_id)
+        require_class_content(db, account, session.class_id)
 
     viewer_participant_id = None
 

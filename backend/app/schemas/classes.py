@@ -9,23 +9,44 @@ class ClassRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+def _blank_to_none(value):
+    # "Fall 2026" is optional; an empty box means no semester.
+    if isinstance(value, str):
+        value = value.strip()
+        return value or None
+    return value
+
+
 class ClassCreate(ClassRequestModel):
     name: str = Field(min_length=1, max_length=100)
+    semester: str | None = Field(default=None, max_length=30)
 
     @field_validator("name", mode="before")
     @classmethod
     def normalize_name(cls, value):
         return value.strip() if isinstance(value, str) else value
 
+    @field_validator("semester", mode="before")
+    @classmethod
+    def normalize_semester(cls, value):
+        return _blank_to_none(value)
+
 
 class ClassUpdate(ClassRequestModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
+    # null (or "") clears the semester.
+    semester: str | None = Field(default=None, max_length=30)
     joining_open: bool | None = None
 
     @field_validator("name", mode="before")
     @classmethod
     def normalize_name(cls, value):
         return value.strip() if isinstance(value, str) else value
+
+    @field_validator("semester", mode="before")
+    @classmethod
+    def normalize_semester(cls, value):
+        return _blank_to_none(value)
 
     @model_validator(mode="after")
     def require_supplied_non_null_field(self) -> "ClassUpdate":
@@ -36,6 +57,21 @@ class ClassUpdate(ClassRequestModel):
         if "joining_open" in self.model_fields_set and self.joining_open is None:
             raise ValueError("joining_open cannot be null.")
         return self
+
+
+class ClassSemesterCreate(ClassRequestModel):
+    semester: str = Field(min_length=1, max_length=30)
+
+    @field_validator("semester", mode="before")
+    @classmethod
+    def normalize_semester(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class ClassSemester(BaseModel):
+    class_id: int
+    semester: str | None
+    archived: bool
 
 
 class ClassJoin(ClassRequestModel):
@@ -53,6 +89,9 @@ class ClassJoin(ClassRequestModel):
 class ClassResponse(BaseModel):
     class_id: int
     name: str
+    semester: str | None = None
+    parent_class_id: int | None = None
+    semesters: list[ClassSemester] = []
     created_by_id: int
     join_code: str | None
     joining_open: bool
