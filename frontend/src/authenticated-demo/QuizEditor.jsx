@@ -55,6 +55,9 @@ import QuizCollaboratorDialog, {
   AddCollaboratorCell,
 } from "./QuizCollaboratorDialog";
 import { QuizFlowButton, QuizFlowTrack } from "./QuizFlowPanel";
+import QuestionBankDialog from "./QuestionBankDialog";
+import { downloadQuizQuestionsCsv } from "./questionBankModel";
+import OptionsMenu from "./OptionsMenu";
 import "./quiz-flow.css";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -169,6 +172,7 @@ export function QuizEditor({
   // Which save button was pressed, for its "Saving…" / "Sending…" label.
   const [savingKind, setSavingKind] = useState(null);
   const [sharing, setSharing] = useState(false);
+  const [questionBankOpen, setQuestionBankOpen] = useState(false);
   // New quizzes belong to a class: the class page links here with ?class=ID.
   const classId = searchParams.get("class");
   const validClass = /^[1-9][0-9]*$/.test(classId ?? "");
@@ -1052,6 +1056,14 @@ export function QuizEditor({
         <div className="qe-strip">
           <JumpChips ids={ids} current={current} />
 
+          <button
+            type="button"
+            className="qe-bank-button"
+            onClick={() => setQuestionBankOpen(true)}
+          >
+            Question bank
+          </button>
+
           <TimePicker
             title="Time per question"
             label={`Time per question: ${editor.defaultTime} seconds. Change`}
@@ -1448,7 +1460,6 @@ export function QuizEditor({
           >
             <span aria-hidden="true">+</span> Add question
           </button>
-
           <RequestError error={requestError} />
 
           {conflict && (
@@ -1548,6 +1559,12 @@ export function QuizEditor({
         </div>
       </fieldset>
     </form>
+    <QuestionBankDialog
+      open={questionBankOpen}
+      classId={editing ? existingQuiz.class_id : Number(classId)}
+      onClose={() => setQuestionBankOpen(false)}
+      onAdd={(questions) => edit({ ...editorRef.current, questions: [...editorRef.current.questions, ...questions] })}
+    />
 
     {/* Outside the editor's <form>, so its invite form isn't nested. */}
     {sharing && (
@@ -1656,6 +1673,19 @@ export function QuizViewer() {
     if (done) navigate(classPagePath(quiz.class_id), { replace: true });
   }
 
+  async function duplicateQuiz() {
+    const copied = await action.run(() =>
+      api(`/classes/${quiz.class_id}/quizzes/${quiz.quiz_id}/duplicate`, {
+        method: "POST",
+      }),
+    );
+    if (copied?.quiz) {
+      navigate(`/app/quizzes/${copied.quiz.quiz_id}/edit`, {
+        state: { classId: copied.quiz.class_id },
+      });
+    }
+  }
+
   return (
     <section className="qv" aria-labelledby="quiz-title">
       <ConfirmDialog confirmer={confirmer} />
@@ -1713,26 +1743,6 @@ export function QuizViewer() {
             </Link>
           )}
 
-          {canShare && (
-            <button
-              type="button"
-              className="qb-btn qb-btn-paper"
-              disabled={action.busy}
-              onClick={() => void archiveQuiz()}
-            >
-              Archive
-            </button>
-          )}
-
-          {mine && (
-            <Link
-              className="qb-btn qb-btn-paper"
-              to={`/app/quizzes/${quiz.quiz_id}/reports`}
-            >
-              Hosting history
-            </Link>
-          )}
-
           {quiz.status !== "ARCHIVED" && (
             <QuizFlowButton
               quiz={quiz}
@@ -1772,6 +1782,48 @@ export function QuizViewer() {
                 </Link>
               </div>
             )}
+
+          {(quiz.class_id || mine || canShare || quiz.can_edit) && (
+            <OptionsMenu className="qv-options-menu">
+              {mine && (
+                <Link to={`/app/quizzes/${quiz.quiz_id}/reports`}>
+                  Hosting history
+                </Link>
+              )}
+              {quiz.class_id && (
+                <button
+                  type="button"
+                  disabled={action.busy}
+                  onClick={() => void duplicateQuiz()}
+                >
+                  {action.busy ? "Duplicating…" : "Duplicate quiz"}
+                </button>
+              )}
+              {(mine || quiz.can_edit) && questions.length > 0 && (
+                <button
+                  type="button"
+                  disabled={action.busy}
+                  onClick={() =>
+                    void action.run(async () =>
+                      downloadQuizQuestionsCsv(quiz.version.title, questions),
+                    )
+                  }
+                >
+                  Export questions (CSV)
+                </button>
+              )}
+              {canShare && (
+                <button
+                  type="button"
+                  className="ui-danger"
+                  disabled={action.busy}
+                  onClick={() => void archiveQuiz()}
+                >
+                  Archive quiz
+                </button>
+              )}
+            </OptionsMenu>
+          )}
         </div>
       </div>
 
