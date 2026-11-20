@@ -1273,26 +1273,25 @@ function ClassWorkspace({ classInfo, onChange }) {
 
             <button
               type="button"
-              className="cl-secondary"
-              aria-haspopup="dialog"
-              onClick={() => setBankOpen(true)}
+              disabled={csv.busy}
+              onClick={() =>
+                void csv.download(
+                  `/classes/${classInfo.id}/grades/export.csv`,
+                  "class-grades.csv",
+                )
+              }
             >
-              Question bank
+              {csv.busy ? "Preparing…" : "Export grades"}
             </button>
 
             {/* Less frequent actions, like the quiz page's ⋯ menu. */}
             <OptionsMenu className="cl-class-options">
               <button
                 type="button"
-                disabled={csv.busy}
-                onClick={() =>
-                  void csv.download(
-                    `/classes/${classInfo.id}/grades/export.csv`,
-                    "class-grades.csv",
-                  )
-                }
+                aria-haspopup="dialog"
+                onClick={() => setBankOpen(true)}
               >
-                {csv.busy ? "Preparing…" : "Export grades"}
+                Question bank
               </button>
               {!classInfo.archived && (
                 <button

@@ -1933,8 +1933,8 @@
   }
 }
 
-/* Admin class header: two everyday actions as buttons, and the rarer ones
-   (Export grades, Archive class) in a ⋯ menu, so the title isn't squeezed. */
+/* Admin class header: + Add student and Export grades as buttons, and
+   Question bank and Archive class in a ⋯ menu, so the title isn't squeezed. */
 .qp .cl-classbar .cl-actions {
   align-items: center;
 }
