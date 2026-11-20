@@ -1708,6 +1708,12 @@
 /* ---------- Question bank pop-up (QuestionBankExportDialog) ----------
    The Add student pop-up's frame (cl-dlg) with the square ✓ boxes and
    bordered question rows the quiz editor's question bank uses. */
+/* App.css gives every label a margin; the search box and ✓ boxes here
+   are labels, so line them up without it. */
+.qp .qbx label {
+  margin: 0;
+}
+
 /* position: relative keeps each visually hidden checkbox inside its own
    box. Otherwise it sits against the whole pop-up, and focusing it on a
    click scrolls the pop-up to "show" it, sliding the courses out of view. */
