@@ -39,6 +39,7 @@ import {
 } from "./ReportTable";
 import { ClassStudents } from "./ClassManagement";
 import { AddStudentDialog, JoinRequestsTable } from "./StudentRoster";
+import QuestionBankExportDialog from "../authenticated-demo/QuestionBankExportDialog";
 import {
   CLASS_EVENTS,
   SUBMISSION_EVENTS,
@@ -1074,6 +1075,7 @@ function ClassWorkspace({ classInfo, onChange }) {
     isValid: (key) => key in LAYOUTS,
   });
   const [addOpen, setAddOpen] = useState(false);
+  const [bankOpen, setBankOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(classInfo.name);
   const manage = useAction();
@@ -1270,6 +1272,15 @@ function ClassWorkspace({ classInfo, onChange }) {
 
             <button
               type="button"
+              className="cl-secondary"
+              aria-haspopup="dialog"
+              onClick={() => setBankOpen(true)}
+            >
+              Question bank
+            </button>
+
+            <button
+              type="button"
               disabled={csv.busy}
               onClick={() =>
                 void csv.download(
@@ -1321,6 +1332,13 @@ function ClassWorkspace({ classInfo, onChange }) {
           </div>
         )}
       </div>
+
+      {adminView && bankOpen && (
+        <QuestionBankExportDialog
+          classId={classInfo.id}
+          onClose={() => setBankOpen(false)}
+        />
+      )}
 
       {adminView && addOpen && (
         <AddStudentDialog

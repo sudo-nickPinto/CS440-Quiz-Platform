@@ -1704,3 +1704,156 @@
     display: none;
   }
 }
+
+/* ---------- Question bank pop-up (QuestionBankExportDialog) ----------
+   The Add student pop-up's frame (cl-dlg) with the square ✓ boxes and
+   bordered question rows the quiz editor's question bank uses. */
+.qp .qbx .qbx-check {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.qp .qbx .qbx-check:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.qp .qbx .qbx-box {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--ink);
+  background: #fff;
+  color: transparent;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.qp .qbx .qbx-check.is-on .qbx-box,
+.qp .qbx .qbx-box.is-mixed {
+  background: var(--navy);
+  color: #fff;
+}
+
+.qp .qbx .qbx-check input:focus-visible + .qbx-box {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 3px;
+}
+
+.qp .qbx .qbx-text,
+.qp .qbx .qbx-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.qp .qbx .qbx-copy strong {
+  overflow-wrap: anywhere;
+}
+
+.qp .qbx .qbx-text small,
+.qp .qbx .qbx-copy small {
+  color: var(--gray);
+  font-weight: 700;
+}
+
+.qp .qbx .qbx-courses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.qp .qbx .qbx-courses .qbx-check {
+  padding: 8px 14px 8px 10px;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.qp .qbx .qbx-courses .qbx-check.is-on,
+.qp .qbx .qbx-row.is-selected {
+  border-color: var(--navy);
+  background: var(--sky-soft);
+  box-shadow: 3px 3px 0 var(--navy);
+}
+
+.qp .qbx .qbx-filters .cl-search input {
+  width: 100%;
+}
+
+.qp .qbx .qbx-list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.qp .qbx .qbx-count {
+  color: var(--gray);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.qp .qbx .qbx-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 120px;
+  overflow: auto;
+  padding: 10px 12px 12px 10px;
+  border: 2px solid var(--ink);
+  background: var(--sand);
+}
+
+.qp .qbx .qbx-row {
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.qp .qbx .qbx-pick {
+  min-height: 64px;
+  padding: 8px 12px;
+}
+
+.qp .qbx .qbx-more,
+.qp .qbx .qbx-clear {
+  padding: 7px 16px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-weight: 700;
+}
+
+.qp .qbx .qbx-more {
+  justify-self: center;
+}
+
+.qp .qbx .qbx-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .qp .qbx .qbx-filters {
+    flex-direction: column;
+  }
+
+  .qp .qbx .cl-dlg-foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .qp .qbx .qbx-actions > button {
+    flex: 1;
+  }
+}
