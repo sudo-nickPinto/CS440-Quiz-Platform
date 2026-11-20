@@ -15,3 +15,7 @@ backend/__pycache__/
 
 # macOS
 .DS_Store
+
+# Database backups and their passphrase (deploy/backup-db.sh) stay off git.
+backups/
+deploy/backup-passphrase
