@@ -2111,6 +2111,93 @@
   box-shadow: none;
 }
 
+/* Matches the neighbouring Time per question button (.qe-tpbtn). */
+.qp .qe-bank-button {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  height: 42px;
+  padding: 0 14px;
+  border: var(--b);
+  background: var(--sky-soft);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--navy);
+  font: inherit;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.qp .qe-bank-button:hover:not(:disabled) { background: var(--paper); }
+.qp .qe-bank-button:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: none; }
+@media (max-width: 640px) { .qp .qe-bank-button { height: 44px; padding: 0 10px; } }
+.qb-modal-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgb(0 0 0 / .55); display: grid; place-items: center; padding: 24px; }
+.qb-bank { width: min(900px, 100%); max-height: 90vh; overflow: auto; background: #fffaf2; border: 4px solid #222; box-shadow: 9px 9px 0 #222; padding: 24px; }
+.qb-bank > header { display: flex; justify-content: space-between; align-items: start; border-bottom: 3px solid #222; margin-bottom: 18px; }
+.qb-bank h2 { margin: 2px 0 14px; text-transform: uppercase; }
+.qb-bank header button { font-size: 32px; border: 0; background: transparent; cursor: pointer; }
+.qb-bank-tools { display: grid; grid-template-columns: minmax(240px, 1fr) auto auto auto; gap: 10px; margin-bottom: 14px; }
+.qb-bank-tools input, .qb-bank-tools select, .qb-bank-tools button { min-height: 48px; border: 3px solid #222; background: white; padding: 8px 12px; font: inherit; }
+.qb-bank-tools select { appearance: none; padding-right: 48px; background-image: linear-gradient(45deg, transparent 50%, #0b3d7a 50%), linear-gradient(135deg, #0b3d7a 50%, transparent 50%); background-position: calc(100% - 22px) 50%, calc(100% - 16px) 50%; background-repeat: no-repeat; background-size: 7px 7px; }
+.qb-bank-list { display: grid; gap: 8px; max-height: 310px; overflow: auto; margin-bottom: 14px; border: var(--b-thin); background: var(--sand); padding: 10px 12px 12px 10px; }
+.qb-bank-row { display: grid; grid-template-columns: minmax(0, 1fr) 54px; grid-template-rows: minmax(64px, auto) auto; align-items: stretch; border: 2px solid #222; background: #fffaf2; box-shadow: 3px 3px 0 #222; transition: background .15s ease, border-color .15s ease; }
+.qb-bank-row:hover { background: #fff4e6; }
+.qb-bank-row.is-selected { border-color: #0b3d7a; background: #e3f5ff; box-shadow: 3px 3px 0 #0b3d7a; }
+/* Rows grow with long questions; position keeps the hidden checkbox inside its row. */
+.qp .qb-bank-select { position: relative; grid-row: 1; min-width: 0; min-height: 64px; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 11px; align-items: center; margin: 0; padding: 8px 12px; cursor: pointer; }
+.qb-bank-select input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+.qb-bank-check { width: 30px; height: 30px; display: grid; place-items: center; border: 2px solid #222; background: #fff; color: transparent; font-size: 20px; font-weight: 900; line-height: 1; }
+.qb-bank-select input:checked + .qb-bank-check { background: #0b3d7a; color: #fff; }
+.qb-bank-select input:focus-visible + .qb-bank-check { outline: 3px solid #c84b08; outline-offset: 3px; }
+.qb-bank-copy { min-width: 0; align-self: center; display: flex; flex-direction: column; justify-content: center; gap: 2px; line-height: 1.2; }
+.qb-bank-copy strong { overflow-wrap: anywhere; }
+.qb-bank-copy small { color: #666; }
+/* Multi-correct questions can't be added here: faded and slightly blurred,
+   with a small tag (the full reason is the tooltip). */
+.qb-bank-row.is-unsupported { background: #f3efe8; box-shadow: none; }
+.qb-bank-row.is-unsupported .qb-bank-select { cursor: not-allowed; }
+.qb-bank-row.is-unsupported .qb-bank-check,
+.qb-bank-row.is-unsupported .qb-bank-copy strong { opacity: .5; filter: blur(.6px); }
+.qp .qb-bank-copy small.qb-bank-unsupported { justify-self: start; width: fit-content; margin-top: 3px; padding: 1px 7px; border: 1.5px solid #9a3412; background: #fff; color: #9a3412; font-size: 11px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; }
+.qp button.qb-bank-expand { grid-row: 1; align-self: center; justify-self: center; width: 30px; min-width: 0; min-height: 30px; height: 30px; display: grid; place-items: center; margin: 0; border: 0 !important; background: transparent !important; box-shadow: none !important; color: var(--navy); padding: 0; cursor: pointer; transform: none; }
+.qp button.qb-bank-expand:hover:not(:disabled) { border: 0 !important; background: transparent !important; box-shadow: none !important; filter: none; color: var(--orange-deep); transform: none; }
+.qb-bank-expand:focus-visible { outline: 3px solid #c84b08; outline-offset: 2px; }
+.qb-bank-expand span { display: block; width: 12px; height: 12px; border-right: 3px solid currentColor; border-bottom: 3px solid currentColor; transform: translateY(-3px) rotate(45deg); transition: transform .15s ease; }
+.qb-bank-expand[aria-expanded="true"] span { transform: translateY(3px) rotate(225deg); }
+.qb-bank-choices { grid-column: 1 / -1; grid-row: 2; list-style: none; display: grid; gap: 6px; margin: 0; padding: 10px 12px 12px; border-top: var(--b-thin); background: var(--sand); }
+.qb-bank-choices li { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; column-gap: 14px; align-items: center; min-height: 36px; border: var(--b-thin); background: var(--paper); padding: 0 10px 0 0; }
+.qb-bank-choices li > span { align-self: stretch; width: 36px; display: grid; place-items: center; border-right: var(--b-thin); background: var(--sand); font: 13px "Archivo Black", sans-serif; }
+.qb-bank-choices li > strong { min-width: 0; overflow-wrap: anywhere; font-size: 14px; line-height: 1.25; }
+.qb-bank-choices li > small { color: var(--navy); font-size: 10px; font-weight: 900; letter-spacing: .7px; text-transform: uppercase; }
+.qb-bank-choices li.is-correct { border-color: var(--navy); background: var(--sky-soft); }
+.qb-bank-choices li.is-correct > span { border-right-color: var(--navy); background: var(--navy); color: var(--paper); }
+.qb-csv { border-top: 3px solid #222; margin-top: 20px; padding-top: 16px; }
+.qb-csv summary { width: fit-content; color: var(--ink); font: 16px "Archivo Black", sans-serif; cursor: pointer; text-transform: uppercase; }
+.qb-csv-help { margin: 12px 0; color: #5f5f5f; font-size: 14px; }
+.qb-csv-file { position: relative; display: flex; align-items: center; gap: 12px; min-height: 48px; width: 100%; border: var(--b-thin); background: var(--paper); padding: 7px; cursor: pointer; }
+.qb-csv-file > span { flex: 0 0 auto; border: var(--b-thin); background: var(--sky-soft); padding: 7px 12px; color: var(--navy); font: 12px "Archivo Black", sans-serif; letter-spacing: .4px; text-transform: uppercase; }
+.qb-csv-file > strong { min-width: 0; overflow: hidden; color: #666; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.qb-csv-file input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+.qb-csv-file:focus-within { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+.qb-csv-preview { display: grid; gap: 8px; max-height: 280px; overflow: auto; margin: 0 0 14px; padding: 12px; background: var(--sky-soft); border: var(--b-thin); }
+.qb-csv-status { display: flex; gap: 8px; align-items: center; padding-bottom: 4px; color: var(--navy); }
+.qb-csv-status strong, .qb-csv-status span { border: var(--b-thin); background: var(--paper); padding: 5px 8px; font-size: 12px; text-transform: uppercase; }
+.qb-csv-row { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: center; min-height: 48px; margin: 0; border: var(--b-thin); background: var(--paper); padding: 8px 10px; cursor: pointer; }
+.qb-csv-row input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+.qb-csv-check { width: 26px; height: 26px; display: grid; place-items: center; border: var(--b-thin); background: #fff; color: transparent; font-weight: 900; line-height: 1; }
+.qb-csv-row input:checked + .qb-csv-check { background: var(--navy); color: #fff; }
+.qb-csv-row input:focus-visible + .qb-csv-check { outline: 3px solid var(--orange-deep); outline-offset: 2px; }
+.qb-csv-row > span:last-child { min-width: 0; display: grid; gap: 2px; }
+.qb-csv-row small { color: #666; font-size: 10px; font-weight: 900; letter-spacing: .5px; text-transform: uppercase; }
+.qb-csv-row strong { overflow-wrap: anywhere; font-size: 14px; }
+.qb-csv-error { margin: 0; border: 2px solid #a32020; background: #fff1f1; padding: 9px 11px; color: #851919; font-size: 13px; font-weight: 700; }
+.qb-csv-preview .qb-btn { width: fit-content; margin-top: 4px; }
+@media (max-width: 700px) {
+  .qb-bank-tools { grid-template-columns: 1fr; }
+  .qb-bank-row { grid-template-columns: minmax(0, 1fr) 48px; }
+  .qp .qb-bank-expand { justify-self: center; margin: 0; }
+  .qb-bank-choices { padding-left: 12px; }
+}
+
 .qp .qe-conflict {
   margin-top: 20px;
   padding: 16px;
