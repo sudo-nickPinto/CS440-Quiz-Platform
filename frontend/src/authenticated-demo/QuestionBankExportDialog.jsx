@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApi } from "./rest";
 import RequestError from "./RequestError";
-import { exportPlan, saveCsvFile } from "./questionBankExport";
+import { exportPlan } from "./questionBankExport";
+import { useFileDownload } from "./useFileDownload";
 
 const PAGE_SIZE = 100;
+
+// Informational only: these still download (correct_choices like "A|C").
+const isMultiCorrect = (item) => item.choices.filter((choice) => choice.is_correct).length > 1;
 
 // The square ✓ box used by the question bank in the quiz editor. The real checkbox is
 // visually hidden; "mixed" draws a dash for a partly selected group.
@@ -38,7 +42,7 @@ export default function QuestionBankExportDialog({ classId, onClose }) {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(new Set());
   const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const file = useFileDownload();
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -122,15 +126,12 @@ export default function QuestionBankExportDialog({ classId, onClose }) {
     });
   }
 
-  async function download() {
-    setBusy(true); setError(null);
-    try {
-      const text = await api("/question-bank/export.csv", {
-        method: "POST", body: JSON.stringify(plan.payload),
-      });
-      saveCsvFile(text, plan.filename);
-    } catch (failure) { setError(failure); }
-    finally { setBusy(false); }
+  function download() {
+    void file.download("/question-bank/export.csv", plan.filename, {
+      method: "POST",
+      body: plan.payload,
+      filename: plan.filename,
+    });
   }
 
   const allCourses = courses?.length > 0 && classIds.size === courses.length;
@@ -161,7 +162,7 @@ export default function QuestionBankExportDialog({ classId, onClose }) {
       </div>
 
       <div className="cl-add-body">
-        <RequestError error={error} />
+        <RequestError error={error || file.error} />
 
         {courses === null ? <p className="cl-add-note">Loading courses…</p> : !courses.length ? (
           <p className="cl-dlg-empty">There are no questions in your courses yet. Questions are added to the bank when you write quizzes.</p>
@@ -254,6 +255,14 @@ export default function QuestionBankExportDialog({ classId, onClose }) {
                     <span className="qbx-copy">
                       <strong>{item.question_text}</strong>
                       {classIds.size > 1 && <small>{courseName(item.source_class_id)}</small>}
+                      {isMultiCorrect(item) && (
+                        <small
+                          className="qbx-tag"
+                          title="More than one correct answer. It downloads as e.g. A|C."
+                        >
+                          Multi-correct
+                        </small>
+                      )}
                     </span>
                   </Check>
                 </article>
@@ -275,10 +284,10 @@ export default function QuestionBankExportDialog({ classId, onClose }) {
           <button
             type="button"
             className="cl-add-one"
-            disabled={busy || !classIds.size || !plan.count}
+            disabled={file.busy || !classIds.size || !plan.count}
             onClick={download}
           >
-            {busy ? "Preparing…" : plan.button}
+            {file.busy ? "Preparing…" : plan.button}
           </button>
         </div>
       </div>

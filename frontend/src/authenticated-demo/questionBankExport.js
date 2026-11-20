@@ -3,18 +3,6 @@ export function fileSlug(text) {
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-// Saves CSV text as a download.
-export function saveCsvFile(text, filename) {
-  const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 function courseNames(courses, classIds) {

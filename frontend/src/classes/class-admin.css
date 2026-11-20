@@ -1762,6 +1762,19 @@
   overflow-wrap: anywhere;
 }
 
+.qp .qbx .qbx-copy small.qbx-tag {
+  width: fit-content;
+  margin-top: 3px;
+  padding: 1px 7px;
+  border: 1.5px solid var(--navy);
+  background: var(--paper);
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
 .qp .qbx .qbx-text small,
 .qp .qbx .qbx-copy small {
   color: var(--gray);
