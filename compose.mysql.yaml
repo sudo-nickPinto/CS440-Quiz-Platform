@@ -29,6 +29,11 @@ services:
       - ./ulugbek-err/migrations/0010_quiz_submission.up.sql:/docker-entrypoint-initdb.d/0010.sql:ro
       - ./ulugbek-err/migrations/0011_account_profile.up.sql:/docker-entrypoint-initdb.d/0011.sql:ro
       - ./ulugbek-err/migrations/0012_question_revision.up.sql:/docker-entrypoint-initdb.d/0012.sql:ro
+      - ./ulugbek-err/migrations/0013_session_answer_correction.up.sql:/docker-entrypoint-initdb.d/0013.sql:ro
+      - ./ulugbek-err/migrations/0014_faculty_access.up.sql:/docker-entrypoint-initdb.d/0014.sql:ro
+      - ./ulugbek-err/migrations/0015_question_bank.up.sql:/docker-entrypoint-initdb.d/0015.sql:ro
+      - ./ulugbek-err/migrations/0016_class_roster.up.sql:/docker-entrypoint-initdb.d/0016.sql:ro
+      - ./ulugbek-err/migrations/0018_roster_membership_source.up.sql:/docker-entrypoint-initdb.d/0018.sql:ro
     healthcheck:
       test:
         - CMD-SHELL
