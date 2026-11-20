@@ -1556,17 +1556,28 @@ def suggest_quiz_collaborators(
     """People in the quiz's class for the Add collaborator search, a page at a
     time, alphabetically. Only they can be added as editors.
 
-    An empty query lists everyone in the class; otherwise only names and
-    emails starting with the query. A page shorter than ``limit`` is the last
-    one. Owner only, like the rest of collaborator management; the owner
-    themselves is left out.
+    The quiz's current collaborators come first, then everyone else in the
+    class, each group alphabetically, so the pop-up can show one list with
+    Remove at the top and Add below. An empty query lists everyone;
+    otherwise only names and emails starting with the query, in the same
+    order. A page shorter than ``limit`` is the last one. Owner only, like
+    the rest of collaborator management; the owner themselves is left out.
     """
     from app.services.class_roster import name_or_email_starts_with
 
     _require_collaborator_owner(db, account, class_id, quiz_id)
+    is_editor = QuizCollaborator.account_id.is_not(None)
     statement = (
-        select(Account)
+        select(Account, is_editor)
         .join(ClassMembership, ClassMembership.account_id == Account.account_id)
+        .outerjoin(
+            QuizCollaborator,
+            and_(
+                QuizCollaborator.account_id == Account.account_id,
+                QuizCollaborator.quiz_id == quiz_id,
+                QuizCollaborator.revoked_at.is_(None),
+            ),
+        )
         .where(
             ClassMembership.class_id == class_id,
             ClassMembership.status == MembershipStatus.ACTIVE,
@@ -1577,28 +1588,20 @@ def suggest_quiz_collaborators(
     matching = name_or_email_starts_with(query)
     if matching is not None:
         statement = statement.where(matching)
-    matches = db.scalars(
+    rows = db.execute(
         statement
-        .order_by(Account.display_name, Account.account_id)
+        .order_by(case((is_editor, 0), else_=1), Account.display_name, Account.account_id)
         .limit(limit)
         .offset(offset)
     ).all()
-    editors = set(
-        db.scalars(
-            select(QuizCollaborator.account_id).where(
-                QuizCollaborator.quiz_id == quiz_id,
-                QuizCollaborator.revoked_at.is_(None),
-            )
-        )
-    )
     return [
         CollaboratorSuggestion(
             account_id=match.account_id,
             email=match.email,
             display_name=match.display_name,
-            is_collaborator=match.account_id in editors,
+            is_collaborator=bool(editor),
         )
-        for match in matches
+        for match, editor in rows
     ]
 
 

@@ -1105,6 +1105,33 @@ def test_collaborator_suggestions_mark_current_editors(collaboration_client) -> 
     assert suggestions[0]["is_collaborator"] is True
 
 
+def test_collaborator_suggestions_put_collaborators_first(collaboration_client) -> None:
+    client, class_id, owner, editor, outsider = collaboration_client
+    with client.app.state.database.session_factory() as db:
+        aaron = Account(auth0_sub="auth0|aaron", email="aaron@example.com", display_name="Aaron")
+        db.add(aaron)
+        db.flush()
+        db.add(ClassMembership(class_id=class_id, account_id=aaron.account_id))
+        db.commit()
+        aaron_id = aaron.account_id
+    quiz_id = _create(client, class_id)["quiz_id"]
+
+    def order(q=""):
+        return [(i["account_id"], i["is_collaborator"]) for i in _suggest(client, class_id, quiz_id, q).json()]
+
+    # Alphabetical while nobody is a collaborator...
+    assert order() == [(aaron_id, False), (editor.account_id, False)]
+    added = client.post(
+        f"/classes/{class_id}/quizzes/{quiz_id}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+    assert added.status_code == 201
+    # ...then the collaborator comes first, also when searching.
+    assert order() == [(editor.account_id, True), (aaron_id, False)]
+    assert order("e") == [(editor.account_id, True)]
+    assert order("a") == [(aaron_id, False)]
+
+
 def test_only_the_owner_gets_collaborator_suggestions(collaboration_client) -> None:
     client, class_id, owner, editor, outsider = collaboration_client
     quiz_id = _create(client, class_id)["quiz_id"]

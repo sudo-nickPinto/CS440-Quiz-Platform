@@ -30,7 +30,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
@@ -940,39 +940,45 @@ def suggest_students(
     limit: int = SUGGESTION_LIMIT,
     offset: int = 0,
 ) -> list[StudentSuggestion]:
-    """Active accounts anywhere in QuizBurg, a page at a time, alphabetically.
+    """Active accounts anywhere in QuizBurg, a page at a time.
 
-    An empty query lists everyone, so the pop-up shows people as soon as it
-    opens; otherwise only names and emails starting with the query. A page
-    shorter than ``limit`` is the last one. Organizer only, because it shows
-    other people's emails.
+    People already in this class (active members) come first, then everyone
+    else, each group alphabetically, so the pop-up opens on who belongs and
+    you scroll down to who you can add. An empty query lists everyone;
+    otherwise only names and emails starting with the query, in the same
+    order. A page shorter than ``limit`` is the last one. Organizer only,
+    because it shows other people's emails.
     """
     _require_organizer(db, account, class_id)
-    statement = select(Account).where(Account.is_active.is_(True))
+    in_class = case(
+        (ClassMembership.status == MembershipStatus.ACTIVE, 0), else_=1
+    )
+    statement = (
+        select(Account, ClassMembership.status)
+        .outerjoin(
+            ClassMembership,
+            and_(
+                ClassMembership.account_id == Account.account_id,
+                ClassMembership.class_id == class_id,
+            ),
+        )
+        .where(Account.is_active.is_(True))
+    )
     matching = name_or_email_starts_with(query)
     if matching is not None:
         statement = statement.where(matching)
-    matches = db.scalars(
+    rows = db.execute(
         statement
-        .order_by(Account.display_name, Account.account_id)
+        .order_by(in_class, Account.display_name, Account.account_id)
         .limit(limit)
         .offset(offset)
     ).all()
-    statuses = {
-        membership.account_id: membership.status
-        for membership in db.scalars(
-            select(ClassMembership).where(
-                ClassMembership.class_id == class_id,
-                ClassMembership.account_id.in_([match.account_id for match in matches]),
-            )
-        )
-    } if matches else {}
     return [
         StudentSuggestion(
             account_id=match.account_id,
             email=match.email,
             display_name=match.display_name,
-            membership_status=statuses.get(match.account_id),
+            membership_status=status,
         )
-        for match in matches
+        for match, status in rows
     ]

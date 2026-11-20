@@ -276,7 +276,8 @@ revocation immediately blocks future draft reads and writes. Errors include `not
 `collaborator-suggestions` powers the Add collaborator list, which shows the
 class as soon as the pop-up opens and filters as the owner types. It returns
 one page of active members of the quiz's class (never the owner, never anyone
-outside the class), alphabetically, as
+outside the class): the quiz's current collaborators first, then everyone
+else, each group alphabetically, as
 `{ account_id, email, display_name, is_collaborator }`. An empty `q` lists
 everyone; otherwise only people whose email, first name, last name or a word
 of their name starts with `q`. Page with `limit` (1–50, default 8) and
@@ -598,7 +599,7 @@ Approve (the person becomes an `ACTIVE` `MEMBER`) or reject (`REJECTED`) one req
 The older `POST /classes/{class_id}/invites` still creates an `INVITED` membership that the person accepts; the app no longer uses it.
 
 #### `GET /classes/{class_id}/student-suggestions?q=...&limit=8&offset=0` → `200 StudentSuggestion[]`
-For the + Add student list: one page of active accounts anywhere in QuizBurg, alphabetically. An empty `q` lists everyone (the pop-up shows people as soon as it opens); otherwise only accounts whose email, first name, last name or a word of their name starts with `q`. Page with `limit` (1–50, default 8) and `offset`; a page shorter than `limit` is the last one. Each has `account_id`, `email`, `display_name` and their `membership_status` in this class (or `null`).
+For the + Add student list: one page of active accounts anywhere in QuizBurg: people already in this class (active members) first, then everyone else, each group alphabetically. An empty `q` lists everyone (the pop-up shows people as soon as it opens); otherwise only accounts whose email, first name, last name or a word of their name starts with `q`. Page with `limit` (1–50, default 8) and `offset`; a page shorter than `limit` is the last one. Each has `account_id`, `email`, `display_name` and their `membership_status` in this class (or `null`).
 
 ### `DELETE /classes/{class_id}/membership` → `403`
 Self-service class departure is disabled. This route always returns `class_self_leave_disabled`; an organizer must remove the member through `DELETE /classes/{class_id}/members/{account_id}`.
