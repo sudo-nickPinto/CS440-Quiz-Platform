@@ -1336,6 +1336,7 @@ function ClassWorkspace({ classInfo, onChange }) {
       {adminView && bankOpen && (
         <QuestionBankExportDialog
           classId={classInfo.id}
+          className={classInfo.name}
           onClose={() => setBankOpen(false)}
         />
       )}

@@ -1781,20 +1781,6 @@
   font-weight: 700;
 }
 
-.qp .qbx .qbx-courses {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.qp .qbx .qbx-courses .qbx-check {
-  padding: 8px 14px 8px 10px;
-  border: 2px solid var(--ink);
-  background: var(--paper);
-  box-shadow: 3px 3px 0 var(--ink);
-}
-
-.qp .qbx .qbx-courses .qbx-check.is-on,
 .qp .qbx .qbx-row.is-selected {
   border-color: var(--navy);
   background: var(--sky-soft);
@@ -1818,11 +1804,22 @@
   font-weight: 700;
 }
 
+/* The pop-up keeps one height, and the question list takes whatever the
+   search row and the footer leave, so a phone still shows several rows. */
+.qp .qbx.cl-dlg[open] {
+  height: min(780px, calc(100dvh - 32px));
+}
+
+.qp .qbx .cl-add-body {
+  overflow: hidden;
+}
+
 .qp .qbx .qbx-list {
   display: grid;
+  flex: 1;
   align-content: start;
   gap: 8px;
-  min-height: 120px;
+  min-height: 0;
   overflow: auto;
   padding: 10px 12px 12px 10px;
   border: 2px solid var(--ink);
@@ -1841,36 +1838,120 @@
   padding: 8px 12px;
 }
 
-.qp .qbx .qbx-more,
-.qp .qbx .qbx-clear {
-  padding: 7px 16px;
+.qp .qbx .qbx-empty {
+  padding: 24px 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Quiz picker: the blue "ALL QUIZZES ▾" button and its pop-up list. */
+.qp .qbx .qbx-pick-quiz {
+  position: relative;
+  flex: 0 1 260px;
+  min-width: 0;
+}
+
+.qp .qbx .qbx-pick-quiz > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border: var(--b);
+  background: var(--sky-soft);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  list-style: none;
+  cursor: pointer;
+}
+
+.qp .qbx .qbx-pick-quiz > summary::-webkit-details-marker {
+  display: none;
+}
+
+.qp .qbx .qbx-pick-quiz > summary[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.qp .qbx .qbx-pick-quiz[open] > summary {
+  background: var(--ink);
+  color: var(--paper);
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+.qp .qbx .qbx-pick-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qp .qbx .qbx-pick-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 5;
+  display: grid;
+  gap: 6px;
+  width: min(320px, calc(100vw - 48px));
+  max-height: 280px;
+  overflow: auto;
+  padding: 10px;
   border: var(--b);
   background: var(--paper);
-  box-shadow: 3px 3px 0 var(--ink);
-  font-weight: 700;
+  box-shadow: var(--shadow);
+  animation: qb-drop 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.qp .qbx .qbx-more {
-  justify-self: center;
-}
-
-.qp .qbx .qbx-actions {
+.qp .qbx .qbx-pick-panel .ui-opt {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+.qp .qbx .qbx-pick-panel .ui-opt small {
+  font-weight: 700;
+  opacity: 0.75;
 }
 
 @media (max-width: 640px) {
-  .qp .qbx .qbx-filters {
-    flex-direction: column;
+  .qp .qbx .qbx-pick-quiz {
+    flex-basis: 150px;
   }
 
   .qp .qbx .cl-dlg-foot {
     flex-direction: column;
     align-items: stretch;
   }
+}
 
-  .qp .qbx .qbx-actions > button {
-    flex: 1;
+/* Admin class header: with four actions beside it the class title was
+   squeezed onto two lines. On wider screens the actions get their own row
+   under the title, with Archive (the destructive one) set apart on the
+   right. Phones keep the wrapping layout above. */
+@media (min-width: 761px) {
+  .qp .cl-classbar:has(> .cl-actions) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 20px;
+    row-gap: 16px;
+  }
+
+  .qp .cl-classbar:has(> .cl-actions) > .cl-actions {
+    grid-row: 2;
+    grid-column: 2 / -1;
+  }
+
+  .qp .cl-classbar > .cl-actions > .cl-danger {
+    margin-left: auto;
   }
 }

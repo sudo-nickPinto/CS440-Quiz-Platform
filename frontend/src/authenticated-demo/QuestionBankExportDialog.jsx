@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApi } from "./rest";
 import RequestError from "./RequestError";
-import { exportPlan } from "./questionBankExport";
+import { exportPlan, visibleQuestions } from "./questionBankExport";
 import { useFileDownload } from "./useFileDownload";
 
 const PAGE_SIZE = 100;
@@ -9,8 +9,8 @@ const PAGE_SIZE = 100;
 // Informational only: these still download (correct_choices like "A|C").
 const isMultiCorrect = (item) => item.choices.filter((choice) => choice.is_correct).length > 1;
 
-// The square ✓ box used by the question bank in the quiz editor. The real checkbox is
-// visually hidden; "mixed" draws a dash for a partly selected group.
+// The square ✓ box used by the question bank in the quiz editor. The real
+// checkbox is visually hidden; "mixed" draws a dash for a partly ticked group.
 function Check({ checked, mixed = false, label, children, className = "", ...props }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -25,100 +25,104 @@ function Check({ checked, mixed = false, label, children, className = "", ...pro
   );
 }
 
+// "ALL QUIZZES ▾": a site-styled pop-up list (like Time per question), not
+// the browser's own select. dismissPopovers closes it on a pick, an outside
+// click or Escape.
+function QuizPicker({ quizzes, value, onChange, disabled }) {
+  const chosen = quizzes.find((quiz) => quiz.quiz_id === value);
+  return (
+    <details className="qb-pop qbx-pick-quiz">
+      <summary
+        aria-label={`Quiz: ${chosen ? chosen.title : "All quizzes"}. Change`}
+        aria-disabled={disabled || undefined}
+        onClick={(event) => disabled && event.preventDefault()}
+      >
+        <span className="qbx-pick-label">{chosen ? chosen.title : "All quizzes"}</span>
+        <span aria-hidden="true">▾</span>
+      </summary>
+      <div className="qbx-pick-panel" role="group" aria-label="Quiz">
+        <button type="button" className="ui-opt" aria-pressed={value == null} onClick={() => onChange(null)}>
+          All quizzes
+        </button>
+        {quizzes.map((quiz) => (
+          <button
+            key={quiz.quiz_id}
+            type="button"
+            className="ui-opt"
+            aria-pressed={quiz.quiz_id === value}
+            onClick={() => onChange(quiz.quiz_id)}
+          >
+            {quiz.title}
+            <small>{quiz.question_count}</small>
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+// Every bank question of one class, a page at a time until done.
+async function loadClassQuestions(api, classId) {
+  const items = [];
+  for (let page = 1; ; page += 1) {
+    const result = await api(
+      `/question-bank/items?class_ids=${classId}&page=${page}&page_size=${PAGE_SIZE}`,
+    );
+    items.push(...result.items);
+    if (items.length >= result.pagination.total_items || !result.items.length) return items;
+  }
+}
+
 /*
- * The admin dashboard's question bank: download questions as CSV from every
- * course, some courses, one quiz, or exactly the ticked questions.
+ * The class dashboard's question bank: download this class's questions as
+ * CSV. Every question starts ticked; the quiz picker and search narrow what's
+ * shown, and the ticked questions shown are what downloads.
  */
-export default function QuestionBankExportDialog({ classId, onClose }) {
+export default function QuestionBankExportDialog({ classId, className, onClose }) {
   const api = useApi();
   const dialogRef = useRef(null);
-  const known = useRef(new Map()); // bank_question_id -> item, for pruning
-  const [courses, setCourses] = useState(null);
-  const [classIds, setClassIds] = useState(new Set());
+  // Escape first closes an open quiz picker (dismissPopovers does that before
+  // the dialog's cancel event), and only a second Escape closes the pop-up.
+  const pickerWasOpen = useRef(false);
+  const [items, setItems] = useState(null);
+  const [quizzes, setQuizzes] = useState([]);
   const [quizId, setQuizId] = useState(null);
   const [search, setSearch] = useState("");
-  const [loaded, setLoaded] = useState([]);
-  const [matching, setMatching] = useState(0);
-  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(new Set());
-  const [loading, setLoading] = useState(false);
-  const file = useFileDownload();
   const [error, setError] = useState(null);
+  const file = useFileDownload();
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog && !dialog.open) dialog.showModal();
   }, []);
 
-  // Courses and quizzes. Start with the course the dashboard is open on.
   useEffect(() => {
     let live = true;
-    api("/question-bank/sources")
-      .then((result) => {
+    Promise.all([api("/question-bank/sources"), loadClassQuestions(api, classId)])
+      .then(([sources, questions]) => {
         if (!live) return;
-        setCourses(result.courses);
-        const here = result.courses.some((course) => course.class_id === classId);
-        setClassIds(new Set(here ? [classId] : result.courses.map((course) => course.class_id)));
+        const course = sources.courses.find((entry) => entry.class_id === classId);
+        setQuizzes(course?.quizzes ?? []);
+        setItems(questions);
+        setSelected(new Set(questions.map((question) => question.bank_question_id)));
       })
-      .catch((failure) => live && setError(failure));
+      .catch((failure) => {
+        if (live) { setError(failure); setItems([]); }
+      });
     return () => { live = false; };
   }, [api, classId]);
 
-  const classKey = [...classIds].sort((a, b) => a - b).join(",");
+  const loading = items === null;
+  const shown = useMemo(() => visibleQuestions(items ?? [], { quizId, search }), [items, quizId, search]);
+  const ticked = shown.filter((item) => selected.has(item.bank_question_id));
+  const quiz = quizzes.find((entry) => entry.quiz_id === quizId) ?? null;
+  const plan = exportPlan({
+    className, quiz, search, shown: shown.length, ticked: ticked.length,
+    loading, empty: !loading && !items.length,
+  });
 
-  // Questions matching the filters; "Show more" adds pages.
-  useEffect(() => {
-    if (!classKey) return undefined;
-    const timer = window.setTimeout(async () => {
-      setLoading(true); setError(null);
-      try {
-        const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) });
-        classKey.split(",").forEach((id) => params.append("class_ids", id));
-        if (quizId != null) params.set("quiz_id", String(quizId));
-        if (search.trim()) params.set("search", search.trim());
-        const result = await api(`/question-bank/items?${params}`);
-        result.items.forEach((item) => known.current.set(item.bank_question_id, item));
-        setLoaded((current) => (page === 1 ? result.items : [...current, ...result.items]));
-        setMatching(result.pagination.total_items);
-      } catch (failure) { setError(failure); }
-      finally { setLoading(false); }
-    }, 200);
-    return () => window.clearTimeout(timer);
-  }, [api, classKey, quizId, search, page]);
-
-  // With no course ticked nothing is fetched, so show nothing.
-  const items = classKey ? loaded : [];
-  const total = classKey ? matching : 0;
-
-  const plan = useMemo(() => exportPlan({
-    courses: courses ?? [], classIds, quizId, search, selectedIds: selected, matching: total,
-  }), [courses, classIds, quizId, search, selected, total]);
-
-  function changeFilters(update) {
-    setPage(1);
-    update();
-  }
-
-  function chooseCourses(next) {
-    changeFilters(() => {
-      setClassIds(next);
-      // A quiz or ticked question from a course that is no longer ticked
-      // can't be downloaded, so drop it.
-      const quizCourse = courses?.find((course) => course.quizzes.some((quiz) => quiz.quiz_id === quizId));
-      if (quizCourse && !next.has(quizCourse.class_id)) setQuizId(null);
-      setSelected((current) => new Set([...current].filter(
-        (id) => next.has(known.current.get(id)?.source_class_id),
-      )));
-    });
-  }
-
-  function toggleCourse(id) {
-    const next = new Set(classIds);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    chooseCourses(next);
-  }
-
-  function toggleQuestion(id) {
+  function toggle(id) {
     setSelected((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -126,30 +130,40 @@ export default function QuestionBankExportDialog({ classId, onClose }) {
     });
   }
 
-  function download() {
-    void file.download("/question-bank/export.csv", plan.filename, {
-      method: "POST",
-      body: plan.payload,
-      filename: plan.filename,
+  function tickShown(on) {
+    setSelected((current) => {
+      const next = new Set(current);
+      shown.forEach((item) => (on ? next.add(item.bank_question_id) : next.delete(item.bank_question_id)));
+      return next;
     });
   }
 
-  const allCourses = courses?.length > 0 && classIds.size === courses.length;
-  const someCourses = classIds.size > 0 && !allCourses;
-  const shownSelected = items.filter((item) => selected.has(item.bank_question_id)).length;
-  const quizCourses = (courses ?? []).filter(
-    (course) => classIds.has(course.class_id) && course.quizzes.length,
-  );
-  const courseName = (id) => courses?.find((course) => course.class_id === id)?.name;
+  function download() {
+    void file.download("/question-bank/export.csv", plan.filename, {
+      method: "POST",
+      body: { class_ids: [classId], bank_question_ids: ticked.map((item) => item.bank_question_id) },
+      filename: plan.filename,
+    });
+  }
 
   return (
     <dialog
       ref={dialogRef}
       className="cl-dlg cl-dlg-wide qbx"
       aria-labelledby="qbx-title"
+      onKeyDownCapture={(event) => {
+        if (event.key === "Escape") {
+          pickerWasOpen.current = Boolean(dialogRef.current?.querySelector("details[open]"));
+        }
+      }}
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        if (pickerWasOpen.current) {
+          pickerWasOpen.current = false;
+          dialogRef.current?.querySelector("details[open]")?.removeAttribute("open");
+        } else {
+          onClose();
+        }
       }}
       onClick={(event) => {
         // A click on the backdrop lands on the <dialog> itself.
@@ -164,132 +178,78 @@ export default function QuestionBankExportDialog({ classId, onClose }) {
       <div className="cl-add-body">
         <RequestError error={error || file.error} />
 
-        {courses === null ? <p className="cl-add-note">Loading courses…</p> : !courses.length ? (
-          <p className="cl-dlg-empty">There are no questions in your courses yet. Questions are added to the bank when you write quizzes.</p>
-        ) : (
-          <>
-            <div className="qbx-courses" role="group" aria-label="Courses">
+        <div className="cl-dlg-row qbx-filters">
+          <label className="cl-search">
+            <span className="cl-sr">Search questions</span>
+            <input
+              type="search"
+              placeholder="Search questions…"
+              value={search}
+              disabled={loading}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          <QuizPicker quizzes={quizzes} value={quizId} onChange={setQuizId} disabled={loading} />
+        </div>
+
+        <div className="qbx-list-head">
+          <Check
+            label={`Select all ${shown.length} shown`}
+            checked={shown.length > 0 && ticked.length === shown.length}
+            mixed={ticked.length > 0 && ticked.length < shown.length}
+            disabled={!shown.length}
+            onChange={() => tickShown(ticked.length !== shown.length)}
+          >
+            <span className="qbx-text"><strong>Select all {shown.length} shown</strong></span>
+          </Check>
+          <span className="qbx-count">
+            {loading ? "Loading…" : `${ticked.length} of ${shown.length} ticked`}
+          </span>
+        </div>
+
+        <div className="qbx-list" aria-busy={loading}>
+          {shown.length ? shown.map((item) => (
+            <article
+              key={item.bank_question_id}
+              className={`qbx-row${selected.has(item.bank_question_id) ? " is-selected" : ""}`}
+            >
               <Check
-                label="Select all courses"
-                checked={allCourses}
-                mixed={someCourses}
-                onChange={() => chooseCourses(allCourses ? new Set() : new Set(courses.map((course) => course.class_id)))}
+                label={item.question_text}
+                className="qbx-pick"
+                checked={selected.has(item.bank_question_id)}
+                onChange={() => toggle(item.bank_question_id)}
               >
-                <span className="qbx-text"><strong>All courses</strong></span>
+                <span className="qbx-copy">
+                  <strong>{item.question_text}</strong>
+                  {isMultiCorrect(item) && (
+                    <small
+                      className="qbx-tag"
+                      title="More than one correct answer. It downloads as e.g. A|C."
+                    >
+                      Multi-correct
+                    </small>
+                  )}
+                </span>
               </Check>
-              {courses.map((course) => (
-                <Check
-                  key={course.class_id}
-                  label={course.name}
-                  checked={classIds.has(course.class_id)}
-                  onChange={() => toggleCourse(course.class_id)}
-                >
-                  <span className="qbx-text">
-                    <strong>{course.name}</strong>
-                    <small>{course.question_count} {course.question_count === 1 ? "question" : "questions"}{course.archived ? " · archived" : ""}</small>
-                  </span>
-                </Check>
-              ))}
-            </div>
-
-            <div className="cl-dlg-row qbx-filters">
-              <label className="cl-search">
-                <span className="cl-sr">Search questions</span>
-                <input
-                  type="search"
-                  placeholder="Search questions…"
-                  value={search}
-                  disabled={!classIds.size}
-                  onChange={(e) => changeFilters(() => setSearch(e.target.value))}
-                />
-              </label>
-              <label className="cl-sort">
-                <span className="cl-sr">Quiz</span>
-                <select
-                  value={quizId ?? ""}
-                  disabled={!classIds.size}
-                  onChange={(e) => changeFilters(() => setQuizId(e.target.value ? Number(e.target.value) : null))}
-                >
-                  <option value="">All quizzes</option>
-                  {quizCourses.map((course) => (
-                    <optgroup key={course.class_id} label={course.name}>
-                      {course.quizzes.map((quiz) => (
-                        <option key={quiz.quiz_id} value={quiz.quiz_id}>{quiz.title} ({quiz.question_count})</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="qbx-list-head">
-              <Check
-                label={`Select all ${items.length} shown`}
-                checked={items.length > 0 && shownSelected === items.length}
-                mixed={shownSelected > 0 && shownSelected < items.length}
-                disabled={!items.length}
-                onChange={() => setSelected((current) => {
-                  const next = new Set(current);
-                  const all = shownSelected === items.length;
-                  items.forEach((item) => (all ? next.delete(item.bank_question_id) : next.add(item.bank_question_id)));
-                  return next;
-                })}
-              >
-                <span className="qbx-text"><strong>Select all {items.length} shown</strong></span>
-              </Check>
-              <span className="qbx-count">{loading ? "Loading…" : `${total} ${total === 1 ? "question matches" : "questions match"}`}</span>
-            </div>
-
-            <div className="qbx-list" aria-busy={loading}>
-              {items.length ? items.map((item) => (
-                <article
-                  key={item.bank_question_id}
-                  className={`qbx-row${selected.has(item.bank_question_id) ? " is-selected" : ""}`}
-                >
-                  <Check
-                    label={item.question_text}
-                    className="qbx-pick"
-                    checked={selected.has(item.bank_question_id)}
-                    onChange={() => toggleQuestion(item.bank_question_id)}
-                  >
-                    <span className="qbx-copy">
-                      <strong>{item.question_text}</strong>
-                      {classIds.size > 1 && <small>{courseName(item.source_class_id)}</small>}
-                      {isMultiCorrect(item) && (
-                        <small
-                          className="qbx-tag"
-                          title="More than one correct answer. It downloads as e.g. A|C."
-                        >
-                          Multi-correct
-                        </small>
-                      )}
-                    </span>
-                  </Check>
-                </article>
-              )) : <p>{loading ? "Loading questions…" : classIds.size ? "No matching questions." : "Choose at least one course."}</p>}
-              {items.length < total && !loading && (
-                <button type="button" className="qbx-more" onClick={() => setPage((value) => value + 1)}>Show more ({total - items.length} left)</button>
-              )}
-            </div>
-          </>
-        )}
+            </article>
+          )) : (
+            <p className="qbx-empty">
+              {loading ? "Loading questions…" : items.length ? "No matching questions." : "No questions yet. Questions are added to the bank when quizzes are written in this class."}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="cl-dlg-foot">
-        <span aria-live="polite">You’ll download: <b>{plan.summary}</b></span>
-        <div className="qbx-actions">
-          {selected.size > 0 && (
-            <button type="button" className="qbx-clear" onClick={() => setSelected(new Set())}>Clear selection</button>
-          )}
-          <button
-            type="button"
-            className="cl-add-one"
-            disabled={file.busy || !classIds.size || !plan.count}
-            onClick={download}
-          >
-            {file.busy ? "Preparing…" : plan.button}
-          </button>
-        </div>
+        <span aria-live="polite">{plan.disabled ? plan.summary : <>You’ll download: <b>{plan.summary}</b></>}</span>
+        <button
+          type="button"
+          className="cl-add-one"
+          disabled={plan.disabled || file.busy}
+          onClick={download}
+        >
+          {file.busy ? "Preparing…" : plan.button}
+        </button>
       </div>
     </dialog>
   );
