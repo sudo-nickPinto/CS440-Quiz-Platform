@@ -6,14 +6,15 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
 from app.schemas.question_bank import (
-    BankExportRequest, BankScope, BankSelection, BankSourcesResponse, CsvImportRequest, CsvImportResponse,
+    BankScope, BankSelection, ClassBankDownload, ClassBankQuizzesResponse, CsvImportRequest, CsvImportResponse,
     CsvBankSaveRequest, CsvBankSaveResponse, CsvPreviewRequest,
     CsvPreviewResponse, DuplicateQuizResponse, QuestionBankPage,
 )
 from app.schemas.quiz import QuizResponse
 from app.services.question_bank import (
-    add_from_bank, duplicate_quiz, export_account_csv, export_csv, import_csv,
-    list_account_bank, list_bank, list_bank_sources, preview_csv, save_csv_to_bank,
+    add_from_bank, download_class_csv, duplicate_quiz, export_csv, import_csv,
+    list_bank, list_class_bank_items, list_class_bank_quizzes, preview_csv,
+    save_csv_to_bank,
 )
 
 router = APIRouter(prefix="/classes/{class_id}", tags=["question bank"])
@@ -82,33 +83,27 @@ def duplicate_class_quiz(class_id: int, quiz_id: int, db: Session = Depends(get_
     return DuplicateQuizResponse(quiz=duplicate_quiz(db, account, class_id, quiz_id))
 
 
-# Account-wide bank: the admin dashboard's question bank, across courses.
-account_router = APIRouter(prefix="/question-bank", tags=["question bank"])
+# The class dashboard's question bank (organizers): download this class's
+# questions as CSV.
 
 
-@account_router.get("/sources", response_model=BankSourcesResponse)
-def list_question_bank_sources(db: Session = Depends(get_db),
-                               account: CurrentAccount = Depends(get_active_account)):
-    return list_bank_sources(db, account)
+@router.get("/question-bank/quizzes", response_model=ClassBankQuizzesResponse)
+def list_class_bank_quizzes_route(class_id: int, db: Session = Depends(get_db),
+                                  account: CurrentAccount = Depends(get_active_account)):
+    return list_class_bank_quizzes(db, account, class_id)
 
 
-@account_router.get("/items", response_model=QuestionBankPage)
-def list_account_question_bank(
-    class_ids: Annotated[list[int], Query(min_length=1, max_length=200)],
-    quiz_id: Annotated[int | None, Query(ge=1)] = None,
-    search: str = Query(default="", max_length=200),
-    page: Page = 1,
-    page_size: PageSize = 25,
-    db: Session = Depends(get_db),
-    account: CurrentAccount = Depends(get_active_account),
-):
-    return list_account_bank(db, account, sorted(set(class_ids)), quiz_id=quiz_id,
-                             search=search, page=page, page_size=page_size)
-
-
-@account_router.post("/export.csv")
-def export_account_question_csv(payload: BankExportRequest, db: Session = Depends(get_db),
+@router.get("/question-bank/items", response_model=QuestionBankPage)
+def list_class_bank_items_route(class_id: int, page: Page = 1, page_size: PageSize = 25,
+                                db: Session = Depends(get_db),
                                 account: CurrentAccount = Depends(get_active_account)):
-    content = export_account_csv(db, account, payload)
+    return list_class_bank_items(db, account, class_id, page=page, page_size=page_size)
+
+
+@router.post("/question-bank/download.csv")
+def download_class_bank_csv(class_id: int, payload: ClassBankDownload,
+                            db: Session = Depends(get_db),
+                            account: CurrentAccount = Depends(get_active_account)):
+    content = download_class_csv(db, account, class_id, payload.bank_question_ids)
     return Response(content=content, media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": "attachment; filename=question-bank.csv"})
