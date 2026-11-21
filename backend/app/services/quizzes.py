@@ -974,33 +974,6 @@ def update_class_quiz_question(
         if question is None:
             raise APIError(404, "question_not_found", "Question not found.")
 
-    if editor_version.published_at is not None:
-        # The quiz row is already locked, so this immutable-version copy and
-        # the selection of its target question cannot race archive, publish,
-        # or another editor creating the next draft.
-        source_order = source.question_order
-        draft = QuizVersion(
-            quiz_id=quiz_id,
-            version_number=max(
-                version.version_number for version in quiz.versions
-            ) + 1,
-            title=editor_version.title,
-            description=editor_version.description,
-            published_at=None,
-            questions=_clone_questions(editor_version.questions),
-        )
-        db.add(draft)
-        db.flush()
-        editor_version = draft
-        quiz.status = QuizStatus.DRAFT
-        db.flush()
-        question = next(
-            item for item in editor_version.questions
-            if item.question_order == source_order
-        )
-        if question.question_id != source.question_id:
-            mapped_source = source
-
     if (
         mapped_source is not None
         and not _same_question_content(mapped_source, question)
@@ -1020,6 +993,40 @@ def update_class_quiz_question(
             "question_edit_conflict",
             "This question changed after you opened it. Reload that question before saving.",
             details={"current_revision": question.revision},
+        )
+
+    incoming = _question_from_payload(payload, question_order=question.question_order)
+    incoming.question_type = question.question_type
+    if _same_question_content(question, incoming):
+        return QuestionUpdateResponse(
+            quiz_id=quiz_id,
+            quiz_revision=quiz.revision,
+            question=QuestionResponse.model_validate(question),
+        )
+
+    if editor_version.published_at is not None:
+        # The quiz row is already locked, so this immutable-version copy and
+        # the selection of its target question cannot race archive, publish,
+        # or another editor creating the next draft.
+        source_order = question.question_order
+        draft = QuizVersion(
+            quiz_id=quiz_id,
+            version_number=max(
+                version.version_number for version in quiz.versions
+            ) + 1,
+            title=editor_version.title,
+            description=editor_version.description,
+            published_at=None,
+            questions=_clone_questions(editor_version.questions),
+        )
+        db.add(draft)
+        db.flush()
+        editor_version = draft
+        quiz.status = QuizStatus.DRAFT
+        db.flush()
+        question = next(
+            item for item in editor_version.questions
+            if item.question_order == source_order
         )
 
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -1104,6 +1111,7 @@ def update_class_quiz_question(
             quiz_revision=quiz_revision,
             question=QuestionResponse.model_validate(question),
         )
+        withdraw_pending_submissions_for_edit(db, quiz, account.account_id, now)
         db.commit()
         return response
     except SQLAlchemyError as exc:
@@ -1157,7 +1165,11 @@ def update_class_quiz_default_time(
         questions = [
             questions_by_id[question_id] for question_id in payload.question_ids
         ]
-        for question in questions:
+        changed = [
+            question for question in questions
+            if question.time_limit_seconds != payload.time_limit_seconds
+        ]
+        for question in changed:
             question.time_limit_seconds = payload.time_limit_seconds
             question.revision += 1
             question.updated_at = now
@@ -1165,8 +1177,9 @@ def update_class_quiz_default_time(
                 db, question, owner_id=quiz.author_id, class_id=class_id,
                 quiz_id=quiz_id,
             )
-        quiz.revision += 1
-        quiz.updated_at = now
+        if changed:
+            quiz.revision += 1
+            quiz.updated_at = now
         db.flush()
         response = QuizDefaultTimeUpdateResponse(
             quiz_id=quiz_id,
@@ -1176,6 +1189,8 @@ def update_class_quiz_default_time(
                 QuestionResponse.model_validate(question) for question in questions
             ],
         )
+        if changed:
+            withdraw_pending_submissions_for_edit(db, quiz, account.account_id, now)
         db.commit()
         return response
     except SQLAlchemyError as exc:
@@ -1201,18 +1216,7 @@ def add_class_quiz_question(
     their independent question revisions and can proceed without a stale
     whole-quiz conflict.
     """
-    _require_active_class_member(db, account, class_id)
-
-    # Serialize order allocation for two simultaneous appends. This does not
-    # lock any Question row, so an editor may save another question at once.
-    db.execute(
-        select(Quiz.quiz_id)
-        .where(Quiz.quiz_id == quiz_id)
-        .with_for_update()
-    )
-    db.expire_all()
-    quiz = _class_quiz(db, class_id, quiz_id)
-    _require_quiz_editor(db, account, quiz, lock_access=True)
+    quiz = _lock_class_quiz_for_content_write(db, account, class_id, quiz_id)
     if quiz.status == QuizStatus.ARCHIVED:
         raise APIError(409, "quiz_not_editable", "An archived quiz cannot be edited.")
 
@@ -1254,6 +1258,7 @@ def add_class_quiz_question(
             quiz_revision=quiz.revision,
             question=QuestionResponse.model_validate(question),
         )
+        withdraw_pending_submissions_for_edit(db, quiz, account.account_id, now)
         db.commit()
         return response
     except SQLAlchemyError as exc:
@@ -1265,13 +1270,9 @@ def add_class_quiz_question(
         ) from exc
 
 
-def update_class_quiz(
-    db: Session,
-    account: CurrentAccount,
-    class_id: int,
-    quiz_id: int,
-    payload: QuizUpdate,
-) -> QuizResponse:
+def _lock_class_quiz_for_content_write(
+    db: Session, account: CurrentAccount, class_id: int, quiz_id: int
+) -> Quiz:
     try:
         quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
     except APIError:
@@ -1279,6 +1280,17 @@ def update_class_quiz(
         _require_active_class_member(db, account, class_id)
         raise
     _require_quiz_editor(db, account, quiz, lock_access=True)
+    return quiz
+
+
+def update_class_quiz(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    quiz_id: int,
+    payload: QuizUpdate,
+) -> QuizResponse:
+    quiz = _lock_class_quiz_for_content_write(db, account, class_id, quiz_id)
     if quiz.status == QuizStatus.ARCHIVED:
         raise APIError(409, "quiz_not_editable", "An archived quiz cannot be edited.")
 

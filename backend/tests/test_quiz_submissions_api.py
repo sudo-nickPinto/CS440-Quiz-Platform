@@ -793,6 +793,74 @@ def test_aggregate_edit_withdraws_only_after_a_content_change(
     assert snapshot["quiz_version_id"] == version_id
 
 
+@pytest.fixture
+def pending_quiz_with_draft(submissions, pending_quiz) -> tuple[str, dict, int]:
+    client, _, _, _ = submissions
+    path, payload, published, submission_id = pending_quiz
+    edited = client.put(
+        path,
+        json={**payload, "title": "Working draft", "expected_revision": published["revision"]},
+    )
+    assert edited.status_code == 200, edited.text
+    # Before automatic withdrawal, a pending request could outlive draft creation.
+    with client.app.state.database.session_factory() as db:
+        submission = db.get(QuizSubmission, submission_id)
+        submission.status = SubmissionStatus.PENDING
+        submission.decided_at = submission.decided_by_id = None
+        db.commit()
+    return path, edited.json(), submission_id
+
+
+@pytest.mark.parametrize("operation", ["autosave", "append"])
+def test_question_write_withdraws_pending_review(
+    submissions, pending_quiz, operation
+) -> None:
+    client, data, _, _ = submissions
+    path, payload, published, submission_id = pending_quiz
+    question = published["version"]["questions"][0]
+    question_payload = payload["questions"][0]
+    if operation == "autosave":
+        question_path = f"{path}/questions/{question['question_id']}"
+        autosave = {**question_payload, "expected_revision": question["revision"]}
+        unchanged = client.patch(question_path, json=autosave)
+        assert unchanged.status_code == 200, unchanged.text
+        assert unchanged.json()["question"]["question_id"] == question["question_id"]
+        assert unchanged.json()["quiz_revision"] == published["revision"]
+        with client.app.state.database.session_factory() as db:
+            assert db.get(QuizSubmission, submission_id).status == SubmissionStatus.PENDING
+        saved = client.patch(question_path, json={**autosave, "question_text": "Edited question?"})
+    else:
+        saved = client.post(f"{path}/questions", json=question_payload)
+    assert saved.status_code == (200 if operation == "autosave" else 201), saved.text
+    with client.app.state.database.session_factory() as db:
+        submission = db.get(QuizSubmission, submission_id)
+        assert submission.status == SubmissionStatus.WITHDRAWN
+        assert submission.decided_by_id == data["ids"]["owner"]
+        assert submission.decided_at is not None
+
+
+def test_timer_change_withdraws_pending_review_but_an_unchanged_timer_does_not(
+    submissions, pending_quiz_with_draft
+) -> None:
+    client, _, _, _ = submissions
+    path, draft, submission_id = pending_quiz_with_draft
+    question = draft["version"]["questions"][0]
+    payload = {
+        "time_limit_seconds": question["time_limit_seconds"],
+        "question_ids": [question["question_id"]],
+    }
+    unchanged = client.patch(f"{path}/default-time", json=payload)
+    assert unchanged.status_code == 200, unchanged.text
+    assert unchanged.json()["quiz_revision"] == draft["revision"]
+    with client.app.state.database.session_factory() as db:
+        assert db.get(QuizSubmission, submission_id).status == SubmissionStatus.PENDING
+
+    changed = client.patch(f"{path}/default-time", json={**payload, "time_limit_seconds": 30})
+    assert changed.status_code == 200, changed.text
+    with client.app.state.database.session_factory() as db:
+        assert db.get(QuizSubmission, submission_id).status == SubmissionStatus.WITHDRAWN
+
+
 # Submission preview (GET /classes/{id}/dashboard/submissions/{id}/preview).
 # The preview shows every question and correct answer of the version that was
 # sent, so it must follow the same access rules as the submission itself.
