@@ -896,7 +896,10 @@ def test_suggestions_search_names_and_emails_across_the_app(roster_client) -> No
     assert by_last[0]["display_name"] == "Maya Rivera"
     assert by_last[0]["membership_status"] == "INVITED"
     assert by_email[0]["account_id"] == identities["tunde"].account_id
-    assert short.json() == []
+    assert [item["email"] for item in short.json()] == [
+        PEOPLE["jae_a"][0],
+        PEOPLE["jae_b"][0],
+    ]
     assert wildcard.json() == []
 
     make_student(client, class_id, identities["tunde"])
@@ -905,6 +908,54 @@ def test_suggestions_search_names_and_emails_across_the_app(roster_client) -> No
         client.get(f"/classes/{class_id}/student-suggestions", params={"q": "jae"}).status_code
         == 403
     )
+
+
+def test_suggestions_list_everyone_a_page_at_a_time(roster_client) -> None:
+    client, _, class_id = roster_client
+    path = f"/classes/{class_id}/student-suggestions"
+    everyone = sorted(
+        (display, email) for email, _, _, display, _ in PEOPLE.values()
+    )
+
+    # An empty search lists every active account: people in the class
+    # first, then everyone else, each alphabetically.
+    first = client.get(path, params={"limit": 3}).json()
+    second = client.get(path, params={"limit": 3, "offset": 3}).json()
+    rest = client.get(path, params={"limit": 50, "offset": 6}).json()
+    pages = first + second + rest
+    in_class = [item for item in pages if item["membership_status"] == "ACTIVE"]
+    assert in_class and pages[: len(in_class)] == in_class
+    for group in (in_class, pages[len(in_class):]):
+        names = [(item["display_name"], item["account_id"]) for item in group]
+        assert names == sorted(names)
+    assert sorted((item["display_name"], item["email"]) for item in pages) == everyone
+    assert len(first) == len(second) == 3
+    assert len(rest) < 50  # a short page is the last one
+    assert client.get(path, params={"offset": 100}).json() == []
+
+    # The default page is still 8, and the limit is bounded.
+    assert len(client.get(path).json()) == min(8, len(everyone))
+    for params in ({"limit": 0}, {"limit": 51}, {"offset": -1}):
+        assert client.get(path, params=params).status_code == 422, params
+
+
+def test_suggestions_put_people_in_the_class_first(roster_client) -> None:
+    client, identities, class_id = roster_client
+    path = f"/classes/{class_id}/student-suggestions"
+    tunde = identities["tunde"].account_id
+
+    def in_class_ids(params):
+        listed = client.get(path, params={"limit": 50, **params}).json()
+        group = [item["account_id"] for item in listed if item["membership_status"] == "ACTIVE"]
+        # The people in the class are the first rows of the list.
+        assert [item["account_id"] for item in listed[: len(group)]] == group
+        return group
+
+    assert tunde not in in_class_ids({})
+    make_student(client, class_id, identities["tunde"])
+    assert tunde in in_class_ids({})
+    # A search keeps the same order.
+    assert in_class_ids({"q": "tu"}) == [tunde]
 
 
 # -- Email service ----------------------------------------------------------

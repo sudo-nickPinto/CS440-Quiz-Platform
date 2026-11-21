@@ -22,7 +22,9 @@ from app.schemas.quiz import (
     QuizResponse,
     QuizUpdate,
 )
+from app.services.class_roster import SUGGESTION_MAX_LIMIT
 from app.services.quizzes import (
+    COLLABORATOR_SUGGESTION_LIMIT,
     add_class_quiz_question,
     add_quiz_collaborator,
     create_quiz,
@@ -250,11 +252,16 @@ def suggest_quiz_collaborators_route(
     class_id: int,
     quiz_id: int,
     q: str = Query(default="", max_length=100),
+    limit: int = Query(default=COLLABORATOR_SUGGESTION_LIMIT, ge=1, le=SUGGESTION_MAX_LIMIT),
+    offset: int = Query(default=0, ge=0, le=100_000),
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> list[CollaboratorSuggestion]:
-    """Add collaborator search: people in this class matching the query."""
-    return suggest_quiz_collaborators(db, account, class_id, quiz_id, q)
+    """Add collaborator search: a page of people in this class; an empty `q`
+    lists everyone."""
+    return suggest_quiz_collaborators(
+        db, account, class_id, quiz_id, q, limit=limit, offset=offset
+    )
 
 
 @router.post(

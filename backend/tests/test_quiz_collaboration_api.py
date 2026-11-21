@@ -1069,9 +1069,26 @@ def test_collaborator_suggestions_list_classmates_as_you_type(
     # Not the owner, and not people outside the class.
     assert _suggest(client, class_id, quiz_id, "ow").json() == []
     assert _suggest(client, class_id, quiz_id, "out").json() == []
-    # One character, or only wildcards, finds nothing.
-    assert _suggest(client, class_id, quiz_id, "e").json() == []
+    # One character searches too; only wildcards finds nothing.
+    assert _suggest(client, class_id, quiz_id, "e").json() == by_name
     assert _suggest(client, class_id, quiz_id, "%%").json() == []
+
+
+def test_collaborator_suggestions_list_the_class_a_page_at_a_time(
+    collaboration_client,
+) -> None:
+    client, class_id, owner, editor, outsider = collaboration_client
+    quiz_id = _create(client, class_id)["quiz_id"]
+    path = f"/classes/{class_id}/quizzes/{quiz_id}/collaborator-suggestions"
+
+    # An empty search lists the class (not the owner, not outsiders).
+    assert [item["account_id"] for item in _suggest(client, class_id, quiz_id, "").json()] == [
+        editor.account_id
+    ]
+    assert client.get(path, params={"limit": 1}).json()[0]["account_id"] == editor.account_id
+    assert client.get(path, params={"limit": 1, "offset": 1}).json() == []
+    for params in ({"limit": 0}, {"limit": 51}, {"offset": -1}):
+        assert client.get(path, params=params).status_code == 422, params
 
 
 def test_collaborator_suggestions_mark_current_editors(collaboration_client) -> None:
@@ -1086,6 +1103,33 @@ def test_collaborator_suggestions_mark_current_editors(collaboration_client) -> 
     suggestions = _suggest(client, class_id, quiz_id, "ed").json()
 
     assert suggestions[0]["is_collaborator"] is True
+
+
+def test_collaborator_suggestions_put_collaborators_first(collaboration_client) -> None:
+    client, class_id, owner, editor, outsider = collaboration_client
+    with client.app.state.database.session_factory() as db:
+        aaron = Account(auth0_sub="auth0|aaron", email="aaron@example.com", display_name="Aaron")
+        db.add(aaron)
+        db.flush()
+        db.add(ClassMembership(class_id=class_id, account_id=aaron.account_id))
+        db.commit()
+        aaron_id = aaron.account_id
+    quiz_id = _create(client, class_id)["quiz_id"]
+
+    def order(q=""):
+        return [(i["account_id"], i["is_collaborator"]) for i in _suggest(client, class_id, quiz_id, q).json()]
+
+    # Alphabetical while nobody is a collaborator...
+    assert order() == [(aaron_id, False), (editor.account_id, False)]
+    added = client.post(
+        f"/classes/{class_id}/quizzes/{quiz_id}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+    assert added.status_code == 201
+    # ...then the collaborator comes first, also when searching.
+    assert order() == [(editor.account_id, True), (aaron_id, False)]
+    assert order("e") == [(editor.account_id, True)]
+    assert order("a") == [(aaron_id, False)]
 
 
 def test_only_the_owner_gets_collaborator_suggestions(collaboration_client) -> None:
