@@ -5,8 +5,8 @@ import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import RequestError from "../authenticated-demo/RequestError";
 import { canEditQuiz } from "../authenticated-demo/quizEditing";
 import {
+  useCatchUp,
   useNotifications,
-  useNotificationsReconnect,
 } from "../authenticated-demo/notifications";
 import { approvalLabel, submissionPreviewPath } from "./classHelpers";
 import { useClassResource } from "./classResources";
@@ -25,13 +25,17 @@ export default function SubmissionPreviewPage() {
   const quiz = useResource(Number.isSafeInteger(quizId) && quizId > 0 ? `/quizzes/${quizId}` : null);
   const canEdit = quiz.data && canEditQuiz(quiz.data);
 
-  // Another organizer deciding, or the member withdrawing, updates the
-  // status here without a reload.
+  // Keep the submitted snapshot on screen while checking its status and
+  // current edit access after decisions, saved edits, or a missed event.
+  function refreshPreview() {
+    refresh();
+    quiz.refresh();
+  }
   useNotifications("submission_changed", (event) => {
-    if (path && Number(event?.submission_id) === Number(submissionId)) refresh();
+    if (path && Number(event?.submission_id) === Number(submissionId)) refreshPreview();
   });
-  useNotificationsReconnect(() => {
-    if (path) refresh();
+  useCatchUp(() => {
+    if (path) refreshPreview();
   });
   const classInfo = useClassResource(classId);
   const api = useApi();

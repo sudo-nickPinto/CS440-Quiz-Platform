@@ -44,8 +44,8 @@ import {
 } from "./EditorParts";
 import { useQuizCollaboration } from "./useQuizCollaboration";
 import {
+  useCatchUp,
   useNotifications,
-  useNotificationsReconnect,
 } from "./notifications";
 import { classPagePath } from "../classes/classPaths";
 import NewQuizClassPicker from "../classes/NewQuizClassPicker";
@@ -1589,8 +1589,8 @@ export function QuizViewer() {
   const resource = useResource(validId ? `/quizzes/${quizId}` : null);
   const flow = useQuizFlow(resource.data ?? null, account.account_id);
 
-  // Approval status changes made elsewhere (an organizer deciding, the
-  // owner sending or withdrawing in another tab) update the page in place.
+  // Refresh the detail and approval state here, outside the draft editor.
+  // Saving content can withdraw a request while this page is open elsewhere.
   const { refresh: refreshQuiz } = resource;
   const { refresh: refreshFlow } = flow;
   useNotifications("submission_changed", (event) => {
@@ -1599,7 +1599,7 @@ export function QuizViewer() {
       refreshFlow();
     }
   });
-  useNotificationsReconnect(() => {
+  useCatchUp(() => {
     if (validId) {
       refreshQuiz();
       refreshFlow();

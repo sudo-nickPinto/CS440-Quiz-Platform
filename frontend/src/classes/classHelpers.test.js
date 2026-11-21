@@ -248,6 +248,7 @@ describe("approvalButton", () => {
     const rejected = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "REJECTED" });
     expect(approvalButton(rejected)).toMatchObject({ kind: "send", label: "Send for approval", note: "Rejected" });
     const withdrawn = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "WITHDRAWN" });
+    expect(presentStatus(withdrawn)).toMatchObject({ label: "Withdrawn" });
     expect(approvalButton(withdrawn)).toMatchObject({ kind: "send", label: "Send for approval", note: null });
   });
 

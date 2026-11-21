@@ -58,7 +58,7 @@ const DRAFT_NOTES = {
   rejected: "An organizer rejected the last version. Edit it, then send it again.",
   withdrawn: "The last request was withdrawn. Send it again when it's ready.",
   approval_outdated: "It changed since it was approved, so it needs approval again.",
-  unpublished_changes: "It changed since it was approved, so it needs approval again.",
+  unpublished_changes: "Publish the saved edits and send a new request for approval.",
 };
 
 /**
@@ -82,9 +82,10 @@ export function quizFlowState({ quiz, accountId, pending }) {
     };
   }
 
-  if (pending) {
+  // A content edit withdraws the request. The detail response and the
+  // queue can briefly describe different versions while they refresh.
+  if (pending && quiz.status === "PUBLISHED" && pending.is_current_version !== false) {
     const mine = pending.submitted_by_id === accountId;
-    const edited = quiz.status === "DRAFT";
     return {
       step: 2,
       label: "Waiting for approval",
@@ -92,9 +93,7 @@ export function quizFlowState({ quiz, accountId, pending }) {
       // isn't yours means you're an organizer of the class.
       action: mine ? "withdraw" : "review",
       note: mine
-        ? edited
-          ? "Waiting for an organizer. Your newer edits aren't part of this request; send them once it's decided."
-          : "Waiting for an organizer to approve it."
+        ? "Waiting for an organizer to approve it. Saving changes to the quiz withdraws this request."
         : `${pending.submitter_name ?? "A student"} sent this for approval.`,
     };
   }

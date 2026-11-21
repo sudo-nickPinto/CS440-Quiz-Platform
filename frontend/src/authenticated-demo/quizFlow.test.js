@@ -89,13 +89,14 @@ describe("quizFlowState", () => {
     expect(state.note).toContain("Amy");
   });
 
-  it("edits made after sending are called out", () => {
+  it("offers a new request for saved edits even if the pending list hasn't refreshed yet", () => {
     const state = quizFlowState({
-      quiz: quiz({ status: "DRAFT" }),
+      quiz: quiz({ hosting: { can_host: false, reason: "unpublished_changes" } }),
       accountId: ME,
       pending: { submission_id: 50, submitted_by_id: ME },
     });
-    expect(state.note).toContain("newer edits");
+    expect(state).toMatchObject({ label: "Draft", action: "send" });
+    expect(state.note).toContain("send a new request");
   });
 
   it("the owner can send a draft", () => {

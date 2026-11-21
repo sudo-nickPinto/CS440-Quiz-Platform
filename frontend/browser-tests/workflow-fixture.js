@@ -281,4 +281,4 @@ export async function openClass(page_, options = {}) {
   return state;
 }
 
-export const IDS = { CLASS_ID, SUBMISSION_ID, SUBMITTED_VERSION_ID };
+export const IDS = { CLASS_ID, QUIZ_ID, SUBMISSION_ID, SUBMITTED_VERSION_ID };
