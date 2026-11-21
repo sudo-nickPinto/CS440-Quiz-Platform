@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
@@ -9,6 +10,7 @@ import {
 } from "../authenticated-demo/notifications";
 import { approvalLabel, submissionPreviewPath } from "./classHelpers";
 import { useClassResource } from "./classResources";
+import RejectSubmissionDialog from "./RejectSubmissionDialog";
 
 // Read-only view of exactly the version a member submitted for approval.
 // The quiz page shows the newest (possibly draft) version, so organizers
@@ -33,6 +35,7 @@ export default function SubmissionPreviewPage() {
   const classInfo = useClassResource(classId);
   const api = useApi();
   const action = useAction();
+  const [rejecting, setRejecting] = useState(false);
   const organizer = classInfo.status === "ready" && classInfo.data.canManage;
   const backTo = organizer
     ? `/app/classes/${classId}?section=Approvals`
@@ -86,13 +89,22 @@ export default function SubmissionPreviewPage() {
           action={action}
           archived={classInfo.status === "ready" && classInfo.data.archived}
           onDecide={(status) => void decide(status)}
+          onReject={() => setRejecting(true)}
         />
       ) : null}
+      {rejecting && (
+        <RejectSubmissionDialog
+          classId={classId}
+          submissionId={submissionId}
+          onClose={() => setRejecting(false)}
+          onRejected={preview.reload}
+        />
+      )}
     </section>
   );
 }
 
-function SubmissionBody({ data, organizer, action, archived, onDecide }) {
+function SubmissionBody({ data, organizer, action, archived, onDecide, onReject }) {
   const { submission, version } = data;
   const decided = submission.decided_by_name
     ? ` by ${submission.decided_by_name}`
@@ -147,7 +159,7 @@ function SubmissionBody({ data, organizer, action, archived, onDecide }) {
             type="button"
             className="cl-decide"
             disabled={action.busy}
-            onClick={() => onDecide("REJECTED")}
+            onClick={onReject}
           >
             Reject
           </button>

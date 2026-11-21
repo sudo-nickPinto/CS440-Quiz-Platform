@@ -2008,3 +2008,23 @@
     left: 0;
   }
 }
+
+.cl-reject-dialog label {
+  display: block;
+  margin: 16px 0 6px;
+  font-weight: 700;
+}
+
+.cl-reject-dialog textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border: var(--b);
+  font: inherit;
+  resize: vertical;
+}
+
+.cl-reject-dialog textarea + p {
+  margin-top: 6px;
+}

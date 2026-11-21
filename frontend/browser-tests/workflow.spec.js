@@ -97,12 +97,41 @@ test("a stale submission can be reviewed and rejected but not approved", async (
   await expect(button(page, "Approve this version")).toBeDisabled();
 
   await button(page, "Reject").click();
+  const dialog = page.getByRole("dialog", { name: "Reject submission" });
+  await expect(dialog.getByRole("textbox", { name: "Rejection comment (optional)" })).toBeFocused();
+  await dialog.getByRole("button", { name: "Reject submission" }).click();
   await expect(page.getByText("Rejected by Professor")).toBeVisible();
   expect(state.calls).toContainEqual({
     method: "PATCH",
     path: DECISION,
     body: { status: "REJECTED" },
   });
+});
+
+test("the rejection form preserves feedback after a refused decision", async ({ page }) => {
+  const state = await openClass(page, { as: "organizer", submission: "PENDING", failDecision: true });
+  await button(page, "Reject").click();
+
+  const dialog = page.getByRole("dialog", { name: "Reject submission" });
+  const input = dialog.getByRole("textbox", { name: "Rejection comment (optional)" });
+  const submit = dialog.getByRole("button", { name: "Reject submission" });
+  await input.fill("x".repeat(1001));
+  await expect(submit).toBeDisabled();
+  await input.fill("  Revise the second question.  ");
+  await submit.click();
+  await expect(dialog.getByRole("alert")).toBeVisible();
+  await expect(input).toHaveValue("  Revise the second question.  ");
+  await submit.click();
+  await expect.poll(() => state.calls.filter((call) => call.method === "PATCH" && call.path === DECISION)).toEqual(
+    Array.from({ length: 2 }, () => ({
+      method: "PATCH", path: DECISION,
+      body: { status: "REJECTED", rejection_comment: "Revise the second question." },
+    })),
+  );
+  await expect(submit).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(button(page, "Reject")).toBeFocused();
 });
 
 test("a refused decision shows the server's reason and changes nothing", async ({

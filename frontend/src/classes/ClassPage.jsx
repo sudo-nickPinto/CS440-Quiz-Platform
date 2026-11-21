@@ -38,6 +38,7 @@ import {
   ScoreMeter,
 } from "./ReportTable";
 import { ClassStudents } from "./ClassManagement";
+import RejectSubmissionDialog from "./RejectSubmissionDialog";
 import { AddStudentDialog, JoinRequestsTable } from "./StudentRoster";
 import QuestionBankExportDialog from "../authenticated-demo/QuestionBankExportDialog";
 import OptionsMenu from "../authenticated-demo/OptionsMenu";
@@ -814,6 +815,7 @@ const APPROVAL_COLUMNS = ["", "", "cl-wide", "cl-wide", "", "cl-go-cell"];
 function SubmissionsTable({ classInfo, onChange, switcher = null }) {
   const api = useApi();
   const action = useAction();
+  const [rejectingId, setRejectingId] = useState(null);
   const memory = `class:${classInfo.id}:approvals`;
   const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "oldest", {
@@ -923,7 +925,7 @@ function SubmissionsTable({ classInfo, onChange, switcher = null }) {
                   type="button"
                   className="cl-decide"
                   disabled={action.busy}
-                  onClick={() => void decide(item, "REJECTED")}
+                  onClick={() => setRejectingId(item.submission_id)}
                 >
                   Reject
                 </button>
@@ -954,6 +956,17 @@ function SubmissionsTable({ classInfo, onChange, switcher = null }) {
           };
         })}
       />
+      {rejectingId != null && (
+        <RejectSubmissionDialog
+          classId={classInfo.id}
+          submissionId={rejectingId}
+          onClose={() => setRejectingId(null)}
+          onRejected={() => {
+            resource.reload();
+            onChange?.();
+          }}
+        />
+      )}
     </>
   );
 }
