@@ -25,6 +25,8 @@ from app.models.quiz import (
 from app.schemas.pagination import PageInfo
 from app.schemas.question_bank import (
     BankScope,
+    ClassBankQuiz,
+    ClassBankQuizzesResponse,
     CsvBankSaveRequest,
     CsvBankSaveResponse,
     CsvImportRequest,
@@ -160,7 +162,8 @@ def _visible_condition(
 def _response(item: QuestionBankItem) -> QuestionBankItemResponse:
     return QuestionBankItemResponse(
         bank_question_id=item.bank_question_id, owner_id=item.owner_id,
-        source_class_id=item.source_class_id, question_type=item.question_type,
+        source_class_id=item.source_class_id, source_quiz_id=item.source_quiz_id,
+        question_type=item.question_type,
         question_text=item.question_text, explanation=item.explanation,
         choices=[AnswerChoiceCreate.model_validate(choice) for choice in item.choices_json],
         updated_at=item.updated_at,
@@ -440,6 +443,10 @@ def export_csv(db: Session, account: CurrentAccount, class_id: int, scope: BankS
     ) & QuestionBankItem.is_current.is_(True)
     if ids: condition = condition & QuestionBankItem.bank_question_id.in_(ids)
     items = list(db.scalars(select(QuestionBankItem).where(condition).order_by(QuestionBankItem.bank_question_id)))
+    return _csv_text(items)
+
+
+def _csv_text(items: list[QuestionBankItem]) -> str:
     unsupported = [
         item.bank_question_id for item in items if len(item.choices_json) > 4
     ]
@@ -462,3 +469,84 @@ def export_csv(db: Session, account: CurrentAccount, class_id: int, scope: BankS
             row[f"choice_{key}"] = safe(choices[index]["choice_text"]) if index < len(choices) else ""
         writer.writerow(row)
     return out.getvalue()
+
+
+# The class dashboard's question bank: an organizer downloads this class's
+# questions as CSV.
+
+
+def _class_bank_condition(db: Session, account: CurrentAccount, class_id: int):
+    """Current questions from this class that its organizer may see.
+
+    404 if the caller isn't in the class, 403 if they don't organize it. The
+    class bank's organizer rule, limited to questions whose source is this
+    class: the caller's own, quizzes shared with them, and the class's
+    published quizzes.
+    """
+    from app.services.class_authorization import require_class_organizer
+
+    require_class_organizer(db, account, class_id)
+    _ensure_legacy_snapshots(db, account, class_id, is_organizer=True)
+    return (
+        (QuestionBankItem.source_class_id == class_id)
+        & QuestionBankItem.is_current.is_(True)
+        & _visible_condition(account, class_id, BankScope.CLASS, is_organizer=True)
+    )
+
+
+def list_class_bank_quizzes(
+    db: Session, account: CurrentAccount, class_id: int
+) -> ClassBankQuizzesResponse:
+    """This class's quizzes that have questions in its bank, with counts."""
+    condition = _class_bank_condition(db, account, class_id)
+    counts = dict(db.execute(
+        select(QuestionBankItem.source_quiz_id, func.count())
+        .where(condition, QuestionBankItem.source_quiz_id.is_not(None))
+        .group_by(QuestionBankItem.source_quiz_id)
+    ).all())
+    quizzes = db.scalars(
+        select(Quiz).where(Quiz.quiz_id.in_(counts)).options(selectinload(Quiz.versions))
+    ).all() if counts else []
+    entries = [
+        ClassBankQuiz(
+            quiz_id=quiz.quiz_id,
+            title=quiz.versions[-1].title,
+            question_count=counts[quiz.quiz_id],
+        )
+        for quiz in quizzes
+        if quiz.versions
+    ]
+    entries.sort(key=lambda quiz: (quiz.title.lower(), quiz.quiz_id))
+    return ClassBankQuizzesResponse(quizzes=entries)
+
+
+def list_class_bank_items(
+    db: Session, account: CurrentAccount, class_id: int, *, page: int, page_size: int
+) -> QuestionBankPage:
+    """This class's bank questions, a page at a time, newest first."""
+    condition = _class_bank_condition(db, account, class_id)
+    total = db.scalar(select(func.count()).select_from(QuestionBankItem).where(condition)) or 0
+    items = list(db.scalars(
+        select(QuestionBankItem).where(condition)
+        .order_by(QuestionBankItem.updated_at.desc(), QuestionBankItem.bank_question_id.desc())
+        .limit(page_size).offset((page - 1) * page_size)
+    ))
+    return QuestionBankPage(items=[_response(item) for item in items], pagination=PageInfo(
+        page=page, page_size=page_size, total_items=total,
+        total_pages=ceil(total / page_size) if total else 0,
+    ))
+
+
+def download_class_csv(
+    db: Session, account: CurrentAccount, class_id: int, bank_question_ids: list[int]
+) -> str:
+    """The chosen questions of this class as CSV, in the import template."""
+    condition = _class_bank_condition(db, account, class_id)
+    items = list(db.scalars(
+        select(QuestionBankItem)
+        .where(condition, QuestionBankItem.bank_question_id.in_(bank_question_ids))
+        .order_by(QuestionBankItem.bank_question_id)
+    ))
+    if len(items) != len(bank_question_ids):
+        raise APIError(404, "bank_question_not_found", "A selected question is unavailable.")
+    return _csv_text(items)

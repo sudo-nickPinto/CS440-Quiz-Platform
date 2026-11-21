@@ -357,6 +357,20 @@ uses the same filtering and raises `409 quiz_version_not_approved` when the
 exact version is not currently hostable, or `409 class_archived` when the class
 itself cannot host. Session creation calls it (Task 5).
 
+## Class question bank downloads
+
+The class dashboard's **⋯ → Question bank** pop-up: an organizer downloads this class's bank questions as CSV. All three need an active faculty organizer of the class (`404 class_not_found` if the caller isn't in it, `403 not_class_organizer` if they're only a member). Questions count as this class's when their source is the class: the organizer's own, quizzes shared with them, and the class's published quizzes; members' drafts stay hidden.
+
+```text
+GET  /classes/{class_id}/question-bank/quizzes
+GET  /classes/{class_id}/question-bank/items?page=1&page_size=25
+POST /classes/{class_id}/question-bank/download.csv
+```
+
+- `quizzes` → `200 { quizzes: [{ quiz_id, title, question_count }] }`: this class's quizzes that have questions in its bank, by title.
+- `items` → `200 QuestionBankPage`: this class's questions, newest first (`page_size` up to 100). Each item has `bank_question_id`, `source_class_id`, `source_quiz_id`, `question_text`, `explanation` and `choices`.
+- `download.csv` with `{ "bank_question_ids": [...] }` (1–5000 unique ids) → `200 text/csv` in the CSV import template, multi-correct answers as e.g. `A|C`. An id that isn't one of this class's visible questions is `404 bank_question_not_found`; a question with more than four choices is `422 csv_choice_limit_exceeded`.
+
 ## Sessions
 
 Statuses: `LOBBY → ACTIVE → COMPLETED`, or `LOBBY → CANCELLED`. Starting, advancing, ending and answering all happen over the WebSocket ([LIVE_PROTOCOL.md](LIVE_PROTOCOL.md) §1, §4). A session whose host is gone for 15 minutes is ended automatically (§5, PR #53).
