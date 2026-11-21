@@ -1,6 +1,6 @@
 """An authenticated class on migrated MySQL for approval and live-session tests."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 
 import pytest
@@ -19,7 +19,7 @@ class ApprovalClass:
     client: TestClient
     class_id: int
     accounts: dict[str, CurrentAccount]
-    tokens: dict[str, str]
+    tokens: dict[str, str] = field(repr=False)
 
     @property
     def path(self) -> str:
