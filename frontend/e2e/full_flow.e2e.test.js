@@ -158,10 +158,14 @@ describe('full flow: one class from sign-in to grade export', () => {
     const joined = await rest('ana', 'POST', '/classes/join', {
       code: course.join_code.replace('-', '').toLowerCase(),
     })
-    expect(joined).toMatchObject({ class_id: course.class_id, current_role: 'MEMBER', join_code: null })
+    expect(joined).toMatchObject({
+      class_id: course.class_id, current_role: null, join_code: null, membership_status: 'REQUESTED',
+    })
     for (const person of ['ben', 'cy']) {
       await rest(person, 'POST', '/classes/join', { code: course.join_code })
     }
+    expect(await rest('prof', 'POST', `${base}/join-requests/approve-all`))
+      .toMatchObject({ approved: 3 })
     expect(await refused('ben', 'POST', '/classes/join', { code: course.join_code })).toMatchObject({
       status: 409,
       code: 'already_class_member',
@@ -189,6 +193,7 @@ describe('full flow: one class from sign-in to grade export', () => {
 
     // ta joins as a member and is promoted; a student can't be.
     await rest('ta', 'POST', '/classes/join', { code: course.join_code })
+    await rest('prof', 'POST', `${base}/join-requests/${me.ta.account_id}/approve`)
     expect(
       await rest('prof', 'PATCH', `${base}/members/${me.ta.account_id}`, { role: 'ORGANIZER' }),
     ).toMatchObject({ role: 'ORGANIZER', status: 'ACTIVE' })
@@ -278,9 +283,9 @@ describe('full flow: one class from sign-in to grade export', () => {
       })
     }
 
-    // Students can't see someone else's quiz; organizers can read but not edit.
+    // A class organizer can edit this quiz. An unrelated student cannot open it.
     expect(await refused('ana', 'GET', quizPath)).toMatchObject({ status: 404, code: 'quiz_not_found' })
-    expect((await rest('ta', 'GET', quizPath)).can_edit).toBe(false)
+    expect((await rest('ta', 'GET', quizPath)).can_edit).toBe(true)
 
     // A draft can't be hosted; a published one needs approval first.
     expect(await refused('prof', 'POST', `${quizPath}/sessions`)).toMatchObject({
@@ -733,7 +738,7 @@ describe('full flow: one class from sign-in to grade export', () => {
       active_member_count: 6,
       student_count: 4,
       completed_session_count: 2,
-      attendance_rate: 0.75,
+      attendance_rate: 0.875,
       active_sessions: [],
     })
     expect(dashboard.class_average).toBeCloseTo(classAverage, 0)
@@ -771,9 +776,10 @@ describe('full flow: one class from sign-in to grade export', () => {
     expect(Object.keys(byName)).toEqual(['Ana', 'Ben', 'Cy', 'Dee'])
     expect(byName.Ana).toMatchObject({
       session_count: 1,
-      attendance_rate: 0.5,
+      attendance_rate: 1,
       total_points: score(finals.s1, 'Ana'),
       recent_scores: [null, score(finals.s1, 'Ana')],
+      recent_attendance_statuses: ['HOSTED', 'PLAYED'],
     })
     expect(byName.Cy.recent_scores).toEqual([score(finals.s2, 'Cy'), score(finals.s1, 'Cy')])
     expect(await refused('ana', 'GET', `${base}/students`)).toMatchObject({
@@ -878,8 +884,8 @@ describe('full flow: one class from sign-in to grade export', () => {
       expect(await refused('ana', 'GET', path)).toMatchObject({ status: 403, code: 'not_class_organizer' })
     }
 
-    // The gradebook: one column per completed session, oldest first; a blank
-    // cell means absent, not zero.
+    // One column per completed session, oldest first, with hosted sessions
+    // labelled and absent cells blank.
     const grades = await call('prof', 'GET', `${base}/grades/export.csv`)
     expect(grades.status).toBe(200)
     expect(grades.headers.get('content-disposition')).toBe('attachment; filename="full-flow-101-grades.csv"')
@@ -890,7 +896,7 @@ describe('full flow: one class from sign-in to grade export', () => {
     expect(header.slice(4)).toEqual(['Sessions played', 'Attendance %', 'Average points', 'Total points'])
     expect(gradeRows.map((r) => r.slice(0, 2))).toEqual(STUDENTS.map((p) => [me[p].display_name, me[p].email]))
     const anaRow = gradeRows[0]
-    expect(anaRow.slice(2, 6)).toEqual([String(score(finals.s1, 'Ana')), '', '1', '50.0'])
+    expect(anaRow.slice(2, 6)).toEqual([String(score(finals.s1, 'Ana')), 'Hosted', '1', '100.0'])
     expect(await refused('ana', 'GET', `${base}/grades/export.csv`)).toMatchObject({
       status: 403,
       code: 'not_class_organizer',

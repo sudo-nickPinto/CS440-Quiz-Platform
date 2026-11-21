@@ -199,7 +199,9 @@ describe("attendance display", () => {
     expect(attendanceLabel("HOSTED", false)).toBe("Hosted");
     expect(attendanceLabel("ABSENT", true)).toBe("Absent");
     expect(attendanceLabel("PLAYED", false)).toBe("Played");
-    expect(attendanceLabel(undefined, 0 != null)).toBe("Played");
+    for (const [score, label] of [[0, "Played"], [null, "Absent"]]) {
+      expect(attendanceLabel(undefined, score != null)).toBe(label);
+    }
     expect(scoreMark(0, 100)).toBe("lo");
   });
 
