@@ -71,6 +71,7 @@ def submissions() -> Iterator[tuple[TestClient, dict, dict, dict]]:
                     "faculty",
                     "owner",
                     "collaborator",
+                    "second_editor",
                     "classmate",
                     "revoked",
                     "invited",
@@ -106,7 +107,7 @@ def submissions() -> Iterator[tuple[TestClient, dict, dict, dict]]:
                     joined_via=JoinedVia.CREATOR,
                 )
             ]
-            for name in ("owner", "collaborator", "classmate", "revoked"):
+            for name in ("owner", "collaborator", "second_editor", "classmate", "revoked"):
                 memberships.append(
                     ClassMembership(
                         class_id=main.class_id,
@@ -764,6 +765,63 @@ def test_approved_list_and_helper_share_current_version_rules(submissions) -> No
         with pytest.raises(APIError) as error:
             require_approved_quiz_version(db, class_id, newer_version_id)
         assert error.value.code == "quiz_version_not_approved"
+
+
+def test_my_quizzes_shares_rejection_feedback_with_current_quiz_editors(
+    submissions,
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    quiz_id = data["quizzes"]["main"]
+    quizzes = f"/classes/{class_id}/quizzes"
+    collaborator_url = f"{quizzes}/{quiz_id}/collaborators"
+    shared = client.post(
+        collaborator_url, json={"email": "second_editor@example.edu", "permission": "EDITOR"}
+    )
+    assert shared.status_code == 201, shared.text
+
+    act_as(actor, identities, "collaborator")
+    sent = post_submission(client, class_id, data["versions"]["main"])
+    assert sent.status_code == 201, sent.text
+    submission_id = sent.json()["submission_id"]
+
+    act_as(actor, identities, "faculty")
+    comment = "Explain why this choice is correct."
+    response = client.patch(
+        f"/classes/{class_id}/quiz-submissions/{submission_id}",
+        json={"status": "REJECTED", "rejection_comment": comment},
+    )
+    assert response.status_code == 200, response.text
+    assert preview(client, class_id, submission_id).json()["submission"]["rejection_comment"] == comment
+
+    for name in ("owner", "second_editor"):
+        act_as(actor, identities, name)
+        result = client.get(quizzes, params={"mine": "true"})
+        assert result.status_code == 200, result.text
+        item = next(item for item in result.json()["items"] if item["quiz_id"] == quiz_id)
+        assert item["rejection_comment"] == comment
+        assert item["approval_submission_id"] == submission_id
+        assert item["approval_sent_by_me"] is False
+        assert_error(preview(client, class_id, submission_id), 404, "submission_not_found")
+
+    act_as(actor, identities, "owner")
+    for name in ("collaborator", "second_editor"):
+        response = client.delete(f"{collaborator_url}/{data['ids'][name]}")
+        assert response.status_code == 204, response.text
+
+    for name in ("collaborator", "second_editor", "revoked", "classmate"):
+        act_as(actor, identities, name)
+        result = client.get(quizzes, params={"mine": "true"})
+        assert result.status_code == 200, result.text
+        assert all(item["quiz_id"] != quiz_id for item in result.json()["items"])
+        assert comment not in result.text
+        assert_error(preview(client, class_id, submission_id), 404, "submission_not_found")
+
+    # The original submitter keeps the audit row without the feedback after revocation.
+    act_as(actor, identities, "collaborator")
+    assert client.get(f"/classes/{class_id}/quiz-submissions").json()[0]["rejection_comment"] is None
+    queue = client.get(f"/classes/{class_id}/dashboard/submissions").json()
+    assert queue["items"][0]["rejection_comment"] is None
 
 
 def test_approval_grants_no_editing_or_results_permissions(submissions) -> None:

@@ -22,7 +22,7 @@ from app.models.quiz import (
     QuizVersion,
     QuizVisibility,
 )
-from app.models.quiz_submission import QuizSubmission
+from app.models.quiz_submission import QuizSubmission, SubmissionStatus
 from app.schemas.pagination import PageInfo, SortOrder
 from app.schemas.quiz import (
     CollaboratorSuggestion,
@@ -700,6 +700,13 @@ def list_class_quizzes(
                 approval_sent_by_me=bool(
                     submission
                     and submission.submitted_by_id == account.account_id
+                ),
+                rejection_comment=(
+                    submission.rejection_comment
+                    if access is not None
+                    and submission is not None
+                    and submission.status == SubmissionStatus.REJECTED
+                    else None
                 ),
                 collaborator_names=collaborator_names.get(quiz.quiz_id, []),
             )
