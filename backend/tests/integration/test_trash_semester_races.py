@@ -12,7 +12,7 @@ from app.errors import APIError
 from app.models import AccountRole, Class, LiveSession, Quiz, QuizVersion
 from app.schemas.classes import ClassSemesterCreate
 from app.services.classes import create_semester, lock_course
-from app.services.sessions import _lock_hostable_quiz
+from app.services.sessions import _lock_hostable_class, _lock_hostable_quiz
 from tests.integration.test_response_submission import (  # noqa: F401
     ResponseContext,
     response_context,
@@ -72,6 +72,30 @@ def test_hosting_waits_for_a_quiz_being_moved_to_the_trash(
         outcome = _run_while_held(trashing, host)
 
     assert outcome == {"error": "quiz_not_found"}
+
+
+def test_hosting_waits_for_a_class_being_moved_to_the_trash(
+    response_context: ResponseContext,
+) -> None:
+    session = _session(response_context)
+    class_id = session.class_id
+    engine = response_context.client.app.state.database.engine
+
+    with Session(engine) as trashing:
+        # Holds the class row the way trash_class does, mid-way through.
+        course = trashing.scalar(
+            select(Class).where(Class.class_id == class_id).with_for_update()
+        )
+        course.deleted_at = datetime.now(UTC).replace(tzinfo=None)
+        trashing.flush()
+
+        def host() -> None:
+            with Session(engine) as hosting:
+                _lock_hostable_class(hosting, class_id)
+
+        outcome = _run_while_held(trashing, host)
+
+    assert outcome == {"error": "class_not_found"}
 
 
 def test_two_requests_cannot_add_the_same_semester(

@@ -671,6 +671,28 @@ def test_restoring_a_class_and_its_quiz_together_works(lifecycle) -> None:
     assert client.get(f"/quizzes/{quiz_id}").status_code == 200
 
 
+def test_restoring_two_semesters_of_a_course_together_restores_both(
+    lifecycle,
+) -> None:
+    client, _, class_id = lifecycle
+    created = client.post(
+        f"/classes/{class_id}/semesters", json={"semester": "Spring 2027"}
+    )
+    assert created.status_code == 201, created.json()
+    spring_id = created.json()["class_id"]
+    assert client.post(f"/classes/{class_id}/trash").status_code == 204
+    assert client.post(f"/classes/{spring_id}/trash").status_code == 204
+
+    response = client.post(
+        "/trash/restore", json={"class_ids": [class_id, spring_id]}
+    )
+
+    assert response.status_code == 204, response.json()
+    assert client.get("/trash").json()["classes"] == []
+    assert client.get(f"/classes/{class_id}").status_code == 200
+    assert client.get(f"/classes/{spring_id}").status_code == 200
+
+
 def test_deleting_a_class_for_good_takes_its_trashed_items_with_it(lifecycle) -> None:
     client, identities, class_id = lifecycle
     quiz_id = create_quiz(client, class_id)
