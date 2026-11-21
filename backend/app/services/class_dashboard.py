@@ -42,7 +42,7 @@ from app.services.class_approvals import approval_counts
 from app.services.class_roster import count_join_requests
 from app.services.class_authorization import (
     ClassAccess,
-    require_class_member,
+    require_class_content,
     require_class_organizer,
 )
 from app.services.spreadsheet import safe_cell
@@ -118,7 +118,12 @@ def _session_rows(db: Session, class_id: int, statuses) -> list:
             Result,
             Result.session_participant_id == SessionParticipant.session_participant_id,
         )
-        .where(LiveSession.class_id == class_id, LiveSession.status.in_(statuses))
+        .where(
+            LiveSession.class_id == class_id,
+            LiveSession.status.in_(statuses),
+            # A session the host moved to the trash doesn't count anywhere.
+            LiveSession.deleted_at.is_(None),
+        )
         .group_by(
             LiveSession.session_id,
             LiveSession.status,
@@ -318,6 +323,7 @@ def _class_scores(
         .where(
             LiveSession.class_id == class_id,
             LiveSession.status == LiveSessionStatus.COMPLETED,
+            LiveSession.deleted_at.is_(None),
         )
     ).all()
 
@@ -418,7 +424,7 @@ def list_class_quizzes(
     sort: QuizSort,
     order: SortOrder,
 ) -> ClassQuizPage:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     sessions, rows = _session_summaries(
         db, account, class_id, access, (LiveSessionStatus.COMPLETED,)
     )
@@ -443,7 +449,7 @@ def list_class_sessions(
     order: SortOrder,
     q: str | None = None,
 ) -> ClassSessionPage:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     sessions, _ = _session_summaries(
         db, account, class_id, access, (LiveSessionStatus.COMPLETED,)
     )
@@ -465,7 +471,7 @@ def get_class_dashboard(
     account: CurrentAccount,
     class_id: int,
 ) -> ClassDashboardResponse:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     organizer = _is_organizer(access)
     completed, rows = _session_summaries(
         db, account, class_id, access, (LiveSessionStatus.COMPLETED,)

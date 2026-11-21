@@ -34,7 +34,7 @@ from app.models.session import (
     SessionQuestionStatus,
 )
 from app.schemas.class_dashboard import AttendanceStatus
-from app.services.class_authorization import require_class_member
+from app.services.class_authorization import require_class_content
 from app.services.class_dashboard import (
     _attendance_status,
     _class_students,
@@ -61,7 +61,7 @@ def get_class_session_results(
     class_id: int,
     session_id: int,
 ) -> dict:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     session = db.get(LiveSession, session_id)
     # Other classes' sessions, open sessions and unfinished sessions all look
     # missing here, so the URL can't be used to probe them.
@@ -69,6 +69,7 @@ def get_class_session_results(
         session is None
         or session.class_id != class_id
         or session.status != LiveSessionStatus.COMPLETED
+        or session.deleted_at is not None
     ):
         raise APIError(404, "session_not_found", "Session not found.")
 
@@ -102,7 +103,7 @@ def get_class_quiz_results(
     class_id: int,
     quiz_id: int,
 ) -> dict:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     organizer = _is_organizer(access)
 
     sessions, _ = _session_summaries(
@@ -181,7 +182,7 @@ def get_class_student_results(
     class_id: int,
     account_id: int,
 ) -> dict:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     organizer = _is_organizer(access)
     if not organizer and account_id != account.account_id:
         raise APIError(
@@ -253,6 +254,7 @@ def get_class_student_results(
         .where(
             LiveSession.class_id == class_id,
             LiveSession.status == LiveSessionStatus.COMPLETED,
+            LiveSession.deleted_at.is_(None),
         )
     ).all()
 

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, aliased, selectinload
 from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models.account import Account, FACULTY_ACCOUNT_TYPE
-from app.models.classes import ClassMembership, ClassRole, MembershipStatus
+from app.models.classes import Class, ClassMembership, ClassRole, MembershipStatus
 from app.models.quiz import (
     AnswerChoice,
     CollaboratorEventType,
@@ -119,7 +119,8 @@ def _check_text_limits(
 def _quiz_query(quiz_id: int):
     return (
         select(Quiz)
-        .where(Quiz.quiz_id == quiz_id)
+        # A quiz in the trash looks missing; services/trash.py restores it.
+        .where(Quiz.quiz_id == quiz_id, Quiz.deleted_at.is_(None))
         .options(
             selectinload(Quiz.versions)
             .selectinload(QuizVersion.questions)
@@ -174,16 +175,28 @@ def _require_active_membership(
     db: Session,
     account: CurrentAccount,
     class_id: int,
+    *,
+    content: bool = True,
 ) -> ClassMembership:
     """The caller's ACTIVE membership in the class, or 404 class_not_found.
 
     V3 has no app-wide authority over classes: being an Admin (faculty)
     doesn't let anyone into a class they aren't an active member of.
     """
-    get_class(db, class_id)
+    class_ = get_class(db, class_id)
     membership = get_class_membership(db, class_id, account.account_id)
     if membership is None or membership.status != MembershipStatus.ACTIVE:
         raise APIError(404, "class_not_found", "Class not found.")
+    if (
+        content
+        and class_.archived_at is not None
+        and not (account.is_admin and membership.role == ClassRole.ORGANIZER)
+    ):
+        raise APIError(
+            409,
+            "class_archived",
+            "This class is archived. Only its organizers can open it.",
+        )
     return membership
 
 
@@ -420,7 +433,7 @@ def create_quiz(
     The draft can't be hosted until it's published, and publishing doesn't
     approve it for hosting either.
     """
-    _require_active_membership(db, account, class_id)
+    _require_active_membership(db, account, class_id, content=False)
     if get_class(db, class_id).archived_at is not None:
         raise APIError(
             409, "class_archived", "An archived class cannot get new quizzes."
@@ -493,8 +506,11 @@ def list_quizzes(
             (ClassMembership.class_id == Quiz.class_id)
             & (ClassMembership.account_id == account.account_id),
         )
+        .join(Class, Class.class_id == Quiz.class_id)
         .where(
             ClassMembership.status == MembershipStatus.ACTIVE,
+            Quiz.deleted_at.is_(None),
+            Class.deleted_at.is_(None),
             or_(
                 Quiz.author_id == account.account_id,
                 collaborator_access,
@@ -556,7 +572,7 @@ def list_class_quizzes(
         QuizCollaborator.account_id == account.account_id,
         QuizCollaborator.revoked_at.is_(None),
     )
-    condition = Quiz.class_id == class_id
+    condition = and_(Quiz.class_id == class_id, Quiz.deleted_at.is_(None))
     if mine or membership.role != ClassRole.ORGANIZER:
         condition = and_(
             condition,
@@ -826,7 +842,7 @@ def _lock_class_quiz_for_update(
     earlier in the request.  Load the entity through the locking read itself so
     status and revision checks cannot observe stale pre-publication state.
     """
-    statement = select(Quiz).where(Quiz.quiz_id == quiz_id)
+    statement = select(Quiz).where(Quiz.quiz_id == quiz_id, Quiz.deleted_at.is_(None))
     if class_id is not None:
         statement = statement.where(Quiz.class_id == class_id)
     quiz = db.scalar(
@@ -846,6 +862,8 @@ def _require_quiz_editor(
 ) -> None:
     stored_account = _require_current_active_account(db, account, lock=lock_access)
     if quiz.class_id is not None:
+        # 404 while the quiz's class is in the trash.
+        get_class(db, quiz.class_id)
         membership = _require_active_class_member(
             db,
             account,
