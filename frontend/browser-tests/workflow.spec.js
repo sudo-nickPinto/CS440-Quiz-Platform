@@ -108,31 +108,67 @@ test("a stale submission can be reviewed and rejected but not approved", async (
   });
 });
 
-test("the rejection form preserves feedback after a refused decision", async ({ page }) => {
-  const state = await openClass(page, { as: "organizer", submission: "PENDING", failDecision: true });
-  await button(page, "Reject").click();
+for (const entry of ["queue", "preview"]) {
+  test(`the ${entry} rejection form accepts exactly 1,000 trimmed characters`, async ({ page }) => {
+    const state = await openClass(page, {
+      as: "organizer", submission: "PENDING", path: entry === "preview" ? PREVIEW : undefined,
+    });
+    const reject = button(page, "Reject");
+    await reject.focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "Reject submission" });
+    const input = dialog.getByRole("textbox", { name: "Rejection comment (optional)" });
+    const submit = dialog.getByRole("button", { name: "Reject submission" });
+    await expect(input).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(reject).toBeFocused();
+    expect(state.calls.filter((call) => call.method === "PATCH")).toHaveLength(0);
 
-  const dialog = page.getByRole("dialog", { name: "Reject submission" });
-  const input = dialog.getByRole("textbox", { name: "Rejection comment (optional)" });
-  const submit = dialog.getByRole("button", { name: "Reject submission" });
-  await input.fill("x".repeat(1001));
-  await expect(submit).toBeDisabled();
-  await input.fill("  Revise the second question.  ");
-  await submit.click();
-  await expect(dialog.getByRole("alert")).toBeVisible();
-  await expect(input).toHaveValue("  Revise the second question.  ");
-  await submit.click();
-  await expect.poll(() => state.calls.filter((call) => call.method === "PATCH" && call.path === DECISION)).toEqual(
-    Array.from({ length: 2 }, () => ({
-      method: "PATCH", path: DECISION,
-      body: { status: "REJECTED", rejection_comment: "Revise the second question." },
-    })),
-  );
-  await expect(submit).toBeEnabled();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  await expect(button(page, "Reject")).toBeFocused();
-});
+    await reject.click();
+    const boundary = "🧪".repeat(1000);
+    await input.fill(`${boundary}x`);
+    await expect(submit).toBeDisabled();
+    await input.fill(`  ${boundary}  `);
+    await expect(submit).toBeEnabled();
+    await submit.click();
+    await expect(dialog).toHaveCount(0);
+    expect(state.calls).toContainEqual({
+      method: "PATCH", path: DECISION, body: { status: "REJECTED", rejection_comment: boundary },
+    });
+  });
+
+  test(`the ${entry} rejection form preserves feedback after a refused decision`, async ({ page }) => {
+    const state = await openClass(page, {
+      as: "organizer", submission: "PENDING", failDecision: true,
+      path: entry === "preview" ? PREVIEW : undefined,
+    });
+    await button(page, "Reject").click();
+
+    const dialog = page.getByRole("dialog", { name: "Reject submission" });
+    const input = dialog.getByRole("textbox", { name: "Rejection comment (optional)" });
+    const submit = dialog.getByRole("button", { name: "Reject submission" });
+    await input.fill("x".repeat(1001));
+    await expect(submit).toBeDisabled();
+    await input.fill("  Revise the second question.  ");
+    await submit.click();
+    await expect(dialog.getByRole("alert")).toBeVisible();
+    await expect(input).toHaveValue("  Revise the second question.  ");
+    await submit.click();
+    await expect.poll(() => state.calls.filter((call) => call.method === "PATCH" && call.path === DECISION)).toEqual(
+      Array.from({ length: 2 }, () => ({
+        method: "PATCH", path: DECISION,
+        body: { status: "REJECTED", rejection_comment: "Revise the second question." },
+      })),
+    );
+    await expect(submit).toBeEnabled();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(button(page, "Reject")).toBeFocused();
+  });
+}
 
 test("another collaborator can read feedback in My quizzes even if the preview is private", async ({ page }) => {
   const comment = "Replace <b>the diagram</b> and add an explanation.";
@@ -185,38 +221,88 @@ test("a collaborator sees new feedback after refocusing My quizzes", async ({ pa
   await expect(page.getByText(comment, { exact: true })).toBeVisible();
 });
 
-test("Participate shows a host and a zero-score player with their own report links", async ({ page }) => {
-  await openClass(page, {
-    path: `/app/classes/${CLASS_ID}?section=Reports`,
-    sessions: [
-      { session_id: 20, quiz_title: "My hosted quiz", host_name: "Student", is_host: true },
-      {
-        session_id: 21, quiz_title: "Quiz I played", host_name: "Professor",
-        is_host: false, my_score: 0, my_rank: 1, participant_count: 1,
-      },
-      { session_id: 22, quiz_title: "Quiz I missed", host_name: "Professor", is_host: false },
-    ],
-  });
-  await button(page, "Cards").click();
-  const hostPath = "/app/results/host/20";
-  const playerPath = `/app/classes/${CLASS_ID}/sessions/21/report`;
-  const hostedCard = page.getByRole("article").filter({ hasText: "My hosted quiz" });
-  await expect(hostedCard.getByText("Hosted", { exact: true })).toBeVisible();
-  await expect(hostedCard.getByRole("link")).toHaveAttribute("href", hostPath);
-  await expect(hostedCard.getByText(/Rank #|points|No score recorded/)).toHaveCount(0);
-  const playedCard = page.getByRole("article").filter({ hasText: "Quiz I played" });
-  await expect(playedCard.getByText("0 points")).toBeVisible();
-  await expect(playedCard.getByRole("link")).toHaveAttribute("href", playerPath);
+for (const width of [375, 1280]) {
+  test(`long feedback stays readable in rows and cards at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 812 });
+    const comment = `<img src=x alt="literal feedback"> ${"longword".repeat(108)}`;
+    await openClass(page, { as: "collaborator", submission: "REJECTED", comment });
+    await button(page, "Cards").click();
+    await expect(page.getByRole("article").getByText(comment, { exact: true })).toBeVisible();
+    await expect(page.getByRole("img", { name: "literal feedback" })).toHaveCount(0);
+    await noHorizontalScroll(page);
 
-  await button(page, "Rows").click();
-  const hostedRow = page.getByRole("row").filter({ hasText: "My hosted quiz" });
-  await expect(hostedRow.getByRole("cell", { name: "Hosted", exact: true })).toBeVisible();
-  await expect(hostedRow.getByRole("link", { name: "Host results for My hosted quiz" })).toHaveAttribute("href", hostPath);
-  const playedRow = page.getByRole("row").filter({ hasText: "Quiz I played" });
-  await expect(playedRow.getByRole("link", { name: "My results for Quiz I played" })).toHaveAttribute("href", playerPath);
-  const missedRow = page.getByRole("row").filter({ hasText: "Quiz I missed" });
-  await expect(missedRow.getByRole("cell", { name: "Absent", exact: true })).toBeVisible();
-  await expect(missedRow.getByRole("link")).toHaveCount(0);
+    await button(page, "Rows").click();
+    const quizzes = page.getByRole("table", { name: "My quizzes" });
+    await expect(quizzes.getByText(comment, { exact: true })).toBeVisible();
+    await expect(quizzes.getByRole("link", { name: "Original submitted quiz", exact: true })).toBeVisible();
+    await noHorizontalScroll(page);
+  });
+
+  test(`Participate shows a host and zero-score player with links at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 812 });
+    await openClass(page, {
+      path: `/app/classes/${CLASS_ID}?section=Reports`,
+      sessions: [
+        { session_id: 20, quiz_title: "My hosted quiz", host_name: "Student", is_host: true },
+        {
+          session_id: 21, quiz_title: "Quiz I played", host_name: "Professor",
+          is_host: false, my_score: 0, my_rank: 1, participant_count: 1,
+        },
+        { session_id: 22, quiz_title: "Quiz I missed", host_name: "Professor", is_host: false },
+      ],
+    });
+    await button(page, "Cards").click();
+    const hostPath = "/app/results/host/20";
+    const playerPath = `/app/classes/${CLASS_ID}/sessions/21/report`;
+    const hostedCard = page.getByRole("article").filter({ hasText: "My hosted quiz" });
+    await expect(hostedCard.getByText("Hosted", { exact: true })).toBeVisible();
+    await expect(hostedCard.getByRole("link")).toHaveAttribute("href", hostPath);
+    await expect(hostedCard.getByText(/Rank #|points|No score recorded/)).toHaveCount(0);
+    const playedCard = page.getByRole("article").filter({ hasText: "Quiz I played" });
+    await expect(playedCard.getByText("0 points")).toBeVisible();
+    await expect(playedCard.getByRole("link")).toHaveAttribute("href", playerPath);
+    await noHorizontalScroll(page);
+
+    await button(page, "Rows").click();
+    const hostedRow = page.getByRole("row").filter({ hasText: "My hosted quiz" });
+    await expect(hostedRow.getByRole("cell", { name: "Hosted", exact: true })).toBeVisible();
+    await expect(hostedRow.getByRole("link", { name: "My hosted quiz", exact: true })).toHaveAttribute("href", hostPath);
+    const playedRow = page.getByRole("row").filter({ hasText: "Quiz I played" });
+    await expect(playedRow.getByRole("link", { name: "Quiz I played", exact: true })).toHaveAttribute("href", playerPath);
+    const missedRow = page.getByRole("row").filter({ hasText: "Quiz I missed" });
+    await expect(missedRow.getByRole("cell", { name: "Absent", exact: true })).toBeVisible();
+    await expect(missedRow.getByRole("link")).toHaveCount(0);
+    await noHorizontalScroll(page);
+  });
+}
+
+test("withdrawal refresh and window focus preserve unsaved editor text", async ({ page }) => {
+  const now = Date.now();
+  await page.clock.setFixedTime(now);
+  let notifications;
+  await page.routeWebSocket("**/ws/notifications", (socket) => {
+    socket.onMessage(() => {
+      notifications = socket;
+      socket.send(JSON.stringify({ type: "notifications_ready" }));
+    });
+  });
+  const state = await openClass(page, { path: `/app/quizzes/${QUIZ_ID}/edit`, submission: "PENDING" });
+  const title = page.getByRole("textbox", { name: "Quiz title" });
+  await title.fill("Unsaved title I am still editing");
+  await expect.poll(() => Boolean(notifications)).toBe(true);
+
+  state.submission.status = "WITHDRAWN";
+  state.quizRevision += 1;
+  notifications.send(JSON.stringify({
+    type: "submission_changed", action: "withdrawn",
+    class_id: CLASS_ID, quiz_id: QUIZ_ID, submission_id: SUBMISSION_ID,
+  }));
+  await page.clock.setFixedTime(now + 11_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+
+  await expect(title).toHaveValue("Unsaved title I am still editing");
+  expect(state.calls.filter((call) => call.path === `/quizzes/${QUIZ_ID}`).map((call) => call.method))
+    .toEqual(["GET"]);
 });
 
 const STUDENT_REPORT = {

@@ -87,6 +87,7 @@ export async function openClass(page_, options = {}) {
 
   const state = {
     calls: [],
+    quizRevision: 2,
     submission: submission
       ? {
           status: submission,
@@ -236,7 +237,7 @@ export async function openClass(page_, options = {}) {
       return json({
         ...myQuiz(),
         status: "DRAFT",
-        revision: 2,
+        revision: state.quizRevision,
         visibility: "PRIVATE",
         can_edit: !organizer,
         version: {
