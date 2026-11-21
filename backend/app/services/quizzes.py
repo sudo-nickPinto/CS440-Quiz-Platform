@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
-from app.models.account import Account
+from app.models.account import Account, FACULTY_ACCOUNT_TYPE
 from app.models.classes import ClassMembership, ClassRole, MembershipStatus
 from app.models.quiz import (
     AnswerChoice,
@@ -161,7 +161,7 @@ def _require_current_active_account(
         Account.is_active.is_(True),
     )
     if lock:
-        statement = statement.with_for_update()
+        statement = statement.with_for_update().execution_options(populate_existing=True)
     stored_account = db.scalar(statement)
     if stored_account is None:
         raise APIError(403, "inactive_account", "This account is inactive.")
@@ -796,7 +796,7 @@ def _active_membership(
         ClassMembership.status == MembershipStatus.ACTIVE,
     )
     if lock:
-        statement = statement.with_for_update()
+        statement = statement.with_for_update().execution_options(populate_existing=True)
     return db.scalar(statement)
 
 
@@ -858,14 +858,19 @@ def _require_quiz_editor(
     *,
     lock_access: bool = False,
 ) -> None:
-    _require_current_active_account(db, account, lock=lock_access)
+    stored_account = _require_current_active_account(db, account, lock=lock_access)
     if quiz.class_id is not None:
-        _require_active_class_member(
+        membership = _require_active_class_member(
             db,
             account,
             quiz.class_id,
             lock=lock_access,
         )
+        if (
+            membership.role == ClassRole.ORGANIZER
+            and stored_account.account_type == FACULTY_ACCOUNT_TYPE
+        ):
+            return
     if quiz.author_id == account.account_id:
         return
     if _active_collaborator(
@@ -878,21 +883,19 @@ def _require_quiz_editor(
     raise APIError(
         403,
         "quiz_edit_denied",
-        "Only the quiz owner or an active editor can edit this quiz.",
+        "Only the quiz owner, an active collaborator, or a faculty class organizer "
+        "can edit this quiz.",
     )
 
 
 def _can_edit(db: Session, account: CurrentAccount, quiz: Quiz) -> bool:
     if quiz.status == QuizStatus.ARCHIVED:
         return False
-    if quiz.class_id is not None and _active_membership(
-        db, quiz.class_id, account.account_id
-    ) is None:
+    try:
+        _require_quiz_editor(db, account, quiz)
+    except APIError:
         return False
-    return (
-        quiz.author_id == account.account_id
-        or _active_collaborator(db, quiz.quiz_id, account.account_id) is not None
-    )
+    return True
 
 
 def require_quiz_editor_access(
