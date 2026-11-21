@@ -861,6 +861,45 @@ def test_timer_change_withdraws_pending_review_but_an_unchanged_timer_does_not(
         assert db.get(QuizSubmission, submission_id).status == SubmissionStatus.WITHDRAWN
 
 
+@pytest.mark.parametrize("source", ["bank", "csv"])
+def test_import_withdraws_only_when_questions_are_added_to_the_quiz(
+    submissions, pending_quiz_with_draft, source
+) -> None:
+    client, data, _, _ = submissions
+    class_id = data["classes"]["main"]
+    quiz_path, draft, submission_id = pending_quiz_with_draft
+    bank_path = f"/classes/{class_id}/question-bank"
+    csv_text = (
+        "question_text,explanation,choice_a,choice_b,choice_c,choice_d,correct_choices\n"
+        "New question?,,Yes,No,,,A"
+    )
+    previewed = client.post(f"{bank_path}/csv/preview", json={"csv_text": csv_text})
+    assert previewed.status_code == 200, previewed.text
+    assert previewed.json()["valid_count"] == 1
+    row = previewed.json()["rows"][0]
+    rows = [{"row_number": row["row_number"], "question": row["question"]}]
+    saved = client.post(f"{bank_path}/csv", json={"rows": rows})
+    assert saved.status_code == 201, saved.text
+    with client.app.state.database.session_factory() as db:
+        assert db.get(QuizSubmission, submission_id).status == SubmissionStatus.PENDING
+    assert client.get(quiz_path).json()["revision"] == draft["revision"]
+
+    if source == "bank":
+        bank = client.get(bank_path).json()["items"]
+        bank_id = next(item["bank_question_id"] for item in bank
+                       if item["question_text"] == "New question?")
+        imported = client.post(
+            f"{quiz_path}/questions/from-bank", json={"bank_question_ids": [bank_id]}
+        )
+    else:
+        imported = client.post(f"{quiz_path}/questions/csv", json={"rows": rows})
+    assert imported.status_code == 200, imported.text
+    latest = client.get(quiz_path).json()
+    assert latest["version"]["questions"][-1]["question_text"] == "New question?"
+    with client.app.state.database.session_factory() as db:
+        assert db.get(QuizSubmission, submission_id).status == SubmissionStatus.WITHDRAWN
+
+
 # Submission preview (GET /classes/{id}/dashboard/submissions/{id}/preview).
 # The preview shows every question and correct answer of the version that was
 # sent, so it must follow the same access rules as the submission itself.
