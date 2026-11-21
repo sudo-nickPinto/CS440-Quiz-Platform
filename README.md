@@ -92,26 +92,36 @@ For optional quiz-title search in a class's completed session history, see the [
 
 ### 1. In plain English
 
-Task 4 adds a review step between publishing a quiz and making it available to
-host in a class. An active class member who owns a quiz, or actively
-collaborates on it, submits an exact published version. An active faculty
-organizer then approves or rejects the submission. Approved current versions
-appear in the class's approved-quiz list; submitters may instead withdraw their
-own pending submissions.
+An instructor spots an unclear question in a student's submitted quiz. Saving
+a correction withdraws the pending request so the student can publish and
+submit the revision. If the instructor chooses to reject the submission, they
+can leave a comment explaining what to fix. The frontend follow-up will show
+the instructor's edit and rejection controls and the comment in My quizzes for
+the student who owns the quiz and its active collaborators.
+
+A student who hosts one session, plays another, and misses a third has 50%
+attendance. The report and gradebook record the first session as Hosted and
+exclude it from the attendance denominator. The frontend follow-up will show
+Hosted in session history and student reports.
 
 ### 2. Assumptions and design choices
 
-- `quiz.class_id` is the authoritative class, and approval never grants quiz
-  editing, class-management, report, or results permissions.
+- `quiz.class_id` is the authoritative class. Active faculty organizers can edit
+  non-archived quizzes they can already open in that class. Owners control
+  publishing and collaborator management. Active class members who own or
+  collaborate on a quiz can submit a published version.
 - Submission rows are permanent audit history. Decisions and withdrawals are
   terminal, self-approval is allowed, and conditional updates give competing
   decisions one winner.
-- Only published, non-archived, current versions are hostable. A newer
-  published version makes an older approval stale, while a newer draft does
-  not.
+- A committed content change withdraws pending submissions in the same database
+  transaction. The notification goes out after the commit.
+- A newer draft makes the older publication stale for submission and approval
+  and blocks starting a new session. Publish the revision and get it approved
+  before hosting again. Existing sessions stay pinned to their original
+  version, including the questions and the title shown in history.
 - Archived classes keep readable submission history but cannot receive new
-  submissions, approve versions, or return hostable quizzes. Rejection and
-  withdrawal remain available to close pending records.
+  submissions, approve versions, or host new sessions. Rejection and withdrawal
+  remain available to close pending records.
 - Inaccessible classes, submissions, and versions use non-leaking `404`
   responses. Visible users without organizer or withdrawal authority receive
   `403`.
@@ -122,21 +132,19 @@ Migration `0010_quiz_submission` adds the submission model, restrictive audit
 foreign keys, decision-field checks, and a stored generated
 `active_version_id`. A unique key on `(class_id, active_version_id)` prevents
 concurrent pending or approved duplicates while allowing rejected or withdrawn
-versions to be submitted again.
+versions to be submitted again. Migration `0020_quiz_submission_rejection_comment` adds optional plain-text
+rejection feedback. Feedback access in My quizzes follows current owner and
+collaborator access. The full submission preview has separate permissions.
 
-The backend provides five class routes: create and list submissions, approve or
-reject a submission, soft-withdraw a pending submission, and list approved
-quizzes. Focused model, schema, authorization, stale-version, hostability, and
-real-MySQL concurrency tests cover the workflow. Task 4 also exposes a reusable
-approval helper; Task 5 will connect that helper to live-session creation and
-hosting.
+Live-session creation checks the current version's approval. Completed-session
+reports and exports use the stored host ID to distinguish Hosted from Absent.
+A participant who scores zero still counts as Played.
 
-See the [Task 4 overview](docs/V3_TASK4_QUIZ_SUBMISSION_APPROVAL.md) for the
-workflow and test scenarios, the [API reference](docs/API.md) for endpoint
-contracts, and the
-[detailed Task 4 design](docs/V3_TASK4_SUBMISSION_APPROVAL_DRAFT.md) for the
-complete authorization, state-machine, migration, and Task 5 boundary
-decisions.
+See the [API reference](docs/API.md) for the current contract, including edit
+permissions, submission decisions, feedback, and report fields. The
+[Task 4 overview](docs/V3_TASK4_QUIZ_SUBMISSION_APPROVAL.md) and
+[original Task 4 design](docs/V3_TASK4_SUBMISSION_APPROVAL_DRAFT.md) describe
+the initial approval workflow and schema.
 
 ## Development Workflow
 
