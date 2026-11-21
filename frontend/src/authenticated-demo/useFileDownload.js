@@ -5,17 +5,25 @@ import { useAction } from "./rest";
  * Downloads a file from an authenticated API route, such as a CSV or
  * Excel export. The server's Content-Disposition filename is used when
  * it sends one; otherwise fallbackName.
+ *
+ * options: { method, body } for a POST export (body is sent as JSON), and
+ * { filename } to name the file yourself whatever the server says.
  */
 export function useFileDownload() {
   const { getAccessTokenSilently } = useAuth0();
   const action = useAction();
 
-  async function download(path, fallbackName) {
+  async function download(path, fallbackName, options = {}) {
+    const { method = "GET", body, filename } = options;
     const result = await action.run(async () => {
       const token = await getAccessTokenSilently();
       const base = import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "");
+      const headers = { Authorization: "Bearer " + token };
+      if (body !== undefined) headers["Content-Type"] = "application/json";
       const response = await fetch(base + path, {
-        headers: { Authorization: "Bearer " + token },
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -29,7 +37,7 @@ export function useFileDownload() {
       const name = /filename="([^"]+)"/.exec(
         response.headers.get("Content-Disposition") || "",
       )?.[1];
-      return { blob: await response.blob(), name: name || fallbackName };
+      return { blob: await response.blob(), name: filename || name || fallbackName };
     });
 
     if (!result) return;

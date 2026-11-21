@@ -39,6 +39,8 @@ import {
 } from "./ReportTable";
 import { ClassStudents } from "./ClassManagement";
 import { AddStudentDialog, JoinRequestsTable } from "./StudentRoster";
+import QuestionBankExportDialog from "../authenticated-demo/QuestionBankExportDialog";
+import OptionsMenu from "../authenticated-demo/OptionsMenu";
 import {
   CLASS_EVENTS,
   SUBMISSION_EVENTS,
@@ -1074,6 +1076,7 @@ function ClassWorkspace({ classInfo, onChange }) {
     isValid: (key) => key in LAYOUTS,
   });
   const [addOpen, setAddOpen] = useState(false);
+  const [bankOpen, setBankOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(classInfo.name);
   const manage = useAction();
@@ -1281,16 +1284,26 @@ function ClassWorkspace({ classInfo, onChange }) {
               {csv.busy ? "Preparing…" : "Export grades"}
             </button>
 
-            {!classInfo.archived && (
+            {/* Less frequent actions, like the quiz page's ⋯ menu. */}
+            <OptionsMenu className="cl-class-options">
               <button
                 type="button"
-                className="cl-secondary cl-danger"
-                disabled={manage.busy}
-                onClick={() => void archiveClass()}
+                aria-haspopup="dialog"
+                onClick={() => setBankOpen(true)}
               >
-                Archive
+                Question bank
               </button>
-            )}
+              {!classInfo.archived && (
+                <button
+                  type="button"
+                  className="ui-danger"
+                  disabled={manage.busy}
+                  onClick={() => void archiveClass()}
+                >
+                  Archive class
+                </button>
+              )}
+            </OptionsMenu>
           </div>
         )}
 
@@ -1321,6 +1334,14 @@ function ClassWorkspace({ classInfo, onChange }) {
           </div>
         )}
       </div>
+
+      {adminView && bankOpen && (
+        <QuestionBankExportDialog
+          classId={classInfo.id}
+          className={classInfo.name}
+          onClose={() => setBankOpen(false)}
+        />
+      )}
 
       {adminView && addOpen && (
         <AddStudentDialog
