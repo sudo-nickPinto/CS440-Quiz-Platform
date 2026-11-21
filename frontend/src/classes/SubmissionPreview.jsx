@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router";
 
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import RequestError from "../authenticated-demo/RequestError";
+import { canEditQuiz } from "../authenticated-demo/quizEditing";
 import {
   useNotifications,
   useNotificationsReconnect,
@@ -17,6 +18,9 @@ export default function SubmissionPreviewPage() {
   const path = submissionPreviewPath(classId, submissionId);
   const preview = useResource(path);
   const { refresh } = preview;
+  const quizId = preview.data?.submission?.quiz_id;
+  const quiz = useResource(Number.isSafeInteger(quizId) && quizId > 0 ? `/quizzes/${quizId}` : null);
+  const canEdit = quiz.data && canEditQuiz(quiz.data);
 
   // Another organizer deciding, or the member withdrawing, updates the
   // status here without a reload.
@@ -55,6 +59,11 @@ export default function SubmissionPreviewPage() {
           <p className="cl-eyebrow">Submitted version</p>
           <h1>{preview.data ? preview.data.version.title : "Submission"}</h1>
         </div>
+        {canEdit && (
+          <Link className="cl-button" to={`/app/quizzes/${quizId}/edit`}>
+            Edit quiz
+          </Link>
+        )}
       </header>
 
       {!path ? (

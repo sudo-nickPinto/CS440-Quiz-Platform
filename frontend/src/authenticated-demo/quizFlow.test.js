@@ -122,11 +122,24 @@ describe("quizFlowState", () => {
     expect(draft.action).toBeNull();
 
     const published = quizFlowState({
-      quiz: quiz({ author_id: 2, status: "PUBLISHED" }),
+      quiz: quiz({
+        author_id: 2,
+        status: "PUBLISHED",
+        collaborators: [{ account_id: ME }],
+      }),
       accountId: ME,
       pending: null,
     });
     expect(published.action).toBe("send");
+  });
+
+  it("an organizer's edit permission alone does not let them submit", () => {
+    const state = quizFlowState({
+      quiz: quiz({ author_id: 2, status: "PUBLISHED", can_edit: true }),
+      accountId: ME,
+      pending: null,
+    });
+    expect(state.action).toBeNull();
   });
 
   it("returns null when the track is hidden", () => {
@@ -143,7 +156,7 @@ describe("quizFlowState", () => {
 describe("sendQuizForApproval", () => {
   function fakeApi(current, { conflict = false } = {}) {
     return vi.fn(async (path, options = {}) => {
-      if (path === "/quizzes/10") return current;
+      if (path === "/quizzes/10") return quiz(current);
       if (path.endsWith("/publish")) {
         return { version: { quiz_version_id: 200 } };
       }
@@ -162,7 +175,7 @@ describe("sendQuizForApproval", () => {
   it("publishes a draft, then submits the new version", async () => {
     const api = fakeApi({ status: "DRAFT", revision: 3, version: { quiz_version_id: 199 } });
 
-    const result = await sendQuizForApproval(api, 4, 10);
+    const result = await sendQuizForApproval(api, 4, 10, ME);
 
     expect(result.body).toEqual({ quiz_version_id: 200 });
     const publish = api.mock.calls.find(([path]) => path.endsWith("/publish"));
@@ -173,7 +186,7 @@ describe("sendQuizForApproval", () => {
   it("submits an already-published version without publishing again", async () => {
     const api = fakeApi({ status: "PUBLISHED", revision: 3, version: { quiz_version_id: 150 } });
 
-    const result = await sendQuizForApproval(api, 4, 10);
+    const result = await sendQuizForApproval(api, 4, 10, ME);
 
     expect(result.body).toEqual({ quiz_version_id: 150 });
     expect(api.mock.calls.some(([path]) => path.endsWith("/publish"))).toBe(false);
@@ -185,7 +198,13 @@ describe("sendQuizForApproval", () => {
       { conflict: true },
     );
 
-    await expect(sendQuizForApproval(api, 4, 10)).resolves.toBeNull();
+    await expect(sendQuizForApproval(api, 4, 10, ME)).resolves.toBeNull();
+  });
+
+  it("rechecks active collaboration before submitting", async () => {
+    const api = fakeApi({ author_id: 2, status: "PUBLISHED", can_edit: true });
+    await expect(sendQuizForApproval(api, 4, 10, ME)).rejects.toThrow("eligible collaborator");
+    expect(api.mock.calls.map(([path]) => path)).toEqual(["/quizzes/10"]);
   });
 
   it("passes other errors on", async () => {
@@ -193,7 +212,7 @@ describe("sendQuizForApproval", () => {
       throw Object.assign(new Error("Nope"), { code: "quiz_edit_denied" });
     });
 
-    await expect(sendQuizForApproval(api, 4, 10)).rejects.toThrow("Nope");
+    await expect(sendQuizForApproval(api, 4, 10, ME)).rejects.toThrow("Nope");
   });
 });
 

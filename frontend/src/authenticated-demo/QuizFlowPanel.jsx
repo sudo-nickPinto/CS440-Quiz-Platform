@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { useAccount } from "./account";
 
 import HostQuizButton from "./HostQuizButton";
 import { FLOW_STEPS, sendQuizForApproval } from "./quizFlow";
@@ -76,6 +77,7 @@ export function QuizFlowTrack({ flow }) {
 // quiz.
 export function QuizFlowButton({ quiz, flow, action, onChange }) {
   const api = useApi();
+  const account = useAccount();
 
   if (!flow.visible || !flow.state) return null;
   const next = flow.state.action;
@@ -99,7 +101,7 @@ export function QuizFlowButton({ quiz, flow, action, onChange }) {
         disabled={action.busy}
         onClick={() =>
           void run(() =>
-            sendQuizForApproval(api, quiz.class_id, quiz.quiz_id),
+            sendQuizForApproval(api, quiz.class_id, quiz.quiz_id, account.account_id),
           )
         }
       >

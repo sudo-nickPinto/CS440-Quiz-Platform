@@ -42,7 +42,7 @@ export default function EditQuizPage() {
     return (
       <section className="qp-content">
         <h1>Editing unavailable</h1>
-        <p>Only the quiz creator or an active collaborator can edit this quiz.</p>
+        <p>Editing requires access as the owner, an active collaborator, or a faculty organizer of the class.</p>
         <Link to={`/app/quizzes/${quiz.quiz_id}`}>
           Back to quiz
         </Link>

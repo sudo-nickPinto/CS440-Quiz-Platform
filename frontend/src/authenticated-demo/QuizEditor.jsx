@@ -50,7 +50,7 @@ import {
 import { classPagePath } from "../classes/classPaths";
 import NewQuizClassPicker from "../classes/NewQuizClassPicker";
 import HostQuizButton from "./HostQuizButton";
-import { sendQuizForApproval, useQuizFlow } from "./quizFlow";
+import { canSendQuiz, sendQuizForApproval, useQuizFlow } from "./quizFlow";
 import QuizCollaboratorDialog, {
   AddCollaboratorCell,
 } from "./QuizCollaboratorDialog";
@@ -956,7 +956,7 @@ export function QuizEditor({
       // The draft is already saved, so a failure here must not send people
       // back into the editor (saving again would duplicate a new quiz).
       try {
-        await sendQuizForApproval(api, quizClassId, savedId);
+        await sendQuizForApproval(api, quizClassId, savedId, account.account_id);
       } catch (error) {
         notice = {
           tone: "warning",
@@ -1772,7 +1772,7 @@ export function QuizViewer() {
             quiz.class_id &&
             quiz.status !== "ARCHIVED" &&
             !approved &&
-            (mine || quiz.can_edit) && (
+            canSendQuiz(quiz, account.account_id) && (
               <div className="qv-host">
                 <Link
                   className="qb-btn"

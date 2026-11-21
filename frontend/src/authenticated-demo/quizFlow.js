@@ -29,6 +29,18 @@ export function showsQuizFlow(quiz) {
   return hosting.can_host || !NO_FLOW_REASONS.has(hosting.reason);
 }
 
+// Publishing a draft is owner-only. Active collaborators can submit a
+// published version, and the quiz detail response lists those collaborators.
+export function canSendQuiz(quiz, accountId) {
+  if (accountId == null || !quiz?.class_id) return false;
+  if (quiz.status === "DRAFT") return quiz.author_id === accountId;
+  if (quiz.status !== "PUBLISHED") return false;
+  return (
+    quiz.author_id === accountId ||
+    quiz.collaborators?.some((person) => person.account_id === accountId) === true
+  );
+}
+
 // The newest pending submission for this quiz, from the class's submission
 // list (organizers see every submission, members only their own).
 export function pendingSubmissionFor(items, quizId) {
@@ -87,16 +99,15 @@ export function quizFlowState({ quiz, accountId, pending }) {
     };
   }
 
-  const owner = quiz.author_id === accountId;
-  // Sending a draft publishes it first, and only the owner can publish.
-  // An already-published version can be sent by any editor.
-  const canSend = owner || (quiz.can_edit && quiz.status === "PUBLISHED");
+  const canSend = canSendQuiz(quiz, accountId);
   return {
     step: 1,
     label: "Draft",
     action: canSend ? "send" : null,
     note: !canSend
-      ? "Only the quiz owner can send these edits for approval."
+      ? quiz.status === "DRAFT"
+        ? "The quiz owner can publish and send these edits for approval."
+        : "The quiz owner or an active collaborator can send it for approval."
       : DRAFT_NOTES[quiz.hosting.reason] ??
         "Send it to your class organizers. Once it's approved, you can host it.",
   };
@@ -104,8 +115,11 @@ export function quizFlowState({ quiz, accountId, pending }) {
 
 // Publishes the latest edits if needed, then submits that version to the
 // class. A version that's already waiting or approved counts as sent.
-export async function sendQuizForApproval(api, classId, quizId) {
+export async function sendQuizForApproval(api, classId, quizId, accountId) {
   const current = await api(`/quizzes/${quizId}`);
+  if (!canSendQuiz(current, accountId)) {
+    throw new Error("Only the quiz owner or an eligible collaborator can send this version for approval.");
+  }
   try {
     return await sendForApproval(api, classId, {
       quiz_id: quizId,
