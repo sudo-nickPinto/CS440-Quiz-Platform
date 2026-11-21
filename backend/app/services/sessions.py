@@ -8,6 +8,7 @@ from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models import (
     Account,
+    Class,
     LiveSession,
     LiveSessionStatus,
     Quiz,
@@ -102,6 +103,25 @@ def _participant_response(
     )
 
 
+def _lock_hostable_class(db: Session, class_id: int) -> None:
+    """Lock the class like trash_class does, then check it can still host.
+
+    Moving a class to the trash and hosting in it then wait for each other,
+    so trash_class always sees the new session. The class is locked before
+    the quiz, so this can't deadlock with trash_quiz.
+    """
+    class_ = db.scalar(
+        select(Class)
+        .where(Class.class_id == class_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if class_ is None or class_.deleted_at is not None:
+        raise APIError(404, "class_not_found", "Class not found.")
+    if class_.archived_at is not None:
+        raise PROBLEMS["class_archived"].error()
+
+
 def _lock_hostable_quiz(db: Session, class_id: int, quiz_id: int) -> Quiz:
     """Lock the quiz like trash_quiz does.
 
@@ -136,6 +156,7 @@ def create_session(
     if access.class_.archived_at is not None:
         raise PROBLEMS["class_archived"].error()
 
+    _lock_hostable_class(db, class_id)
     quiz = _lock_hostable_quiz(db, class_id, quiz_id)
 
     # The same checks drive the Host button (QuizResponse.hosting), so the
@@ -151,7 +172,9 @@ def create_session(
 
     for attempt in range(JOIN_CODE_ATTEMPTS):
         if attempt:
-            # The rollback after a join-code clash released the quiz lock.
+            # The rollback after a join-code clash released both locks, and
+            # the class or quiz may have gone to the trash since.
+            _lock_hostable_class(db, class_id)
             _lock_hostable_quiz(db, class_id, quiz_id)
         join_code = _generate_join_code()
         if _active_session_for_code(db, join_code) is not None:

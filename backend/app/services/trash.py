@@ -389,6 +389,10 @@ def _all_or_nothing(db: Session, steps, code: str, message: str) -> None:
     try:
         for step in steps:
             step()
+            # Sessions don't autoflush, and later steps reload rows with
+            # populate_existing (classes._lock_family). Without a flush that
+            # reload would throw away what this step just changed.
+            db.flush()
     except Exception:
         db.rollback()
         raise
