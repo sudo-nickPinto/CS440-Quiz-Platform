@@ -49,13 +49,15 @@ class ApprovalClass:
             json={"quiz_version_id": quiz["version"]["quiz_version_id"]},
         ).json()
 
-    def approve_quiz(self, owner: str, payload: dict) -> dict:
-        quiz = self.publish(owner, self.create_quiz(owner, payload))
-        submission = self.submit(owner, quiz)
+    def approve(self, submission: dict) -> None:
         self.request(
             "organizer", "PATCH", f"{self.path}/quiz-submissions/{submission['submission_id']}",
             json={"status": "APPROVED"},
         )
+
+    def approve_quiz(self, owner: str, payload: dict) -> dict:
+        quiz = self.publish(owner, self.create_quiz(owner, payload))
+        self.approve(self.submit(owner, quiz))
         return quiz
 
 
