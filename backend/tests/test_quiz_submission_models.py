@@ -31,7 +31,7 @@ def test_submission_status_values_match_migration_0010() -> None:
     ]
 
 
-def test_quiz_submission_table_matches_migration_0010() -> None:
+def test_quiz_submission_table_matches_migrations_0010_and_0020() -> None:
     table = QuizSubmission.__table__
 
     assert table.name == "quiz_submission"
@@ -45,7 +45,10 @@ def test_quiz_submission_table_matches_migration_0010() -> None:
         "submitted_at",
         "decided_at",
         "active_version_id",
+        "rejection_comment",
     ]
+    assert table.c.rejection_comment.nullable
+    assert table.c.rejection_comment.type.length == 1000
     assert table.c.status.server_default.arg == SubmissionStatus.PENDING.value
     for column in (
         "class_id",
