@@ -84,10 +84,7 @@ export default function SelectMenu({
           if (disabled) event.preventDefault();
         }}
       >
-        <span>{current?.label ?? "Choose…"}</span>
-        <span className="cl-select-caret" aria-hidden="true">
-          ▾
-        </span>
+        {current?.label ?? "Choose…"}
       </summary>
 
       <div

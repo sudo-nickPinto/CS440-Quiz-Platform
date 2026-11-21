@@ -167,11 +167,7 @@ export function TrashClassDialog({ classInfo, busy, error, onCancel, onConfirm }
           >
             Keep it
           </button>
-          <button
-            type="submit"
-            className="qb-btn cl-btn-danger"
-            disabled={busy || !matches}
-          >
+          <button type="submit" className="qb-btn" disabled={busy || !matches}>
             {busy ? "Moving…" : "Move to trash"}
           </button>
         </div>
@@ -215,7 +211,7 @@ export function PurgeDialog({ items, busy, error, onCancel, onConfirm }) {
         <ul className="cl-purge-list">
           {shown.map((item) => (
             <li key={item.key}>
-              <span className={`cl-kind cl-kind-${item.kind}`}>{item.kindLabel}</span>
+              <span className="cl-kind">{item.kindLabel}</span>
               {item.title}
             </li>
           ))}

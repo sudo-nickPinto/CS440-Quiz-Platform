@@ -9,6 +9,9 @@ export function matchesTyped(typed, expected) {
   return clean(typed) === clean(expected);
 }
 
+// Gone within this many days: the card says so in red.
+const SOON_DAYS = 3;
+
 function daysLeft(item) {
   const days = item.days_left;
   if (days == null) return "";
@@ -23,6 +26,7 @@ export function trashRows(data) {
     kind,
     kindLabel: KIND_LABELS[kind],
     id,
+    soon: fields.daysLeft != null && fields.daysLeft <= SOON_DAYS,
     ...fields,
   });
   return [
@@ -32,6 +36,7 @@ export function trashRows(data) {
         name: item.name,
         detail: item.semester,
         days: daysLeft(item),
+        daysLeft: item.days_left,
       }),
     ),
     ...data.quizzes.map((item) =>
@@ -39,6 +44,7 @@ export function trashRows(data) {
         title: item.title,
         detail: item.class_name,
         days: daysLeft(item),
+        daysLeft: item.days_left,
         blocked: item.class_in_trash,
       }),
     ),
@@ -47,6 +53,7 @@ export function trashRows(data) {
         title: `${item.quiz_title} · Session #${item.session_id}`,
         detail: item.class_name,
         days: daysLeft(item),
+        daysLeft: item.days_left,
         blocked: item.class_in_trash,
       }),
     ),

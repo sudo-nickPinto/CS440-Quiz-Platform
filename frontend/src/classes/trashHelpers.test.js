@@ -42,6 +42,7 @@ describe("trashRows", () => {
       ["quiz:9", "Quiz", "Deleted tomorrow"],
       ["session:31", "Session", "12 days left"],
     ]);
+    expect(rows.map((row) => row.soon)).toEqual([false, true, false]);
     expect(rows[1].blocked).toBe(true);
     expect(rows[2].title).toBe("Week 3 · Session #31");
   });

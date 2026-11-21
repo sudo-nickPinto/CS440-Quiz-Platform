@@ -109,7 +109,6 @@ function Trash() {
           </span>
           <button
             type="button"
-            className="cl-tool-btn"
             disabled={action.busy || pickedRows.length === 0}
             onClick={() => void send("/trash/restore", pickedRows)}
           >
@@ -117,7 +116,7 @@ function Trash() {
           </button>
           <button
             type="button"
-            className="cl-tool-btn is-danger"
+            className="cl-danger"
             disabled={action.busy || pickedRows.length === 0}
             onClick={() => setPurging(pickedRows)}
           >
@@ -154,7 +153,7 @@ function Trash() {
               key={row.key}
             >
               <div className="cl-card-banner">
-                <span className={`cl-role cl-kind-${row.kind}`}>
+                <span className="cl-role">
                   {row.kindLabel}
                 </span>
                 <label className="cl-card-check">
@@ -171,14 +170,15 @@ function Trash() {
               <div className="cl-card-body">
                 <h2>{row.title}</h2>
                 {row.detail && <p className="cl-card-semester">{row.detail}</p>}
-                <p className="cl-days">{row.days}</p>
+                <p className={`cl-days${row.soon ? " is-soon" : ""}`}>
+                  {row.days}
+                </p>
                 {row.blocked && (
                   <p className="cl-muted">Restore its class first.</p>
                 )}
                 <div className="cl-card-actions">
                   <button
                     type="button"
-                    className="cl-tool-btn"
                     disabled={action.busy || row.blocked}
                     onClick={() => void send("/trash/restore", [row])}
                   >
@@ -186,7 +186,7 @@ function Trash() {
                   </button>
                   <button
                     type="button"
-                    className="cl-tool-btn is-danger"
+                    className="cl-danger"
                     disabled={action.busy}
                     onClick={() => setPurging([row])}
                   >
