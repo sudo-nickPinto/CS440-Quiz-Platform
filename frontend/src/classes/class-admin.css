@@ -244,6 +244,7 @@
 
 .qp .cl-stu-strip {
   display: flex;
+  flex-wrap: wrap;
   gap: 5px;
 }
 
@@ -395,10 +396,6 @@
 .qp .cl-gl .cl-gl-date {
   color: var(--gray);
   white-space: nowrap;
-}
-
-.qp .cl-gl .is-missed td:not(.cl-mk) {
-  color: var(--gray);
 }
 
 .qp .cl-gl-go {

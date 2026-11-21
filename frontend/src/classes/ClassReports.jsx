@@ -1,5 +1,6 @@
 import { Link, Navigate, useNavigate, useParams } from "react-router";
 import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
+import { useAccount } from "../authenticated-demo/account";
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import { useConfirm } from "../authenticated-demo/useConfirm";
 import RequestError from "../authenticated-demo/RequestError";
@@ -8,7 +9,7 @@ import {
   ParticipantResults,
 } from "../authenticated-demo/SessionResults";
 import { useFileDownload } from "../authenticated-demo/useFileDownload";
-import { rowLink } from "./classHelpers";
+import { attendanceLabel, formatAttendanceRate, rowLink, sessionResultsPath } from "./classHelpers";
 import { useClassResource } from "./classResources";
 
 function validId(value) {
@@ -27,10 +28,6 @@ function date(value) {
 
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? "—" : parsed.toLocaleString();
-}
-
-function sessionUrl(classId, sessionId) {
-  return `/app/classes/${classId}/sessions/${sessionId}/report`;
 }
 
 function ReportFrame({ classId, title, actions, error, children }) {
@@ -202,6 +199,8 @@ export function ClassQuizReportRedirect() {
 
 function StudentReport({ report, classId }) {
   const navigate = useNavigate();
+  const account = useAccount();
+  const ownReport = Number(report.account_id) === Number(account.account_id);
 
   return (
     <>
@@ -213,9 +212,10 @@ function StudentReport({ report, classId }) {
           [
             "Attendance",
             report.attendance_rate == null
-              ? "—"
-              : `${Math.round(report.attendance_rate * 100)}%`,
+              ? "No eligible sessions"
+              : formatAttendanceRate(report.attendance_rate),
           ],
+          ["Eligible sessions", number(report.attendance_session_count)],
           ["Correct answers", number(report.correct_count)],
           ["Incorrect / unanswered", number(report.incorrect_count)],
           ["Class average", number(report.class_average)],
@@ -223,8 +223,8 @@ function StudentReport({ report, classId }) {
       />
 
       <p className="cl-section-note">
-        Average points exclude sessions the student did not play. Unanswered
-        questions count as incorrect. Class-wide figures are shown only when the
+        Attendance excludes sessions the student hosted. Average points use
+        sessions the student played. Unanswered questions count as incorrect. Class-wide figures are shown only when the
         backend grants access.
       </p>
 
@@ -246,31 +246,33 @@ function StudentReport({ report, classId }) {
           </thead>
 
           <tbody>
-            {report.sessions.map((session) => (
-              // A played session opens its results from anywhere on the row.
-              <tr
-                key={session.session_id}
-                {...(session.played &&
-                  rowLink(navigate, sessionUrl(classId, session.session_id)))}
-              >
-                <td>{date(session.started_at)}</td>
-                <td>{session.quiz_title}</td>
-                <td>{session.played ? "Played" : "Absent"}</td>
-                <td>{number(session.points)}</td>
-                <td>{number(session.correct)}</td>
-                <td>{number(session.incorrect)}</td>
-                <td>{number(session.rank)}</td>
-                <td>
-                  {session.played ? (
-                    <Link to={sessionUrl(classId, session.session_id)}>
-                      Session report →
-                    </Link>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))}
+            {report.sessions.map((session) => {
+              const status = attendanceLabel(session.attendance_status, session.played);
+              const played = status === "Played";
+              const hosted = ownReport && status === "Hosted";
+              const to = sessionResultsPath(classId, session.session_id, {
+                hosted,
+                canViewClassReport: report.view === "organizer" || (ownReport && played),
+              });
+              return (
+                <tr key={session.session_id} {...(to && rowLink(navigate, to))}>
+                  <td>{date(session.started_at)}</td>
+                  <td>{session.quiz_title}</td>
+                  <td>{status}</td>
+                  <td>{played ? number(session.points) : "—"}</td>
+                  <td>{played ? number(session.correct) : "—"}</td>
+                  <td>{played ? number(session.incorrect) : "—"}</td>
+                  <td>{played ? number(session.rank) : "—"}</td>
+                  <td>
+                    {to ? (
+                      <Link to={to}>{hosted ? "Host results →" : "Session report →"}</Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
 
             {report.sessions.length === 0 && (
               <tr>

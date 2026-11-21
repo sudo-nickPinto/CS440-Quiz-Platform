@@ -219,6 +219,89 @@ test("Participate shows a host and a zero-score player with their own report lin
   await expect(missedRow.getByRole("link")).toHaveCount(0);
 });
 
+const STUDENT_REPORT = {
+  account_id: 2,
+  display_name: "Student",
+  session_count: 1,
+  attendance_session_count: 2,
+  attendance_rate: 0.5,
+  total_points: 0,
+  average_score: 0,
+  sessions: [
+    { session_id: 20, quiz_title: "My hosted quiz", attendance_status: "HOSTED", played: false },
+    {
+      session_id: 21, quiz_title: "Quiz I played", attendance_status: "PLAYED",
+      played: true, points: 0, rank: 1, correct: 0, incorrect: 1,
+    },
+    { session_id: 22, quiz_title: "Quiz I missed", attendance_status: "ABSENT", played: false },
+  ],
+};
+const STUDENT_REPORT_PATH = `/app/classes/${CLASS_ID}/students/2/report`;
+
+test("a student report uses eligible attendance and links only to the student's reports", async ({ page }) => {
+  await openClass(page, {
+    path: STUDENT_REPORT_PATH,
+    studentReport: { ...STUDENT_REPORT, view: "member" },
+  });
+
+  const summary = page.getByRole("region", { name: "Report summary" });
+  await expect(summary.getByText("50%")).toBeVisible();
+  await expect(summary.getByText("Eligible sessions")).toBeVisible();
+  await expect(summary.getByText("2", { exact: true })).toBeVisible();
+
+  const hosted = page.getByRole("row").filter({ hasText: "My hosted quiz" });
+  await expect(hosted.getByRole("cell", { name: "Hosted", exact: true })).toBeVisible();
+  await expect(hosted.getByRole("link", { name: /Host results/ })).toHaveAttribute("href", "/app/results/host/20");
+  const played = page.getByRole("row").filter({ hasText: "Quiz I played" });
+  await expect(played.getByRole("cell", { name: "Played", exact: true })).toBeVisible();
+  await expect(played.getByRole("cell", { name: "0", exact: true })).toHaveCount(2);
+  await expect(played.getByRole("link")).toHaveAttribute("href", `/app/classes/${CLASS_ID}/sessions/21/report`);
+  const absent = page.getByRole("row").filter({ hasText: "Quiz I missed" });
+  await expect(absent.getByRole("cell", { name: "Absent", exact: true })).toBeVisible();
+  await expect(absent.getByRole("link")).toHaveCount(0);
+  await absent.getByText("Quiz I missed").click();
+  await expect(page).toHaveURL(new RegExp(`${STUDENT_REPORT_PATH}$`));
+});
+
+test("the organizer roster aligns recent statuses and opens class reports", async ({ page }) => {
+  const studentReport = { ...STUDENT_REPORT, view: "organizer" };
+  await openClass(page, {
+    as: "organizer",
+    path: `/app/classes/${CLASS_ID}?view=admin&section=Students`,
+    studentReport,
+    studentStats: [{
+      ...studentReport, recent_scores: [null, 0, null],
+      recent_attendance_statuses: ["HOSTED", "PLAYED", "ABSENT"],
+    }],
+  });
+  const recent = page.getByRole("group", { name: "Recent attendance, oldest to newest" });
+  await expect(recent.locator("span")).toHaveText(["Absent", "Played · 0", "Hosted"]);
+  await button(page, "Show Student's details").click();
+  await expect(page.getByText(/50% attendance · 2 eligible sessions/)).toBeVisible();
+
+  const hosted = page.getByRole("table", { name: "Student's presentations" })
+    .getByRole("row").filter({ hasText: "My hosted quiz" });
+  await expect(hosted.getByRole("cell", { name: "Hosted", exact: true })).toBeVisible();
+  await expect(hosted.getByRole("link")).toHaveAttribute("href", `/app/classes/${CLASS_ID}/sessions/20/report`);
+
+  await page.getByRole("link", { name: /Full report/ }).click();
+  await expect(page.getByRole("table", { name: "Student session history" })
+    .getByRole("row").filter({ hasText: "My hosted quiz" }).getByRole("link"))
+    .toHaveAttribute("href", `/app/classes/${CLASS_ID}/sessions/20/report`);
+});
+
+test("a student report with only hosting explains the null attendance rate", async ({ page }) => {
+  await openClass(page, {
+    path: STUDENT_REPORT_PATH,
+    studentReport: {
+      ...STUDENT_REPORT, view: "member", attendance_rate: null,
+      attendance_session_count: 0, session_count: 0, sessions: [STUDENT_REPORT.sessions[0]],
+    },
+  });
+  await expect(page.getByText("No eligible sessions")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Hosted", exact: true })).toBeVisible();
+});
+
 test("the submitted version preview displays returned feedback", async ({ page }) => {
   const comment = "The example needs a correction.";
   await openClass(page, { as: "organizer", submission: "REJECTED", comment, path: PREVIEW });

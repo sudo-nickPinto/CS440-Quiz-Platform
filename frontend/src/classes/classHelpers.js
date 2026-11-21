@@ -52,7 +52,6 @@ export function opensRow(event, selection = "") {
   );
 }
 
-// Props for a <tr> that opens `to` (see .cl-click-row in class-admin.css).
 export function sessionResultsPath(classId, sessionId, { hosted, canViewClassReport }) {
   if (hosted) return `/app/results/host/${sessionId}`;
   return canViewClassReport
@@ -60,6 +59,7 @@ export function sessionResultsPath(classId, sessionId, { hosted, canViewClassRep
     : null;
 }
 
+// Props for a <tr> that opens `to` (see .cl-click-row in class-admin.css).
 export function rowLink(navigate, to) {
   return {
     className: "cl-click-row",
@@ -287,6 +287,16 @@ export function studentRanks(rows) {
     ranks.set(Number(row.account_id), rank);
   });
   return ranks;
+}
+
+const ATTENDANCE_LABELS = { HOSTED: "Hosted", PLAYED: "Played", ABSENT: "Absent" };
+
+export function attendanceLabel(status, played) {
+  return ATTENDANCE_LABELS[status] ?? (played ? "Played" : "Absent");
+}
+
+export function formatAttendanceRate(rate) {
+  return rate == null ? "—" : `${Math.round(rate * 100)}%`;
 }
 
 // Colors a score chip: "miss" when absent, "hi" at or above that

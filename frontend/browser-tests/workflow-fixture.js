@@ -76,6 +76,8 @@ export async function openClass(page_, options = {}) {
     stale = false,
     comment = null,
     sessions = [],
+    studentReport = null,
+    studentStats = [],
     previewDenied = false,
     failDecision = false,
     path,
@@ -187,6 +189,20 @@ export async function openClass(page_, options = {}) {
 
     if (method === "GET" && path_ === `${base}/sessions`) {
       return json({ class_id: CLASS_ID, ...page(sessions) });
+    }
+
+    if (method === "GET" && path_ === `${base}/students/${PEOPLE.member.account_id}/results`) {
+      return json(studentReport);
+    }
+
+    if (method === "GET" && path_ === `${base}/students`) {
+      return json({ class_id: CLASS_ID, ...page(studentStats) });
+    }
+
+    if (method === "GET" && path_ === `${base}/members`) {
+      return json([{
+        ...PEOPLE.member, role: "MEMBER", status: "ACTIVE", email: "student@example.test",
+      }]);
     }
 
     // Member view: their own quizzes.
