@@ -9,11 +9,14 @@ from app.api.routes import notifications_live
 from app.auth import CurrentAccount, get_active_account
 from app.config import Settings
 from app.database import Base
+from app.errors import APIError
 from app.live.protocol import CloseCode, LiveCloseError
 from app.main import create_app
 from app.models.account import Account, AccountRole
 from app.models.quiz import QuizVersion
+from app.models.quiz_submission import QuizSubmission, SubmissionStatus
 from app.notifications import events
+from app.services import quizzes
 from tests.class_quiz_helpers import add_member, host_quiz, make_class, publish_quiz
 
 URL = "/ws/notifications"
@@ -390,6 +393,84 @@ def test_organizer_hears_withdraw(event_client) -> None:
             quiz_id,
             accounts["owner"],
         )
+
+
+@pytest.mark.parametrize("class_route", [True, False])
+def test_quiz_edit_notifies_only_after_a_content_change_commits(
+    event_client, class_route
+) -> None:
+    client, ctx, accounts = event_client
+    class_id = ctx["class_id"]
+    quiz_id, version_id = _published_quiz(client, class_id)
+    submission_id = _submit(client, class_id, version_id)
+    path = f"/quizzes/{quiz_id}"
+    if class_route:
+        path = f"/classes/{class_id}{path}"
+    expected_revision = client.get(path).json()["revision"]
+
+    with client.websocket_connect(URL) as owner:
+        _authenticate(owner, "owner")
+        ctx["act"]("faculty")
+        stale = client.put(
+            path, json={**EVENT_QUIZ, "expected_revision": expected_revision + 1}
+        )
+        assert stale.status_code == 409
+        unchanged = client.put(
+            path, json={**EVENT_QUIZ, "expected_revision": expected_revision}
+        )
+        assert unchanged.status_code == 200, unchanged.text
+        _assert_nothing_pending(owner)
+
+        edited = client.put(
+            path,
+            json={**EVENT_QUIZ, "title": "New title", "expected_revision": expected_revision},
+        )
+        assert edited.status_code == 200, edited.text
+        assert owner.receive_json() == _submission_event(
+            "withdrawn", "WITHDRAWN", submission_id, class_id, quiz_id, accounts["faculty"]
+        )
+        _assert_nothing_pending(owner)
+
+
+def test_import_notifies_if_response_building_fails_after_withdrawal(
+    event_client, monkeypatch
+) -> None:
+    client, ctx, accounts = event_client
+    class_id = ctx["class_id"]
+    quiz_id, version_id = _published_quiz(client, class_id)
+    submission_id = _submit(client, class_id, version_id)
+    path = f"/classes/{class_id}/quizzes/{quiz_id}"
+    revision = client.get(path).json()["revision"]
+    saved = client.put(
+        path, json={**EVENT_QUIZ, "title": "Working draft", "expected_revision": revision}
+    )
+    assert saved.status_code == 200, saved.text
+
+    # An older deployment could leave a pending request alongside the draft.
+    with client.app.state.database.session_factory() as db:
+        submission = db.get(QuizSubmission, submission_id)
+        submission.status = SubmissionStatus.PENDING
+        submission.decided_at = submission.decided_by_id = None
+        db.commit()
+
+    def fail_to_load_response(*args):
+        raise APIError(500, "quiz_response_failed", "Injected response error.")
+
+    monkeypatch.setattr(quizzes, "_load_readable_quiz", fail_to_load_response)
+    question = {**EVENT_QUIZ["questions"][0], "question_text": "Imported question?"}
+    with client.websocket_connect(URL) as owner:
+        _authenticate(owner, "owner")
+        response = client.post(
+            f"{path}/questions/csv", json={"rows": [{"row_number": 1, "question": question}]}
+        )
+        assert response.status_code == 500
+        assert response.json()["error"]["code"] == "quiz_response_failed"
+        with client.app.state.database.session_factory() as db:
+            assert db.get(QuizSubmission, submission_id).status == SubmissionStatus.WITHDRAWN
+        assert owner.receive_json() == _submission_event(
+            "withdrawn", "WITHDRAWN", submission_id, class_id, quiz_id, accounts["owner"]
+        )
+        _assert_nothing_pending(owner)
 
 
 def test_failed_notification_does_not_fail_the_request(

@@ -894,13 +894,16 @@ def _share(client: TestClient, path: str) -> None:
     assert shared.status_code == 201
 
 
-def _add_organizer(client: TestClient, class_id: int) -> CurrentAccount:
+def _add_organizer(
+    client: TestClient, class_id: int, *, faculty: bool = False
+) -> CurrentAccount:
     with client.app.state.database.session_factory() as db:
         organizer = Account(
             auth0_sub="auth0|organizer",
             email="organizer@example.com",
             display_name="Organizer",
             is_active=True,
+            account_type="ADMINISTRATOR" if faculty else None,
         )
         db.add(organizer)
         db.flush()
@@ -914,7 +917,42 @@ def _add_organizer(client: TestClient, class_id: int) -> CurrentAccount:
             )
         )
         db.commit()
-        return CurrentAccount(organizer.account_id, AccountRole.USER, True)
+        role = AccountRole.ADMIN if faculty else AccountRole.USER
+        return CurrentAccount(organizer.account_id, role, True)
+
+
+@pytest.mark.parametrize("faculty", [True, False])
+def test_class_organizer_editing_requires_active_faculty(
+    collaboration_client, faculty, monkeypatch
+) -> None:
+    client, class_id, _, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    organizer = _add_organizer(client, class_id, faculty=faculty)
+    client.app.dependency_overrides[get_active_account] = lambda: organizer
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    detail = client.get(path).json()
+    assert detail["visibility"] == "PRIVATE"
+    assert detail["can_edit"] is faculty
+
+    edit = client.put(path, json=_edit_payload(quiz["revision"]))
+    assert edit.status_code == (200 if faculty else 403), edit.text
+    if faculty:
+        assert client.post(
+            f"{path}/publish", json={"expected_revision": edit.json()["revision"]}
+        ).json()["error"]["code"] == "quiz_publish_denied"
+
+    socket_path = f"/ws/quizzes/{quiz['quiz_id']}"
+    monkeypatch.setattr(
+        quiz_editing_live, "authenticate_token", lambda db, settings, token: organizer
+    )
+    with client.websocket_connect(socket_path) as socket:
+        socket.send_json({"type": "auth", "token": "test-token"})
+        if faculty:
+            assert socket.receive_json()["type"] == "quiz_editor_state"
+        else:
+            with pytest.raises(WebSocketDisconnect) as error:
+                socket.receive_json()
+            assert error.value.reason == "quiz_not_found"
 
 
 def _assert_no_emails(body: dict) -> None:

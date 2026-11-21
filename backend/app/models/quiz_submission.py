@@ -9,6 +9,7 @@ from sqlalchemy import (
     Enum as SqlEnum,
     ForeignKey,
     Index,
+    String,
     UniqueConstraint,
     func,
 )
@@ -109,3 +110,4 @@ class QuizSubmission(Base):
         ),
         nullable=True,
     )
+    rejection_comment: Mapped[str | None] = mapped_column(String(1000))

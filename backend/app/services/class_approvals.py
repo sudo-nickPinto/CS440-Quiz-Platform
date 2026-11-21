@@ -10,7 +10,7 @@ polls these counts.
 
 from math import ceil
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.auth import CurrentAccount
@@ -76,18 +76,25 @@ def _question_counts(db: Session, version_ids: set[int]) -> dict[int, int]:
     return {version_id: int(count) for version_id, count in rows}
 
 
-def _newest_published(db: Session, quiz_ids: set[int]) -> dict[int, int]:
+def _newest_version_numbers(
+    db: Session, quiz_ids: set[int]
+) -> dict[int, tuple[int, int | None]]:
     if not quiz_ids:
         return {}
     rows = db.execute(
-        select(QuizVersion.quiz_id, func.max(QuizVersion.version_number))
-        .where(
-            QuizVersion.quiz_id.in_(quiz_ids),
-            QuizVersion.published_at.is_not(None),
+        select(
+            QuizVersion.quiz_id,
+            func.max(QuizVersion.version_number),
+            func.max(
+                case(
+                    (QuizVersion.published_at.is_not(None), QuizVersion.version_number)
+                )
+            ),
         )
+        .where(QuizVersion.quiz_id.in_(quiz_ids))
         .group_by(QuizVersion.quiz_id)
     ).all()
-    return {quiz_id: int(number) for quiz_id, number in rows}
+    return {quiz_id: (latest, published) for quiz_id, latest, published in rows}
 
 
 _submitter = aliased(Account)
@@ -120,29 +127,48 @@ def _visible_submissions(
     return statement
 
 
-def _summaries(db: Session, rows) -> list[ClassSubmissionSummary]:
+def _summaries(
+    db: Session, rows, account: CurrentAccount, access: ClassAccess
+) -> list[ClassSubmissionSummary]:
     counts = _question_counts(db, {row.QuizVersion.quiz_version_id for row in rows})
-    newest = _newest_published(db, {row.QuizVersion.quiz_id for row in rows})
-    return [
-        ClassSubmissionSummary(
-            submission_id=row.QuizSubmission.submission_id,
-            quiz_id=row.QuizVersion.quiz_id,
-            quiz_version_id=row.QuizVersion.quiz_version_id,
-            version_number=row.QuizVersion.version_number,
-            quiz_title=row.QuizVersion.title,
-            question_count=counts.get(row.QuizVersion.quiz_version_id, 0),
-            submitted_by_id=row.QuizSubmission.submitted_by_id,
-            submitter_name=row.submitter_name,
-            status=row.QuizSubmission.status,
-            submitted_at=row.QuizSubmission.submitted_at,
-            decided_at=row.QuizSubmission.decided_at,
-            decided_by_name=row.decided_by_name,
-            is_current_version=(
-                newest.get(row.QuizVersion.quiz_id) == row.QuizVersion.version_number
-            ),
+    newest = _newest_version_numbers(db, {row.QuizVersion.quiz_id for row in rows})
+    summaries = []
+    for row in rows:
+        latest, latest_published = newest[row.QuizVersion.quiz_id]
+        # An approved publication stays current until a newer one is published.
+        # A pending review becomes stale as soon as newer content is saved.
+        current = (
+            latest_published
+            if row.QuizSubmission.status == SubmissionStatus.APPROVED
+            else latest
         )
-        for row in rows
-    ]
+        summaries.append(
+            ClassSubmissionSummary(
+                submission_id=row.QuizSubmission.submission_id,
+                quiz_id=row.QuizVersion.quiz_id,
+                quiz_version_id=row.QuizVersion.quiz_version_id,
+                version_number=row.QuizVersion.version_number,
+                quiz_title=row.QuizVersion.title,
+                question_count=counts.get(row.QuizVersion.quiz_version_id, 0),
+                submitted_by_id=row.QuizSubmission.submitted_by_id,
+                submitter_name=row.submitter_name,
+                status=row.QuizSubmission.status,
+                submitted_at=row.QuizSubmission.submitted_at,
+                decided_at=row.QuizSubmission.decided_at,
+                decided_by_name=row.decided_by_name,
+                rejection_comment=(
+                    row.QuizSubmission.rejection_comment
+                    if row.QuizSubmission.rejection_comment is not None
+                    and (
+                        access.is_organizer
+                        or _can_still_open_quiz(db, row.QuizVersion.quiz_id, account.account_id)
+                    )
+                    else None
+                ),
+                is_current_version=current == row.QuizVersion.version_number,
+            )
+        )
+    return summaries
 
 
 def _hostable_approved(class_id: int):
@@ -180,7 +206,7 @@ def list_class_submissions(
     ).all()
     return ClassSubmissionPage(
         class_id=class_id,
-        items=_summaries(db, rows),
+        items=_summaries(db, rows, account, access),
         pagination=_page_info(page, page_size, total),
     )
 
@@ -224,7 +250,7 @@ def get_class_submission_preview(
         .options(selectinload(QuizVersion.questions).selectinload(Question.choices))
     ).one()
     return ClassSubmissionPreview(
-        submission=_summaries(db, [row])[0],
+        submission=_summaries(db, [row], account, access)[0],
         version=QuizVersionResponse.model_validate(version),
     )
 
