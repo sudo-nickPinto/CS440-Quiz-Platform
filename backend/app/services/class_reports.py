@@ -33,8 +33,10 @@ from app.models.session import (
     SessionQuestion,
     SessionQuestionStatus,
 )
+from app.schemas.class_dashboard import AttendanceStatus
 from app.services.class_authorization import require_class_member
 from app.services.class_dashboard import (
+    _attendance_status,
     _class_students,
     _is_organizer,
     _session_summaries,
@@ -233,6 +235,7 @@ def get_class_student_results(
     rows = db.execute(
         select(
             LiveSession.session_id,
+            LiveSession.host_id,
             LiveSession.started_at,
             LiveSession.created_at,
             QuizVersion.quiz_id,
@@ -263,6 +266,9 @@ def get_class_student_results(
                 "quiz_title": row.title,
                 "started_at": _utc(row.started_at or row.created_at),
                 "played": played,
+                "attendance_status": _attendance_status(
+                    hosted=row.host_id == account_id, played=played
+                ),
                 "points": row.total_score,
                 "rank": row.final_rank,
                 "question_count": row.question_count,
@@ -278,6 +284,10 @@ def get_class_student_results(
         session["started_at"] = session["started_at"].isoformat()
 
     played = [s for s in sessions if s["played"]]
+    attendance_sessions = sum(
+        s["attendance_status"] != AttendanceStatus.HOSTED for s in sessions
+    )
+    attended = sum(s["attendance_status"] == AttendanceStatus.PLAYED for s in sessions)
     total = sum(s["points"] for s in played)
     return {
         "class_id": class_id,
@@ -289,8 +299,9 @@ def get_class_student_results(
         "status": student.status.value,
         "class_session_count": len(sessions),
         "session_count": len(played),
+        "attendance_session_count": attendance_sessions,
         "attendance_rate": (
-            round(len(played) / len(sessions), 3) if sessions else None
+            round(attended / attendance_sessions, 3) if attendance_sessions else None
         ),
         "total_points": total,
         "average_score": round(total / len(played), 1) if played else None,

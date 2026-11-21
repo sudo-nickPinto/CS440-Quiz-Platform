@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.auth import CurrentAccount, get_active_account
 from app.config import Settings
@@ -517,6 +518,60 @@ def test_student_report_marks_missed_sessions(reports) -> None:
         None,
     )
     assert (played["played"], played["points"], played["rank"]) == (True, 300, 2)
+    assert [session["attendance_status"] for session in body["sessions"]] == ["ABSENT", "PLAYED"]
+
+
+def test_student_host_is_excluded_from_attendance_and_zero_is_a_played_score(reports) -> None:
+    client, identities, data = reports
+    zoe_id = data["ids"]["zoe"]
+    with client.app.state.database.session_factory() as db:
+        db.get(LiveSession, data["second"]).host_id = zoe_id
+        result = db.scalar(
+            select(Result)
+            .join(SessionParticipant)
+            .where(
+                SessionParticipant.session_id == data["first"],
+                SessionParticipant.account_id == zoe_id,
+            )
+        )
+        result.total_score = 0
+        db.commit()
+
+    path = f"/classes/{data['class_id']}"
+    students = client.get(f"{path}/students").json()["items"]
+    zoe = next(student for student in students if student["account_id"] == zoe_id)
+    assert zoe["recent_scores"] == [None, 0]
+    assert zoe["recent_attendance_statuses"] == ["HOSTED", "PLAYED"]
+    assert zoe["attendance_rate"] == 1.0
+
+    gradebook = client.get(f"{path}/grades/export.csv")
+    assert gradebook.status_code == 200
+    assert "Zoe Student,zoe@gettysburg.edu,0,Hosted,1,100.0,0.0,0" in gradebook.text
+
+    act_as(client, identities["zoe"])
+    report = client.get(student_url(data, "zoe")).json()
+    assert report["class_session_count"] == 2
+    assert report["attendance_session_count"] == 1
+    assert report["attendance_rate"] == 1.0
+    hosted, played = report["sessions"]
+    assert (hosted["attendance_status"], hosted["played"], hosted["points"], hosted["rank"]) == (
+        "HOSTED", False, None, None
+    )
+    assert (played["attendance_status"], played["points"], played["rank"]) == ("PLAYED", 0, 2)
+    assert client.get(session_url(data, "second")).status_code == 403
+
+
+def test_attendance_is_null_when_a_student_hosted_every_completed_session(reports) -> None:
+    client, _, data = reports
+    with client.app.state.database.session_factory() as db:
+        for key in ("first", "second"):
+            db.get(LiveSession, data[key]).host_id = data["ids"]["member"]
+        db.commit()
+
+    report = client.get(student_url(data, "member")).json()
+    assert report["attendance_session_count"] == 0
+    assert report["attendance_rate"] is None
+    assert all(session["attendance_status"] == "HOSTED" for session in report["sessions"])
 
 
 def test_removed_student_history_stays_visible_to_organizers(reports) -> None:

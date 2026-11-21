@@ -22,6 +22,7 @@ from app.models.session import (
     SessionParticipant,
 )
 from app.schemas.class_dashboard import (
+    AttendanceStatus,
     ClassDashboardResponse,
     ClassQuizPage,
     ClassQuizSummary,
@@ -281,15 +282,22 @@ def _class_roster(db: Session, class_id: int) -> list:
     ).all()
 
 
+def _attendance_status(*, hosted: bool, played: bool) -> AttendanceStatus:
+    if hosted:
+        return AttendanceStatus.HOSTED
+    return AttendanceStatus.PLAYED if played else AttendanceStatus.ABSENT
+
+
 def _class_scores(
     db: Session, class_id: int
-) -> tuple[list[int], dict[int, dict[int, int]]]:
-    """Completed session ids newest first, and each player's score by session."""
+) -> tuple[list[int], dict[int, dict[int, int]], dict[int, set[int]]]:
+    """Completed session IDs newest first, scores by player, and sessions by host."""
     # One row per (session, player); a session nobody played still appears
     # once with a null account so it counts toward attendance.
     plays = db.execute(
         select(
             LiveSession.session_id,
+            LiveSession.host_id,
             func.coalesce(LiveSession.started_at, LiveSession.created_at).label(
                 "started_at"
             ),
@@ -313,20 +321,26 @@ def _class_scores(
     session_times = {row.session_id: row.started_at for row in plays}
     newest_first = sorted(session_times, key=session_times.get, reverse=True)
     scores: dict[int, dict[int, int]] = defaultdict(dict)
+    hosted: dict[int, set[int]] = defaultdict(set)
     for row in plays:
+        hosted[row.host_id].add(row.session_id)
         if row.account_id is not None:
             scores[row.account_id][row.session_id] = int(row.total_score or 0)
-    return newest_first, scores
+    return newest_first, scores, hosted
 
 
 def _class_students(db: Session, class_id: int) -> list[ClassStudentSummary]:
     """Every active student with their scores across completed class sessions."""
     roster = _class_roster(db, class_id)
-    newest_first, scores = _class_scores(db, class_id)
+    newest_first, scores, hosted = _class_scores(db, class_id)
+    recent_sessions = newest_first[:RECENT_SCORE_COUNT]
 
     students = []
     for row in roster:
         played = scores.get(row.account_id, {})
+        hosted_sessions = hosted.get(row.account_id, set())
+        attendance_sessions = len(newest_first) - len(hosted_sessions)
+        attended = len(played.keys() - hosted_sessions)
         total = sum(played.values())
         students.append(
             ClassStudentSummary(
@@ -338,11 +352,16 @@ def _class_students(db: Session, class_id: int) -> list[ClassStudentSummary]:
                 average_score=round(total / len(played), 1) if played else None,
                 total_points=total,
                 attendance_rate=(
-                    round(len(played) / len(newest_first), 3) if newest_first else None
+                    round(attended / attendance_sessions, 3)
+                    if attendance_sessions
+                    else None
                 ),
-                recent_scores=[
-                    played.get(session_id)
-                    for session_id in newest_first[:RECENT_SCORE_COUNT]
+                recent_scores=[played.get(session_id) for session_id in recent_sessions],
+                recent_attendance_statuses=[
+                    _attendance_status(
+                        hosted=session_id in hosted_sessions, played=session_id in played
+                    )
+                    for session_id in recent_sessions
                 ],
             )
         )
@@ -509,7 +528,7 @@ def export_class_grades(
     students = _sort_students(
         _class_students(db, class_id), StudentSort.NAME, SortOrder.ASC
     )
-    _, scores = _class_scores(db, class_id)
+    _, scores, hosted = _class_scores(db, class_id)
 
     output = StringIO(newline="")
     writer = csv.writer(output)
@@ -533,12 +552,17 @@ def export_class_grades(
     )
     for student in students:
         played = scores.get(student.account_id, {})
+        hosted_sessions = hosted.get(student.account_id, set())
         write(
             [
                 student.display_name,
                 student.email,
-                # A blank cell means absent, which is different from scoring 0.
-                *(played.get(session.session_id, "") for session in sessions),
+                *(
+                    "Hosted"
+                    if session.session_id in hosted_sessions
+                    else played.get(session.session_id, "")
+                    for session in sessions
+                ),
                 student.session_count,
                 (
                     round(student.attendance_rate * 100, 1)

@@ -120,6 +120,12 @@ class ClassSessionSummary(BaseModel):
     my_rank: int | None
 
 
+class AttendanceStatus(str, Enum):
+    HOSTED = "HOSTED"
+    PLAYED = "PLAYED"
+    ABSENT = "ABSENT"
+
+
 class ClassStudentSummary(BaseModel):
     account_id: int
     display_name: str
@@ -128,10 +134,11 @@ class ClassStudentSummary(BaseModel):
     session_count: int
     average_score: float | None
     total_points: int
-    # Share of the class's completed sessions this student played, 0 to 1.
+    # Share of completed sessions this student played, excluding sessions they hosted.
     attendance_rate: float | None
-    # Up to five most recent scores, newest first; null where they were absent.
+    # Both lists use the same order, with the newest completed session first.
     recent_scores: list[int | None]
+    recent_attendance_statuses: list[AttendanceStatus]
 
 
 class ClassQuizPage(BaseModel):

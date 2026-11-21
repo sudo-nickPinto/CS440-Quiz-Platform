@@ -642,8 +642,8 @@ Built from the class's `COMPLETED` sessions only; open sessions never count. Sco
 - `GET /classes/{class_id}/presented-quizzes`: for any member. (It was `/quizzes` before V3; that address now lists the class's own quizzes.) Completed sessions grouped by quiz, with `presented_at, session_count, participant_count` and `average_score` (organizers only). It takes `sort=presented_at|title|participant_count`.
 - `GET /classes/{class_id}/students`: organizers only (`403 not_class_organizer`). Active `MEMBER`s, with:
   - `session_count, average_score, total_points`;
-  - `attendance_rate` (0–1);
-  - `recent_scores`, the last five sessions newest first, with null where they were absent.
+  - `attendance_rate` (0–1), excluding completed sessions the student hosted from the denominator, or null when all they did was host;
+  - `recent_scores` (null when there is no participant score) and `recent_attendance_statuses` (`HOSTED`, `PLAYED`, or `ABSENT`), aligned across up to five completed sessions, newest first.
 
   It takes `sort=name|average_score|session_count`.
 
@@ -667,9 +667,9 @@ Organizers and Admins see everyone. Members see only their own rows, and class-w
 - `GET /classes/{class_id}/students/{account_id}/results`: one student's history in the class. Members can only ask for themselves (`403 not_class_organizer` otherwise). It returns:
   - `view`: `organizer` or `member`;
   - `display_name`, `email` (organizers only), `role` and `status`. Removed and departed students keep their history;
-  - `class_session_count`, `session_count`, `attendance_rate`, `total_points`, `average_score`, `correct_count` and `incorrect_count`;
+  - `class_session_count` (all completed sessions), `session_count` (sessions played), `attendance_session_count` (completed sessions excluding ones this student hosted), `attendance_rate` (null when the denominator is zero), `total_points`, `average_score`, `correct_count` and `incorrect_count`;
   - `class_average`, organizers only, using the same formula as the dashboard;
-  - `sessions`: every completed class session, newest first, with `played, points, rank, question_count, correct, incorrect`. The last four are null when the student missed it. Unanswered questions count as incorrect.
+  - `sessions`: every completed class session, newest first, with `attendance_status` (`HOSTED`, `PLAYED`, or `ABSENT`), plus `played, points, rank, question_count, correct, incorrect`. Points and rank describe the stored participant result. Unanswered questions count as incorrect for players.
   - Errors: `404 student_not_found` (never in this class).
 
 ### Excel exports of the class reports → `200 .xlsx`
@@ -679,7 +679,7 @@ Each export is built from the matching report above, so the workbook shows the s
 |---|---|---|---|
 | `GET /classes/{class_id}/sessions/{session_id}/export.xlsx` | Organizers | `class-{cid}-session-{sid}-results.xlsx` | **Summary**; **Scores** (rank, participant, total points, correct); **Answers** (one row per participant per question: result, selected and correct answer, time, points) |
 | `GET /classes/{class_id}/quizzes/{quiz_id}/export.xlsx` | Organizers | `class-{cid}-quiz-{qid}-results.xlsx` | **Summary**; **Presentations** (one row per completed presentation); **Results** (every player's result in each presentation) |
-| `GET /classes/{class_id}/students/{account_id}/export.xlsx` | Organizers, or the student themselves | `class-{cid}-student-{aid}-results.xlsx` | **Summary** (totals, attendance, class average); **Sessions** (every completed class session, played or not) |
+| `GET /classes/{class_id}/students/{account_id}/export.xlsx` | Organizers, or the student themselves | `class-{cid}-student-{aid}-results.xlsx` | **Summary** (totals, attendance, class average); **Sessions** (every completed class session, with an Attendance column) |
 
 - A member who exports a session or quiz gets `403 not_class_organizer`. So does a member who exports another student.
 - A member's own student export leaves out the email and the class average, as the report does.
@@ -688,7 +688,7 @@ Each export is built from the matching report above, so the workbook shows the s
 ### `GET /classes/{class_id}/grades/export.csv` → `200 text/csv`
 Organizers only. Returns `{class-name}-grades.csv`, a gradebook (UTF-8 with BOM, `no-store`):
 - one row per student, sorted by name;
-- one column per completed session, oldest first (`Quiz title (YYYY-MM-DD)`), where an empty cell means absent;
+- one column per completed session, oldest first (`Quiz title (YYYY-MM-DD)`), where `Hosted` marks the student's own presentation, a number is their score, and an empty cell means absent;
 - then `Sessions played, Attendance %, Average points, Total points`.
 
 Cells get the same formula escaping as the session export.
