@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
+from app.api.quiz_edit_notifications import run_quiz_edit_with_notifications
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
 from app.schemas.quiz import QuizListItem, QuizResponse, QuizUpdate
@@ -33,10 +34,15 @@ def get_quiz_route(
 def update_quiz_route(
     quiz_id: int,
     payload: QuizUpdate,
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizResponse:
-    return update_quiz(db, account, quiz_id, payload)
+    return run_quiz_edit_with_notifications(
+        db, request.app.state.notification_hub, background_tasks,
+        update_quiz, account, quiz_id, payload,
+    )
 
 
 @router.patch("/{quiz_id}/archive", response_model=QuizResponse)

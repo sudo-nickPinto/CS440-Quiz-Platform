@@ -392,6 +392,43 @@ def test_organizer_hears_withdraw(event_client) -> None:
         )
 
 
+@pytest.mark.parametrize("class_route", [True, False])
+def test_quiz_edit_notifies_only_after_a_content_change_commits(
+    event_client, class_route
+) -> None:
+    client, ctx, accounts = event_client
+    class_id = ctx["class_id"]
+    quiz_id, version_id = _published_quiz(client, class_id)
+    submission_id = _submit(client, class_id, version_id)
+    path = f"/quizzes/{quiz_id}"
+    if class_route:
+        path = f"/classes/{class_id}{path}"
+    expected_revision = client.get(path).json()["revision"]
+
+    with client.websocket_connect(URL) as owner:
+        _authenticate(owner, "owner")
+        ctx["act"]("faculty")
+        stale = client.put(
+            path, json={**EVENT_QUIZ, "expected_revision": expected_revision + 1}
+        )
+        assert stale.status_code == 409
+        unchanged = client.put(
+            path, json={**EVENT_QUIZ, "expected_revision": expected_revision}
+        )
+        assert unchanged.status_code == 200, unchanged.text
+        _assert_nothing_pending(owner)
+
+        edited = client.put(
+            path,
+            json={**EVENT_QUIZ, "title": "New title", "expected_revision": expected_revision},
+        )
+        assert edited.status_code == 200, edited.text
+        assert owner.receive_json() == _submission_event(
+            "withdrawn", "WITHDRAWN", submission_id, class_id, quiz_id, accounts["faculty"]
+        )
+        _assert_nothing_pending(owner)
+
+
 def test_failed_notification_does_not_fail_the_request(
     event_client, monkeypatch, caplog
 ) -> None:

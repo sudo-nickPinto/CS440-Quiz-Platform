@@ -50,7 +50,7 @@ from app.schemas.quiz import (
 from app.services.class_authorization import get_class, get_class_membership
 from app.services.hosting import quiz_hosting, quiz_hosting_many
 from app.services.question_bank import snapshot_question
-from app.services.quiz_submissions import withdraw_pending_submissions_for_edit
+from app.services.quiz_submissions import commit_quiz_content_edit
 
 
 # Longest question and answer text a host screen can show (see the editor's
@@ -1111,8 +1111,7 @@ def update_class_quiz_question(
             quiz_revision=quiz_revision,
             question=QuestionResponse.model_validate(question),
         )
-        withdraw_pending_submissions_for_edit(db, quiz, account.account_id, now)
-        db.commit()
+        commit_quiz_content_edit(db, quiz, account.account_id, now)
         return response
     except SQLAlchemyError as exc:
         db.rollback()
@@ -1190,8 +1189,7 @@ def update_class_quiz_default_time(
             ],
         )
         if changed:
-            withdraw_pending_submissions_for_edit(db, quiz, account.account_id, now)
-        db.commit()
+            commit_quiz_content_edit(db, quiz, account.account_id, now)
         return response
     except SQLAlchemyError as exc:
         db.rollback()
@@ -1258,8 +1256,7 @@ def add_class_quiz_question(
             quiz_revision=quiz.revision,
             question=QuestionResponse.model_validate(question),
         )
-        withdraw_pending_submissions_for_edit(db, quiz, account.account_id, now)
-        db.commit()
+        commit_quiz_content_edit(db, quiz, account.account_id, now)
         return response
     except SQLAlchemyError as exc:
         db.rollback()
@@ -1359,8 +1356,7 @@ def update_class_quiz(
             hosting=quiz_hosting(db, account, quiz),
             **_attribution(db, quiz),
         )
-        withdraw_pending_submissions_for_edit(db, quiz, account.account_id, now)
-        db.commit()
+        commit_quiz_content_edit(db, quiz, account.account_id, now)
         return response
     except APIError:
         db.rollback()

@@ -37,7 +37,7 @@ from app.schemas.question_bank import (
     QuestionBankPage,
 )
 from app.schemas.quiz import AnswerChoiceCreate, QuestionCreate
-from app.services.quiz_submissions import withdraw_pending_submissions_for_edit
+from app.services.quiz_submissions import commit_quiz_content_edit
 
 CSV_COLUMNS = [
     "question_text", "explanation", "choice_a", "choice_b", "choice_c",
@@ -297,10 +297,7 @@ def add_from_bank(db: Session, account: CurrentAccount, class_id: int, quiz_id: 
     if pending_questions:
         quiz.revision += 1
         quiz.updated_at = datetime.now(UTC).replace(tzinfo=None)
-        withdraw_pending_submissions_for_edit(
-            db, quiz, account.account_id, quiz.updated_at
-        )
-    db.commit()
+        commit_quiz_content_edit(db, quiz, account.account_id, quiz.updated_at)
     db.expire_all()
     return _to_response(db, account, _load_readable_quiz(db, account, quiz_id))
 
@@ -405,8 +402,7 @@ def import_csv(db: Session, account: CurrentAccount, class_id: int, quiz_id: int
             saved_only += 1
     quiz.revision += 1
     quiz.updated_at = datetime.now(UTC).replace(tzinfo=None)
-    withdraw_pending_submissions_for_edit(db, quiz, account.account_id, quiz.updated_at)
-    db.commit()
+    commit_quiz_content_edit(db, quiz, account.account_id, quiz.updated_at)
     db.expire_all()
     return CsvImportResponse(quiz=_to_response(db, account, _load_readable_quiz(db, account, quiz_id)),
         added_to_quiz=len(payload.rows), saved_to_bank_only=saved_only)

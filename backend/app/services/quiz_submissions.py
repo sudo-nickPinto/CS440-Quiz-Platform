@@ -380,12 +380,13 @@ def withdraw_quiz_submission(
         ) from exc
 
 
-def withdraw_pending_submissions_for_edit(
+COMMITTED_QUIZ_WITHDRAWALS = "committed_quiz_withdrawals"
+
+
+def commit_quiz_content_edit(
     db: Session, quiz: Quiz, editor_id: int, edited_at: datetime
-) -> list[int]:
-    """Withdraw pending versions while the caller holds the quiz row lock."""
-    if quiz.class_id is None:
-        return []
+) -> None:
+    """Commit the edit and withdrawals while holding the quiz row lock."""
     submissions = db.scalars(
         select(QuizSubmission)
         .join(QuizVersion, QuizVersion.quiz_version_id == QuizSubmission.quiz_version_id)
@@ -400,7 +401,11 @@ def withdraw_pending_submissions_for_edit(
         submission.status = SubmissionStatus.WITHDRAWN
         submission.decided_by_id = editor_id
         submission.decided_at = edited_at
-    return [submission.submission_id for submission in submissions]
+    db.commit()
+    if submissions:
+        db.info.setdefault(COMMITTED_QUIZ_WITHDRAWALS, []).extend(
+            submission.submission_id for submission in submissions
+        )
 
 
 def _approved_versions_statement(class_id: int):
