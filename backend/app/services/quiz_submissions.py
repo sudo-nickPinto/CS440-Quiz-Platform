@@ -380,6 +380,29 @@ def withdraw_quiz_submission(
         ) from exc
 
 
+def withdraw_pending_submissions_for_edit(
+    db: Session, quiz: Quiz, editor_id: int, edited_at: datetime
+) -> list[int]:
+    """Withdraw pending versions while the caller holds the quiz row lock."""
+    if quiz.class_id is None:
+        return []
+    submissions = db.scalars(
+        select(QuizSubmission)
+        .join(QuizVersion, QuizVersion.quiz_version_id == QuizSubmission.quiz_version_id)
+        .where(
+            QuizVersion.quiz_id == quiz.quiz_id,
+            QuizSubmission.class_id == quiz.class_id,
+            QuizSubmission.status == SubmissionStatus.PENDING,
+        )
+        .with_for_update()
+    ).all()
+    for submission in submissions:
+        submission.status = SubmissionStatus.WITHDRAWN
+        submission.decided_by_id = editor_id
+        submission.decided_at = edited_at
+    return [submission.submission_id for submission in submissions]
+
+
 def _approved_versions_statement(class_id: int):
     newer = aliased(QuizVersion)
     newer_published = exists(

@@ -740,6 +740,59 @@ def test_approval_grants_no_editing_or_results_permissions(submissions) -> None:
     assert_error(results, 403, "not_class_organizer")
 
 
+@pytest.fixture
+def pending_quiz(submissions) -> tuple[str, dict, dict, int]:
+    client, data, _, _ = submissions
+    class_id = data["classes"]["main"]
+    base = f"/classes/{class_id}/quizzes"
+    payload = {key: value for key, value in QUIZ_UPDATE.items() if key != "expected_revision"}
+    created = client.post(base, json=payload)
+    assert created.status_code == 201, created.text
+    quiz_path = f"{base}/{created.json()['quiz_id']}"
+    published = client.post(
+        f"{quiz_path}/publish", json={"expected_revision": created.json()["revision"]}
+    )
+    assert published.status_code == 200, published.text
+    quiz = published.json()
+    sent = post_submission(client, class_id, quiz["version"]["quiz_version_id"])
+    assert sent.status_code == 201, sent.text
+    return quiz_path, payload, quiz, sent.json()["submission_id"]
+
+
+def test_aggregate_edit_withdraws_only_after_a_content_change(
+    submissions, pending_quiz
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    quiz_path, payload, published, submission_id = pending_quiz
+    version_id = published["version"]["quiz_version_id"]
+
+    act_as(actor, identities, "faculty")
+    stale = client.put(quiz_path, json={**payload, "expected_revision": 1})
+    assert_error(stale, 409, "quiz_edit_conflict")
+    unchanged = client.put(
+        quiz_path, json={**payload, "expected_revision": published["revision"]}
+    )
+    assert unchanged.status_code == 200
+    assert unchanged.json()["version"]["quiz_version_id"] == version_id
+    assert unchanged.json()["revision"] == published["revision"]
+    assert client.get(f"/classes/{class_id}/quiz-submissions").json()[0]["status"] == "PENDING"
+
+    saved = client.put(
+        quiz_path,
+        json={**payload, "title": "After review", "expected_revision": published["revision"]},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["version"]["quiz_version_id"] != version_id
+    submission = client.get(f"/classes/{class_id}/quiz-submissions").json()[0]
+    assert submission["status"] == "WITHDRAWN"
+    assert submission["decided_by_id"] == data["ids"]["faculty"]
+    assert submission["decided_at"] is not None
+    snapshot = preview(client, class_id, submission_id).json()["version"]
+    assert snapshot["title"] == payload["title"]
+    assert snapshot["quiz_version_id"] == version_id
+
+
 # Submission preview (GET /classes/{id}/dashboard/submissions/{id}/preview).
 # The preview shows every question and correct answer of the version that was
 # sent, so it must follow the same access rules as the submission itself.
