@@ -65,6 +65,8 @@ def get_or_create_account(db: Session, domain: str, sub: str, token: str) -> dic
     if account:
         return account
 
+    # First sign-in: don't hold a database connection during the Auth0 call.
+    db.rollback()
     profile = _fetch_profile(domain, token)
     email = profile.get("email")
     # Linking trusts the email, so it must be verified: otherwise anyone could
