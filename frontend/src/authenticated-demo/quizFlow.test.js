@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { canEditQuiz } from "./quizEditing";
 import {
+  canSendQuiz,
   findPendingSubmission,
   pendingSubmissionFor,
   quizFlowState,
@@ -56,6 +58,21 @@ describe("pendingSubmissionFor", () => {
   });
 });
 
+describe("quiz detail edit and submit eligibility", () => {
+  it.each([
+    ["organizer in the quiz's class", { can_edit: true }, true, false],
+    ["organizer outside that class", { can_edit: false }, false, false],
+    ["active collaborator", { can_edit: true, collaborators: [{ account_id: ME }] }, true, true],
+    ["revoked collaborator", { can_edit: false, collaborators: [{ account_id: 2 }] }, false, false],
+    ["owner", { author_id: ME, can_edit: true }, true, true],
+    ["archived quiz", { author_id: ME, can_edit: true, status: "ARCHIVED" }, false, false],
+  ])("keeps edit and send separate for %s", (_case, fields, editable, sendable) => {
+    const detail = quiz({ author_id: 2, status: "PUBLISHED", visibility: "PRIVATE", ...fields });
+    expect(canEditQuiz(detail)).toBe(editable);
+    expect(canSendQuiz(detail, ME)).toBe(sendable);
+  });
+});
+
 describe("quizFlowState", () => {
   it("a hostable quiz is ready to host", () => {
     const state = quizFlowState({
@@ -97,6 +114,18 @@ describe("quizFlowState", () => {
     });
     expect(state).toMatchObject({ label: "Draft", action: "send" });
     expect(state.note).toContain("send a new request");
+  });
+
+  it("does not offer to withdraw a stale pending row for a previously published version", () => {
+    const detail = quiz({ status: "PUBLISHED", hosting: { can_host: false, reason: "withdrawn" } });
+    const previous = { submission_id: 50, submitted_by_id: ME, is_current_version: false };
+    const current = { submission_id: 51, submitted_by_id: ME, is_current_version: true };
+
+    const withdrawn = quizFlowState({ quiz: detail, accountId: ME, pending: previous });
+    expect(withdrawn).toMatchObject({ label: "Draft", action: "send" });
+    expect(withdrawn.note).toContain("was withdrawn");
+    expect(quizFlowState({ quiz: detail, accountId: ME, pending: current }))
+      .toMatchObject({ label: "Waiting for approval", action: "withdraw" });
   });
 
   it("the owner can send a draft", () => {
