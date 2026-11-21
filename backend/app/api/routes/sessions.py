@@ -79,6 +79,7 @@ def join_session_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> SessionJoinResponse:
     joined = join_session(db, account, payload.join_code)
+    db.commit()  # release the connection before the announcement; see _announce_join
     _announce_join(request, background_tasks, joined)
     return joined
 
@@ -97,6 +98,7 @@ def join_session_by_id_route(
 ) -> SessionJoinResponse:
     """Join from the class page's Live button; same rules as joining by code."""
     joined = join_session_by_id(db, account, session_id)
+    db.commit()  # release the connection before the announcement; see _announce_join
     _announce_join(request, background_tasks, joined)
     return joined
 
@@ -107,6 +109,11 @@ def _announce_join(
     joined: SessionJoinResponse,
 ) -> None:
     # Joining happens over REST, so tell the live host after the commit.
+    # The route ends its transaction first: FastAPI closes the request's
+    # session only after background tasks finish, and this one needs a
+    # worker thread and a connection of its own (the host's roster), so a
+    # burst of joins could otherwise hold every connection while waiting for
+    # a thread (frontend/loadtest).
     background_tasks.add_task(
         request.app.state.live_hub.participant_joined,
         joined.session.session_id,
