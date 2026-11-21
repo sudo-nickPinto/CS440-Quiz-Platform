@@ -94,7 +94,12 @@ export function ClassCard({ item }) {
           </Link>
         </h2>
 
-        {item.semester && <p className="cl-card-semester">{item.semester}</p>}
+        {item.semester && (
+          <p className="cl-card-semester">
+            {item.semester}
+            {item.semesterCount > 1 && ` · ${item.semesterCount} semesters`}
+          </p>
+        )}
 
         {item.ownerName && <p className="cl-owner">{item.ownerName}</p>}
 

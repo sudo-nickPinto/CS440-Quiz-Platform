@@ -107,7 +107,7 @@ Code: `backend/app/services/class_dashboard.py` and the report tables in `fronte
   - A **hosted session** (its host: **⋯ → Move to trash** on a row of the quiz's **Hosting history**) leaves the hosting history, the students' "quizzes taken", and the class's reports, attendance and grades. That's how a session hosted by mistake stops counting.
   - Something running live can't be trashed; end it first. Restoring or deleting several items at once is all or nothing.
 
-Code: `backend/app/services/trash.py` (and the `deleted_at` filters it lists), `unarchive_class` in `backend/app/services/classes.py`; `frontend/src/classes/ClassLifecycle.jsx`, `TrashPage.jsx` and `frontend/src/authenticated-demo/MoreMenu.jsx`.
+Code: `backend/app/services/trash.py` (and the `deleted_at` filters it lists), `unarchive_class` in `backend/app/services/classes.py`; `frontend/src/classes/ClassLifecycle.jsx` (the dialogs and the Semester panel), `TrashPage.jsx`, `SelectMenu.jsx` (the square dropdown) and `semesters.js`.
 
 ## 8. Deploying
 

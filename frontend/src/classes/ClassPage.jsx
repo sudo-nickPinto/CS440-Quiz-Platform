@@ -14,8 +14,7 @@ import ClassLiveButton from "./ClassLiveButton";
 import {
   ArchiveClassDialog,
   ArchivedBanner,
-  NewSemesterDialog,
-  SemesterOptions,
+  SemesterDialog,
   TrashClassDialog,
 } from "./ClassLifecycle";
 import {
@@ -1086,15 +1085,13 @@ function ClassWorkspace({ classInfo, onChange }) {
   const [bankOpen, setBankOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(classInfo.name);
-  const [semesterDraft, setSemesterDraft] = useState(classInfo.semester ?? "");
-  // "archive" or "semester" while that dialog is open.
+  // "archive", "trash" or "semester" while that dialog is open.
   const [lifecycleDialog, setLifecycleDialog] = useState(null);
   const manage = useAction();
   const navigate = useNavigate();
 
   function cancelRename() {
     setNameDraft(classInfo.name);
-    setSemesterDraft(classInfo.semester ?? "");
     setEditing(false);
   }
 
@@ -1102,18 +1099,14 @@ function ClassWorkspace({ classInfo, onChange }) {
     event.preventDefault();
     const name = nameDraft.trim();
     if (!name) return;
-    const semester = semesterDraft.trim() || null;
-    const changes = {};
-    if (name !== classInfo.name) changes.name = name;
-    if (semester !== (classInfo.semester ?? null)) changes.semester = semester;
-    if (Object.keys(changes).length === 0) {
+    if (name === classInfo.name) {
       setEditing(false);
       return;
     }
     const saved = await manage.run(async () => {
       await api(`/classes/${classInfo.id}`, {
         method: "PATCH",
-        body: JSON.stringify(changes),
+        body: JSON.stringify({ name }),
       });
       return true;
     });
@@ -1202,11 +1195,6 @@ function ClassWorkspace({ classInfo, onChange }) {
     );
   }
 
-  const semesters = classInfo.semesters ?? [];
-  const heading =
-    semesters.length > 1 && classInfo.semester
-      ? classInfo.semester
-      : classInfo.name;
 
   return (
     <section
@@ -1238,9 +1226,10 @@ function ClassWorkspace({ classInfo, onChange }) {
       )}
 
       {lifecycleDialog === "semester" && (
-        <NewSemesterDialog
+        <SemesterDialog
           classInfo={classInfo}
           onClose={() => setLifecycleDialog(null)}
+          onChanged={onChange}
         />
       )}
 
@@ -1307,22 +1296,6 @@ function ClassWorkspace({ classInfo, onChange }) {
                   }}
                 />
               </label>
-              <label className="cl-rename-semester">
-                Semester
-                <input
-                  type="text"
-                  list="class-rename-semester-options"
-                  value={semesterDraft}
-                  maxLength={30}
-                  placeholder="Fall 2026"
-                  disabled={manage.busy}
-                  onChange={(event) => setSemesterDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") cancelRename();
-                  }}
-                />
-              </label>
-              <SemesterOptions id="class-rename-semester-options" />
               <span className="cl-rename-actions">
                 <button
                   type="submit"
@@ -1343,28 +1316,13 @@ function ClassWorkspace({ classInfo, onChange }) {
             </form>
           ) : (
             <div className="cl-title-row">
-              <h1 id="class-heading">{heading}</h1>
-              {semesters.length > 1 && (
-                <nav className="cl-semester-toggle" aria-label="Semesters">
-                  {semesters.map((item) => (
-                    <Link
-                      key={item.class_id}
-                      to={`/app/classes/${item.class_id}`}
-                      aria-current={
-                        item.class_id === classInfo.id ? "page" : undefined
-                      }
-                    >
-                      {item.semester || "No semester"}
-                    </Link>
-                  ))}
-                </nav>
-              )}
+              <h1 id="class-heading">{classInfo.name}</h1>
               {adminView && !classInfo.archived && (
                 <button
                   type="button"
                   className="cl-edit-name"
-                  aria-label={`Edit class name and semester for ${classInfo.name}`}
-                  title="Edit class name and semester"
+                  aria-label={`Edit class name for ${classInfo.name}`}
+                  title="Edit class name"
                   onClick={() => setEditing(true)}
                 >
                   ✎ Edit

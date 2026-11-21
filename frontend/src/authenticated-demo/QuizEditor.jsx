@@ -1662,7 +1662,7 @@ export function QuizViewer() {
       title: `Move “${quiz.version.title}” to the trash?`,
       message:
         "It leaves the class and can't be edited or hosted. Past sessions " +
-        "and results stay saved. Restore it any time from Classes → Trash.",
+        "and results stay saved. You can restore it from Classes → Trash for 30 days.",
       confirmLabel: "Move to trash",
       cancelLabel: "Keep it",
     });
@@ -1840,7 +1840,8 @@ export function QuizViewer() {
                   Archive quiz
                 </button>
               )}
-              {mine && quiz.class_id && (
+              {/* Only faculty have the Trash page to restore it from. */}
+              {mine && quiz.class_id && account.role === "ADMIN" && (
                 <button
                   type="button"
                   className="ui-danger"

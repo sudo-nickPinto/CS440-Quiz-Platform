@@ -2,6 +2,7 @@ import { useRemembered } from "./remember";
 import { Link, useParams } from "react-router";
 
 import ConfirmDialog from "./ConfirmDialog";
+import OptionsMenu from "./OptionsMenu";
 import RequestError from "./RequestError";
 import { useAction, useApi, useResource } from "./rest";
 import { useConfirm } from "./useConfirm";
@@ -51,11 +52,11 @@ function HistoryList({ endpoint, host, backTo }) {
   // also takes it out of the class's reports and grades.
   async function trashSession(session) {
     const sure = await confirmer.confirm({
-      label: "Delete session",
-      title: `Delete session #${session.session_id}?`,
+      label: "Move to trash",
+      title: `Move session #${session.session_id} to the trash?`,
       message:
         "It leaves this history and the class's reports and grades. You can " +
-        "restore it any time from Classes → Trash.",
+        "restore it from Classes → Trash for 30 days.",
       confirmLabel: "Move to trash",
       cancelLabel: "Keep it",
     });
@@ -111,7 +112,6 @@ function HistoryList({ endpoint, host, backTo }) {
         <span>Session</span>
         <span className="qh-wide">Status</span>
         <span />
-        {host && <span />}
       </div>
 
       {resource.loading && (
@@ -183,32 +183,32 @@ function HistoryList({ endpoint, host, backTo }) {
                     </span>
                   </span>
 
-                  {cancelled ? (
-                    <span className="qh-note">No results</span>
-                  ) : (
-                    <Link
-                      className="qh-go"
-                      to={`/app/results/${host ? "host" : "me"}/${session.session_id}`}
-                      aria-label={`View report for session ${session.session_id}`}
-                    >
-                      <span aria-hidden="true">→</span>
-                    </Link>
-                  )}
-
-                  {host && (
-                    <details className="qh-more">
-                      <summary aria-label={`Options for session ${session.session_id}`}>
-                        ⋯
-                      </summary>
-                      <button
-                        type="button"
-                        disabled={action.busy}
-                        onClick={() => void trashSession(session)}
+                  <div className="qh-end">
+                    {cancelled ? (
+                      <span className="qh-note">No results</span>
+                    ) : (
+                      <Link
+                        className="qh-go"
+                        to={`/app/results/${host ? "host" : "me"}/${session.session_id}`}
+                        aria-label={`View report for session ${session.session_id}`}
                       >
-                        Move to trash
-                      </button>
-                    </details>
-                  )}
+                        <span aria-hidden="true">→</span>
+                      </Link>
+                    )}
+
+                    {host && (
+                      <OptionsMenu className="qh-options">
+                        <button
+                          type="button"
+                          className="ui-danger"
+                          disabled={action.busy}
+                          onClick={() => void trashSession(session)}
+                        >
+                          Move to trash
+                        </button>
+                      </OptionsMenu>
+                    )}
+                  </div>
                 </article>
               );
             })}

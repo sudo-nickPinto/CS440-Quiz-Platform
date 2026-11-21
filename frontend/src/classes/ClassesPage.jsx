@@ -5,10 +5,18 @@ import { Link, useNavigate } from "react-router";
 import { useAction, useApi } from "../authenticated-demo/rest";
 import { useClassesResource } from "./classResources";
 import { ClassCard, ResourceMessage } from "./ClassUI";
-import { SemesterOptions } from "./ClassLifecycle";
-import { semesterFor } from "./semesters";
+import SelectMenu from "./SelectMenu";
+import { groupCourses, semesterChoices, semesterFor } from "./semesters";
 import "./class-lifecycle.css";
 import { useAccount } from "../authenticated-demo/account";
+
+const FILTERS = [
+  { value: "all", label: "All classes" },
+  { value: "active", label: "Active classes" },
+  { value: "managed", label: "Classes I manage" },
+  { value: "member", label: "Classes I participate in" },
+  { value: "archived", label: "Archived classes" },
+];
 
 export default function ClassesPage() {
   const api = useApi();
@@ -38,10 +46,14 @@ export default function ClassesPage() {
     (item) => item.membershipStatus === "REQUESTED",
   );
 
-  const classes = records.filter(
-    (item) =>
-      item.membershipStatus !== "INVITED" &&
-      item.membershipStatus !== "REQUESTED",
+  // One card per course: the semesters of a course you organize share a
+  // card, which opens the newest active semester.
+  const classes = groupCourses(
+    records.filter(
+      (item) =>
+        item.membershipStatus !== "INVITED" &&
+        item.membershipStatus !== "REQUESTED",
+    ),
   );
 
   const visible = classes
@@ -73,7 +85,7 @@ export default function ClassesPage() {
     const created = await action.run(() =>
       api("/classes", {
         method: "POST",
-        body: JSON.stringify({ name: trimmedName, semester: semester.trim() }),
+        body: JSON.stringify({ name: trimmedName, semester }),
       }),
     );
 
@@ -194,19 +206,19 @@ export default function ClassesPage() {
             />
           </label>
 
-          <label className="cl-semester-field">
-            Semester
-            <input
-              type="text"
-              list="class-semester-options"
+          <div className="cl-semester-field">
+            <span aria-hidden="true">Semester</span>
+            <SelectMenu
+              label="Semester"
               value={semester}
-              onChange={(event) => setSemester(event.target.value)}
-              placeholder="Fall 2026"
-              maxLength={30}
+              options={semesterChoices().map((item) => ({
+                value: item,
+                label: item,
+              }))}
+              onChange={setSemester}
               disabled={action.busy}
             />
-          </label>
-          <SemesterOptions id="class-semester-options" />
+          </div>
 
           <button type="submit" disabled={action.busy || !name.trim()}>
             {action.busy ? "Saving…" : "Create class →"}
@@ -332,44 +344,17 @@ export default function ClassesPage() {
           />
         </label>
 
-        <details className="cl-filter">
-          <summary>
-            {
-              {
-                all: "All classes",
-                active: "Active classes",
-                managed: "Classes I manage",
-                member: "Classes I participate in",
-                archived: "Archived classes",
-              }[filter]
-            }
-          </summary>
-          <div className="cl-filter-menu" role="listbox" aria-label="Filter classes">
-            {[
-              ["all", "All classes"],
-              ["active", "Active classes"],
-              ["managed", "Classes I manage"],
-              ["member", "Classes I participate in"],
-              ["archived", "Archived classes"],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                role="option"
-                aria-selected={filter === value}
-                onClick={(event) => {
-                  setFilter(value);
-                  event.currentTarget.closest("details").open = false;
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </details>
+        <SelectMenu
+          label="Show"
+          className="cl-filter"
+          value={filter}
+          options={FILTERS}
+          onChange={setFilter}
+          disabled={!ready}
+        />
 
         {canCreateClass && (
-          <Link className="cl-trash-toggle" to="/app/classes/trash">
+          <Link className="cl-button cl-secondary cl-trash-link" to="/app/classes/trash">
             Trash
           </Link>
         )}

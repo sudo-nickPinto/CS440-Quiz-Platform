@@ -1,31 +1,3 @@
-.qp .qh-more {
-  position: relative;
-}
-
-.qp .qh-more > summary {
-  cursor: pointer;
-  list-style: none;
-  background: transparent;
-  border: 0;
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
-.qp .qh-more > summary::-webkit-details-marker {
-  display: none;
-}
-
-.qp .qh-more button {
-  position: absolute;
-  right: 0;
-  z-index: 2;
-  white-space: nowrap;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.4rem 0.7rem;
-}
-
 .qp .qh {
   padding: clamp(16px, 3vw, 32px);
   background: var(--paper);
@@ -118,46 +90,56 @@
   outline-offset: 2px;
 }
 
-/* Hosting history has one more column: Delete (moves the session to the
-   trash). The base grid is in quizburg-polish.css. */
+/* The last column holds the report arrow and, on Hosting history, the ⋯
+   menu beside it (Move to trash). The base grid is in quizburg-polish.css. */
 .qp .qh.is-host .qh-head,
 .qp .qh.is-host .qh-row {
-  grid-template-columns: 96px minmax(0, 1fr) 160px 84px 96px;
+  grid-template-columns: 96px minmax(0, 1fr) 160px 140px;
 }
 
-.qp .qh .qh-trash {
-  align-self: center;
-  justify-self: center;
-  min-height: 38px;
-  padding: 6px 12px;
-  border: var(--b-thin);
-  background: var(--paper);
-  box-shadow: 2px 2px 0 var(--ink);
-  color: var(--color-danger);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  cursor: pointer;
+.qp .qh-row {
+  position: relative;
 }
 
-.qp .qh .qh-trash:hover:not(:disabled) {
-  background: var(--color-danger-bg);
+.qp .qh-end {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
 }
 
-.qp .qh .qh-trash:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.qp .qh-end .qh-go,
+.qp .qh-end .qh-note {
+  align-self: auto;
+  justify-self: auto;
+}
+
+/* The ⋯ button matches the → button next to it; its menu opens under the
+   row's right edge, above the rows below. */
+.qp .qh-end .ui-row-menu,
+.qp .qh-end .ui-row-menu[open] {
+  display: block;
+  align-self: auto;
+}
+
+.qp .qh-end .ui-row-options {
+  top: calc(100% - 8px);
+  right: 12px;
+  min-width: 200px;
 }
 
 @media (max-width: 640px) {
   .qp .qh.is-host .qh-row {
-    grid-template-columns: 70px minmax(0, 1fr) 66px 80px;
+    grid-template-columns: 70px minmax(0, 1fr) 104px;
   }
 
-  .qp .qh .qh-trash {
-    padding: 6px 8px;
-    font-size: 12px;
+  .qp .qh-end {
+    gap: 8px;
+  }
+
+  .qp .qh-end .ui-row-menu > summary {
+    width: 40px;
+    height: 34px;
   }
 }
 
