@@ -625,12 +625,15 @@ Self-service class departure is disabled. This route always returns `class_self_
 
 ### Semesters, archiving and the trash
 
-- **Semester:** `POST /classes` and `PATCH /classes/{class_id}` take an optional `"semester": "Fall 2026"` (at most 30 characters; blank or `null` means none). `ClassResponse` includes `semester`, `parent_class_id` and `semesters` (every semester of that course the caller can be sent to). `POST /classes/{class_id}/semesters` with `{"semester": "Spring 2027"}` starts the next semester: same course name, new code, the same organizers, and no students or quizzes. A repeated label is `409 semester_exists`.
-- **Archived classes:** a student who was a member can still see the class on `GET /classes` and `GET /classes/{class_id}`, but quizzes, the dashboard, reports and other class content return `403 class_archived`. Organizers can still open it.
+- **Semester:** `POST /classes` and `PATCH /classes/{class_id}` take an optional `"semester"`. It must be a real semester: `Spring`, `Summer` or `Fall` and a year, like `"Fall 2026"` (any other text is `422`; `"fall  2026"` is saved as `"Fall 2026"`). Blank or `null` means none. `ClassResponse` includes `semester`, `parent_class_id` and `semesters`: the semesters of that course the caller organizes (always empty for students). `POST /classes/{class_id}/semesters` with `{"semester": "Spring 2027"}` starts the next semester: same course name, new code, the same organizers, and no students or quizzes.
+  - `409 semester_exists`: the course already has that semester. Semesters in the trash count, because they can be restored, and restoring a class is refused with the same error if its semester was taken in the meantime.
+  - `409 semester_missing`: the class has no semester yet. Set one with `PATCH` before starting a new semester, so every semester of a course has a label.
+  - `409 semester_required`: `PATCH` can't clear the semester of a class whose course has other semesters.
+- **Archived classes:** a student who was a member can still see the class on `GET /classes` and `GET /classes/{class_id}`, but quizzes, the dashboard, reports and other class content return `409 class_archived`, and its sessions leave their `GET /me/sessions/taken`. Organizers can still open it.
 - **`POST /classes/{class_id}/archive` → `200 ClassResponse`:** organizers only. Clears the code and closes joining; reports stay.
 - **`POST /classes/{class_id}/unarchive` → `200 ClassResponse`:** organizers only. The class gets a new code and joining opens again. Unarchiving an active class changes nothing.
 
-Moving something to the trash sets `deleted_at` (migration `0017`). Restoring clears it. After 30 days, or when someone permanently deletes it (`POST /trash/purge`), `purged_at` is set (migration `0019`): it leaves the trash and cannot be restored. The row stays, because old results still point at it. Moving and restoring are idempotent and return `204`. Each trash item includes `expires_at` and `days_left`. `POST /trash/restore` and `POST /trash/purge` take `{ "class_ids": [], "quiz_ids": [], "session_ids": [] }`.
+Moving something to the trash sets `deleted_at` (migration `0017`). Restoring clears it. After 30 days, or when someone permanently deletes it (`POST /trash/purge`), `purged_at` is set (migration `0019`): it leaves the trash and cannot be restored. The row stays, because old results still point at it. Moving and restoring are idempotent and return `204`. Each trash item includes `expires_at` and `days_left`. `POST /trash/restore` and `POST /trash/purge` take `{ "class_ids": [], "quiz_ids": [], "session_ids": [] }` and are all or nothing: if one id can't be restored or deleted (for example `404` for an unknown id), the error is returned and nothing changes. Deleting a class for good also deletes the quizzes and sessions of that class that were in the trash.
 
 | Route | Who | Errors |
 |---|---|---|
@@ -643,6 +646,8 @@ While something is in the trash:
 - a class answers `404 class_not_found` to everyone, its code can't be used to join, and it leaves `GET /classes`;
 - a quiz answers `404 quiz_not_found` and leaves the class's quiz lists, approval queue and approved quizzes;
 - a session leaves `GET /quizzes/{quiz_id}/history`, `GET /me/sessions/taken`, and every class report, export and grade.
+
+A class in the trash takes its sessions out of `GET /me/sessions/taken` too, and its quizzes' `GET /quizzes/{quiz_id}/history` is `404 quiz_not_found`.
 
 #### `GET /trash` → `200 TrashResponse`
 What the caller can restore, newest first: `classes` (classes they organize), `quizzes` (quizzes they own) and `sessions` (sessions they hosted).

@@ -42,7 +42,11 @@ class TrashedSession(BaseModel):
 
 
 class TrashSelection(BaseModel):
-    """Ids to restore or permanently delete together. Unknown ids are skipped."""
+    """Ids to restore or permanently delete together, all or nothing.
+
+    If one id can't be changed (unknown, not yours, already deleted), its
+    error is returned and none of the others change either.
+    """
 
     class_ids: list[int] = []
     quiz_ids: list[int] = []

@@ -21,12 +21,19 @@ Who may move what:
 
 Moving and restoring are idempotent. Something running live can't be moved,
 so a game never ends up in the trash mid-question.
+
+Deleting a class permanently (by hand, or 30 days after it was trashed) also
+deletes the quizzes and sessions of that class that were in the trash, so
+nothing is left behind that points at a class you can't restore.
+
+Bulk restore and delete (/trash/restore, /trash/purge) are all or nothing: if
+one id can't be changed, nothing is.
 """
 
 from datetime import UTC, datetime, timedelta
 from math import ceil
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
@@ -43,6 +50,7 @@ from app.schemas.trash import (
     TrashSelection,
 )
 from app.services.class_authorization import ClassAccess, get_class_membership
+from app.services.classes import check_semester_label, lock_course
 from app.services.quizzes import _latest_editor_version
 
 LIVE_STATUSES = (LiveSessionStatus.LOBBY, LiveSessionStatus.ACTIVE)
@@ -77,9 +85,29 @@ def _stamp(deleted_at: datetime) -> dict:
     }
 
 
+def _purge_class_contents(db: Session, class_id: int, now: datetime) -> None:
+    """A class is gone for good, so its trashed quizzes and sessions go too.
+
+    Otherwise they would stay in the trash asking for a class that can't be
+    restored any more.
+    """
+    for model in (Quiz, LiveSession):
+        db.execute(
+            update(model)
+            .where(
+                model.class_id == class_id,
+                model.deleted_at.is_not(None),
+                model.purged_at.is_(None),
+            )
+            .values(purged_at=now)
+            .execution_options(synchronize_session=False)
+        )
+
+
 def expire_trash(db: Session) -> None:
     """Retire anything that has been in the trash for 30 days."""
     cutoff = _now() - timedelta(days=TRASH_DAYS)
+    now = _now()
     changed = False
     for model in (Class, Quiz, LiveSession):
         rows = db.scalars(
@@ -89,12 +117,20 @@ def expire_trash(db: Session) -> None:
                 model.deleted_at <= cutoff,
             )
         ).all()
-        now = _now()
         for row in rows:
             row.purged_at = now
+            if model is Class:
+                _purge_class_contents(db, row.class_id, now)
             changed = True
     if changed:
         _commit(db, "trash_expire_failed", "Could not expire the trash.")
+
+
+def _check_restorable(row, kind: str) -> None:
+    # Gone for good: deleted by hand, or past its 30 days (expire_trash marks
+    # those on its next run).
+    if row.purged_at is not None or _days_left(row.deleted_at) == 0:
+        raise _gone(kind)
 
 
 def _gone(kind: str) -> APIError:
@@ -122,6 +158,17 @@ def _class_in_trash() -> APIError:
         "class_in_trash",
         "This class is in the trash. Restore the class first.",
     )
+
+
+def _check_parent_class(class_: Class, kind: str, allow_trashed_class: bool) -> None:
+    """A quiz or session can't be restored while its class is in the trash.
+
+    Once the class is deleted for good, the quiz or session is gone too.
+    """
+    if class_.purged_at is not None:
+        raise _gone(kind)
+    if not allow_trashed_class and class_.deleted_at is not None:
+        raise _class_in_trash()
 
 
 def _has_live_session(db: Session, *conditions) -> bool:
@@ -173,26 +220,34 @@ def trash_class(db: Session, account: CurrentAccount, class_id: int) -> None:
     _commit(db, "class_trash_failed", "Could not move the class to the trash.")
 
 
-def restore_class(db: Session, account: CurrentAccount, class_id: int) -> None:
+def _restore_class(db: Session, account: CurrentAccount, class_id: int) -> None:
+    # The course lock comes before the class row lock (see lock_course).
+    lock_course(db, class_id)
     class_ = _require_organizer(db, account, class_id)
-    if class_.purged_at is not None:
-        raise _gone("class")
     if class_.deleted_at is None:
         return
-    if _days_left(class_.deleted_at) == 0:
-        class_.purged_at = _now()
-        _commit(db, "class_restore_failed", "Could not restore the class.")
-        raise _gone("class")
+    _check_restorable(class_, "class")
+    if class_.semester is not None:
+        # While it was in the trash, the course may have started the same
+        # semester again. Two "Fall 2026" classes in one course can't both
+        # exist.
+        check_semester_label(db, class_, class_.semester)
     class_.deleted_at = None
-    _commit(db, "class_restore_failed", "Could not restore the class.")
 
 
-def purge_class(db: Session, account: CurrentAccount, class_id: int) -> None:
+def _purge_class(db: Session, account: CurrentAccount, class_id: int) -> None:
     class_ = _require_organizer(db, account, class_id)
     if class_.deleted_at is None or class_.purged_at is not None:
         raise _gone("class")
-    class_.purged_at = _now()
-    _commit(db, "class_purge_failed", "Could not delete the class permanently.")
+    now = _now()
+    class_.purged_at = now
+    _purge_class_contents(db, class_id, now)
+
+
+def restore_class(db: Session, account: CurrentAccount, class_id: int) -> None:
+    expire_trash(db)
+    _restore_class(db, account, class_id)
+    _commit(db, "class_restore_failed", "Could not restore the class.")
 
 
 # -- Quizzes ---------------------------------------------------------------
@@ -219,11 +274,9 @@ def _require_quiz_owner(
         membership = get_class_membership(db, quiz.class_id, account.account_id)
         if membership is None or membership.status != MembershipStatus.ACTIVE:
             raise APIError(404, "quiz_not_found", "Quiz not found.")
-        if (
-            not allow_trashed_class
-            and db.get(Class, quiz.class_id).deleted_at is not None
-        ):
-            raise _class_in_trash()
+        _check_parent_class(
+            db.get(Class, quiz.class_id), "quiz", allow_trashed_class
+        )
     return quiz
 
 
@@ -244,26 +297,25 @@ def trash_quiz(db: Session, account: CurrentAccount, quiz_id: int) -> None:
     _commit(db, "quiz_trash_failed", "Could not move the quiz to the trash.")
 
 
-def restore_quiz(db: Session, account: CurrentAccount, quiz_id: int) -> None:
+def _restore_quiz(db: Session, account: CurrentAccount, quiz_id: int) -> None:
     quiz = _require_quiz_owner(db, account, quiz_id)
-    if quiz.purged_at is not None:
-        raise _gone("quiz")
     if quiz.deleted_at is None:
         return
-    if _days_left(quiz.deleted_at) == 0:
-        quiz.purged_at = _now()
-        _commit(db, "quiz_restore_failed", "Could not restore the quiz.")
-        raise _gone("quiz")
+    _check_restorable(quiz, "quiz")
     quiz.deleted_at = None
-    _commit(db, "quiz_restore_failed", "Could not restore the quiz.")
 
 
-def purge_quiz(db: Session, account: CurrentAccount, quiz_id: int) -> None:
+def _purge_quiz(db: Session, account: CurrentAccount, quiz_id: int) -> None:
     quiz = _require_quiz_owner(db, account, quiz_id, allow_trashed_class=True)
     if quiz.deleted_at is None or quiz.purged_at is not None:
         raise _gone("quiz")
     quiz.purged_at = _now()
-    _commit(db, "quiz_purge_failed", "Could not delete the quiz permanently.")
+
+
+def restore_quiz(db: Session, account: CurrentAccount, quiz_id: int) -> None:
+    expire_trash(db)
+    _restore_quiz(db, account, quiz_id)
+    _commit(db, "quiz_restore_failed", "Could not restore the quiz.")
 
 
 # -- Sessions --------------------------------------------------------------
@@ -280,6 +332,7 @@ def _require_session_host(
         select(LiveSession)
         .where(LiveSession.session_id == session_id)
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if session is None or session.host_id != account.account_id:
         raise APIError(404, "session_not_found", "Session not found.")
@@ -288,11 +341,9 @@ def _require_session_host(
         membership = get_class_membership(db, session.class_id, account.account_id)
         if membership is None or membership.status != MembershipStatus.ACTIVE:
             raise APIError(404, "session_not_found", "Session not found.")
-        if (
-            not allow_trashed_class
-            and db.get(Class, session.class_id).deleted_at is not None
-        ):
-            raise _class_in_trash()
+        _check_parent_class(
+            db.get(Class, session.class_id), "session", allow_trashed_class
+        )
     return session
 
 
@@ -310,50 +361,76 @@ def trash_session(db: Session, account: CurrentAccount, session_id: int) -> None
     _commit(db, "session_trash_failed", "Could not move the session to the trash.")
 
 
-def restore_session(db: Session, account: CurrentAccount, session_id: int) -> None:
+def _restore_session(db: Session, account: CurrentAccount, session_id: int) -> None:
     session = _require_session_host(db, account, session_id)
-    if session.purged_at is not None:
-        raise _gone("session")
     if session.deleted_at is None:
         return
-    if _days_left(session.deleted_at) == 0:
-        session.purged_at = _now()
-        _commit(db, "session_restore_failed", "Could not restore the session.")
-        raise _gone("session")
+    _check_restorable(session, "session")
     session.deleted_at = None
-    _commit(db, "session_restore_failed", "Could not restore the session.")
 
 
-def purge_session(db: Session, account: CurrentAccount, session_id: int) -> None:
+def _purge_session(db: Session, account: CurrentAccount, session_id: int) -> None:
     session = _require_session_host(
         db, account, session_id, allow_trashed_class=True
     )
     if session.deleted_at is None or session.purged_at is not None:
         raise _gone("session")
     session.purged_at = _now()
-    _commit(db, "session_purge_failed", "Could not delete the session permanently.")
+
+
+def restore_session(db: Session, account: CurrentAccount, session_id: int) -> None:
+    expire_trash(db)
+    _restore_session(db, account, session_id)
+    _commit(db, "session_restore_failed", "Could not restore the session.")
+
+
+def _all_or_nothing(db: Session, steps, code: str, message: str) -> None:
+    """Run every step in one transaction: one bad id and nothing changes."""
+    try:
+        for step in steps:
+            step()
+    except Exception:
+        db.rollback()
+        raise
+    _commit(db, code, message)
 
 
 def restore_selected(
     db: Session, account: CurrentAccount, selection: TrashSelection
 ) -> None:
-    for class_id in selection.class_ids:
-        restore_class(db, account, class_id)
-    for quiz_id in selection.quiz_ids:
-        restore_quiz(db, account, quiz_id)
-    for session_id in selection.session_ids:
-        restore_session(db, account, session_id)
+    expire_trash(db)
+    # Classes first, so a quiz or session selected with its class can be
+    # restored in the same request.
+    _all_or_nothing(
+        db,
+        [lambda i=i: _restore_class(db, account, i) for i in selection.class_ids]
+        + [lambda i=i: _restore_quiz(db, account, i) for i in selection.quiz_ids]
+        + [
+            lambda i=i: _restore_session(db, account, i)
+            for i in selection.session_ids
+        ],
+        "trash_restore_failed",
+        "Could not restore the selected items.",
+    )
 
 
 def purge_selected(
     db: Session, account: CurrentAccount, selection: TrashSelection
 ) -> None:
-    for class_id in selection.class_ids:
-        purge_class(db, account, class_id)
-    for quiz_id in selection.quiz_ids:
-        purge_quiz(db, account, quiz_id)
-    for session_id in selection.session_ids:
-        purge_session(db, account, session_id)
+    expire_trash(db)
+    # Quizzes and sessions first: deleting a class also deletes its trashed
+    # quizzes and sessions, and they may be in the same selection.
+    _all_or_nothing(
+        db,
+        [lambda i=i: _purge_quiz(db, account, i) for i in selection.quiz_ids]
+        + [
+            lambda i=i: _purge_session(db, account, i)
+            for i in selection.session_ids
+        ]
+        + [lambda i=i: _purge_class(db, account, i) for i in selection.class_ids],
+        "trash_purge_failed",
+        "Could not delete the selected items permanently.",
+    )
 
 
 # -- Listing ---------------------------------------------------------------
@@ -402,6 +479,8 @@ def _trashed_quizzes(db: Session, account: CurrentAccount) -> list[TrashedQuiz]:
     items = []
     for quiz, class_ in rows:
         if class_ is not None:
+            if class_.purged_at is not None:
+                continue
             membership = get_class_membership(db, class_.class_id, account.account_id)
             if membership is None or membership.status != MembershipStatus.ACTIVE:
                 continue
@@ -433,6 +512,8 @@ def _trashed_sessions(db: Session, account: CurrentAccount) -> list[TrashedSessi
     items = []
     for session, quiz_id, title, class_ in rows:
         if class_ is not None:
+            if class_.purged_at is not None:
+                continue
             membership = get_class_membership(db, class_.class_id, account.account_id)
             if membership is None or membership.status != MembershipStatus.ACTIVE:
                 continue

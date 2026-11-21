@@ -85,16 +85,30 @@ def _format_join_code(code: str | None) -> str | None:
     return f"{code[:4]}-{code[4:]}"
 
 
-def _family_links(db: Session, classes: list[Class]) -> dict[int, list[ClassSemester]]:
-    """Every semester of each course, including the class itself."""
-    if not classes:
+def _family_links(
+    db: Session,
+    account: CurrentAccount,
+    classes: list[Class],
+) -> dict[int, list[ClassSemester]]:
+    """The semesters of each course that the caller organizes.
+
+    Switching semesters is an organizer tool, so students get an empty list,
+    and an organizer never learns about a semester they aren't part of.
+    One query for any number of classes.
+    """
+    if not classes or not account.is_admin:
+        # Only faculty can be organizers (ClassAccess.is_organizer).
         return {}
     roots = {class_.parent_class_id or class_.class_id for class_ in classes}
     rows = db.scalars(
         select(Class)
+        .join(ClassMembership, ClassMembership.class_id == Class.class_id)
         .where(
             Class.deleted_at.is_(None),
             or_(Class.class_id.in_(roots), Class.parent_class_id.in_(roots)),
+            ClassMembership.account_id == account.account_id,
+            ClassMembership.status == MembershipStatus.ACTIVE,
+            ClassMembership.role == ClassRole.ORGANIZER,
         )
         .order_by(Class.created_at, Class.class_id)
     ).all()
@@ -151,8 +165,12 @@ def _to_response(
     )
 
 
-def _access_response(db: Session, access: ClassAccess) -> ClassResponse:
-    links = _family_links(db, [access.class_])
+def _access_response(
+    db: Session,
+    account: CurrentAccount,
+    access: ClassAccess,
+) -> ClassResponse:
+    links = _family_links(db, account, [access.class_])
     return _to_response(
         access.class_,
         access.membership,
@@ -199,7 +217,7 @@ def create_class(
     db.add(class_)
     _commit(db, "class_create_failed", "Could not create the class.")
 
-    links = _family_links(db, [class_])
+    links = _family_links(db, account, [class_])
     return _to_response(class_, membership, links.get(class_.class_id, []))
 
 
@@ -229,7 +247,7 @@ def list_classes(
         .order_by(Class.created_at.desc(), Class.class_id.desc())
     ).all()
 
-    links = _family_links(db, [class_ for class_, _ in rows])
+    links = _family_links(db, account, [class_ for class_, _ in rows])
     return [
         _to_response(class_, membership, links.get(class_.class_id, []))
         for class_, membership in rows
@@ -241,7 +259,7 @@ def get_class(
     account: CurrentAccount,
     class_id: int,
 ) -> ClassResponse:
-    return _access_response(db, require_class_member(db, account, class_id))
+    return _access_response(db, account, require_class_member(db, account, class_id))
 
 
 def update_class(
@@ -255,14 +273,16 @@ def update_class(
     if class_.archived_at is not None and payload.joining_open is True:
         raise APIError(409, "class_archived", "An archived class cannot be reopened.")
 
+    if "semester" in payload.model_fields_set:
+        # Before any other change, so the course lock is taken first.
+        check_semester_label(db, class_, payload.semester)
+        class_.semester = payload.semester
     if "name" in payload.model_fields_set:
         class_.name = payload.name
-    if "semester" in payload.model_fields_set:
-        class_.semester = payload.semester
     if "joining_open" in payload.model_fields_set:
         class_.joining_open = payload.joining_open
     _commit(db, "class_update_failed", "Could not update the class.")
-    return _access_response(db, access)
+    return _access_response(db, account, access)
 
 
 def rotate_class_code(
@@ -290,7 +310,7 @@ def rotate_class_code(
         "class_code_update_failed",
         "Could not update the class code.",
     )
-    return _access_response(db, access)
+    return _access_response(db, account, access)
 
 
 def archive_class(
@@ -301,13 +321,13 @@ def archive_class(
     access = require_class_organizer(db, account, class_id)
     class_ = access.class_
     if class_.archived_at is not None:
-        return _access_response(db, access)
+        return _access_response(db, account, access)
 
     class_.archived_at = _utc_now_milliseconds()
     class_.joining_open = False
     class_.join_code = None
     _commit(db, "class_archive_failed", "Could not archive the class.")
-    return _access_response(db, access)
+    return _access_response(db, account, access)
 
 
 def unarchive_class(
@@ -323,7 +343,7 @@ def unarchive_class(
     access = require_class_organizer(db, account, class_id)
     class_ = access.class_
     if class_.archived_at is None:
-        return _access_response(db, access)
+        return _access_response(db, account, access)
 
     class_.join_code = _generate_unique_code(
         db,
@@ -333,7 +353,81 @@ def unarchive_class(
     class_.joining_open = True
     class_.archived_at = None
     _commit(db, "class_unarchive_failed", "Could not unarchive the class.")
-    return _access_response(db, access)
+    return _access_response(db, account, access)
+
+
+def lock_course(db: Session, class_id: int) -> None:
+    """Lock the first class of the course that `class_id` belongs to.
+
+    Every change to a course's semesters takes this lock first, before any
+    other class row, so two requests can't both add the same semester and
+    can't deadlock each other.
+    """
+    parent_id = db.scalar(select(Class.parent_class_id).where(Class.class_id == class_id))
+    db.execute(
+        select(Class.class_id)
+        .where(Class.class_id == (parent_id or class_id))
+        .with_for_update()
+    )
+
+
+def _lock_family(db: Session, class_: Class) -> list[Class]:
+    """Lock the course and return all of its semesters that still exist.
+
+    Semesters in the trash count, because they can be restored. The rows are
+    read with FOR UPDATE so MySQL returns the newest data, not the snapshot
+    this transaction started with.
+    """
+    root_id = class_.parent_class_id or class_.class_id
+    lock_course(db, class_.class_id)
+    return list(
+        db.scalars(
+            select(Class)
+            .where(
+                Class.purged_at.is_(None),
+                or_(Class.class_id == root_id, Class.parent_class_id == root_id),
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+
+
+def _refuse_duplicate(
+    siblings: list[Class],
+    class_id: int | None,
+    label: str,
+) -> None:
+    wanted = label.casefold()
+    if any(
+        row.class_id != class_id and (row.semester or "").casefold() == wanted
+        for row in siblings
+    ):
+        raise APIError(
+            409,
+            "semester_exists",
+            "This course already has that semester.",
+        )
+
+
+def check_semester_label(db: Session, class_: Class, label: str | None) -> None:
+    """Refuse a label that would break the course's semesters.
+
+    Used when a class's semester changes and when a class comes back from
+    the trash: no two semesters of a course share a label, and a course with
+    more than one semester has a label on every one of them.
+    """
+    siblings = _lock_family(db, class_)
+    others = [row for row in siblings if row.class_id != class_.class_id]
+    if label is None:
+        if others:
+            raise APIError(
+                409,
+                "semester_required",
+                "A course with more than one semester needs a semester on each class.",
+            )
+        return
+    _refuse_duplicate(others, class_.class_id, label)
 
 
 def create_semester(
@@ -350,19 +444,17 @@ def create_semester(
     access = require_class_organizer(db, account, class_id)
     source = access.class_
     root_id = source.parent_class_id or source.class_id
-    label = payload.semester.casefold()
-    siblings = db.scalars(
-        select(Class).where(
-            Class.deleted_at.is_(None),
-            or_(Class.class_id == root_id, Class.parent_class_id == root_id),
-        )
-    ).all()
-    if any((row.semester or "").strip().casefold() == label for row in siblings):
+    siblings = _lock_family(db, source)
+    if any(row.semester is None for row in siblings):
+        # Every semester of a course has a label, so the semester switcher
+        # never shows "No semester". Old classes made before semesters
+        # existed get one with PATCH /classes/{id} first.
         raise APIError(
             409,
-            "semester_exists",
-            "This course already has that semester.",
+            "semester_missing",
+            "Set this class's semester before starting a new one.",
         )
+    _refuse_duplicate(siblings, None, payload.semester)
 
     organizers = db.scalars(
         select(ClassMembership).where(
@@ -404,7 +496,7 @@ def create_semester(
     membership = next(
         row for row in created.memberships if row.account_id == account.account_id
     )
-    links = _family_links(db, [created])
+    links = _family_links(db, account, [created])
     return _to_response(created, membership, links.get(created.class_id, []))
 
 
@@ -458,7 +550,7 @@ def join_class(
         )
     if membership is not None and membership.status == MembershipStatus.REQUESTED:
         # Asking twice changes nothing; the request is still waiting.
-        links = _family_links(db, [class_])
+        links = _family_links(db, account, [class_])
         return _to_response(class_, membership, links.get(class_.class_id, []))
 
     # Using the code is a request an organizer approves (Approvals ->
@@ -514,7 +606,7 @@ def join_class(
     except SQLAlchemyError as exc:
         db.rollback()
         raise APIError(500, "class_join_failed", "Could not join the class.") from exc
-    links = _family_links(db, [class_])
+    links = _family_links(db, account, [class_])
     return _to_response(class_, membership, links.get(class_.class_id, []))
 
 

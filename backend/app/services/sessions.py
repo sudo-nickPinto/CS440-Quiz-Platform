@@ -102,6 +102,23 @@ def _participant_response(
     )
 
 
+def _lock_hostable_quiz(db: Session, class_id: int, quiz_id: int) -> Quiz:
+    """Lock the quiz like trash_quiz does.
+
+    Moving a quiz to the trash and hosting it then wait for each other, so a
+    live session never starts on a trashed quiz.
+    """
+    quiz = db.scalar(
+        select(Quiz)
+        .where(Quiz.quiz_id == quiz_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if quiz is None or quiz.class_id != class_id or quiz.deleted_at is not None:
+        raise APIError(404, "quiz_not_found", "Quiz not found.")
+    return quiz
+
+
 def create_session(
     db: Session,
     account: CurrentAccount,
@@ -119,9 +136,7 @@ def create_session(
     if access.class_.archived_at is not None:
         raise PROBLEMS["class_archived"].error()
 
-    quiz = db.get(Quiz, quiz_id)
-    if quiz is None or quiz.class_id != class_id or quiz.deleted_at is not None:
-        raise APIError(404, "quiz_not_found", "Quiz not found.")
+    quiz = _lock_hostable_quiz(db, class_id, quiz_id)
 
     # The same checks drive the Host button (QuizResponse.hosting), so the
     # button and this endpoint never disagree. Pending, rejected, withdrawn
@@ -134,7 +149,10 @@ def create_session(
         db, class_id, check.version.quiz_version_id
     )
 
-    for _ in range(JOIN_CODE_ATTEMPTS):
+    for attempt in range(JOIN_CODE_ATTEMPTS):
+        if attempt:
+            # The rollback after a join-code clash released the quiz lock.
+            _lock_hostable_quiz(db, class_id, quiz_id)
         join_code = _generate_join_code()
         if _active_session_for_code(db, join_code) is not None:
             continue

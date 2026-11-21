@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -9,11 +10,27 @@ class ClassRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+SEMESTER_PATTERN = re.compile(r"(spring|summer|fall)\s+(\d{4})", re.IGNORECASE)
+
+
+def semester_label(value):
+    """A real semester such as "Fall 2026", written the same way every time.
+
+    The app only offers Spring, Summer and Fall, so free text is refused.
+    """
+    if not isinstance(value, str):
+        return value
+    match = SEMESTER_PATTERN.fullmatch(value.strip())
+    if match is None or not 2000 <= int(match.group(2)) <= 2100:
+        raise ValueError("Pick a semester such as Fall 2026.")
+    return f"{match.group(1).capitalize()} {match.group(2)}"
+
+
 def _blank_to_none(value):
-    # "Fall 2026" is optional; an empty box means no semester.
+    # The semester is optional on a class; an empty box means no semester.
     if isinstance(value, str):
         value = value.strip()
-        return value or None
+        return semester_label(value) if value else None
     return value
 
 
@@ -65,7 +82,7 @@ class ClassSemesterCreate(ClassRequestModel):
     @field_validator("semester", mode="before")
     @classmethod
     def normalize_semester(cls, value):
-        return value.strip() if isinstance(value, str) else value
+        return semester_label(value)
 
 
 class ClassSemester(BaseModel):

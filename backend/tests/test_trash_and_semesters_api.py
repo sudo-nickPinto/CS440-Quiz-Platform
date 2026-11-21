@@ -602,3 +602,247 @@ def test_organizer_can_delete_a_trashed_class_permanently(lifecycle) -> None:
     restore = client.post(f"/classes/{class_id}/restore")
     assert restore.status_code == 404
     assert error_code(restore) == "class_not_found"
+
+
+# -- Review fixes (#171) ------------------------------------------------------
+
+
+def _set(client: TestClient, model, row_id: int, **values) -> None:
+    with client.app.state.database.session_factory() as db:
+        row = db.get(model, row_id)
+        for name, value in values.items():
+            setattr(row, name, value)
+        db.commit()
+
+
+def test_bulk_purge_changes_nothing_when_one_id_is_bad(lifecycle) -> None:
+    client, _, class_id = lifecycle
+    quiz_id = create_quiz(client, class_id)
+    assert client.post(f"/quizzes/{quiz_id}/trash").status_code == 204
+    assert client.post(f"/classes/{class_id}/trash").status_code == 204
+
+    bad = client.post(
+        "/trash/purge", json={"class_ids": [class_id], "quiz_ids": [quiz_id, 999]}
+    )
+
+    assert bad.status_code == 404
+    trash = client.get("/trash").json()
+    assert [row["class_id"] for row in trash["classes"]] == [class_id]
+    assert [row["quiz_id"] for row in trash["quizzes"]] == [quiz_id]
+    # The same request without the bad id works, so a retry isn't stuck.
+    good = client.post(
+        "/trash/purge", json={"class_ids": [class_id], "quiz_ids": [quiz_id]}
+    )
+    assert good.status_code == 204, good.json()
+    assert client.get("/trash").json() == {"classes": [], "quizzes": [], "sessions": []}
+
+
+def test_bulk_restore_changes_nothing_when_one_id_is_bad(lifecycle) -> None:
+    client, identities, class_id = lifecycle
+    first = create_quiz(client, class_id, "First")
+    second = create_quiz(client, class_id, "Second")
+    for quiz_id in (first, second):
+        assert client.post(f"/quizzes/{quiz_id}/trash").status_code == 204
+    act_as(client, identities["coprof"])
+    others = create_quiz(client, class_id, "Not yours")
+    assert client.post(f"/quizzes/{others}/trash").status_code == 204
+    act_as(client, identities["prof"])
+
+    bad = client.post("/trash/restore", json={"quiz_ids": [first, others, second]})
+
+    assert bad.status_code == 404
+    assert {row["quiz_id"] for row in client.get("/trash").json()["quizzes"]} == {
+        first,
+        second,
+    }
+
+
+def test_restoring_a_class_and_its_quiz_together_works(lifecycle) -> None:
+    client, _, class_id = lifecycle
+    quiz_id = create_quiz(client, class_id)
+    assert client.post(f"/quizzes/{quiz_id}/trash").status_code == 204
+    assert client.post(f"/classes/{class_id}/trash").status_code == 204
+
+    response = client.post(
+        "/trash/restore", json={"class_ids": [class_id], "quiz_ids": [quiz_id]}
+    )
+
+    assert response.status_code == 204, response.json()
+    assert client.get(f"/quizzes/{quiz_id}").status_code == 200
+
+
+def test_deleting_a_class_for_good_takes_its_trashed_items_with_it(lifecycle) -> None:
+    client, identities, class_id = lifecycle
+    quiz_id = create_quiz(client, class_id)
+    session_id = add_session(client, quiz_id, identities["prof"], class_id, {})
+    assert client.post(f"/quizzes/{quiz_id}/trash").status_code == 204
+    assert client.post(f"/sessions/{session_id}/trash").status_code == 204
+    assert client.post(f"/classes/{class_id}/trash").status_code == 204
+
+    assert client.post("/trash/purge", json={"class_ids": [class_id]}).status_code == 204
+
+    assert client.get("/trash").json() == {"classes": [], "quizzes": [], "sessions": []}
+    quiz = client.post(f"/quizzes/{quiz_id}/restore")
+    session = client.post(f"/sessions/{session_id}/restore")
+    assert (quiz.status_code, error_code(quiz)) == (404, "quiz_not_found")
+    assert (session.status_code, error_code(session)) == (404, "session_not_found")
+
+
+def test_items_of_an_expired_class_leave_the_trash_too(lifecycle) -> None:
+    client, _, class_id = lifecycle
+    quiz_id = create_quiz(client, class_id)
+    assert client.post(f"/quizzes/{quiz_id}/trash").status_code == 204
+    assert client.post(f"/classes/{class_id}/trash").status_code == 204
+    old = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=31)
+    _set(client, Class, class_id, deleted_at=old)
+
+    assert client.get("/trash").json()["quizzes"] == []
+    assert client.post(f"/quizzes/{quiz_id}/restore").status_code == 404
+
+
+def test_a_quiz_left_behind_by_an_older_purge_is_not_stuck(lifecycle) -> None:
+    """Data from before the purge also took the class's trashed items."""
+    client, _, class_id = lifecycle
+    quiz_id = create_quiz(client, class_id)
+    assert client.post(f"/quizzes/{quiz_id}/trash").status_code == 204
+    now = datetime.now(UTC).replace(tzinfo=None)
+    _set(client, Class, class_id, deleted_at=now, purged_at=now)
+
+    assert client.get("/trash").json()["quizzes"] == []
+    restore = client.post(f"/quizzes/{quiz_id}/restore")
+    assert (restore.status_code, error_code(restore)) == (404, "quiz_not_found")
+
+
+def test_trashed_class_hides_its_sessions_from_every_history(lifecycle) -> None:
+    client, identities, class_id = lifecycle
+    quiz_id = create_quiz(client, class_id)
+    add_session(client, quiz_id, identities["prof"], class_id, {identities["amy"]: 900})
+    act_as(client, identities["amy"])
+    assert len(client.get("/me/sessions/taken").json()["items"]) == 1
+    act_as(client, identities["prof"])
+    assert client.post(f"/classes/{class_id}/trash").status_code == 204
+
+    hosting = client.get(f"/quizzes/{quiz_id}/history")
+    act_as(client, identities["amy"])
+    taken = client.get("/me/sessions/taken").json()["items"]
+
+    assert (hosting.status_code, error_code(hosting)) == (404, "quiz_not_found")
+    assert taken == []
+
+
+def test_archived_class_sessions_leave_student_history_only(lifecycle) -> None:
+    client, identities, class_id = lifecycle
+    quiz_id = create_quiz(client, class_id)
+    add_session(client, quiz_id, identities["prof"], class_id, {identities["amy"]: 900})
+    assert client.post(f"/classes/{class_id}/archive").status_code == 200
+
+    hosting = client.get(f"/quizzes/{quiz_id}/history").json()["items"]
+    act_as(client, identities["amy"])
+    taken = client.get("/me/sessions/taken").json()["items"]
+
+    # Students can't open an archived class's sessions, so they aren't listed.
+    assert taken == []
+    assert len(hosting) == 1
+
+
+def test_only_organizers_get_the_list_of_semesters(lifecycle) -> None:
+    client, identities, class_id = lifecycle
+    spring = client.post(
+        f"/classes/{class_id}/semesters", json={"semester": "Spring 2027"}
+    ).json()["class_id"]
+    # Stranger organizes only the new semester.
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            ClassMembership(
+                class_id=spring,
+                account_id=identities["stranger"].account_id,
+                role=ClassRole.ORGANIZER,
+                joined_via=JoinedVia.INVITE,
+            )
+        )
+        db.commit()
+
+    act_as(client, identities["amy"])
+    student = client.get(f"/classes/{class_id}").json()["semesters"]
+    act_as(client, identities["coprof"])
+    coprof = client.get(f"/classes/{class_id}").json()["semesters"]
+    act_as(client, identities["stranger"])
+    stranger = client.get(f"/classes/{spring}").json()["semesters"]
+
+    assert student == []
+    assert {row["class_id"] for row in coprof} == {class_id, spring}
+    assert [row["class_id"] for row in stranger] == [spring]
+
+
+def test_a_trashed_semester_still_blocks_its_label(lifecycle) -> None:
+    client, _, class_id = lifecycle
+    spring = client.post(
+        f"/classes/{class_id}/semesters", json={"semester": "Spring 2027"}
+    ).json()["class_id"]
+    assert client.post(f"/classes/{spring}/trash").status_code == 204
+
+    again = client.post(f"/classes/{class_id}/semesters", json={"semester": "Spring 2027"})
+    renamed = client.patch(f"/classes/{class_id}", json={"semester": "Spring 2027"})
+
+    assert (again.status_code, error_code(again)) == (409, "semester_exists")
+    assert (renamed.status_code, error_code(renamed)) == (409, "semester_exists")
+
+
+def test_restore_refuses_a_semester_the_course_already_has(lifecycle) -> None:
+    client, _, class_id = lifecycle
+    spring = client.post(
+        f"/classes/{class_id}/semesters", json={"semester": "Spring 2027"}
+    ).json()["class_id"]
+    assert client.post(f"/classes/{spring}/trash").status_code == 204
+    # A duplicate made before the label check counted trashed semesters.
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            Class(
+                name="CS 440",
+                semester="Spring 2027",
+                parent_class_id=class_id,
+                created_by_id=db.get(Class, class_id).created_by_id,
+            )
+        )
+        db.commit()
+
+    response = client.post(f"/classes/{spring}/restore")
+
+    assert (response.status_code, error_code(response)) == (409, "semester_exists")
+    assert [row["class_id"] for row in client.get("/trash").json()["classes"]] == [spring]
+
+
+def test_every_semester_of_a_course_has_a_label(lifecycle) -> None:
+    client, _, class_id = lifecycle
+    old = client.post("/classes", json={"name": "CS 216"}).json()["class_id"]
+
+    unlabelled = client.post(f"/classes/{old}/semesters", json={"semester": "Spring 2027"})
+    client.patch(f"/classes/{old}", json={"semester": "Fall 2026"})
+    labelled = client.post(f"/classes/{old}/semesters", json={"semester": "Spring 2027"})
+    cleared = client.patch(f"/classes/{old}", json={"semester": None})
+
+    assert (unlabelled.status_code, error_code(unlabelled)) == (409, "semester_missing")
+    assert labelled.status_code == 201
+    assert (cleared.status_code, error_code(cleared)) == (409, "semester_required")
+
+
+@pytest.mark.parametrize("label", ["Winter 2027", "Next year", "Fall 27", "Fall 3000"])
+def test_semester_must_be_a_real_semester(lifecycle, label) -> None:
+    client, _, class_id = lifecycle
+
+    created = client.post("/classes", json={"name": "CS 111", "semester": label})
+    new_semester = client.post(f"/classes/{class_id}/semesters", json={"semester": label})
+    changed = client.patch(f"/classes/{class_id}", json={"semester": label})
+
+    assert created.status_code == 422
+    assert new_semester.status_code == 422
+    assert changed.status_code == 422
+
+
+def test_semester_is_written_the_same_way_every_time(lifecycle) -> None:
+    client, _, class_id = lifecycle
+
+    response = client.post(f"/classes/{class_id}/semesters", json={"semester": " fALL  2027 "})
+
+    assert response.status_code == 201
+    assert response.json()["semester"] == "Fall 2027"
