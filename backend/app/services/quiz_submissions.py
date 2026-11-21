@@ -100,18 +100,22 @@ def _require_published_current_version(
             "quiz_version_not_published",
             "Only a published, non-archived quiz version can be submitted.",
         )
-    newer_published = db.scalar(
-        select(QuizVersion.quiz_version_id).where(
+    # The quiz row is already locked. Use a locking read so MySQL sees edits
+    # that committed while this transaction was waiting for that row.
+    newer_version = db.scalar(
+        select(QuizVersion.quiz_version_id)
+        .where(
             QuizVersion.quiz_id == version.quiz_id,
-            QuizVersion.published_at.is_not(None),
             QuizVersion.version_number > version.version_number,
         )
+        .limit(1)
+        .with_for_update(read=True)
     )
-    if newer_published is not None:
+    if newer_version is not None:
         raise APIError(
             409,
             "quiz_version_stale",
-            "A newer published version of this quiz is available.",
+            "A newer version of this quiz has been saved.",
         )
 
 
@@ -125,11 +129,15 @@ def create_quiz_submission(
     class_id: int,
     payload: QuizSubmissionCreate,
 ) -> QuizSubmissionResponse:
+    from app.services.quizzes import _lock_class_quiz_for_update
+
     access = require_class_member(db, account, class_id)
     _require_unarchived_class(access.class_)
     version, quiz = _load_visible_version(
         db, account, class_id, payload.quiz_version_id
     )
+    quiz = _lock_class_quiz_for_update(db, class_id, quiz.quiz_id)
+    db.refresh(version, with_for_update=True)
     _require_published_current_version(db, class_id, version, quiz)
 
     submission = QuizSubmission(
@@ -201,6 +209,21 @@ def _load_visible_submission(
     return submission
 
 
+def _lock_submission_quiz(db: Session, submission: QuizSubmission) -> Quiz:
+    from app.services.quizzes import _lock_class_quiz_for_update
+
+    quiz_id = db.scalar(
+        select(QuizVersion.quiz_id).where(
+            QuizVersion.quiz_version_id == submission.quiz_version_id
+        )
+    )
+    if quiz_id is None:
+        raise APIError(404, "quiz_version_not_found", "Quiz version not found.")
+    quiz = _lock_class_quiz_for_update(db, submission.class_id, quiz_id)
+    db.refresh(submission, with_for_update=True)
+    return quiz
+
+
 def _submitter_remains_eligible(
     db: Session,
     submission: QuizSubmission,
@@ -240,6 +263,7 @@ def decide_quiz_submission(
             "not_class_organizer",
             "Only an active faculty organizer can decide submissions.",
         )
+    quiz = _lock_submission_quiz(db, submission)
     if submission.status != SubmissionStatus.PENDING:
         raise APIError(
             409,
@@ -249,10 +273,9 @@ def decide_quiz_submission(
 
     if payload.status == SubmissionStatus.APPROVED:
         _require_unarchived_class(access.class_)
-        row = _version_and_quiz(db, submission.quiz_version_id)
-        if row is None:
+        version = db.get(QuizVersion, submission.quiz_version_id, with_for_update=True)
+        if version is None:
             raise APIError(404, "quiz_version_not_found", "Quiz version not found.")
-        version, quiz = row
         _require_published_current_version(db, class_id, version, quiz)
         if not _submitter_remains_eligible(db, submission, quiz):
             raise APIError(
@@ -315,6 +338,7 @@ def withdraw_quiz_submission(
             "not_submission_owner",
             "Only the original submitter can withdraw this submission.",
         )
+    _lock_submission_quiz(db, submission)
     if submission.status != SubmissionStatus.PENDING:
         raise APIError(
             409,

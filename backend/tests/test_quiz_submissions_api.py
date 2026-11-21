@@ -783,15 +783,29 @@ def test_preview_returns_the_submitted_version_not_a_newer_one(
     assert body["version"]["quiz_version_id"] == version_id
     assert body["version"]["title"] == "Main published quiz"
     assert body["version"]["version_number"] == 1
-    # A newer unpublished draft doesn't make the submission stale; a newer
-    # published version does, and then it can only be rejected.
-    assert body["submission"]["is_current_version"] is (not newer_published)
-    if newer_published:
-        assert_error(
-            decide(client, class_id, submission_id, "APPROVED"),
-            409,
-            "quiz_version_stale",
-        )
+    assert body["submission"]["is_current_version"] is False
+    assert_error(
+        decide(client, class_id, submission_id, "APPROVED"),
+        409,
+        "quiz_version_stale",
+    )
+
+
+def test_a_saved_draft_makes_the_old_publication_ineligible_for_submission(
+    submissions,
+) -> None:
+    client, data, _, _ = submissions
+    class_id = data["classes"]["main"]
+    quiz_id = data["quizzes"]["main"]
+    response = client.put(f"/classes/{class_id}/quizzes/{quiz_id}", json=QUIZ_UPDATE)
+    assert response.status_code == 200
+    assert response.json()["version"]["version_number"] == 2
+
+    assert_error(
+        post_submission(client, class_id, data["versions"]["main"]),
+        409,
+        "quiz_version_stale",
+    )
 
 
 @pytest.mark.parametrize(

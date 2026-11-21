@@ -76,15 +76,12 @@ def _question_counts(db: Session, version_ids: set[int]) -> dict[int, int]:
     return {version_id: int(count) for version_id, count in rows}
 
 
-def _newest_published(db: Session, quiz_ids: set[int]) -> dict[int, int]:
+def _newest_version_numbers(db: Session, quiz_ids: set[int]) -> dict[int, int]:
     if not quiz_ids:
         return {}
     rows = db.execute(
         select(QuizVersion.quiz_id, func.max(QuizVersion.version_number))
-        .where(
-            QuizVersion.quiz_id.in_(quiz_ids),
-            QuizVersion.published_at.is_not(None),
-        )
+        .where(QuizVersion.quiz_id.in_(quiz_ids))
         .group_by(QuizVersion.quiz_id)
     ).all()
     return {quiz_id: int(number) for quiz_id, number in rows}
@@ -122,7 +119,7 @@ def _visible_submissions(
 
 def _summaries(db: Session, rows) -> list[ClassSubmissionSummary]:
     counts = _question_counts(db, {row.QuizVersion.quiz_version_id for row in rows})
-    newest = _newest_published(db, {row.QuizVersion.quiz_id for row in rows})
+    newest = _newest_version_numbers(db, {row.QuizVersion.quiz_id for row in rows})
     return [
         ClassSubmissionSummary(
             submission_id=row.QuizSubmission.submission_id,
