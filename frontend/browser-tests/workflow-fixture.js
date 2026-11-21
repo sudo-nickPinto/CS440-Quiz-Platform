@@ -14,6 +14,7 @@ const TIME = "2026-11-10T12:00:00Z";
 const PEOPLE = {
   organizer: { account_id: 1, role: "ADMIN", display_name: "Professor" },
   member: { account_id: 2, role: "USER", display_name: "Student" },
+  collaborator: { account_id: 3, role: "USER", display_name: "Co-editor" },
 };
 
 function page(items) {
@@ -56,12 +57,13 @@ const SUBMITTED_VERSION = {
 };
 
 /**
- * Opens the class page as the organizer or a member.
+ * Opens the class page as an organizer, quiz owner, or collaborator.
  *
  * options:
- *   as            "organizer" | "member"
+ *   as            "organizer" | "member" | "collaborator"
  *   submission    null, or the initial status of submission 50
  *                 ("PENDING", "APPROVED", ...)
+ *   comment       the initial rejection feedback
  *   stale         the submitted version is no longer the newest published
  *   previewDenied the preview endpoint answers 404
  *   failDecision  PATCH answers 409 quiz_version_stale
@@ -72,6 +74,7 @@ export async function openClass(page_, options = {}) {
     as = "member",
     submission = null,
     stale = false,
+    comment = null,
     previewDenied = false,
     failDecision = false,
     path,
@@ -84,6 +87,7 @@ export async function openClass(page_, options = {}) {
     submission: submission
       ? {
           status: submission,
+          rejection_comment: comment,
           submitted_by_id: PEOPLE.member.account_id,
           decided_by_name: submission === "PENDING" ? null : "Professor",
         }
@@ -102,6 +106,7 @@ export async function openClass(page_, options = {}) {
       submitted_by_id: item.submitted_by_id,
       submitter_name: "Student",
       status: item.status,
+      rejection_comment: item.rejection_comment ?? null,
       submitted_at: TIME,
       decided_at: item.status === "PENDING" ? null : TIME,
       decided_by_name: item.decided_by_name,
@@ -128,11 +133,12 @@ export async function openClass(page_, options = {}) {
       author_name: "Student",
       version_number: 1,
       updated_at: TIME,
-      my_access: "OWNER",
+      my_access: as === "collaborator" ? "EDITOR" : "OWNER",
       published_version_id: SUBMITTED_VERSION_ID,
       approval_status: item?.status ?? null,
       approval_submission_id: item ? SUBMISSION_ID : null,
-      approval_sent_by_me: Boolean(item),
+      approval_sent_by_me: item?.submitted_by_id === me.account_id,
+      rejection_comment: item?.rejection_comment ?? null,
     };
   }
 
@@ -253,6 +259,7 @@ export async function openClass(page_, options = {}) {
           );
         }
         state.submission.status = body.status;
+        state.submission.rejection_comment = body.rejection_comment ?? null;
         state.submission.decided_by_name = "Professor";
         return json({ submission_id: SUBMISSION_ID, status: body.status });
       }

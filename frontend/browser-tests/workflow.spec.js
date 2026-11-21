@@ -134,6 +134,27 @@ test("the rejection form preserves feedback after a refused decision", async ({ 
   await expect(button(page, "Reject")).toBeFocused();
 });
 
+test("another collaborator can read feedback in My quizzes even if the preview is private", async ({ page }) => {
+  const comment = "Replace <b>the diagram</b> and add an explanation.";
+  await openClass(page, { as: "collaborator", submission: "REJECTED", comment, previewDenied: true });
+
+  await expect(page.getByText("Rejection feedback")).toBeVisible();
+  await expect(page.getByText(comment, { exact: true })).toBeVisible();
+  await button(page, "Rows").click();
+  await expect(page.getByRole("table", { name: "My quizzes" }).getByText(comment, { exact: true })).toBeVisible();
+
+  await page.goto(PREVIEW);
+  await expect(page.getByText("Submission not found.")).toBeVisible();
+});
+
+test("the submitted version preview displays returned feedback", async ({ page }) => {
+  const comment = "The example needs a correction.";
+  await openClass(page, { as: "organizer", submission: "REJECTED", comment, path: PREVIEW });
+
+  await expect(page.getByText("Original submitted question")).toBeVisible();
+  await expect(page.getByText(comment, { exact: true })).toBeVisible();
+});
+
 test("a refused decision shows the server's reason and changes nothing", async ({
   page,
 }) => {

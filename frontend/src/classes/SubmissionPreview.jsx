@@ -11,6 +11,7 @@ import {
 import { approvalLabel, submissionPreviewPath } from "./classHelpers";
 import { useClassResource } from "./classResources";
 import RejectSubmissionDialog from "./RejectSubmissionDialog";
+import RejectionFeedback from "./RejectionFeedback";
 
 // Read-only view of exactly the version a member submitted for approval.
 // The quiz page shows the newest (possibly draft) version, so organizers
@@ -138,6 +139,7 @@ function SubmissionBody({ data, organizer, action, archived, onDecide, onReject 
         </div>
       </section>
 
+      <RejectionFeedback comment={submission.rejection_comment} />
       <RequestError error={action.error} />
 
       {organizer && pending && (

@@ -2028,3 +2028,19 @@
 .cl-reject-dialog textarea + p {
   margin-top: 6px;
 }
+
+.cl-rejection-feedback {
+  display: block;
+  margin: 0.375rem 0;
+  max-width: 65ch;
+  overflow-wrap: anywhere;
+}
+
+.cl-rejection-feedback strong,
+.cl-rejection-feedback > span {
+  display: block;
+}
+
+.cl-rejection-feedback > span {
+  white-space: pre-wrap;
+}
