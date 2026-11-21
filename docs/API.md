@@ -299,8 +299,8 @@ reject pending submissions, and submitters may still withdraw their own.
 
 Body: `{ "quiz_version_id": 321 }`. The caller must own the quiz or be an
 active named collaborator. The exact version must be published, current,
-non-archived, and owned by this class. A newer draft does not make a published
-version stale; a newer published version does.
+non-archived, and owned by this class. A newer saved version makes the
+older publication stale for submission and approval, even if it is still a draft.
 
 Errors: `404 quiz_version_not_found`, `409 class_archived`,
 `409 quiz_version_not_published`, `409 quiz_version_stale`,
@@ -314,12 +314,14 @@ Newest first, without pagination. Active faculty organizers see every class
 submission; other active members see only submissions they created.
 
 `QuizSubmissionResponse`: `submission_id, class_id, quiz_version_id,
-submitted_by_id, status, decided_by_id, submitted_at, decided_at`.
+submitted_by_id, status, decided_by_id, submitted_at, decided_at, rejection_comment`.
+Rejection feedback is visible to organizers and eligible submitters.
 
 ### `PATCH /classes/{class_id}/quiz-submissions/{submission_id}` → `200 QuizSubmissionResponse`
 
-Body accepts only `{ "status": "APPROVED" }` or
-`{ "status": "REJECTED" }`. Only an active faculty `ORGANIZER` may decide;
+Body accepts `{ "status": "APPROVED" }` or `{ "status": "REJECTED" }`. Rejections may include an optional
+`rejection_comment`, trimmed plain text up to 1,000 characters. Blank comments are
+stored as null. Only an active faculty `ORGANIZER` may decide;
 self-approval is allowed. Approval rechecks the version and that the submitter
 still has an active account and class membership and still owns or actively
 collaborates on the quiz. Rejection remains available after that eligibility

@@ -383,6 +383,53 @@ def test_active_duplicate_is_a_conflict_for_pending_and_approved_rows(
     )
 
 
+@pytest.mark.parametrize(
+    ("comment", "expected"),
+    [
+        ("  Please clarify <this question>.\n", "Please clarify <this question>."),
+        (" \t\n ", None),
+        (" x" + "y" * 999 + " ", "x" + "y" * 999),
+    ],
+)
+def test_rejection_comment_is_normalized_and_persisted(
+    submissions, comment, expected
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    sent = post_submission(client, class_id, data["versions"]["main"])
+    submission_id = sent.json()["submission_id"]
+    act_as(actor, identities, "faculty")
+    rejected = client.patch(
+        f"/classes/{class_id}/quiz-submissions/{submission_id}",
+        json={"status": "REJECTED", "rejection_comment": comment},
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["rejection_comment"] == expected
+    assert preview(client, class_id, submission_id).json()["submission"]["rejection_comment"] == expected
+    with client.app.state.database.session_factory() as db:
+        assert db.get(QuizSubmission, submission_id).rejection_comment == expected
+
+
+@pytest.mark.parametrize(
+    ("status", "comment"),
+    [("REJECTED", "a" * 1001), ("APPROVED", "Only a rejection may include feedback")],
+)
+def test_invalid_rejection_comments_leave_the_submission_pending(
+    submissions, status, comment
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    sent = post_submission(client, class_id, data["versions"]["main"])
+    submission_id = sent.json()["submission_id"]
+    act_as(actor, identities, "faculty")
+    response = client.patch(
+        f"/classes/{class_id}/quiz-submissions/{submission_id}",
+        json={"status": status, "rejection_comment": comment},
+    )
+    assert_error(response, 422, "request_validation_error")
+    assert client.get(f"/classes/{class_id}/quiz-submissions").json()[0]["status"] == "PENDING"
+
+
 def test_faculty_organizer_can_approve_reject_and_self_approve(
     submissions,
 ) -> None:
@@ -399,6 +446,7 @@ def test_faculty_organizer_can_approve_reject_and_self_approve(
     )
     assert approved.status_code == 200
     assert approved.json()["status"] == "APPROVED"
+    assert approved.json()["rejection_comment"] is None
     assert approved.json()["decided_by_id"] == data["ids"]["faculty"]
     assert approved.json()["decided_at"] is not None
 

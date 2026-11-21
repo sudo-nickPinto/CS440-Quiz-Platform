@@ -117,7 +117,9 @@ def _visible_submissions(
     return statement
 
 
-def _summaries(db: Session, rows) -> list[ClassSubmissionSummary]:
+def _summaries(
+    db: Session, rows, account: CurrentAccount, access: ClassAccess
+) -> list[ClassSubmissionSummary]:
     counts = _question_counts(db, {row.QuizVersion.quiz_version_id for row in rows})
     newest = _newest_version_numbers(db, {row.QuizVersion.quiz_id for row in rows})
     return [
@@ -134,6 +136,15 @@ def _summaries(db: Session, rows) -> list[ClassSubmissionSummary]:
             submitted_at=row.QuizSubmission.submitted_at,
             decided_at=row.QuizSubmission.decided_at,
             decided_by_name=row.decided_by_name,
+            rejection_comment=(
+                row.QuizSubmission.rejection_comment
+                if row.QuizSubmission.rejection_comment is not None
+                and (
+                    access.is_organizer
+                    or _can_still_open_quiz(db, row.QuizVersion.quiz_id, account.account_id)
+                )
+                else None
+            ),
             is_current_version=(
                 newest.get(row.QuizVersion.quiz_id) == row.QuizVersion.version_number
             ),
@@ -177,7 +188,7 @@ def list_class_submissions(
     ).all()
     return ClassSubmissionPage(
         class_id=class_id,
-        items=_summaries(db, rows),
+        items=_summaries(db, rows, account, access),
         pagination=_page_info(page, page_size, total),
     )
 
@@ -221,7 +232,7 @@ def get_class_submission_preview(
         .options(selectinload(QuizVersion.questions).selectinload(Question.choices))
     ).one()
     return ClassSubmissionPreview(
-        submission=_summaries(db, [row])[0],
+        submission=_summaries(db, [row], account, access)[0],
         version=QuizVersionResponse.model_validate(version),
     )
 

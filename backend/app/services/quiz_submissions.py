@@ -182,10 +182,17 @@ def list_quiz_submissions(
     statement = statement.order_by(
         QuizSubmission.submitted_at.desc(), QuizSubmission.submission_id.desc()
     )
-    return [
-        _submission_response(submission)
-        for submission in db.scalars(statement).all()
-    ]
+    responses = []
+    for submission in db.scalars(statement).all():
+        response = _submission_response(submission)
+        if response.rejection_comment is not None and not access.is_organizer:
+            version_and_quiz = _version_and_quiz(db, submission.quiz_version_id)
+            if version_and_quiz is None or not _has_quiz_access(
+                db, version_and_quiz[1], account.account_id
+            ):
+                response.rejection_comment = None
+        responses.append(response)
+    return responses
 
 
 def _load_visible_submission(
@@ -297,6 +304,7 @@ def decide_quiz_submission(
                 status=payload.status,
                 decided_by_id=account.account_id,
                 decided_at=decided_at,
+                rejection_comment=payload.rejection_comment,
             )
         )
         if changed.rowcount != 1:

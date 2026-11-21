@@ -51,8 +51,9 @@ class ClassSubmissionSummary(BaseModel):
     submitted_at: datetime
     decided_at: datetime | None
     decided_by_name: str | None
-    # False once a newer version of the quiz is published; a stale pending
-    # submission can only be rejected or withdrawn.
+    rejection_comment: str | None = None
+    # A newer saved version makes the older submission stale, even if the
+    # new version is still a draft.
     is_current_version: bool
 
 
