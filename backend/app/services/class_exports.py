@@ -224,6 +224,7 @@ def export_class_student(
         ("Membership", report["status"]),
         ("Class sessions", report["class_session_count"]),
         ("Sessions played", report["session_count"]),
+        ("Attendance sessions", report["attendance_session_count"]),
         (
             "Attendance %",
             (
@@ -254,6 +255,7 @@ def export_class_student(
             "Correct",
             "Incorrect",
             "Questions",
+            "Attendance",
         ],
         (
             [
@@ -266,6 +268,7 @@ def export_class_student(
                 _blank(session["correct"]),
                 _blank(session["incorrect"]),
                 session["question_count"],
+                session["attendance_status"].value.title(),
             ]
             for session in report["sessions"]
         ),

@@ -37,6 +37,7 @@ from app.schemas.question_bank import (
     QuestionBankPage,
 )
 from app.schemas.quiz import AnswerChoiceCreate, QuestionCreate
+from app.services.quiz_submissions import commit_quiz_content_edit
 
 CSV_COLUMNS = [
     "question_text", "explanation", "choice_a", "choice_b", "choice_c",
@@ -233,13 +234,9 @@ def _lock_import_destination(
     quiz_id: int,
 ) -> Quiz:
     """Serialize imports with publishing before choosing a destination version."""
-    from app.services.quizzes import (
-        _lock_class_quiz_for_update,
-        _require_quiz_editor,
-    )
+    from app.services.quizzes import _lock_class_quiz_for_content_write
 
-    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
-    _require_quiz_editor(db, account, quiz, lock_access=True)
+    quiz = _lock_class_quiz_for_content_write(db, account, class_id, quiz_id)
     if quiz.status != QuizStatus.DRAFT:
         raise APIError(
             409,
@@ -303,9 +300,10 @@ def add_from_bank(db: Session, account: CurrentAccount, class_id: int, quiz_id: 
         version.questions.append(question)
         db.flush()
         snapshot_question(db, question, owner_id=quiz.author_id, class_id=class_id, quiz_id=quiz_id)
-    quiz.revision += 1
-    quiz.updated_at = datetime.now(UTC).replace(tzinfo=None)
-    db.commit()
+    if pending_questions:
+        quiz.revision += 1
+        quiz.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        commit_quiz_content_edit(db, quiz, account.account_id, quiz.updated_at)
     db.expire_all()
     return _to_response(db, account, _load_readable_quiz(db, account, quiz_id))
 
@@ -408,8 +406,10 @@ def import_csv(db: Session, account: CurrentAccount, class_id: int, quiz_id: int
                 explanation=row.question.explanation,
                 choices_json=[c.model_dump() for c in row.question.choices]))
             saved_only += 1
-    quiz.revision += 1; quiz.updated_at = datetime.now(UTC).replace(tzinfo=None)
-    db.commit(); db.expire_all()
+    quiz.revision += 1
+    quiz.updated_at = datetime.now(UTC).replace(tzinfo=None)
+    commit_quiz_content_edit(db, quiz, account.account_id, quiz.updated_at)
+    db.expire_all()
     return CsvImportResponse(quiz=_to_response(db, account, _load_readable_quiz(db, account, quiz_id)),
         added_to_quiz=len(payload.rows), saved_to_bank_only=saved_only)
 

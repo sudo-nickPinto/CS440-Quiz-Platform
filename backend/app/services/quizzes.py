@@ -7,13 +7,14 @@ from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
-from app.models.account import Account
+from app.models.account import Account, FACULTY_ACCOUNT_TYPE
 from app.models.classes import Class, ClassMembership, ClassRole, MembershipStatus
 from app.models.quiz import (
     AnswerChoice,
     CollaboratorEventType,
     CollaboratorPermission,
     Question,
+    QuestionType,
     Quiz,
     QuizCollaborator,
     QuizCollaboratorEvent,
@@ -21,7 +22,7 @@ from app.models.quiz import (
     QuizVersion,
     QuizVisibility,
 )
-from app.models.quiz_submission import QuizSubmission
+from app.models.quiz_submission import QuizSubmission, SubmissionStatus
 from app.schemas.pagination import PageInfo, SortOrder
 from app.schemas.quiz import (
     CollaboratorSuggestion,
@@ -49,6 +50,7 @@ from app.schemas.quiz import (
 from app.services.class_authorization import get_class, get_class_membership
 from app.services.hosting import quiz_hosting, quiz_hosting_many
 from app.services.question_bank import snapshot_question
+from app.services.quiz_submissions import commit_quiz_content_edit
 
 
 # Longest question and answer text a host screen can show (see the editor's
@@ -162,7 +164,7 @@ def _require_current_active_account(
         Account.is_active.is_(True),
     )
     if lock:
-        statement = statement.with_for_update()
+        statement = statement.with_for_update().execution_options(populate_existing=True)
     stored_account = db.scalar(statement)
     if stored_account is None:
         raise APIError(403, "inactive_account", "This account is inactive.")
@@ -329,21 +331,7 @@ def _to_response_with_version(
 
 def _questions_from_payload(payload: QuizCreate) -> list[Question]:
     return [
-        Question(
-            question_order=question_order,
-            question_text=question.question_text,
-            explanation=question.explanation,
-            time_limit_seconds=question.time_limit_seconds,
-            base_points=question.base_points,
-            choices=[
-                AnswerChoice(
-                    choice_order=choice_order,
-                    choice_text=choice.choice_text,
-                    is_correct=choice.is_correct,
-                )
-                for choice_order, choice in enumerate(question.choices, start=1)
-            ],
-        )
+        _question_from_payload(question, question_order=question_order)
         for question_order, question in enumerate(payload.questions, start=1)
     ]
 
@@ -355,6 +343,7 @@ def _question_from_payload(
 ) -> Question:
     return Question(
         question_order=question_order,
+        question_type=QuestionType.MULTIPLE_CHOICE,
         question_text=payload.question_text,
         explanation=payload.explanation,
         time_limit_seconds=payload.time_limit_seconds,
@@ -492,14 +481,7 @@ def update_quiz(
     payload: QuizUpdate,
 ) -> QuizResponse:
     """Compatibility route for the editor; V3 writes the class-owned draft."""
-    quiz = _load_quiz(db, quiz_id)
-    if quiz.class_id is None:
-        raise APIError(
-            409,
-            "quiz_class_required",
-            "Assign this legacy quiz to a class before editing it.",
-        )
-    return update_class_quiz(db, account, quiz.class_id, quiz_id, payload)
+    return update_class_quiz(db, account, None, quiz_id, payload)
 
 
 def list_quizzes(
@@ -728,6 +710,13 @@ def list_class_quizzes(
                     submission
                     and submission.submitted_by_id == account.account_id
                 ),
+                rejection_comment=(
+                    submission.rejection_comment
+                    if access is not None
+                    and submission is not None
+                    and submission.status == SubmissionStatus.REJECTED
+                    else None
+                ),
                 collaborator_names=collaborator_names.get(quiz.quiz_id, []),
             )
         )
@@ -812,7 +801,7 @@ def _active_membership(
         ClassMembership.status == MembershipStatus.ACTIVE,
     )
     if lock:
-        statement = statement.with_for_update()
+        statement = statement.with_for_update().execution_options(populate_existing=True)
     return db.scalar(statement)
 
 
@@ -843,25 +832,21 @@ def _class_quiz(db: Session, class_id: int, quiz_id: int) -> Quiz:
 
 def _lock_class_quiz_for_update(
     db: Session,
-    class_id: int,
+    class_id: int | None,
     quiz_id: int,
 ) -> Quiz:
-    """Lock and refresh a class quiz before choosing its editable version.
+    """Lock and refresh a quiz before choosing its editable version.
 
     MySQL locking reads use the latest committed row under REPEATABLE READ,
     unlike a later ordinary SELECT, which may still use a snapshot established
     earlier in the request.  Load the entity through the locking read itself so
     status and revision checks cannot observe stale pre-publication state.
     """
+    statement = select(Quiz).where(Quiz.quiz_id == quiz_id, Quiz.deleted_at.is_(None))
+    if class_id is not None:
+        statement = statement.where(Quiz.class_id == class_id)
     quiz = db.scalar(
-        select(Quiz)
-        .where(
-            Quiz.quiz_id == quiz_id,
-            Quiz.class_id == class_id,
-            Quiz.deleted_at.is_(None),
-        )
-        .with_for_update()
-        .execution_options(populate_existing=True)
+        statement.with_for_update().execution_options(populate_existing=True)
     )
     if quiz is None:
         raise APIError(404, "quiz_not_found", "Quiz not found.")
@@ -875,16 +860,21 @@ def _require_quiz_editor(
     *,
     lock_access: bool = False,
 ) -> None:
-    _require_current_active_account(db, account, lock=lock_access)
+    stored_account = _require_current_active_account(db, account, lock=lock_access)
     if quiz.class_id is not None:
         # 404 while the quiz's class is in the trash.
         get_class(db, quiz.class_id)
-        _require_active_class_member(
+        membership = _require_active_class_member(
             db,
             account,
             quiz.class_id,
             lock=lock_access,
         )
+        if (
+            membership.role == ClassRole.ORGANIZER
+            and stored_account.account_type == FACULTY_ACCOUNT_TYPE
+        ):
+            return
     if quiz.author_id == account.account_id:
         return
     if _active_collaborator(
@@ -897,21 +887,19 @@ def _require_quiz_editor(
     raise APIError(
         403,
         "quiz_edit_denied",
-        "Only the quiz owner or an active editor can edit this quiz.",
+        "Only the quiz owner, an active collaborator, or a faculty class organizer "
+        "can edit this quiz.",
     )
 
 
 def _can_edit(db: Session, account: CurrentAccount, quiz: Quiz) -> bool:
     if quiz.status == QuizStatus.ARCHIVED:
         return False
-    if quiz.class_id is not None and _active_membership(
-        db, quiz.class_id, account.account_id
-    ) is None:
+    try:
+        _require_quiz_editor(db, account, quiz)
+    except APIError:
         return False
-    return (
-        quiz.author_id == account.account_id
-        or _active_collaborator(db, quiz.quiz_id, account.account_id) is not None
-    )
+    return True
 
 
 def require_quiz_editor_access(
@@ -946,8 +934,7 @@ def update_class_quiz_question(
     draft creation. The compare-and-swap on ``question.revision`` then rejects
     two editors that changed the same question from the same revision.
     """
-    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
-    _require_quiz_editor(db, account, quiz, lock_access=True)
+    quiz = _lock_class_quiz_for_content_write(db, account, class_id, quiz_id)
     if quiz.status == QuizStatus.ARCHIVED:
         raise APIError(
             409,
@@ -1004,33 +991,6 @@ def update_class_quiz_question(
         if question is None:
             raise APIError(404, "question_not_found", "Question not found.")
 
-    if editor_version.published_at is not None:
-        # The quiz row is already locked, so this immutable-version copy and
-        # the selection of its target question cannot race archive, publish,
-        # or another editor creating the next draft.
-        source_order = source.question_order
-        draft = QuizVersion(
-            quiz_id=quiz_id,
-            version_number=max(
-                version.version_number for version in quiz.versions
-            ) + 1,
-            title=editor_version.title,
-            description=editor_version.description,
-            published_at=None,
-            questions=_clone_questions(editor_version.questions),
-        )
-        db.add(draft)
-        db.flush()
-        editor_version = draft
-        quiz.status = QuizStatus.DRAFT
-        db.flush()
-        question = next(
-            item for item in editor_version.questions
-            if item.question_order == source_order
-        )
-        if question.question_id != source.question_id:
-            mapped_source = source
-
     if (
         mapped_source is not None
         and not _same_question_content(mapped_source, question)
@@ -1050,6 +1010,40 @@ def update_class_quiz_question(
             "question_edit_conflict",
             "This question changed after you opened it. Reload that question before saving.",
             details={"current_revision": question.revision},
+        )
+
+    incoming = _question_from_payload(payload, question_order=question.question_order)
+    incoming.question_type = question.question_type
+    if _same_question_content(question, incoming):
+        return QuestionUpdateResponse(
+            quiz_id=quiz_id,
+            quiz_revision=quiz.revision,
+            question=QuestionResponse.model_validate(question),
+        )
+
+    if editor_version.published_at is not None:
+        # The quiz row is already locked, so this immutable-version copy and
+        # the selection of its target question cannot race archive, publish,
+        # or another editor creating the next draft.
+        source_order = question.question_order
+        draft = QuizVersion(
+            quiz_id=quiz_id,
+            version_number=max(
+                version.version_number for version in quiz.versions
+            ) + 1,
+            title=editor_version.title,
+            description=editor_version.description,
+            published_at=None,
+            questions=_clone_questions(editor_version.questions),
+        )
+        db.add(draft)
+        db.flush()
+        editor_version = draft
+        quiz.status = QuizStatus.DRAFT
+        db.flush()
+        question = next(
+            item for item in editor_version.questions
+            if item.question_order == source_order
         )
 
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -1134,7 +1128,7 @@ def update_class_quiz_question(
             quiz_revision=quiz_revision,
             question=QuestionResponse.model_validate(question),
         )
-        db.commit()
+        commit_quiz_content_edit(db, quiz, account.account_id, now)
         return response
     except SQLAlchemyError as exc:
         db.rollback()
@@ -1158,8 +1152,7 @@ def update_class_quiz_default_time(
     overrides are left alone. Only timer and revision columns are changed; this
     lets the caller preserve local text edits while accepting the new revision.
     """
-    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
-    _require_quiz_editor(db, account, quiz, lock_access=True)
+    quiz = _lock_class_quiz_for_content_write(db, account, class_id, quiz_id)
     if quiz.status != QuizStatus.DRAFT:
         raise APIError(
             409,
@@ -1187,7 +1180,11 @@ def update_class_quiz_default_time(
         questions = [
             questions_by_id[question_id] for question_id in payload.question_ids
         ]
-        for question in questions:
+        changed = [
+            question for question in questions
+            if question.time_limit_seconds != payload.time_limit_seconds
+        ]
+        for question in changed:
             question.time_limit_seconds = payload.time_limit_seconds
             question.revision += 1
             question.updated_at = now
@@ -1195,8 +1192,9 @@ def update_class_quiz_default_time(
                 db, question, owner_id=quiz.author_id, class_id=class_id,
                 quiz_id=quiz_id,
             )
-        quiz.revision += 1
-        quiz.updated_at = now
+        if changed:
+            quiz.revision += 1
+            quiz.updated_at = now
         db.flush()
         response = QuizDefaultTimeUpdateResponse(
             quiz_id=quiz_id,
@@ -1206,7 +1204,8 @@ def update_class_quiz_default_time(
                 QuestionResponse.model_validate(question) for question in questions
             ],
         )
-        db.commit()
+        if changed:
+            commit_quiz_content_edit(db, quiz, account.account_id, now)
         return response
     except SQLAlchemyError as exc:
         db.rollback()
@@ -1231,18 +1230,7 @@ def add_class_quiz_question(
     their independent question revisions and can proceed without a stale
     whole-quiz conflict.
     """
-    _require_active_class_member(db, account, class_id)
-
-    # Serialize order allocation for two simultaneous appends. This does not
-    # lock any Question row, so an editor may save another question at once.
-    db.execute(
-        select(Quiz.quiz_id)
-        .where(Quiz.quiz_id == quiz_id)
-        .with_for_update()
-    )
-    db.expire_all()
-    quiz = _class_quiz(db, class_id, quiz_id)
-    _require_quiz_editor(db, account, quiz, lock_access=True)
+    quiz = _lock_class_quiz_for_content_write(db, account, class_id, quiz_id)
     if quiz.status == QuizStatus.ARCHIVED:
         raise APIError(409, "quiz_not_editable", "An archived quiz cannot be edited.")
 
@@ -1284,7 +1272,7 @@ def add_class_quiz_question(
             quiz_revision=quiz.revision,
             question=QuestionResponse.model_validate(question),
         )
-        db.commit()
+        commit_quiz_content_edit(db, quiz, account.account_id, now)
         return response
     except SQLAlchemyError as exc:
         db.rollback()
@@ -1295,16 +1283,39 @@ def add_class_quiz_question(
         ) from exc
 
 
+def _lock_class_quiz_for_content_write(
+    db: Session, account: CurrentAccount, class_id: int | None, quiz_id: int
+) -> Quiz:
+    # Check access before taking the write lock. Keep this read in a separate
+    # transaction so MySQL does not pin the writer to a pre-lock snapshot.
+    with Session(db.get_bind()) as access_db:
+        quiz = access_db.get(Quiz, quiz_id)
+        if quiz is None or (class_id is not None and quiz.class_id != class_id):
+            if class_id is not None:
+                _require_active_class_member(access_db, account, class_id)
+            raise APIError(404, "quiz_not_found", "Quiz not found.")
+        if quiz.class_id is None:
+            raise APIError(
+                409,
+                "quiz_class_required",
+                "Assign this legacy quiz to a class before editing it.",
+            )
+        _require_quiz_editor(access_db, account, quiz)
+        class_id = quiz.class_id
+
+    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
+    _require_quiz_editor(db, account, quiz, lock_access=True)
+    return quiz
+
+
 def update_class_quiz(
     db: Session,
     account: CurrentAccount,
-    class_id: int,
+    class_id: int | None,
     quiz_id: int,
     payload: QuizUpdate,
 ) -> QuizResponse:
-    _require_active_class_member(db, account, class_id)
-    quiz = _class_quiz(db, class_id, quiz_id)
-    _require_quiz_editor(db, account, quiz)
+    quiz = _lock_class_quiz_for_content_write(db, account, class_id, quiz_id)
     if quiz.status == QuizStatus.ARCHIVED:
         raise APIError(409, "quiz_not_editable", "An archived quiz cannot be edited.")
 
@@ -1316,38 +1327,23 @@ def update_class_quiz(
             "Reload the latest version before saving again.",
             details={"current_revision": quiz.revision},
         )
-    _check_text_limits(payload.questions, _latest_editor_version(quiz))
+    editor_version = _latest_editor_version(quiz)
+    _check_text_limits(payload.questions, editor_version)
+    questions = _questions_from_payload(payload)
+    if (
+        editor_version.title == payload.title
+        and editor_version.description == payload.description
+        and len(editor_version.questions) == len(questions)
+        and all(
+            _same_question_content(saved, incoming)
+            for saved, incoming in zip(editor_version.questions, questions)
+        )
+    ):
+        return _to_response(db, account, quiz)
 
     now = datetime.now(UTC).replace(tzinfo=None)
-    changed = db.execute(
-        update(Quiz)
-        .where(
-            Quiz.quiz_id == quiz_id,
-            Quiz.revision == payload.expected_revision,
-            Quiz.status != QuizStatus.ARCHIVED,
-        )
-        .values(revision=Quiz.revision + 1, updated_at=now)
-    )
-    if changed.rowcount != 1:
-        db.rollback()
-        current_revision = db.scalar(
-            select(Quiz.revision).where(Quiz.quiz_id == quiz_id)
-        )
-        raise APIError(
-            409,
-            "quiz_edit_conflict",
-            "This quiz changed after you opened it. "
-            "Reload the latest version before saving again.",
-            details={"current_revision": current_revision},
-        )
-
-    _require_quiz_editor(db, account, quiz, lock_access=True)
-
-    draft = next(
-        (version for version in reversed(quiz.versions) if version.published_at is None),
-        None,
-    )
-    if draft is None:
+    draft = editor_version
+    if draft.published_at is not None:
         draft = QuizVersion(
             quiz_id=quiz_id,
             version_number=max(version.version_number for version in quiz.versions) + 1,
@@ -1363,13 +1359,15 @@ def update_class_quiz(
 
     draft.title = payload.title
     draft.description = payload.description
-    draft.questions = _questions_from_payload(payload)
+    draft.questions = questions
     quiz.status = QuizStatus.DRAFT
+    quiz.revision += 1
+    quiz.updated_at = now
     try:
         db.flush()
         for question in draft.questions:
             snapshot_question(
-                db, question, owner_id=quiz.author_id, class_id=class_id,
+                db, question, owner_id=quiz.author_id, class_id=quiz.class_id,
                 quiz_id=quiz_id,
             )
         response = QuizResponse(
@@ -1386,7 +1384,7 @@ def update_class_quiz(
             hosting=quiz_hosting(db, account, quiz),
             **_attribution(db, quiz),
         )
-        db.commit()
+        commit_quiz_content_edit(db, quiz, account.account_id, now)
         return response
     except APIError:
         db.rollback()
