@@ -25,6 +25,7 @@ from app.models import (
     QuizVersion,
     SubmissionStatus,
 )
+from app.services import quizzes
 from app.services.quiz_submissions import require_approved_quiz_version
 
 
@@ -865,6 +866,27 @@ def pending_quiz(submissions) -> tuple[str, dict, dict, int]:
     return quiz_path, payload, quiz, sent.json()["submission_id"]
 
 
+@pytest.mark.parametrize("class_route", [True, False])
+@pytest.mark.parametrize(
+    ("viewer", "status", "code"),
+    [("outsider", 404, "class_not_found"), ("classmate", 403, "quiz_edit_denied")],
+)
+def test_unauthorized_quiz_edits_never_take_the_write_lock(
+    submissions, monkeypatch, class_route, viewer, status, code
+) -> None:
+    client, data, identities, actor = submissions
+    path = f"/quizzes/{data['quizzes']['main']}"
+    if class_route:
+        path = f"/classes/{data['classes']['main']}{path}"
+
+    def unexpected_lock(*args):
+        pytest.fail("An unauthorized request reached the quiz write lock")
+
+    monkeypatch.setattr(quizzes, "_lock_class_quiz_for_update", unexpected_lock)
+    act_as(actor, identities, viewer)
+    assert_error(client.put(path, json=QUIZ_UPDATE), status, code)
+
+
 def test_aggregate_edit_withdraws_only_after_a_content_change(
     submissions, pending_quiz
 ) -> None:
@@ -1055,6 +1077,43 @@ def test_preview_returns_the_submitted_version_not_a_newer_one(
         409,
         "quiz_version_stale",
     )
+
+
+def test_approved_publication_stays_current_until_a_new_version_is_published(
+    submissions, pending_quiz
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    class_path = f"/classes/{class_id}"
+    quiz_path, payload, published, submission_id = pending_quiz
+    original_id = published["version"]["quiz_version_id"]
+
+    act_as(actor, identities, "faculty")
+    assert decide(client, class_id, submission_id, "APPROVED").status_code == 200
+    saved = client.put(
+        quiz_path,
+        json={**payload, "title": "New draft", "expected_revision": published["revision"]},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["hosting"]["reason"] == "unpublished_changes"
+
+    def assert_current(expected):
+        summary = client.get(f"{class_path}/dashboard/submissions").json()["items"][0]
+        assert summary["submission_id"] == submission_id
+        assert summary["is_current_version"] is expected
+        assert preview(client, class_id, submission_id).json()["submission"]["is_current_version"] is expected
+
+    assert_current(True)
+    [approval] = client.get(f"{class_path}/approved-quizzes").json()
+    assert approval["quiz_version_id"] == original_id
+
+    act_as(actor, identities, "owner")
+    updated = client.post(
+        f"{quiz_path}/publish", json={"expected_revision": saved.json()["revision"]}
+    )
+    assert updated.status_code == 200, updated.text
+    assert_current(False)
+    assert client.get(f"{class_path}/approved-quizzes").json() == []
 
 
 def test_a_saved_draft_makes_the_old_publication_ineligible_for_submission(

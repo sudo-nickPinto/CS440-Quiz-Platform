@@ -224,13 +224,9 @@ def _lock_import_destination(
     quiz_id: int,
 ) -> Quiz:
     """Serialize imports with publishing before choosing a destination version."""
-    from app.services.quizzes import (
-        _lock_class_quiz_for_update,
-        _require_quiz_editor,
-    )
+    from app.services.quizzes import _lock_class_quiz_for_content_write
 
-    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
-    _require_quiz_editor(db, account, quiz, lock_access=True)
+    quiz = _lock_class_quiz_for_content_write(db, account, class_id, quiz_id)
     if quiz.status != QuizStatus.DRAFT:
         raise APIError(
             409,

@@ -468,14 +468,7 @@ def update_quiz(
     payload: QuizUpdate,
 ) -> QuizResponse:
     """Compatibility route for the editor; V3 writes the class-owned draft."""
-    quiz = _lock_class_quiz_for_update(db, None, quiz_id)
-    if quiz.class_id is None:
-        raise APIError(
-            409,
-            "quiz_class_required",
-            "Assign this legacy quiz to a class before editing it.",
-        )
-    return update_class_quiz(db, account, quiz.class_id, quiz_id, payload)
+    return update_class_quiz(db, account, None, quiz_id, payload)
 
 
 def list_quizzes(
@@ -923,8 +916,7 @@ def update_class_quiz_question(
     draft creation. The compare-and-swap on ``question.revision`` then rejects
     two editors that changed the same question from the same revision.
     """
-    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
-    _require_quiz_editor(db, account, quiz, lock_access=True)
+    quiz = _lock_class_quiz_for_content_write(db, account, class_id, quiz_id)
     if quiz.status == QuizStatus.ARCHIVED:
         raise APIError(
             409,
@@ -1142,8 +1134,7 @@ def update_class_quiz_default_time(
     overrides are left alone. Only timer and revision columns are changed; this
     lets the caller preserve local text edits while accepting the new revision.
     """
-    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
-    _require_quiz_editor(db, account, quiz, lock_access=True)
+    quiz = _lock_class_quiz_for_content_write(db, account, class_id, quiz_id)
     if quiz.status != QuizStatus.DRAFT:
         raise APIError(
             409,
@@ -1275,14 +1266,26 @@ def add_class_quiz_question(
 
 
 def _lock_class_quiz_for_content_write(
-    db: Session, account: CurrentAccount, class_id: int, quiz_id: int
+    db: Session, account: CurrentAccount, class_id: int | None, quiz_id: int
 ) -> Quiz:
-    try:
-        quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
-    except APIError:
-        # Preserve the class-membership error for callers outside the class.
-        _require_active_class_member(db, account, class_id)
-        raise
+    # Check access before taking the write lock. Keep this read in a separate
+    # transaction so MySQL does not pin the writer to a pre-lock snapshot.
+    with Session(db.get_bind()) as access_db:
+        quiz = access_db.get(Quiz, quiz_id)
+        if quiz is None or (class_id is not None and quiz.class_id != class_id):
+            if class_id is not None:
+                _require_active_class_member(access_db, account, class_id)
+            raise APIError(404, "quiz_not_found", "Quiz not found.")
+        if quiz.class_id is None:
+            raise APIError(
+                409,
+                "quiz_class_required",
+                "Assign this legacy quiz to a class before editing it.",
+            )
+        _require_quiz_editor(access_db, account, quiz)
+        class_id = quiz.class_id
+
+    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
     _require_quiz_editor(db, account, quiz, lock_access=True)
     return quiz
 
@@ -1290,7 +1293,7 @@ def _lock_class_quiz_for_content_write(
 def update_class_quiz(
     db: Session,
     account: CurrentAccount,
-    class_id: int,
+    class_id: int | None,
     quiz_id: int,
     payload: QuizUpdate,
 ) -> QuizResponse:
@@ -1346,7 +1349,7 @@ def update_class_quiz(
         db.flush()
         for question in draft.questions:
             snapshot_question(
-                db, question, owner_id=quiz.author_id, class_id=class_id,
+                db, question, owner_id=quiz.author_id, class_id=quiz.class_id,
                 quiz_id=quiz_id,
             )
         response = QuizResponse(

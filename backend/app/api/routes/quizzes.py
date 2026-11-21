@@ -31,16 +31,15 @@ def get_quiz_route(
 
 
 @router.put("/{quiz_id}", response_model=QuizResponse)
-def update_quiz_route(
+async def update_quiz_route(
     quiz_id: int,
     payload: QuizUpdate,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizResponse:
-    return run_quiz_edit_with_notifications(
-        db, request.app.state.notification_hub, background_tasks,
+    return await run_quiz_edit_with_notifications(
+        request.app.state.notification_hub, background_tasks,
         update_quiz, account, quiz_id, payload,
     )
 

@@ -64,33 +64,31 @@ def export_question_csv(class_id: int, scope: BankScope = BankScope.CLASS,
 
 
 @router.post("/quizzes/{quiz_id}/questions/from-bank", response_model=QuizResponse)
-def add_bank_questions(
+async def add_bank_questions(
     class_id: int,
     quiz_id: int,
     payload: BankSelection,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ):
-    return run_quiz_edit_with_notifications(
-        db, request.app.state.notification_hub, background_tasks,
+    return await run_quiz_edit_with_notifications(
+        request.app.state.notification_hub, background_tasks,
         add_from_bank, account, class_id, quiz_id, payload.bank_question_ids,
     )
 
 
 @router.post("/quizzes/{quiz_id}/questions/csv", response_model=CsvImportResponse)
-def import_question_csv(
+async def import_question_csv(
     class_id: int,
     quiz_id: int,
     payload: CsvImportRequest,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ):
-    return run_quiz_edit_with_notifications(
-        db, request.app.state.notification_hub, background_tasks,
+    return await run_quiz_edit_with_notifications(
+        request.app.state.notification_hub, background_tasks,
         import_csv, account, class_id, quiz_id, payload,
     )
 

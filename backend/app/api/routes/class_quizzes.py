@@ -98,8 +98,7 @@ async def update_class_quiz_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizResponse:
     hub = request.app.state.quiz_edit_hub
-    result = await hub.run_db(
-        run_quiz_edit_with_notifications,
+    result = await run_quiz_edit_with_notifications(
         request.app.state.notification_hub,
         background_tasks,
         update_class_quiz,
@@ -134,8 +133,7 @@ async def update_class_quiz_question_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuestionUpdateResponse:
     hub = request.app.state.quiz_edit_hub
-    result = await hub.run_db(
-        run_quiz_edit_with_notifications,
+    result = await run_quiz_edit_with_notifications(
         request.app.state.notification_hub,
         background_tasks,
         update_class_quiz_question,
@@ -171,8 +169,7 @@ async def update_class_quiz_default_time_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizDefaultTimeUpdateResponse:
     hub = request.app.state.quiz_edit_hub
-    result = await hub.run_db(
-        run_quiz_edit_with_notifications,
+    result = await run_quiz_edit_with_notifications(
         request.app.state.notification_hub,
         background_tasks,
         update_class_quiz_default_time,
@@ -209,8 +206,7 @@ async def add_class_quiz_question_route(
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuestionUpdateResponse:
     hub = request.app.state.quiz_edit_hub
-    result = await hub.run_db(
-        run_quiz_edit_with_notifications,
+    result = await run_quiz_edit_with_notifications(
         request.app.state.notification_hub,
         background_tasks,
         add_class_quiz_question,

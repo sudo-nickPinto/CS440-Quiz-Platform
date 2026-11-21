@@ -169,7 +169,10 @@ def _session_summaries(
     organizer = _is_organizer(access)
     summaries = []
     for row in rows:
-        my_score, my_rank = mine.get(row.session_id, (None, None))
+        is_host = row.host_id == account.account_id
+        my_score, my_rank = (None, None) if is_host else mine.get(
+            row.session_id, (None, None)
+        )
         summaries.append(
             ClassSessionSummary(
                 session_id=row.session_id,
@@ -177,7 +180,7 @@ def _session_summaries(
                 quiz_title=row.title,
                 status=row.status.value,
                 host_name=row.host_name,
-                is_host=row.host_id == account.account_id,
+                is_host=is_host,
                 started_at=_utc(row.started_at or row.created_at),
                 ended_at=_utc(row.ended_at),
                 participant_count=int(row.participant_count),
@@ -324,8 +327,12 @@ def _class_scores(
     hosted: dict[int, set[int]] = defaultdict(set)
     for row in plays:
         hosted[row.host_id].add(row.session_id)
-        if row.account_id is not None:
-            scores[row.account_id][row.session_id] = int(row.total_score or 0)
+        if (
+            row.account_id is not None
+            and row.account_id != row.host_id
+            and row.total_score is not None
+        ):
+            scores[row.account_id][row.session_id] = row.total_score
     return newest_first, scores, hosted
 
 
@@ -340,7 +347,6 @@ def _class_students(db: Session, class_id: int) -> list[ClassStudentSummary]:
         played = scores.get(row.account_id, {})
         hosted_sessions = hosted.get(row.account_id, set())
         attendance_sessions = len(newest_first) - len(hosted_sessions)
-        attended = len(played.keys() - hosted_sessions)
         total = sum(played.values())
         students.append(
             ClassStudentSummary(
@@ -352,7 +358,7 @@ def _class_students(db: Session, class_id: int) -> list[ClassStudentSummary]:
                 average_score=round(total / len(played), 1) if played else None,
                 total_points=total,
                 attendance_rate=(
-                    round(attended / attendance_sessions, 3)
+                    round(len(played) / attendance_sessions, 3)
                     if attendance_sessions
                     else None
                 ),

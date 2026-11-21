@@ -521,7 +521,10 @@ def test_student_report_marks_missed_sessions(reports) -> None:
     assert [session["attendance_status"] for session in body["sessions"]] == ["ABSENT", "PLAYED"]
 
 
-def test_student_host_is_excluded_from_attendance_and_zero_is_a_played_score(reports) -> None:
+@pytest.mark.parametrize("legacy_host_result", [False, True])
+def test_student_host_is_excluded_from_attendance_and_zero_is_a_played_score(
+    reports, legacy_host_result
+) -> None:
     client, identities, data = reports
     zoe_id = data["ids"]["zoe"]
     with client.app.state.database.session_factory() as db:
@@ -535,6 +538,18 @@ def test_student_host_is_excluded_from_attendance_and_zero_is_a_played_score(rep
             )
         )
         result.total_score = 0
+        if legacy_host_result:
+            participant = SessionParticipant(
+                account_id=zoe_id, session_id=data["second"]
+            )
+            db.add(participant)
+            db.flush()
+            db.add(Result(
+                session_participant_id=participant.session_participant_id,
+                total_score=500,
+                final_rank=1,
+                correct_count=1,
+            ))
         db.commit()
 
     path = f"/classes/{data['class_id']}"
@@ -543,6 +558,7 @@ def test_student_host_is_excluded_from_attendance_and_zero_is_a_played_score(rep
     assert zoe["recent_scores"] == [None, 0]
     assert zoe["recent_attendance_statuses"] == ["HOSTED", "PLAYED"]
     assert zoe["attendance_rate"] == 1.0
+    assert (zoe["session_count"], zoe["total_points"], zoe["average_score"]) == (1, 0, 0.0)
 
     gradebook = client.get(f"{path}/grades/export.csv")
     assert gradebook.status_code == 200
@@ -553,12 +569,42 @@ def test_student_host_is_excluded_from_attendance_and_zero_is_a_played_score(rep
     assert report["class_session_count"] == 2
     assert report["attendance_session_count"] == 1
     assert report["attendance_rate"] == 1.0
+    assert (report["session_count"], report["total_points"], report["average_score"]) == (1, 0, 0.0)
     hosted, played = report["sessions"]
     assert (hosted["attendance_status"], hosted["played"], hosted["points"], hosted["rank"]) == (
         "HOSTED", False, None, None
     )
     assert (played["attendance_status"], played["points"], played["rank"]) == ("PLAYED", 0, 2)
-    assert client.get(session_url(data, "second")).status_code == 403
+    history = client.get(f"{path}/sessions").json()["items"]
+    hosted_summary = next(s for s in history if s["session_id"] == data["second"])
+    assert (hosted_summary["is_host"], hosted_summary["my_score"], hosted_summary["my_rank"]) == (
+        True, None, None
+    )
+    if not legacy_host_result:
+        assert client.get(session_url(data, "second")).status_code == 403
+
+
+def test_participant_without_a_result_is_absent_in_summary_report_and_gradebook(reports) -> None:
+    client, _, data = reports
+    member_id = data["ids"]["member"]
+    with client.app.state.database.session_factory() as db:
+        db.add(SessionParticipant(account_id=member_id, session_id=data["first"]))
+        db.commit()
+
+    path = f"/classes/{data['class_id']}"
+    students = client.get(f"{path}/students").json()["items"]
+    member = next(student for student in students if student["account_id"] == member_id)
+    report = client.get(student_url(data, "member")).json()
+    assert member["recent_attendance_statuses"] == ["ABSENT", "ABSENT"]
+    assert member["recent_scores"] == [None, None]
+    assert [session["attendance_status"] for session in report["sessions"]] == ["ABSENT", "ABSENT"]
+    for summary in (member, report):
+        assert (summary["session_count"], summary["attendance_rate"], summary["average_score"]) == (
+            0, 0.0, None
+        )
+    assert "Member,member@gettysburg.edu,,,0,0.0,,0" in client.get(
+        f"{path}/grades/export.csv"
+    ).text
 
 
 def test_attendance_is_null_when_a_student_hosted_every_completed_session(reports) -> None:

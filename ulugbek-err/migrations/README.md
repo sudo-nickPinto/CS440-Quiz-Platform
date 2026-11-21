@@ -22,6 +22,7 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0014_faculty_access` | Adds `faculty_access_event`: an append-only history of faculty status granted or removed in the app (issue #116). Faculty status itself is still `account.account_type = 'ADMINISTRATOR'` |
 | `0016_class_roster` | Adds `REQUESTED` and `REJECTED` to `class_membership.status` (joining with the class code now waits for an organizer) and the `class_roster_entry` table for roster files imported by organizers |
 | `0018_roster_membership_source` | Adds `ROSTER` to `class_membership.joined_via` for students a roster import added, so a corrected roster email only removes access the roster gave (not an accepted invitation). 0017 is taken by an open branch |
+| `0020_quiz_submission_rejection_comment` | Adds nullable `quiz_submission.rejection_comment` for organizer feedback on rejected quizzes. 0019 is taken by the archive and trash branch (PR #171) |
 
 Each migration comes in two files:
 
