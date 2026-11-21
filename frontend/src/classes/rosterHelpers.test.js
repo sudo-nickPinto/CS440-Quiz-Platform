@@ -44,8 +44,9 @@ describe("rosterName and outcomeLabel", () => {
 });
 
 describe("suggestions", () => {
-  it("waits for two characters and tidies spaces", () => {
-    expect(suggestionQuery(" a ")).toBe("");
+  it("tidies spaces, and an empty search lists everyone", () => {
+    expect(suggestionQuery("   ")).toBe("");
+    expect(suggestionQuery(" a ")).toBe("a");
     expect(suggestionQuery("  maya   riv ")).toBe("maya riv");
   });
 

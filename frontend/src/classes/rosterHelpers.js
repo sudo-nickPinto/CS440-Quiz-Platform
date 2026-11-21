@@ -45,7 +45,7 @@ export function rosterName(row) {
 export function suggestionStatus(status) {
   switch (status) {
     case "ACTIVE":
-      return { label: "Already a student", canAdd: false };
+      return { label: "In this class", canAdd: false };
     case "INVITED":
       return { label: "Invited", canAdd: true };
     case "REQUESTED":
@@ -57,12 +57,11 @@ export function suggestionStatus(status) {
   }
 }
 
-// Only ask the server once the search could match something.
+// The search sent to the server, with spaces tidied. Empty lists everyone.
 export function suggestionQuery(text) {
-  const query = String(text ?? "")
+  return String(text ?? "")
     .trim()
     .replace(/\s+/g, " ");
-  return query.length >= 2 ? query : "";
 }
 
 // Roster files: CSV or Excel. Older .xls files aren't supported.
