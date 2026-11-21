@@ -53,6 +53,13 @@ export function opensRow(event, selection = "") {
 }
 
 // Props for a <tr> that opens `to` (see .cl-click-row in class-admin.css).
+export function sessionResultsPath(classId, sessionId, { hosted, canViewClassReport }) {
+  if (hosted) return `/app/results/host/${sessionId}`;
+  return canViewClassReport
+    ? `/app/classes/${classId}/sessions/${sessionId}/report`
+    : null;
+}
+
 export function rowLink(navigate, to) {
   return {
     className: "cl-click-row",

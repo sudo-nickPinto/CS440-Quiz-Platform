@@ -185,6 +185,40 @@ test("a collaborator sees new feedback after refocusing My quizzes", async ({ pa
   await expect(page.getByText(comment, { exact: true })).toBeVisible();
 });
 
+test("Participate shows a host and a zero-score player with their own report links", async ({ page }) => {
+  await openClass(page, {
+    path: `/app/classes/${CLASS_ID}?section=Reports`,
+    sessions: [
+      { session_id: 20, quiz_title: "My hosted quiz", host_name: "Student", is_host: true },
+      {
+        session_id: 21, quiz_title: "Quiz I played", host_name: "Professor",
+        is_host: false, my_score: 0, my_rank: 1, participant_count: 1,
+      },
+      { session_id: 22, quiz_title: "Quiz I missed", host_name: "Professor", is_host: false },
+    ],
+  });
+  await button(page, "Cards").click();
+  const hostPath = "/app/results/host/20";
+  const playerPath = `/app/classes/${CLASS_ID}/sessions/21/report`;
+  const hostedCard = page.getByRole("article").filter({ hasText: "My hosted quiz" });
+  await expect(hostedCard.getByText("Hosted", { exact: true })).toBeVisible();
+  await expect(hostedCard.getByRole("link")).toHaveAttribute("href", hostPath);
+  await expect(hostedCard.getByText(/Rank #|points|No score recorded/)).toHaveCount(0);
+  const playedCard = page.getByRole("article").filter({ hasText: "Quiz I played" });
+  await expect(playedCard.getByText("0 points")).toBeVisible();
+  await expect(playedCard.getByRole("link")).toHaveAttribute("href", playerPath);
+
+  await button(page, "Rows").click();
+  const hostedRow = page.getByRole("row").filter({ hasText: "My hosted quiz" });
+  await expect(hostedRow.getByRole("cell", { name: "Hosted", exact: true })).toBeVisible();
+  await expect(hostedRow.getByRole("link", { name: "Host results for My hosted quiz" })).toHaveAttribute("href", hostPath);
+  const playedRow = page.getByRole("row").filter({ hasText: "Quiz I played" });
+  await expect(playedRow.getByRole("link", { name: "My results for Quiz I played" })).toHaveAttribute("href", playerPath);
+  const missedRow = page.getByRole("row").filter({ hasText: "Quiz I missed" });
+  await expect(missedRow.getByRole("cell", { name: "Absent", exact: true })).toBeVisible();
+  await expect(missedRow.getByRole("link")).toHaveCount(0);
+});
+
 test("the submitted version preview displays returned feedback", async ({ page }) => {
   const comment = "The example needs a correction.";
   await openClass(page, { as: "organizer", submission: "REJECTED", comment, path: PREVIEW });

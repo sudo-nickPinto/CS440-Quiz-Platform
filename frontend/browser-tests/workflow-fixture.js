@@ -75,6 +75,7 @@ export async function openClass(page_, options = {}) {
     submission = null,
     stale = false,
     comment = null,
+    sessions = [],
     previewDenied = false,
     failDecision = false,
     path,
@@ -182,6 +183,10 @@ export async function openClass(page_, options = {}) {
 
     if (method === "GET" && path_ === `${base}/active-sessions`) {
       return error(404, "not_found", "No live sessions.");
+    }
+
+    if (method === "GET" && path_ === `${base}/sessions`) {
+      return json({ class_id: CLASS_ID, ...page(sessions) });
     }
 
     // Member view: their own quizzes.

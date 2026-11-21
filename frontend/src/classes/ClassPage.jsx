@@ -25,6 +25,7 @@ import {
   resolveUserSection,
   rowLink,
   sendForApproval,
+  sessionResultsPath,
   SUBMISSION_FILTERS,
   SUBMISSION_SORTS,
   USER_SECTIONS,
@@ -416,7 +417,7 @@ function LayoutToggle({ layout, onChange }) {
 
 const PARTICIPATE_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-wide", "cl-go-cell"];
 
-// Member view: completed and missed sessions, as cards or list rows.
+// Member view: hosted, played, and missed sessions, as cards or rows.
 function ParticipateTable({ classInfo, layout, onLayoutChange }) {
   const memory = `class:${classInfo.id}:participate`;
   const [page, setPage] = useRemembered(`${memory}:page`, 1);
@@ -432,6 +433,16 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
   );
   const toggle = <LayoutToggle layout={layout} onChange={onLayoutChange} />;
 
+  function participation(session) {
+    const hosted = session.is_host === true;
+    const played = !hosted && session.my_score != null;
+    const report = sessionResultsPath(classInfo.id, session.session_id, {
+      hosted,
+      canViewClassReport: classInfo.canManage || played,
+    });
+    return { hosted, played, report };
+  }
+
   if (layout === "list") {
     return (
       <ReportTable
@@ -440,7 +451,7 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
         noun="session"
         tableClass="cl-rows cl-member-rows"
         columnClasses={PARTICIPATE_COLUMNS}
-        headers={["Rank", "Quiz", "Score", "Host", "Date", ""]}
+        headers={["Rank / Status", "Quiz", "Score", "Host", "Date", ""]}
         emptyTitle="No sessions yet"
         emptyText={
           "When an organizer hosts a quiz here, a Live button appears at " +
@@ -450,11 +461,10 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
         onPageChange={setPage}
         controls={toggle}
         rows={resource.data.items.map((session) => {
-          const played = session.my_score != null;
-          const report =
-            classInfo.canManage || played
-              ? `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`
-              : null;
+          const { hosted, played, report } = participation(session);
+          const reportLabel = hosted
+            ? "Host results"
+            : classInfo.canManage ? "Session report" : "My results";
           return {
             key: session.session_id,
             text: `${session.quiz_title} ${session.host_name}`,
@@ -467,7 +477,7 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
                   <small>of {formatScore(session.participant_count)}</small>
                 </span>
               ) : (
-                "Absent"
+                hosted ? "Hosted" : "Absent"
               ),
               <span className="cl-quiz-cell">
                 {report ? (
@@ -500,7 +510,7 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
               report ? (
                 <GoLink
                   to={report}
-                  label={`${classInfo.canManage ? "Session report" : "My results"} for ${session.quiz_title}`}
+                  label={`${reportLabel} for ${session.quiz_title}`}
                 />
               ) : null,
             ],
@@ -526,11 +536,7 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
       items={resource.data.items}
       getText={(session) => `${session.quiz_title} ${session.host_name}`}
       renderCard={(session) => {
-        const played = session.my_score != null;
-        const report =
-          classInfo.canManage || played
-            ? `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`
-            : null;
+        const { hosted, played, report } = participation(session);
         const maxScore = session.top_score ?? best;
         const percentage =
           played && maxScore > 0
@@ -542,9 +548,9 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
             key={session.session_id}
             title={session.quiz_title}
             to={report}
-            status={played ? "Completed" : "Absent"}
+            status={hosted ? "Hosted" : played ? "Completed" : "Absent"}
             headline={
-              played
+              hosted ? "You hosted this session" : played
                 ? `Rank #${session.my_rank} of ${formatScore(session.participant_count)}`
                 : "Did not participate"
             }
@@ -552,13 +558,15 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
           >
             <p>Hosted by {session.host_name}</p>
             <p>{formatDate(session.started_at)}</p>
-            <p>
-              <strong>
-                {played
-                  ? `${formatScore(session.my_score)} points`
-                  : "No score recorded"}
-              </strong>
-            </p>
+            {!hosted && (
+              <p>
+                <strong>
+                  {played
+                    ? `${formatScore(session.my_score)} points`
+                    : "No score recorded"}
+                </strong>
+              </p>
+            )}
             {played && (
               <span className="qc-progress" aria-hidden="true">
                 <span style={{ width: `${percentage}%` }} />
