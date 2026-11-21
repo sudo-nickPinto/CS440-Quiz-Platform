@@ -41,6 +41,15 @@ PEOPLE = (
 )
 
 
+def _people() -> tuple[str, ...]:
+    """PEOPLE, plus student001..studentN when E2E_EXTRA_PEOPLE=N (the live
+    quiz load test, frontend/loadtest/live-quiz.mjs)."""
+    extra = int(os.environ.get("E2E_EXTRA_PEOPLE", "0") or 0)
+    if not 0 <= extra <= 2000:
+        sys.exit("E2E_EXTRA_PEOPLE must be between 0 and 2000.")
+    return PEOPLE + tuple(f"student{n:03d}" for n in range(1, extra + 1))
+
+
 def _free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -118,7 +127,7 @@ def main() -> None:
         json.dumps(
             {
                 "base_url": f"http://127.0.0.1:{port}",
-                "tokens": {name: make_token(sub=f"e2e|{name}") for name in PEOPLE},
+                "tokens": {name: make_token(sub=f"e2e|{name}") for name in _people()},
             }
         ),
         flush=True,

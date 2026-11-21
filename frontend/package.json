@@ -12,7 +12,8 @@
     "test:e2e": "vitest run e2e",
     "dev:browser-test": "vite --config browser-tests/vite.config.js",
     "test:browser": "playwright test",
-    "test:browser:ui": "playwright test --ui"
+    "test:browser:ui": "playwright test --ui",
+    "loadtest": "node loadtest/live-quiz.mjs"
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.27.0",
