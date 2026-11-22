@@ -92,17 +92,16 @@ For optional quiz-title search in a class's completed session history, see the [
 
 ### 1. In plain English
 
-An instructor spots an unclear question in a student's submitted quiz. Saving
-a correction withdraws the pending request so the student can publish and
-submit the revision. If the instructor chooses to reject the submission, they
-can leave a comment explaining what to fix. The frontend follow-up will show
-the instructor's edit and rejection controls and the comment in My quizzes for
-the student who owns the quiz and its active collaborators.
+An organizer spots an unclear question while reviewing a student's submission.
+They choose **Edit quiz** from the preview and save a correction. The request
+clears from the pending queue, and the owner can publish and submit the revision.
+If the organizer rejects a request with a comment, the owner and active
+collaborators can read it in **My quizzes**, even if someone else submitted it.
 
-A student who hosts one session, plays another, and misses a third has 50%
-attendance. The report and gradebook record the first session as Hosted and
-exclude it from the attendance denominator. The frontend follow-up will show
-Hosted in session history and student reports.
+A student who hosts one session sees **Hosted** in their session history and
+can open the host report directly. If they play a second session for zero
+points and miss a third, their history shows **Played** and **Absent** for
+those sessions. Their attendance is 1 of 2 eligible sessions (50%).
 
 ### 2. Assumptions and design choices
 
@@ -145,6 +144,15 @@ permissions, submission decisions, feedback, and report fields. The
 [Task 4 overview](docs/V3_TASK4_QUIZ_SUBMISSION_APPROVAL.md) and
 [original Task 4 design](docs/V3_TASK4_SUBMISSION_APPROVAL_DRAFT.md) describe
 the initial approval workflow and schema.
+
+### 4. Run the full-stack browser checks
+
+From `frontend/`, run `npm run test:browser:full-stack` after installing the
+frontend dependencies and Playwright Chromium. Set `E2E_DATABASE_URL` to a
+disposable local MySQL 8 test database with all repository migrations applied,
+including `0020_quiz_submission_rejection_comment`. Use `BACKEND_PYTHON` if the
+backend Python environment lives outside `backend/.venv`. Run the browser and
+backend test suites serially if they share a test database.
 
 ## Development Workflow
 
