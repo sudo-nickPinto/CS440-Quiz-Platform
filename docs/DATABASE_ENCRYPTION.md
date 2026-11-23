@@ -1,14 +1,16 @@
 # Database encryption at rest
 
 With the Docker-hosted MySQL (`compose.mysql.yaml`), QuizBurg's data is
-encrypted on disk. Someone who copies the database files, the data volume or a
-backup can't read names, emails, quizzes or scores from them.
+encrypted on disk. Someone who gets a copy of the database files, the data
+volume or a backup, without the key, can't read names, emails, quizzes or
+scores from them.
 
 ## What is and isn't protected
 
 | Situation | Protected? |
 |---|---|
-| The server's disk, a volume copy or snapshot of `mysql-data` is stolen | Yes. Tables, redo/undo logs and binary logs are encrypted, and the key is in a separate volume. |
+| A copy or snapshot of the `mysql-data` volume leaks on its own | Yes. Tables, redo/undo logs and binary logs are encrypted, and the key is in the separate `mysql-keyring` volume. |
+| The whole server disk is taken | No, on a single Docker node: both volumes are on that disk, so the key goes with the data. Only storage encryption by the host (ask Reclaim) covers this. |
 | A backup made with `deploy/backup-db.sh` leaks | Yes. Backups are encrypted with a passphrase. |
 | Someone logs in to MySQL with a valid password | No. MySQL decrypts for any logged-in user, so keep the database off the internet and its passwords secret. |
 | Someone takes over the server itself (both volumes and the running containers) | No. They have the key too. |

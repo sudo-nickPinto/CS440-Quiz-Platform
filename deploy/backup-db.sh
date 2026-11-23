@@ -27,6 +27,8 @@ fi
 umask 077
 mkdir -p "$out_dir"
 file="$out_dir/quizburg-$(date -u +%Y%m%dT%H%M%SZ).sql.gz.enc"
+# A failed dump must not leave a partial file that looks like a backup.
+trap 'rm -f "$file"' ERR
 
 $compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -uroot \
     --single-transaction --routines --triggers --no-tablespaces \
