@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
 import { apiFetch } from '../api'
+import { pickTokenGetter } from '../guest/guestSession'
 
 export function useApi() {
-  const { getAccessTokenSilently } = useAuth0()
+  const { getAccessTokenSilently, isAuthenticated } = useAuth0()
 
   return useCallback(
-    (path, options) => apiFetch(path, getAccessTokenSilently, options),
-    [getAccessTokenSilently],
+    (path, options) =>
+      apiFetch(
+        path,
+        pickTokenGetter(isAuthenticated, getAccessTokenSilently),
+        options,
+      ),
+    [getAccessTokenSilently, isAuthenticated],
   )
 }
 

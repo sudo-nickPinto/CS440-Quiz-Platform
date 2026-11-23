@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 
 import { AccountContext } from "./account";
+import { pickTokenGetter } from "../guest/guestSession";
 import { createNotificationsBus, NotificationsContext } from "./notifications";
 import {
   createNotificationsClient,
@@ -15,7 +16,7 @@ import {
 // for catching up, so pages don't each add their own.
 export default function NotificationsProvider({ children }) {
   const account = useContext(AccountContext);
-  const { getAccessTokenSilently } = useAuth0();
+  const { getAccessTokenSilently, isAuthenticated } = useAuth0();
   const [bus] = useState(createNotificationsBus);
   const accountId = account?.is_active ? account.account_id : null;
 
@@ -23,8 +24,10 @@ export default function NotificationsProvider({ children }) {
     if (accountId == null) return undefined;
     const client = createNotificationsClient({
       url: notificationsSocketUrl(import.meta.env.VITE_API_BASE_URL),
-      getToken: ({ freshToken } = {}) =>
+      // Temporary demo: guests send their own token (src/guest).
+      getToken: pickTokenGetter(isAuthenticated, ({ freshToken } = {}) =>
         getAccessTokenSilently(freshToken ? { cacheMode: "off" } : undefined),
+      ),
       onEvent: (event) => bus.emit(event),
       onReady: ({ reconnected }) => {
         if (!reconnected) return;
@@ -34,7 +37,7 @@ export default function NotificationsProvider({ children }) {
       },
     });
     return () => client.close();
-  }, [accountId, bus, getAccessTokenSilently]);
+  }, [accountId, bus, getAccessTokenSilently, isAuthenticated]);
 
   // The tab came back: timers may have been throttled and events missed
   // while it was hidden. Throttled inside the bus.

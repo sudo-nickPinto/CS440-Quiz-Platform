@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { useGuestQuizPath } from "../guest/guestSession";
 
 import Avatar from "../avatars/Avatar";
 
@@ -109,6 +110,8 @@ export function HostFinal({ final, title, totalQuestions, sessionId, backTo }) {
 
 export function ParticipantFinal({ final, totalQuestions, sessionId, backTo }) {
   const me = final.me;
+  // Temporary demo: a guest is already on their quiz, so only "answers".
+  const guest = Boolean(useGuestQuizPath());
 
   return (
     <section className="lv-complete" aria-labelledby="complete-title">
@@ -149,9 +152,11 @@ export function ParticipantFinal({ final, totalQuestions, sessionId, backTo }) {
         <Link className="qb-btn" to={`/app/results/me/${sessionId}`}>
           See your answers →
         </Link>
-        <Link className="qb-btn qb-btn-paper" to={backTo || "/app/classes"}>
-          Back to class
-        </Link>
+        {!guest && (
+          <Link className="qb-btn qb-btn-paper" to={backTo || "/app/classes"}>
+            Back to class
+          </Link>
+        )}
       </div>
     </section>
   );

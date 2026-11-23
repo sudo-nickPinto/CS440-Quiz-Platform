@@ -1,0 +1,148 @@
+/* Guest join for the capstone live demo (temporary, demo branch only). */
+
+.gj {
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+
+.gj-header {
+  display: flex;
+  align-items: center;
+  padding: 14px 24px;
+  border-bottom: var(--b);
+  background: var(--paper);
+}
+
+.gj-main {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+}
+
+.gj-card {
+  width: min(100%, 460px);
+  padding: 32px 28px;
+  border: var(--b);
+  background: #ffffff;
+  box-shadow: var(--shadow);
+}
+
+.gj-card form {
+  display: grid;
+  gap: 12px;
+}
+
+.gj-eyebrow {
+  margin: 0;
+  color: var(--orange-deep);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.gj-card h1 {
+  margin: 0;
+  color: var(--navy);
+  font-size: clamp(28px, 7vw, 36px);
+  line-height: 1.1;
+}
+
+.gj-help {
+  margin: 0 0 8px;
+  color: var(--gray);
+}
+
+.gj-help strong {
+  color: var(--ink);
+}
+
+.gj-label {
+  font-weight: 700;
+}
+
+.gj-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--navy);
+  box-shadow: 3px 3px 0 var(--ink);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.gj-input:focus-visible {
+  outline: 3px solid var(--sky);
+  outline-offset: 2px;
+}
+
+.gj-code {
+  font-size: 32px;
+  letter-spacing: 10px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.gj-input::placeholder {
+  color: var(--gray);
+  opacity: 0.6;
+}
+
+.gj-button {
+  margin-top: 8px;
+  min-height: 52px;
+  border: var(--b);
+  background: var(--orange-deep);
+  color: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  font: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.gj-button:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.gj-button:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+.gj-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.gj-back {
+  justify-self: start;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--navy);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.gj-error {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border: var(--b-thin);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-weight: 700;
+}

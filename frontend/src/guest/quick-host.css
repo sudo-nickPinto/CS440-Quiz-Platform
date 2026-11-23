@@ -1,0 +1,110 @@
+/* Quick host for the capstone live demo (temporary, demo branch only). */
+
+.qh-body {
+  display: grid;
+  gap: 16px;
+  padding: 28px;
+}
+
+.qh-body h1 {
+  margin: 0;
+  color: var(--navy);
+}
+
+.qh-lede {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--gray);
+}
+
+.qh-search {
+  display: grid;
+  gap: 6px;
+  max-width: 420px;
+  font-weight: 700;
+}
+
+.qp .qh-search input {
+  padding: 10px 12px;
+  border: var(--b-thin);
+  background: #ffffff;
+  font: inherit;
+  font-weight: 400;
+}
+
+.qh-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qh-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: var(--b);
+  background: #ffffff;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.qh-item div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.qh-item strong {
+  overflow-wrap: anywhere;
+  font-size: 18px;
+}
+
+.qh-item small {
+  color: var(--gray);
+}
+
+.qp .qh-host {
+  flex: none;
+  min-height: 44px;
+  padding: 8px 18px;
+  border: var(--b);
+  background: var(--orange-deep);
+  color: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  font: inherit;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.qp .qh-host:hover:not(:disabled) {
+  background: var(--orange);
+}
+
+.qp .qh-host:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.qp .qh-host:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.qh-empty {
+  color: var(--gray);
+}
+
+@media (max-width: 560px) {
+  .qh-body {
+    padding: 20px 16px;
+  }
+
+  .qh-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

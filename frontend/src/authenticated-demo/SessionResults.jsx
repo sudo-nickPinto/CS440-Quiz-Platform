@@ -10,6 +10,7 @@ import {
 } from "react-router";
 import { useAction, useApi, useResource } from "./rest";
 import { classPagePath } from "../classes/classPaths";
+import { useGuestQuizPath } from "../guest/guestSession";
 import RequestError from "./RequestError";
 import { useFileDownload } from "./useFileDownload";
 import {
@@ -887,7 +888,7 @@ export function ParticipantResults({ report, backTo, backLabel }) {
           ← {backLabel || "Classes"}
         </Link>
         <div className="rr-trail">
-          <span>Classes /</span>
+          {!backTo?.startsWith("/app/play/") && <span>Classes /</span>}
           <span>Results /</span>
           <b>{report.quiz_title}</b>
         </div>
@@ -1025,9 +1026,13 @@ export default function SessionResults() {
   // itself does. "Back" always goes to that class.
   const session = useResource(valid ? "/sessions/" + sessionId : null);
   const classId = session.data?.class_id;
-  const back = classId
-    ? { backTo: classPagePath(classId), backLabel: "Class" }
-    : {};
+  // Temporary demo: guests go back to their quiz, never to a class.
+  const guestQuizPath = useGuestQuizPath();
+  const back = guestQuizPath
+    ? { backTo: guestQuizPath, backLabel: "Back to the quiz" }
+    : classId
+      ? { backTo: classPagePath(classId), backLabel: "Class" }
+      : {};
 
   const resource = useResource(
     valid
@@ -1052,7 +1057,9 @@ export default function SessionResults() {
     return (
       <section className="qp-content">
         <RequestError error={resource.error} retry={resource.reload} />
-        <Link to="/app/classes">Back to classes</Link>
+        <Link to={guestQuizPath || "/app/classes"}>
+          {guestQuizPath ? "Back to the quiz" : "Back to classes"}
+        </Link>
       </section>
     );
   }

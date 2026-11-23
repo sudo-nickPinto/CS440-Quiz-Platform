@@ -968,3 +968,57 @@
     transition: none !important;
   }
 }
+/* Temporary demo: the big guest Join button (src/guest). */
+.lp-guest-join {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 36px 0 28px;
+  text-align: center;
+}
+
+.lp .lp-guest-join-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-width: min(100%, 360px);
+  padding: 22px 40px;
+  border: var(--b);
+  background: var(--orange-deep);
+  color: var(--paper);
+  box-shadow: var(--shadow);
+  font-size: clamp(24px, 5vw, 32px);
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.lp .lp-guest-join-button:hover {
+  background: var(--orange);
+}
+
+.lp .lp-guest-join-button:active {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+.lp .lp-guest-join-button:focus-visible {
+  outline: 3px solid var(--sky);
+  outline-offset: 4px;
+}
+
+.lp-guest-join p {
+  margin: 0;
+  color: var(--gray);
+  font-size: 15px;
+}
+
+@media (max-width: 640px) {
+  .lp .lp-guest-join-button {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 18px 20px;
+  }
+}
