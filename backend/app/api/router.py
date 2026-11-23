@@ -7,6 +7,7 @@ from app.api.routes.class_quizzes import router as class_quizzes_router
 from app.api.routes.class_reports import router as class_reports_router
 from app.api.routes.class_roster import router as class_roster_router
 from app.api.routes.faculty import router as faculty_router
+from app.api.routes.guest import router as guest_router
 from app.api.routes.health import router as health_router
 from app.api.routes.live import router as live_router
 from app.api.routes.me import router as me_router
@@ -29,6 +30,8 @@ api_router.include_router(class_quizzes_router)
 api_router.include_router(class_reports_router)
 api_router.include_router(class_roster_router)
 api_router.include_router(faculty_router)
+# Temporary: guest join for the capstone live demo (app/guest.py).
+api_router.include_router(guest_router)
 api_router.include_router(health_router)
 api_router.include_router(live_router)
 api_router.include_router(me_router)

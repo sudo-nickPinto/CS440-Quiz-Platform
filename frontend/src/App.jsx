@@ -7,6 +7,13 @@ import AuthenticatedDemo from "./authenticated-demo/PreviewApp";
 import AccountGate from "./components/AccountGate";
 import VerifyEmailConfirmPage from "./components/VerifyEmailConfirmPage";
 import { clearExplicitLogin, returnToState, wasExplicitLogin } from "./api";
+// Temporary demo: join a game with a code and nickname, no account.
+import GuestJoinPage from "./guest/GuestJoinPage";
+import {
+  clearGuestToken,
+  getGuestQuizPath,
+  getGuestToken,
+} from "./guest/guestSession";
 import "./App.css";
 
 const WAS_SIGNED_IN = "quiz-was-signed-in";
@@ -48,6 +55,7 @@ export default function App() {
 
     try {
       if (isAuthenticated) {
+        clearGuestToken();
         localStorage.setItem(WAS_SIGNED_IN, "1");
         sessionStorage.removeItem(TRIED);
         return;
@@ -58,6 +66,9 @@ export default function App() {
         sessionStorage.removeItem(TRIED);
         return;
       }
+
+      // A demo guest in this tab stays a guest; don't bounce them to Auth0.
+      if (getGuestToken()) return;
 
       const wasSignedIn = localStorage.getItem(WAS_SIGNED_IN);
       const alreadyTried = sessionStorage.getItem(TRIED);
@@ -141,5 +152,28 @@ export default function App() {
       ? "Sign-in could not be completed. Please select Sign in and try again."
       : "";
 
-  return <LandingPage authError={realError} />;
+  const landing = <LandingPage authError={realError} />;
+
+  return (
+    <Routes>
+      <Route path="/play" element={<GuestJoinPage />} />
+      <Route path="/app/*" element={<GuestApp landing={landing} />} />
+      <Route path="*" element={landing} />
+    </Routes>
+  );
+}
+
+// Temporary demo: a guest who joined from /play uses the regular app pages
+// (lobby, live game, results) with their guest token instead of Auth0.
+function GuestApp({ landing }) {
+  if (!getGuestToken() || !getGuestQuizPath()) return landing;
+
+  function leave() {
+    clearGuestToken();
+    window.location.assign("/");
+  }
+
+  return (
+    <AuthenticatedDemo guest={getGuestQuizPath()} onSignOut={leave} />
+  );
 }

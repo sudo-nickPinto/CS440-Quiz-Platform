@@ -18,6 +18,17 @@ def authenticate_token(db: Session, settings: Settings, token: str) -> CurrentAc
     Every expected failure becomes a LiveCloseError with a §7 close code, so
     only genuinely unexpected errors reach the handler's 1011 fallback.
     """
+    # Temporary demo: guest players (app/guest.py) use our own token.
+    from app.guest import guest_current_account, is_guest_token
+
+    if is_guest_token(token):
+        account = guest_current_account(db, token)
+        if account is None:
+            raise LiveCloseError(CloseCode.UNAUTHORIZED, "invalid_token")
+        if not account.is_active:
+            raise LiveCloseError(CloseCode.FORBIDDEN, "inactive_account")
+        return account
+
     if not settings.auth0_domain or not settings.auth0_audience:
         raise LiveCloseError(CloseCode.SERVER_ERROR, "auth_not_configured")
     if not token:

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
+import { Link } from "react-router";
 import {
   PASSWORD_CONNECTION,
   clearExplicitLogin,
@@ -403,6 +404,15 @@ export default function LandingPage({ authError = "" }) {
       <main className="lp-frame" id="landing-main">
         <section className="lp-hero">
           <div className="lp-wrap">
+            {/* Temporary demo: join a live game with a code and nickname,
+                no account needed (src/guest). */}
+            <div className="lp-guest-join">
+              <Link className="lp-guest-join-button" to="/play">
+                Join a game <span aria-hidden="true">→</span>
+              </Link>
+              <p>No account needed: just the game code and a nickname.</p>
+            </div>
+
             <div className="lp-hero-top">
               <div className="lp-hero-copy">
                 <p className="lp-eyebrow">

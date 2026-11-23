@@ -7,6 +7,7 @@ import {
   useLocation,
   useNavigationType,
   useNavigate,
+  useParams,
 } from "react-router";
 import Avatar from "../avatars/Avatar";
 import ClassesPage from "../classes/ClassesPage";
@@ -33,6 +34,9 @@ import ProfilePage from "./ProfilePage";
 import FacultyAccessPage from "../faculty/FacultyAccessPage";
 import { isFaculty } from "../faculty/facultyAccess";
 import LiveSessionPage from "./LiveSessionPage";
+// Temporary demo: host a quiz without going through a class, and guests.
+import QuickHostPage from "../guest/QuickHostPage";
+import { GuestQuizContext } from "../guest/guestSession";
 import EditQuizPage from "./EditQuizPage";
 import "./preview.css";
 import SessionResults from "./SessionResults";
@@ -51,7 +55,7 @@ if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
   window.history.scrollRestoration = "manual";
 }
 
-export default function PreviewApp({ onSignOut }) {
+export default function PreviewApp({ onSignOut, guest = false }) {
   const account = useResource("/me");
   // PATCH /me returns the updated account; use it so the header updates
   // without reloading /me (which would blank the app while it loads).
@@ -132,8 +136,8 @@ export default function PreviewApp({ onSignOut }) {
           <header className="qp-header">
             <Link
               className="qb-brand-link"
-              to="/app/classes"
-              aria-label="QuizBurg — Classes"
+              to={guest || "/app/classes"}
+              aria-label={guest ? "QuizBurg — Your quiz" : "QuizBurg — Classes"}
             >
               <QuizBurgLogo />
             </Link>
@@ -141,7 +145,18 @@ export default function PreviewApp({ onSignOut }) {
             <div className="ui-user">
               {/* Type a six-digit code from anywhere. Hidden during a live
                   game so nobody leaves it by accident. */}
-              {!isLiveGamePath(pathname) && (
+              {!guest && !isLiveGamePath(pathname) && (
+                <Link
+                  className="qb-join"
+                  to="/app/quick-host"
+                  aria-current={
+                    pathname === "/app/quick-host" ? "page" : undefined
+                  }
+                >
+                  Host a quiz
+                </Link>
+              )}
+              {!guest && !isLiveGamePath(pathname) && (
                 <Link
                   className="qb-join"
                   to="/app/join"
@@ -162,19 +177,21 @@ export default function PreviewApp({ onSignOut }) {
 
                 <div className="qb-account-menu">
                   <p>
-                    <small>Signed in as</small>
+                    <small>{guest ? "Playing as" : "Signed in as"}</small>
                     <strong>{me.display_name}</strong>
                   </p>
-                  <button type="button" onClick={() => navigate("/app/profile")}>
-                    Edit profile
-                  </button>
-                  {isFaculty(me) && (
+                  {!guest && (
+                    <button type="button" onClick={() => navigate("/app/profile")}>
+                      Edit profile
+                    </button>
+                  )}
+                  {!guest && isFaculty(me) && (
                     <button type="button" onClick={() => navigate("/app/faculty")}>
                       Faculty access
                     </button>
                   )}
                   <button type="button" onClick={onSignOut}>
-                    Sign out
+                    {guest ? "Leave" : "Sign out"}
                   </button>
                 </div>
               </details>
@@ -182,6 +199,11 @@ export default function PreviewApp({ onSignOut }) {
           </header>
 
           <main id="app-main" className="qp-frame" ref={main} tabIndex={-1}>
+            {guest ? (
+              <GuestQuizContext.Provider value={guest}>
+                <GuestRoutes quizPath={guest} pathname={pathname} />
+              </GuestQuizContext.Provider>
+            ) : (
             <Routes>
               <Route path="classes" element={<ClassesPage />} />
 
@@ -236,6 +258,8 @@ export default function PreviewApp({ onSignOut }) {
 
               <Route path="join" element={<JoinSessionPage />} />
 
+              <Route path="quick-host" element={<QuickHostPage />} />
+
               <Route
                 path="profile"
                 element={<ProfilePage onSaved={setSavedAccount} />}
@@ -268,12 +292,49 @@ export default function PreviewApp({ onSignOut }) {
                 element={<Navigate to="/app/classes" replace />}
               />
             </Routes>
+            )}
           </main>
 
           {/* "A quiz is live" pop-up on any page when a class lobby opens. */}
-          <LiveQuizPopup />
+          {!guest && <LiveQuizPopup />}
         </div>
       </NotificationsProvider>
     </AccountContext.Provider>
   );
+}
+
+// Temporary demo: a guest only ever sees their own game and their own
+// answers afterwards. Every other address leads back to the game.
+function GuestRoutes({ quizPath, pathname }) {
+  const sessionId = quizPath.split("/").pop();
+  const back = <Navigate to={quizPath} replace />;
+
+  return (
+    <Routes>
+      <Route
+        path="play/:sessionId"
+        element={
+          <GuestOwnSession sessionId={sessionId} fallback={back}>
+            <LiveSessionPage key={pathname} />
+          </GuestOwnSession>
+        }
+      />
+      <Route
+        path="results/:view/:sessionId"
+        element={
+          <GuestOwnSession sessionId={sessionId} fallback={back} view="me">
+            <SessionResults key={pathname} />
+          </GuestOwnSession>
+        }
+      />
+      <Route path="*" element={back} />
+    </Routes>
+  );
+}
+
+function GuestOwnSession({ sessionId, view, fallback, children }) {
+  const params = useParams();
+  const ownSession = params.sessionId === sessionId;
+  const ownView = view === undefined || params.view === view;
+  return ownSession && ownView ? children : fallback;
 }

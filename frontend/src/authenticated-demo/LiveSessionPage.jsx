@@ -11,6 +11,7 @@ import Avatar from "../avatars/Avatar";
 import QuizStartCountdown from "./QuizStartCountdown";
 import CopyCodeButton from "./CopyCodeButton";
 import { classPagePath } from "../classes/classPaths";
+import { useGuestQuizPath } from "../guest/guestSession";
 import {
   answerSuit,
   answerTextSize,
@@ -133,7 +134,8 @@ function HostLobby({ state, title, actions }) {
             </div>
 
             <p className="lv-join-step">
-              Go to <b>{window.location.host}/app/join</b> and enter the code
+              Go to <b>{window.location.host}</b>, tap <b>Join a game</b> and
+              enter the code
             </p>
           </div>
         </div>
@@ -715,8 +717,21 @@ function ConnectedSession({ sessionId }) {
 
   const host = state.role === "host";
   const canAct = state.connection === "open" && !action.busy;
-  const title = metadata.data?.quiz_title || `Session ${sessionId}`;
-  const classPage = classPagePath(metadata.data?.class_id);
+  // Temporary demo: guests only ever go back to their own game. A guest
+  // reopening a finished game has no live session state, so its title and
+  // question count come from their saved report instead.
+  const guestQuizPath = useGuestQuizPath();
+  const guestReport = useResource(
+    guestQuizPath && phase === "ended" && !state.session?.total_questions
+      ? `/sessions/${sessionId}/report?personal=true`
+      : null,
+  );
+  const title =
+    metadata.data?.quiz_title ||
+    guestReport.data?.quiz_title ||
+    `Session ${sessionId}`;
+  const classPage = guestQuizPath || classPagePath(metadata.data?.class_id);
+  const backLabel = guestQuizPath ? "Back to the quiz" : "Back to class";
   const terminalMessage = CONNECTION_ERRORS[state.connection];
 
   const canAdvance =
@@ -738,11 +753,29 @@ function ConnectedSession({ sessionId }) {
     if (await confirmer.confirm(options)) run(command);
   }
 
-  const total = state.session?.total_questions;
+  const total =
+    state.session?.total_questions ?? guestReport.data?.questions?.length;
   const order =
     state.currentQuestion?.question_order ??
     state.lastQuestion?.question_order ??
     null;
+
+  // Temporary demo: a guest coming back to a finished quiz waits for the
+  // stored results and sees the final screen again, instead of being sent
+  // straight on to their answers.
+  if (
+    phase === "ended" &&
+    guestQuizPath &&
+    !state.final &&
+    state.lastError?.code !== "results_unavailable"
+  ) {
+    return (
+      <div className="lv-centered" role="status">
+        <h1>Loading your results…</h1>
+        <Dots />
+      </div>
+    );
+  }
 
   if (phase === "ended") {
     // session_ended carries `reason`; GET /sessions/{id}/results carries
@@ -936,7 +969,7 @@ function ConnectedSession({ sessionId }) {
               }
             />
             <Link className="qb-btn qb-btn-paper" to={classPage}>
-              Back to class
+              {backLabel}
             </Link>
           </div>
         )}
@@ -965,9 +998,15 @@ function ConnectedSession({ sessionId }) {
             {phase === "left" && (
               <div className="lv-centered">
                 <h1>You left the session</h1>
-                <Link className="qb-btn" to={classPage}>
-                  Back to class
-                </Link>
+                {guestQuizPath ? (
+                  <Link className="qb-btn" to="/" reloadDocument>
+                    Back to home
+                  </Link>
+                ) : (
+                  <Link className="qb-btn" to={classPage}>
+                    Back to class
+                  </Link>
+                )}
               </div>
             )}
 

@@ -80,10 +80,21 @@ def current_user(
 
 def get_account_record(
     request: Request,
-    claims: dict = Depends(current_user),
     creds: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> dict:
+    # Temporary demo: guest players (app/guest.py) carry our own token
+    # instead of an Auth0 one.
+    from app.guest import guest_account_record, is_guest_token
+
+    if creds is not None and is_guest_token(creds.credentials):
+        record = guest_account_record(db, creds.credentials)
+        db.commit()  # hand the connection back now (see check_code_route)
+        if record is None:
+            raise APIError(401, "invalid_token", "Invalid token")
+        return record
+
+    claims = current_user(request, creds)
     if creds is None:
         raise APIError(401, "missing_token", "Missing bearer token")
     return get_or_create_account(

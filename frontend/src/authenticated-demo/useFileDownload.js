@@ -1,5 +1,6 @@
 import { useAuth0 } from "@auth0/auth0-react";
 import { useAction } from "./rest";
+import { pickTokenGetter } from "../guest/guestSession";
 
 /*
  * Downloads a file from an authenticated API route, such as a CSV or
@@ -10,13 +11,16 @@ import { useAction } from "./rest";
  * { filename } to name the file yourself whatever the server says.
  */
 export function useFileDownload() {
-  const { getAccessTokenSilently } = useAuth0();
+  const { getAccessTokenSilently, isAuthenticated } = useAuth0();
   const action = useAction();
 
   async function download(path, fallbackName, options = {}) {
     const { method = "GET", body, filename } = options;
     const result = await action.run(async () => {
-      const token = await getAccessTokenSilently();
+      const token = await pickTokenGetter(
+        isAuthenticated,
+        getAccessTokenSilently,
+      )();
       const base = import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "");
       const headers = { Authorization: "Bearer " + token };
       if (body !== undefined) headers["Content-Type"] = "application/json";

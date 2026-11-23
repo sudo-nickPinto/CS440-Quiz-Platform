@@ -2,6 +2,7 @@ import { useAuth0 } from '@auth0/auth0-react'
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { createLiveSession } from './liveSession.js'
 import { livePhase, nextQuestionOrder } from './liveReducer.js'
+import { pickTokenGetter } from '../guest/guestSession.js'
 
 // Live state and controls for one session page.
 //
@@ -15,19 +16,19 @@ import { livePhase, nextQuestionOrder } from './liveReducer.js'
 // Each action returns a promise that resolves on the server's ack and
 // rejects with a LiveCommandError ({ code, message }) on an error reply.
 export function useLiveSession(sessionId) {
-  const { getAccessTokenSilently } = useAuth0()
+  const { getAccessTokenSilently, isAuthenticated } = useAuth0()
 
   // Building the store has no side effects; the socket opens in the effect.
-  const store = useMemo(
-    () =>
-      createLiveSession({
-        sessionId,
-        apiBaseUrl: import.meta.env.VITE_API_BASE_URL,
-        getToken: ({ freshToken }) =>
-          getAccessTokenSilently(freshToken ? { cacheMode: 'off' } : undefined),
-      }),
-    [sessionId, getAccessTokenSilently],
-  )
+  const store = useMemo(() => {
+    // Temporary demo: guests send their own token (src/guest).
+    const getAuth0Token = ({ freshToken }) =>
+      getAccessTokenSilently(freshToken ? { cacheMode: 'off' } : undefined)
+    return createLiveSession({
+      sessionId,
+      apiBaseUrl: import.meta.env.VITE_API_BASE_URL,
+      getToken: pickTokenGetter(isAuthenticated, getAuth0Token),
+    })
+  }, [sessionId, getAccessTokenSilently, isAuthenticated])
 
   useEffect(() => {
     store.start()
