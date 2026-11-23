@@ -41,6 +41,7 @@ import { ClassStudents } from "./ClassManagement";
 import { AddStudentDialog, JoinRequestsTable } from "./StudentRoster";
 import QuestionBankExportDialog from "../authenticated-demo/QuestionBankExportDialog";
 import OptionsMenu from "../authenticated-demo/OptionsMenu";
+import { downloadQuizQuestionsCsv } from "../authenticated-demo/questionBankModel";
 import {
   CLASS_EVENTS,
   SUBMISSION_EVENTS,
@@ -594,6 +595,8 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
   const api = useApi();
   const account = useAccount();
   const action = useAction();
+  const navigate = useNavigate();
+  const confirmer = useConfirm();
   const memory = `class:${classInfo.id}:present`;
   const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "recent", {
@@ -627,6 +630,87 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
         );
         return true;
       }),
+    );
+  }
+
+  async function duplicateQuiz(quiz) {
+    const copied = await action.run(() =>
+      api(`/classes/${classInfo.id}/quizzes/${quiz.quiz_id}/duplicate`, {
+        method: "POST",
+      }),
+    );
+    if (copied?.quiz) {
+      navigate(`/app/quizzes/${copied.quiz.quiz_id}/edit`, {
+        state: { classId: classInfo.id },
+      });
+    }
+  }
+
+  // The list only has counts, so load the quiz's questions first.
+  async function exportQuestions(quiz) {
+    await action.run(async () => {
+      const detail = await api(`/quizzes/${quiz.quiz_id}`);
+      const questions = [...detail.version.questions].sort(
+        (a, b) => a.question_order - b.question_order,
+      );
+      downloadQuizQuestionsCsv(detail.version.title, questions);
+      return true;
+    });
+  }
+
+  async function archiveQuiz(quiz) {
+    const sure = await confirmer.confirm({
+      label: "Archive quiz",
+      title: `Archive “${quiz.title}”?`,
+      message:
+        "It will no longer be available to edit or host. Past sessions and results stay saved.",
+      confirmLabel: "Archive quiz",
+      cancelLabel: "Keep it",
+    });
+    if (!sure) return;
+    const done = await action.run(async () => {
+      await api(`/quizzes/${quiz.quiz_id}/archive`, { method: "PATCH" });
+      return true;
+    });
+    refresh(done);
+  }
+
+  // The same options as the ⋯ menu on the quiz page.
+  function quizOptions(quiz, info) {
+    return (
+      <OptionsMenu className="cl-quiz-options">
+        {info.owner && (
+          <Link to={`/app/quizzes/${quiz.quiz_id}/reports`}>
+            Hosting history
+          </Link>
+        )}
+        <button
+          type="button"
+          disabled={action.busy}
+          onClick={() => void duplicateQuiz(quiz)}
+        >
+          Duplicate quiz
+        </button>
+        {quiz.question_count > 0 && (
+          <button
+            type="button"
+            disabled={action.busy}
+            onClick={() => void exportQuestions(quiz)}
+          >
+            Export questions (CSV)
+          </button>
+        )}
+        {info.owner && !info.archived && (
+          <button
+            type="button"
+            className="ui-danger"
+            disabled={action.busy}
+            onClick={() => void archiveQuiz(quiz)}
+          >
+            Archive quiz
+          </button>
+        )}
+      </OptionsMenu>
     );
   }
 
@@ -729,6 +813,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
     return (
       <>
         <RequestError error={action.error} />
+        <ConfirmDialog confirmer={confirmer} />
         <ReportTable
           {...shared}
           tableClass="cl-rows cl-member-rows"
@@ -763,7 +848,10 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
                 <PeopleTags quiz={quiz} owner={info.owner} />,
                 <span className="cl-dim">{formatScore(quiz.question_count)}</span>,
                 <span className="cl-dim">{formatDate(quiz.updated_at)}</span>,
-                <GoLink to={info.to} label={`Open ${quiz.title}`} />,
+                <div className="cl-quiz-actions">
+                  {quizOptions(quiz, info)}
+                  <GoLink to={info.to} label={`Open ${quiz.title}`} />
+                </div>,
               ],
             };
           })}
@@ -775,6 +863,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
   return (
     <>
       <RequestError error={action.error} />
+      <ConfirmDialog confirmer={confirmer} />
       <CardCollection
         {...shared}
         items={resource.data.items}
@@ -795,6 +884,9 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
               headline={`${quiz.question_count} ${
                 quiz.question_count === 1 ? "question" : "questions"
               }`}
+              actions={
+                <div className="cl-quiz-actions">{quizOptions(quiz, info)}</div>
+              }
             >
               <PeopleTags quiz={quiz} owner={owner} long />
               <p>Edited {formatDate(quiz.updated_at)}</p>

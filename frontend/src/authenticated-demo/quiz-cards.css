@@ -137,6 +137,36 @@
   transform: translate(3px, 3px);
   box-shadow: none;
 }
+.qp .cl-quiz-actions {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+/* An open menu must sit above the following rows. The row cells get a hover
+   filter (which creates a stacking context), so raise the whole open row. */
+.qp .cl-quiz-actions:has(.ui-row-menu[open]),
+.qp .cl-rows tbody tr:has(.ui-row-menu[open]) > td {
+  position: relative;
+  z-index: 20;
+}
+/* The table scrolls sideways on narrow screens, which would also cut off a
+   menu opened on its last rows, so let it overflow while one is open. */
+.qp .cl-table-wrap:has(.cl-quiz-options[open]) {
+  overflow: visible;
+}
+.qp .cl-quiz-actions .ui-row-menu,
+.qp .cl-quiz-actions .ui-row-menu[open] {
+  position: relative;
+  align-self: center;
+}
+.qp .cl-quiz-actions .ui-row-options {
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(260px, 76vw);
+}
 .qp .qc-card a:focus-visible,
 .qp .qc-card button:focus-visible,
 .qp .qc-card summary:focus-visible {

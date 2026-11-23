@@ -166,3 +166,26 @@ test("class page and preview fit a phone screen", async ({ page }) => {
   await expect(page.getByText("Original submitted question")).toBeVisible();
   await noHorizontalScroll(page);
 });
+
+test("each quiz row and card has an options menu that exports its questions", async ({
+  page,
+}) => {
+  await openClass(page, { as: "member" });
+
+  for (const layout of ["Rows", "Cards"]) {
+    if (layout === "Cards") await button(page, "Cards").click();
+    const menu = page.locator(".cl-quiz-options");
+    await expect(menu).toHaveCount(1);
+    await menu.locator("summary").click();
+    await expect(page.getByRole("link", { name: "Hosting history" })).toBeVisible();
+    await expect(button(page, "Duplicate quiz")).toBeVisible();
+    await expect(button(page, "Archive quiz")).toBeVisible();
+
+    const download = page.waitForEvent("download");
+    await button(page, "Export questions (CSV)").click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(/-questions\.csv$/);
+    const text = await (await file.createReadStream()).toArray();
+    expect(Buffer.concat(text).toString()).toContain("New draft question");
+  }
+});
