@@ -564,8 +564,8 @@ def test_student_host_is_excluded_from_attendance_and_zero_is_a_played_score(
     assert gradebook.status_code == 200
     assert "Zoe Student,zoe@gettysburg.edu,0,Hosted,1,100.0,0.0,0" in gradebook.text
 
-    act_as(client, identities["zoe"])
     report = client.get(student_url(data, "zoe")).json()
+    act_as(client, identities["zoe"])
     assert report["class_session_count"] == 2
     assert report["attendance_session_count"] == 1
     assert report["attendance_rate"] == 1.0
@@ -629,19 +629,14 @@ def test_removed_student_history_stays_visible_to_organizers(reports) -> None:
     assert body["total_points"] == 100
 
 
-def test_member_sees_own_report_without_class_wide_numbers(reports) -> None:
+def test_member_cannot_open_their_own_or_another_student_report(reports) -> None:
     client, identities, data = reports
     act_as(client, identities["zoe"])
 
-    mine = client.get(student_url(data, "zoe"))
-    other = client.get(student_url(data, "amy"))
-
-    assert mine.status_code == 200
-    assert mine.json()["total_points"] == 300
-    assert mine.json()["email"] is None
-    assert mine.json()["class_average"] is None
-    assert other.status_code == 403
-    assert other.json()["error"]["code"] == "not_class_organizer"
+    for name in ("zoe", "amy"):
+        response = client.get(student_url(data, name))
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "not_class_organizer"
 
 
 def test_student_outside_the_class_is_not_found(reports) -> None:

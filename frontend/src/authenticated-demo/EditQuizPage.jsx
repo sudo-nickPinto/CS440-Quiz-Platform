@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 import { classPagePath } from "../classes/classPaths";
 
 import { useResource } from "./rest";
@@ -9,6 +9,9 @@ import RequestError from "./RequestError";
 
 export default function EditQuizPage() {
   const { quizId } = useParams();
+  const { state } = useLocation();
+  const returnSubmissionId = state?.returnSubmissionId;
+  const returning = Number.isSafeInteger(returnSubmissionId) && returnSubmissionId > 0;
 
   const validId = /^[1-9]\d*$/.test(quizId ?? "");
   const resource = useResource(
@@ -42,7 +45,7 @@ export default function EditQuizPage() {
     return (
       <section className="qp-content">
         <h1>Editing unavailable</h1>
-        <p>Only the quiz creator or an active collaborator can edit this quiz.</p>
+        <p>Editing requires access as the owner, an active collaborator, or a faculty organizer of the class.</p>
         <Link to={`/app/quizzes/${quiz.quiz_id}`}>
           Back to quiz
         </Link>
@@ -83,6 +86,7 @@ export default function EditQuizPage() {
       key={quizEditorKey(quiz)}
       initialEditor={initialEditor}
       existingQuiz={quiz}
+      returnSubmissionId={returning ? returnSubmissionId : null}
       onReload={resource.reload}
     />
   );

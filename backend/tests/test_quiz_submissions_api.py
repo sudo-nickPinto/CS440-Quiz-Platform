@@ -801,6 +801,10 @@ def test_my_quizzes_shares_rejection_feedback_with_current_quiz_editors(
         assert result.status_code == 200, result.text
         item = next(item for item in result.json()["items"] if item["quiz_id"] == quiz_id)
         assert item["rejection_comment"] == comment
+        assert item["approval_feedback"] == {
+            "status": "REJECTED", "decided_by_name": "Faculty", "rejection_comment": comment,
+        }
+        assert client.get(f"/quizzes/{quiz_id}").json()["approval_feedback"] == item["approval_feedback"]
         assert item["approval_submission_id"] == submission_id
         assert item["approval_sent_by_me"] is False
         assert_error(preview(client, class_id, submission_id), 404, "submission_not_found")
@@ -1237,3 +1241,44 @@ def test_archived_quiz_preview_stays_readable_but_cannot_be_approved(
         "quiz_version_not_published",
     )
     assert decide(client, class_id, submission_id, "REJECTED").status_code == 200
+
+
+def test_organizer_sends_back_an_edited_quiz_and_the_next_request_clears_feedback(
+    submissions, pending_quiz
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    quiz_path, payload, published, submission_id = pending_quiz
+    detail_path = f"/quizzes/{published['quiz_id']}"
+    review = {**payload, "expected_revision": published["revision"], "return_submission_id": submission_id}
+
+    assert_error(client.put(quiz_path, json={**review, "title": "Owner edit"}), 403, "not_class_organizer")
+    act_as(actor, identities, "faculty")
+    assert_error(client.put(quiz_path, json=review), 409, "quiz_content_unchanged")
+    assert_error(
+        client.put(quiz_path, json={**review, "title": "Wrong request", "return_submission_id": submission_id + 1}),
+        409,
+        "invalid_submission_transition",
+    )
+    assert client.get(detail_path).json()["revision"] == published["revision"]
+    assert preview(client, class_id, submission_id).json()["submission"]["status"] == "PENDING"
+
+    draft = client.put(quiz_path, json={**review, "title": "Corrected by the professor"})
+    assert draft.status_code == 200, draft.text
+    snapshot = preview(client, class_id, submission_id).json()
+    assert snapshot["submission"]["status"] == "WITHDRAWN"
+    assert snapshot["version"]["title"] == published["version"]["title"]
+
+    act_as(actor, identities, "owner")
+    feedback = {
+        "status": "WITHDRAWN",
+        "decided_by_name": "Faculty",
+        "rejection_comment": None,
+    }
+    assert client.get(detail_path).json()["approval_feedback"] == feedback
+    new_version = client.post(
+        f"{quiz_path}/publish", json={"expected_revision": draft.json()["revision"]}
+    ).json()["version"]
+    assert client.get(detail_path).json()["approval_feedback"] == feedback
+    assert post_submission(client, class_id, new_version["quiz_version_id"]).status_code == 201
+    assert client.get(detail_path).json()["approval_feedback"] is None

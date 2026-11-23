@@ -52,6 +52,13 @@ export function opensRow(event, selection = "") {
   );
 }
 
+export function sessionResultsPath(classId, sessionId, { hosted, canViewClassReport }) {
+  if (hosted) return `/app/results/host/${sessionId}`;
+  return canViewClassReport
+    ? `/app/classes/${classId}/sessions/${sessionId}/report`
+    : null;
+}
+
 // Props for a <tr> that opens `to` (see .cl-click-row in class-admin.css).
 export function rowLink(navigate, to) {
   return {
@@ -187,11 +194,17 @@ export function resolveUserSection(requested) {
   return "My quizzes";
 }
 
-// The lead block on a My quizzes row. Members only see Draft or Approved:
-// publishing (freezing a version) happens inside "Send for approval". A quiz
-// edited after approval is a Draft again until the new version is approved.
+// My quizzes shows a withdrawn request until a new version is sent.
+// Publishing (freezing a version) happens inside "Send for approval".
 export function presentStatus(quiz) {
   if (quiz.status === "ARCHIVED") return { key: "archived", label: "Archived" };
+  if (quiz.approval_feedback?.status === "REJECTED" || quiz.approval_status === "REJECTED") {
+    return { key: "rejected", label: "Rejected" };
+  }
+  if (quiz.approval_feedback?.status === "WITHDRAWN") {
+    return { key: "withdrawn", label: "Sent back" };
+  }
+  if (quiz.approval_status === "WITHDRAWN") return { key: "withdrawn", label: "Withdrawn" };
   if (quiz.status === "PUBLISHED" && quiz.approval_status === "APPROVED") {
     return { key: "approved", label: "Approved" };
   }
@@ -214,17 +227,15 @@ export function collaboratorTags(names, max = 3) {
 // only the owner can publish, so co-editors can't send it.
 export function approvalButton(quiz) {
   if (quiz.status === "ARCHIVED" || !quiz.my_access) return null;
-  const edited = quiz.status === "DRAFT" && Boolean(quiz.published_version_id);
   const status = quiz.approval_status;
 
   if (status === "APPROVED" && quiz.status === "PUBLISHED") {
     return { kind: "approved", label: "✓ Approved", disabled: true, note: null };
   }
-  if (status === "PENDING") {
-    const note = edited ? "Edited since request" : null;
+  if (status === "PENDING" && quiz.status === "PUBLISHED") {
     return quiz.approval_sent_by_me
-      ? { kind: "withdraw", label: "Withdraw request", disabled: false, note }
-      : { kind: "waiting", label: "Waiting for approval", disabled: true, note };
+      ? { kind: "withdraw", label: "Withdraw request", disabled: false, note: null }
+      : { kind: "waiting", label: "Waiting for approval", disabled: true, note: null };
   }
 
   const needsPublish = quiz.status === "DRAFT";
@@ -282,6 +293,16 @@ export function studentRanks(rows) {
     ranks.set(Number(row.account_id), rank);
   });
   return ranks;
+}
+
+const ATTENDANCE_LABELS = { HOSTED: "Hosted", PLAYED: "Played", ABSENT: "Absent" };
+
+export function attendanceLabel(status, played) {
+  return ATTENDANCE_LABELS[status] ?? (played ? "Played" : "Absent");
+}
+
+export function formatAttendanceRate(rate) {
+  return rate == null ? "—" : `${Math.round(rate * 100)}%`;
 }
 
 // Colors a score chip: "miss" when absent, "hi" at or above that

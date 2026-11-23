@@ -119,7 +119,7 @@ def test_saved_revision_preserves_live_snapshot_search_and_gradebook(
 
     owner_id = course.accounts["owner"].account_id
     student_path = f"{course.path}/students/{owner_id}"
-    student = course.request("owner", "GET", f"{student_path}/results").json()
+    student = course.request("organizer", "GET", f"{student_path}/results").json()
     assert (
         student["class_session_count"], student["session_count"],
         student["attendance_session_count"], student["attendance_rate"],
@@ -141,7 +141,7 @@ def test_saved_revision_preserves_live_snapshot_search_and_gradebook(
     assert scores == {original["title"]: "Hosted", updated["title"]: "0", other["version"]["title"]: ""}
     assert (owner["Sessions played"], owner["Attendance %"]) == ("1", "50.0")
 
-    xlsx = course.request("owner", "GET", f"{student_path}/export.xlsx")
+    xlsx = course.request("organizer", "GET", f"{student_path}/export.xlsx")
     workbook = load_workbook(BytesIO(xlsx.content))
     summary = dict(workbook["Summary"].values)
     assert (summary["Sessions played"], summary["Attendance sessions"], summary["Attendance %"]) == (

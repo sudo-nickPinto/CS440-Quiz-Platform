@@ -127,3 +127,10 @@ Since V3, every quiz belongs to a class. Migration `0008` fills in `quiz.class_i
 3. Once the first query returns no rows, a later migration can make `quiz.class_id` required.
 
 Until then, a quiz without a class is visible only to its author.
+
+## Returning a quiz for revision
+
+`0021_quiz_submission_returned_for_revision` adds
+`quiz_submission.returned_for_revision`. Existing withdrawals default to
+false. Apply it after the rejection-comment migration before running the new
+backend.

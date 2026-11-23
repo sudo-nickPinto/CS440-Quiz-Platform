@@ -4,6 +4,8 @@ import {
   approvalLabel,
   approvedQuizzesPath,
   approvalButton,
+  attendanceLabel,
+  formatAttendanceRate,
   collaboratorTags,
   presentStatus,
   sendForApproval,
@@ -20,6 +22,7 @@ import {
   initials,
   resolveAdminSection,
   scoreMark,
+  sessionResultsPath,
   studentRanks,
   submissionsPath,
 } from "./classHelpers";
@@ -179,6 +182,36 @@ describe("studentRanks", () => {
   });
 });
 
+describe("session results access", () => {
+  it.each([
+    ["actual host", true, false, "/app/results/host/20"],
+    ["organizer who hosted", true, true, "/app/results/host/20"],
+    ["organizer viewing someone else's session", false, true, "/app/classes/4/sessions/20/report"],
+    ["student who played", false, true, "/app/classes/4/sessions/20/report"],
+    ["student who missed the session", false, false, null],
+  ])("routes a %s", (_viewer, hosted, canViewClassReport, href) => {
+    expect(sessionResultsPath(4, 20, { hosted, canViewClassReport })).toBe(href);
+  });
+});
+
+describe("attendance display", () => {
+  it("uses the explicit status and distinguishes a legacy zero score from absence", () => {
+    expect(attendanceLabel("HOSTED", false)).toBe("Hosted");
+    expect(attendanceLabel("ABSENT", true)).toBe("Absent");
+    expect(attendanceLabel("PLAYED", false)).toBe("Played");
+    for (const [score, label] of [[0, "Played"], [null, "Absent"]]) {
+      expect(attendanceLabel(undefined, score != null)).toBe(label);
+    }
+    expect(scoreMark(0, 100)).toBe("lo");
+  });
+
+  it("keeps a null rate distinct from zero percent", () => {
+    expect(formatAttendanceRate(null)).toBe("—");
+    expect(formatAttendanceRate(0)).toBe("0%");
+    expect(formatAttendanceRate(0.5)).toBe("50%");
+  });
+});
+
 describe("scoreMark", () => {
   it("marks absences, and scores against the presentation average", () => {
     expect(scoreMark(null, 500)).toBe("miss");
@@ -248,7 +281,19 @@ describe("approvalButton", () => {
     const rejected = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "REJECTED" });
     expect(approvalButton(rejected)).toMatchObject({ kind: "send", label: "Send for approval", note: "Rejected" });
     const withdrawn = quiz({ status: "PUBLISHED", published_version_id: 3, approval_status: "WITHDRAWN" });
+    expect(presentStatus(withdrawn)).toMatchObject({ label: "Withdrawn" });
     expect(approvalButton(withdrawn)).toMatchObject({ kind: "send", label: "Send for approval", note: null });
+  });
+
+  it("offers a new send action after withdrawal even if the older pending row was cached", () => {
+    const savedDraft = { published_version_id: 3, approval_sent_by_me: true };
+    const pending = quiz({ ...savedDraft, approval_status: "PENDING" });
+    const withdrawn = quiz({ ...savedDraft, approval_status: "WITHDRAWN" });
+    expect(approvalButton(pending)).toMatchObject({ kind: "send", disabled: false });
+    expect(presentStatus(withdrawn).label).toBe("Withdrawn");
+    expect(approvalButton(withdrawn)).toMatchObject({ kind: "send", disabled: false });
+    expect(approvalButton({ ...withdrawn, my_access: "EDITOR" }))
+      .toMatchObject({ kind: "send", disabled: true });
   });
 
   it("keeps co-editors from sending unpublished edits", () => {

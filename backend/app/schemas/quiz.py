@@ -106,6 +106,7 @@ class QuizCreate(QuizRequestModel):
 
 class QuizUpdate(QuizCreate):
     expected_revision: int = Field(ge=1, strict=True)
+    return_submission_id: int | None = Field(default=None, gt=0, strict=True)
 
 
 class QuizPublish(QuizRequestModel):
@@ -214,6 +215,12 @@ class QuizContributor(BaseModel):
     display_name: str
 
 
+class QuizApprovalFeedback(BaseModel):
+    status: SubmissionStatus
+    decided_by_name: str | None
+    rejection_comment: str | None = None
+
+
 class QuizResponse(BaseModel):
     quiz_id: int
     author_id: int
@@ -230,6 +237,7 @@ class QuizResponse(BaseModel):
     can_edit: bool
     version: QuizVersionResponse
     hosting: QuizHosting | None = None
+    approval_feedback: QuizApprovalFeedback | None = None
 
 
 class QuizListItem(BaseModel):
@@ -270,6 +278,7 @@ class ClassQuizListItem(QuizListItem):
     approval_submission_id: int | None = None
     approval_sent_by_me: bool = False
     rejection_comment: str | None = None
+    approval_feedback: QuizApprovalFeedback | None = None
     # Display names of the quiz's active collaborators, A to Z.
     collaborator_names: list[str] = Field(default_factory=list)
 

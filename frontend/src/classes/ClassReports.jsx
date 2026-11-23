@@ -8,7 +8,7 @@ import {
   ParticipantResults,
 } from "../authenticated-demo/SessionResults";
 import { useFileDownload } from "../authenticated-demo/useFileDownload";
-import { rowLink } from "./classHelpers";
+import { attendanceLabel, formatAttendanceRate, rowLink, sessionResultsPath } from "./classHelpers";
 import { useClassResource } from "./classResources";
 
 function validId(value) {
@@ -27,10 +27,6 @@ function date(value) {
 
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? "—" : parsed.toLocaleString();
-}
-
-function sessionUrl(classId, sessionId) {
-  return `/app/classes/${classId}/sessions/${sessionId}/report`;
 }
 
 function ReportFrame({ classId, title, actions, error, children }) {
@@ -213,9 +209,10 @@ function StudentReport({ report, classId }) {
           [
             "Attendance",
             report.attendance_rate == null
-              ? "—"
-              : `${Math.round(report.attendance_rate * 100)}%`,
+              ? "No eligible sessions"
+              : formatAttendanceRate(report.attendance_rate),
           ],
+          ["Eligible sessions", number(report.attendance_session_count)],
           ["Correct answers", number(report.correct_count)],
           ["Incorrect / unanswered", number(report.incorrect_count)],
           ["Class average", number(report.class_average)],
@@ -223,8 +220,8 @@ function StudentReport({ report, classId }) {
       />
 
       <p className="cl-section-note">
-        Average points exclude sessions the student did not play. Unanswered
-        questions count as incorrect. Class-wide figures are shown only when the
+        Attendance excludes sessions the student hosted. Average points use
+        sessions the student played. Unanswered questions count as incorrect. Class-wide figures are shown only when the
         backend grants access.
       </p>
 
@@ -246,31 +243,31 @@ function StudentReport({ report, classId }) {
           </thead>
 
           <tbody>
-            {report.sessions.map((session) => (
-              // A played session opens its results from anywhere on the row.
-              <tr
-                key={session.session_id}
-                {...(session.played &&
-                  rowLink(navigate, sessionUrl(classId, session.session_id)))}
-              >
-                <td>{date(session.started_at)}</td>
-                <td>{session.quiz_title}</td>
-                <td>{session.played ? "Played" : "Absent"}</td>
-                <td>{number(session.points)}</td>
-                <td>{number(session.correct)}</td>
-                <td>{number(session.incorrect)}</td>
-                <td>{number(session.rank)}</td>
-                <td>
-                  {session.played ? (
-                    <Link to={sessionUrl(classId, session.session_id)}>
-                      Session report →
-                    </Link>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))}
+            {report.sessions.map((session) => {
+              const status = attendanceLabel(session.attendance_status, session.played);
+              const played = status === "Played";
+              const to = played ? sessionResultsPath(classId, session.session_id, {
+                canViewClassReport: true,
+              }) : null;
+              return (
+                <tr key={session.session_id} {...(to && rowLink(navigate, to))}>
+                  <td>{date(session.started_at)}</td>
+                  <td>{session.quiz_title}</td>
+                  <td>{status}</td>
+                  <td>{played ? number(session.points) : "—"}</td>
+                  <td>{played ? number(session.correct) : "—"}</td>
+                  <td>{played ? number(session.incorrect) : "—"}</td>
+                  <td>{played ? number(session.rank) : "—"}</td>
+                  <td>
+                    {to ? (
+                      <Link to={to}>Session report →</Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
 
             {report.sessions.length === 0 && (
               <tr>
@@ -342,15 +339,20 @@ export function ClassStudentReportPage() {
   const { classId, accountId } = useParams();
   const valid = validId(classId) && validId(accountId);
 
-  const resource = useResource(
-    valid ? `/classes/${classId}/students/${accountId}/results` : null,
-  );
   const classInfo = useClassResource(classId);
+  const canManage = classInfo.status === "ready" && classInfo.data.canManage;
+  const resource = useResource(
+    valid && canManage ? `/classes/${classId}/students/${accountId}/results` : null,
+  );
   const file = useFileDownload();
-  const canRemove =
-    classInfo.status === "ready" &&
-    classInfo.data.canManage &&
-    !classInfo.data.archived;
+  const canRemove = canManage && !classInfo.data.archived;
+
+  if (valid && (
+    (classInfo.status === "ready" && !canManage) ||
+    resource.error?.code === "not_class_organizer"
+  )) {
+    return <Navigate replace to={`/app/classes/${classId}?view=user&section=Reports`} />;
+  }
 
   return (
     <ReportFrame
@@ -361,9 +363,7 @@ export function ClassStudentReportPage() {
           : "Student report"
       }
       actions={
-        // Anyone who can open this report may export it; only organizers
-        // remove students.
-        resource.data && (
+        canManage && resource.data && (
           <div className="cl-actions">
             <ExcelButton
               file={file}
@@ -382,7 +382,14 @@ export function ClassStudentReportPage() {
       }
       error={file.error}
     >
-      <ReportRequest valid={valid} resource={resource}>
+      <ReportRequest
+        valid={valid}
+        resource={canManage ? resource : {
+          loading: classInfo.status === "loading",
+          error: classInfo.error,
+          reload: classInfo.reload,
+        }}
+      >
         {(report) => <StudentReport report={report} classId={classId} />}
       </ReportRequest>
     </ReportFrame>

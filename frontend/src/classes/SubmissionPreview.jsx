@@ -1,13 +1,18 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 
+import { useAccount } from "../authenticated-demo/account";
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import RequestError from "../authenticated-demo/RequestError";
+import { canEditQuiz } from "../authenticated-demo/quizEditing";
 import {
+  useCatchUp,
   useNotifications,
-  useNotificationsReconnect,
 } from "../authenticated-demo/notifications";
 import { approvalLabel, submissionPreviewPath } from "./classHelpers";
 import { useClassResource } from "./classResources";
+import RejectSubmissionDialog from "./RejectSubmissionDialog";
+import RejectionFeedback from "./RejectionFeedback";
 
 // Read-only view of exactly the version a member submitted for approval.
 // The quiz page shows the newest (possibly draft) version, so organizers
@@ -17,19 +22,32 @@ export default function SubmissionPreviewPage() {
   const path = submissionPreviewPath(classId, submissionId);
   const preview = useResource(path);
   const { refresh } = preview;
+  const quizId = preview.data?.submission?.quiz_id;
+  const quiz = useResource(Number.isSafeInteger(quizId) && quizId > 0 ? `/quizzes/${quizId}` : null);
+  const canEdit = quiz.data && canEditQuiz(quiz.data);
 
-  // Another organizer deciding, or the member withdrawing, updates the
-  // status here without a reload.
+  // Keep the submitted snapshot on screen while checking its status and
+  // current edit access after decisions, saved edits, or a missed event.
+  function refreshPreview() {
+    refresh();
+    quiz.refresh();
+  }
   useNotifications("submission_changed", (event) => {
-    if (path && Number(event?.submission_id) === Number(submissionId)) refresh();
+    if (path && Number(event?.submission_id) === Number(submissionId)) refreshPreview();
   });
-  useNotificationsReconnect(() => {
-    if (path) refresh();
+  useCatchUp(() => {
+    if (path) refreshPreview();
   });
   const classInfo = useClassResource(classId);
   const api = useApi();
   const action = useAction();
+  const [rejecting, setRejecting] = useState(false);
   const organizer = classInfo.status === "ready" && classInfo.data.canManage;
+  const account = useAccount();
+  const canSendBack = organizer && !classInfo.data.archived &&
+    quiz.data?.author_id !== account.account_id &&
+    preview.data?.submission.status === "PENDING" &&
+    preview.data.submission.is_current_version;
   const backTo = organizer
     ? `/app/classes/${classId}?section=Approvals`
     : `/app/classes/${classId}?view=user&section=My%20quizzes`;
@@ -55,6 +73,15 @@ export default function SubmissionPreviewPage() {
           <p className="cl-eyebrow">Submitted version</p>
           <h1>{preview.data ? preview.data.version.title : "Submission"}</h1>
         </div>
+        {canEdit && (
+          <Link
+            className="cl-button"
+            to={`/app/quizzes/${quizId}/edit`}
+            state={canSendBack ? { returnSubmissionId: Number(submissionId) } : undefined}
+          >
+            Edit quiz
+          </Link>
+        )}
       </header>
 
       {!path ? (
@@ -77,13 +104,22 @@ export default function SubmissionPreviewPage() {
           action={action}
           archived={classInfo.status === "ready" && classInfo.data.archived}
           onDecide={(status) => void decide(status)}
+          onReject={() => setRejecting(true)}
         />
       ) : null}
+      {rejecting && (
+        <RejectSubmissionDialog
+          classId={classId}
+          submissionId={submissionId}
+          onClose={() => setRejecting(false)}
+          onRejected={preview.reload}
+        />
+      )}
     </section>
   );
 }
 
-function SubmissionBody({ data, organizer, action, archived, onDecide }) {
+function SubmissionBody({ data, organizer, action, archived, onDecide, onReject }) {
   const { submission, version } = data;
   const decided = submission.decided_by_name
     ? ` by ${submission.decided_by_name}`
@@ -117,6 +153,7 @@ function SubmissionBody({ data, organizer, action, archived, onDecide }) {
         </div>
       </section>
 
+      <RejectionFeedback comment={submission.rejection_comment} />
       <RequestError error={action.error} />
 
       {organizer && pending && (
@@ -138,7 +175,7 @@ function SubmissionBody({ data, organizer, action, archived, onDecide }) {
             type="button"
             className="cl-decide"
             disabled={action.busy}
-            onClick={() => onDecide("REJECTED")}
+            onClick={onReject}
           >
             Reject
           </button>

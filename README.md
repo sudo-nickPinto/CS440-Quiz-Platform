@@ -92,17 +92,18 @@ For optional quiz-title search in a class's completed session history, see the [
 
 ### 1. In plain English
 
-An instructor spots an unclear question in a student's submitted quiz. Saving
-a correction withdraws the pending request so the student can publish and
-submit the revision. If the instructor chooses to reject the submission, they
-can leave a comment explaining what to fix. The frontend follow-up will show
-the instructor's edit and rejection controls and the comment in My quizzes for
-the student who owns the quiz and its active collaborators.
+An organizer spots an unclear question while reviewing a student's submission.
+They choose **Edit quiz** from the preview, make the correction, and select
+**Send back to student**. QuizBurg withdraws the request and tells the student to
+review the changes before resubmitting. If the organizer rejects a quiz, its
+**My quizzes** entry says **Rejected**. The owner and active collaborators can
+open the quiz to read who rejected it and any feedback.
 
-A student who hosts one session, plays another, and misses a third has 50%
-attendance. The report and gradebook record the first session as Hosted and
-exclude it from the attendance denominator. The frontend follow-up will show
-Hosted in session history and student reports.
+A student who hosts one session sees **Hosted** in their session history and
+can open the host report directly. If they play a second session for zero
+points and miss a third, their history shows **Played** and **Absent** for
+those sessions. An organizer viewing that student's report sees 1 of 2 eligible
+sessions attended (50%).
 
 ### 2. Assumptions and design choices
 
@@ -132,9 +133,10 @@ Migration `0010_quiz_submission` adds the submission model, restrictive audit
 foreign keys, decision-field checks, and a stored generated
 `active_version_id`. A unique key on `(class_id, active_version_id)` prevents
 concurrent pending or approved duplicates while allowing rejected or withdrawn
-versions to be submitted again. Migration `0020_quiz_submission_rejection_comment` adds optional plain-text
-rejection feedback. Feedback access in My quizzes follows current owner and
-collaborator access. The full submission preview has separate permissions.
+versions to be submitted again. Migration `0020_quiz_submission_rejection_comment`
+stores optional rejection feedback, and `0021_quiz_submission_returned_for_revision`
+records an instructor return. The quiz page shows feedback to the owner and
+active collaborators. The full submission preview has separate permissions.
 
 Live-session creation checks the current version's approval. Completed-session
 reports and exports use the stored host ID to distinguish Hosted from Absent.
@@ -145,6 +147,15 @@ permissions, submission decisions, feedback, and report fields. The
 [Task 4 overview](docs/V3_TASK4_QUIZ_SUBMISSION_APPROVAL.md) and
 [original Task 4 design](docs/V3_TASK4_SUBMISSION_APPROVAL_DRAFT.md) describe
 the initial approval workflow and schema.
+
+### 4. Run the full-stack browser checks
+
+From `frontend/`, run `npm run test:browser:full-stack` after installing the
+frontend dependencies and Playwright Chromium. Set `E2E_DATABASE_URL` to a
+disposable local MySQL 8 test database with all repository migrations applied,
+including `0021_quiz_submission_returned_for_revision`. Use `BACKEND_PYTHON` if
+the backend Python environment lives outside `backend/.venv`. Run the browser and
+backend test suites serially if they share a test database.
 
 ## Development Workflow
 
