@@ -11,11 +11,18 @@ from app.models import AccountRole
 from app.schemas.response import ResponseReceipt
 
 
+class _FakeSession:
+    """Stands in for the request's DB session; the route only commits it."""
+
+    def commit(self) -> None:
+        pass
+
+
 def test_response_route_passes_validated_identity_and_answer_to_service(
     monkeypatch,
 ) -> None:
     account = CurrentAccount(7, AccountRole.USER, True)
-    database_marker = object()
+    database_marker = _FakeSession()
     captured: dict[str, object] = {}
 
     def fake_submit(db, current_account, session_id, session_question_id, payload):

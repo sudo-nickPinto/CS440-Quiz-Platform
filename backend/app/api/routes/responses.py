@@ -30,6 +30,7 @@ def submit_response_route(
         session_question_id,
         payload,
     )
+    db.commit()  # release the connection before the hook; see sessions._announce_join
     # Same after-answer hook as the live socket, so REST answers still close
     # the question and notify the host (LIVE_PROTOCOL.md §4).
     background_tasks.add_task(
