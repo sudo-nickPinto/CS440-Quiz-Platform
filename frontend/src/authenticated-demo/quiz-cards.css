@@ -152,18 +152,9 @@
   position: relative;
   z-index: 20;
 }
-/* What a menu option is doing, shown beside the ⋯ because the menu closes
-   as soon as an option is picked. */
-.qp .cl-quiz-working {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ink);
-  white-space: nowrap;
-}
-/* A sideways-scrolling table would also cut off a menu opened on its last
-   rows. OptionsMenu marks the table while one is open (only when it isn't
-   scrolled sideways), so the menu can hang out below it. */
-.qp .cl-table-wrap[data-menu-open] {
+/* The table scrolls sideways on narrow screens, which would also cut off a
+   menu opened on its last rows, so let it overflow while one is open. */
+.qp .cl-table-wrap:has(.cl-quiz-options[open]) {
   overflow: visible;
 }
 .qp .cl-quiz-actions .ui-row-menu,
