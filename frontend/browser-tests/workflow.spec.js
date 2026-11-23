@@ -189,3 +189,159 @@ test("each quiz row and card has an options menu that exports its questions", as
     expect(Buffer.concat(text).toString()).toContain("New draft question");
   }
 });
+
+function quizRow(page, title) {
+  return page.getByRole("row").filter({ hasText: title });
+}
+
+async function menuOptions(scope) {
+  await scope.locator(".cl-quiz-options summary").click();
+  return scope
+    .locator(".cl-quiz-options .ui-row-options")
+    .locator("a, button")
+    .allInnerTexts();
+}
+
+test("the options menu only offers what the member can do with each quiz", async ({
+  page,
+}) => {
+  await openClass(page, {
+    as: "member",
+    moreQuizzes: [
+      {
+        quiz_id: 11,
+        title: "Shared quiz",
+        author_id: 1,
+        author_name: "Professor",
+        my_access: "EDITOR",
+      },
+      { quiz_id: 12, title: "Archived quiz", status: "ARCHIVED" },
+      { quiz_id: 13, title: "Empty quiz", question_count: 0 },
+    ],
+  });
+
+  expect(await menuOptions(quizRow(page, "Original submitted quiz"))).toEqual([
+    "Hosting history",
+    "Duplicate quiz",
+    "Export questions (CSV)",
+    "Archive quiz",
+  ]);
+  await page.keyboard.press("Escape");
+  // A collaborator can't see the owner's hosting history or archive it.
+  expect(await menuOptions(quizRow(page, "Shared quiz"))).toEqual([
+    "Duplicate quiz",
+    "Export questions (CSV)",
+  ]);
+  await page.keyboard.press("Escape");
+  expect(await menuOptions(quizRow(page, "Archived quiz"))).toEqual([
+    "Hosting history",
+    "Duplicate quiz",
+    "Export questions (CSV)",
+  ]);
+  await page.keyboard.press("Escape");
+  expect(await menuOptions(quizRow(page, "Empty quiz"))).toEqual([
+    "Hosting history",
+    "Duplicate quiz",
+    "Archive quiz",
+  ]);
+});
+
+test("an archived class offers no Duplicate, which the server would refuse", async ({
+  page,
+}) => {
+  await openClass(page, { as: "member", classArchived: true });
+  expect(await menuOptions(quizRow(page, "Original submitted quiz"))).not.toContain(
+    "Duplicate quiz",
+  );
+});
+
+test("archive asks first and only archives once confirmed", async ({ page }) => {
+  const state = await openClass(page, { as: "member" });
+  const row = quizRow(page, "Original submitted quiz");
+  const archives = () =>
+    state.calls.filter((call) => call.method === "PATCH" && call.path.endsWith("/archive"));
+
+  await row.locator(".cl-quiz-options summary").click();
+  await button(page, "Archive quiz").click();
+  await button(page, "Keep it").click();
+  expect(archives()).toHaveLength(0);
+
+  await row.locator(".cl-quiz-options summary").click();
+  await button(page, "Archive quiz").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Archive quiz" }).click();
+  await expect.poll(() => archives().length).toBe(1);
+});
+
+test("a failed export shows why and downloads nothing", async ({ page }) => {
+  for (const [quizDetail, message] of [
+    ["error", "Could not load the quiz."],
+    ["empty", "has no questions to export"],
+  ]) {
+    await openClass(page, { as: "member", quizDetail });
+    let downloaded = false;
+    page.on("download", () => {
+      downloaded = true;
+    });
+    await quizRow(page, "Original submitted quiz").locator(".cl-quiz-options summary").click();
+    await button(page, "Export questions (CSV)").click();
+    await expect(page.getByRole("alert").filter({ hasText: message })).toBeVisible();
+    expect(downloaded).toBe(false);
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  }
+});
+
+test("a menu on the last row of a sideways-scrolling table stays in reach", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 900, height: 800 });
+  await openClass(page, {
+    as: "member",
+    moreQuizzes: [
+      {
+        quiz_id: 11,
+        title: "Supercalifragilisticexpialidocious_Thermodynamics_Final_Review_Quiz",
+      },
+    ],
+  });
+  const wrap = page.locator(".cl-table-wrap");
+  const scrolled = await wrap.evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+    return el.scrollLeft;
+  });
+  expect(scrolled).toBeGreaterThan(0);
+
+  const row = quizRow(page, "Supercalifragilistic");
+  await row.locator(".cl-quiz-options summary").click();
+  // The table keeps its scroll instead of spilling past the page...
+  expect(await wrap.evaluate((el) => el.scrollLeft)).toBe(scrolled);
+  await noHorizontalScroll(page);
+  // ...and the whole menu fits inside it, so nothing is cut off.
+  const box = await wrap.boundingBox();
+  const menu = await row.locator(".ui-row-options").boundingBox();
+  expect(menu.y + menu.height).toBeLessThanOrEqual(box.y + box.height);
+  expect(menu.x).toBeGreaterThanOrEqual(box.x);
+  expect(menu.x + menu.width).toBeLessThanOrEqual(box.x + box.width);
+});
+
+test("the row says what a slow menu option is doing after the menu closes", async ({
+  page,
+}) => {
+  await openClass(page, { as: "member" });
+  let finish;
+  const held = new Promise((resolve) => {
+    finish = resolve;
+  });
+  await page.route("**/__test_api/quizzes/*", async (route) => {
+    await held;
+    await route.fallback();
+  });
+  const row = quizRow(page, "Original submitted quiz");
+  await row.locator(".cl-quiz-options summary").click();
+  await button(page, "Export questions (CSV)").click();
+  await expect(row.getByRole("status")).toHaveText("Exporting…");
+
+  const download = page.waitForEvent("download");
+  finish();
+  await download;
+  await expect(row.getByRole("status")).toHaveCount(0);
+});

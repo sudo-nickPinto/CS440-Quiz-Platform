@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRemembered } from "../authenticated-demo/remember";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAccount } from "../authenticated-demo/account";
@@ -588,9 +588,9 @@ function SortSelect({ label, value, choices, onChange }) {
 const PRESENT_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-num cl-wide", "cl-wide", "cl-go-cell"];
 
 // Member view: the caller's own quizzes in this class (owned or shared with
-// them), as cards or list rows. Clicking a quiz opens the editor; Host live
-// and the approval button stay on the card or row, and Archive lives in the
-// editor.
+// them), as cards or list rows. Clicking a quiz opens its page; Host live
+// and the approval button stay on the card or row, and the ⋯ menu has the
+// same options as the one on the quiz page.
 function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
   const api = useApi();
   const account = useAccount();
@@ -608,8 +608,34 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
   const pending = reportResource(resource);
   const canSubmit =
     classInfo.membershipStatus === "ACTIVE" && !classInfo.archived;
+  // Which quiz a ⋯ menu action is working on, shown on its row or card,
+  // since the menu closes as soon as an option is picked.
+  const [working, setWorking] = useState(null);
+  // The error shows above the list, which may be off screen when the
+  // quiz is further down, so a failed menu action scrolls to it.
+  const errorBox = useRef(null);
+  const showMenuError = useRef(false);
+  useEffect(() => {
+    if (!action.error || !showMenuError.current) return;
+    showMenuError.current = false;
+    errorBox.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [action.error]);
 
   if (pending) return pending;
+
+  // Runs a ⋯ menu action, marking its quiz as working meanwhile.
+  async function runFromMenu(quiz, label, work) {
+    if (action.busy) return null;
+    setWorking({ quizId: quiz.quiz_id, label });
+    showMenuError.current = true;
+    try {
+      const result = await action.run(work);
+      if (result) showMenuError.current = false;
+      return result;
+    } finally {
+      setWorking(null);
+    }
+  }
 
   function refresh(done) {
     if (!done) return;
@@ -634,7 +660,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
   }
 
   async function duplicateQuiz(quiz) {
-    const copied = await action.run(() =>
+    const copied = await runFromMenu(quiz, "Duplicating…", () =>
       api(`/classes/${classInfo.id}/quizzes/${quiz.quiz_id}/duplicate`, {
         method: "POST",
       }),
@@ -646,13 +672,21 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
     }
   }
 
-  // The list only has counts, so load the quiz's questions first.
+  // The list only has counts, so load the quiz's questions first. They
+  // may all have been deleted since the list loaded: say so instead of
+  // downloading a file with only the header row.
   async function exportQuestions(quiz) {
-    await action.run(async () => {
+    await runFromMenu(quiz, "Exporting…", async () => {
       const detail = await api(`/quizzes/${quiz.quiz_id}`);
       const questions = [...detail.version.questions].sort(
         (a, b) => a.question_order - b.question_order,
       );
+      if (questions.length === 0) {
+        resource.reload();
+        throw new Error(
+          `“${detail.version.title}” has no questions to export.`,
+        );
+      }
       downloadQuizQuestionsCsv(detail.version.title, questions);
       return true;
     });
@@ -668,49 +702,65 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
       cancelLabel: "Keep it",
     });
     if (!sure) return;
-    const done = await action.run(async () => {
+    const done = await runFromMenu(quiz, "Archiving…", async () => {
       await api(`/quizzes/${quiz.quiz_id}/archive`, { method: "PATCH" });
       return true;
     });
     refresh(done);
   }
 
-  // The same options as the ⋯ menu on the quiz page.
+  // The same options as the ⋯ menu on the quiz page. Duplicate needs an
+  // active membership in a class that isn't archived, like sending for
+  // approval. A quiz with none of the options gets no menu.
   function quizOptions(quiz, info) {
+    const canDuplicate = canSubmit;
+    const canExport = quiz.question_count > 0;
+    const canArchive = info.owner && !info.archived;
+    const busyHere = working?.quizId === quiz.quiz_id;
+    if (!info.owner && !canDuplicate && !canExport && !busyHere) return null;
     return (
-      <OptionsMenu className="cl-quiz-options">
-        {info.owner && (
-          <Link to={`/app/quizzes/${quiz.quiz_id}/reports`}>
-            Hosting history
-          </Link>
+      <>
+        {busyHere && (
+          <span className="cl-quiz-working" role="status">
+            {working.label}
+          </span>
         )}
-        <button
-          type="button"
-          disabled={action.busy}
-          onClick={() => void duplicateQuiz(quiz)}
-        >
-          Duplicate quiz
-        </button>
-        {quiz.question_count > 0 && (
-          <button
-            type="button"
-            disabled={action.busy}
-            onClick={() => void exportQuestions(quiz)}
-          >
-            Export questions (CSV)
-          </button>
-        )}
-        {info.owner && !info.archived && (
-          <button
-            type="button"
-            className="ui-danger"
-            disabled={action.busy}
-            onClick={() => void archiveQuiz(quiz)}
-          >
-            Archive quiz
-          </button>
-        )}
-      </OptionsMenu>
+        <OptionsMenu className="cl-quiz-options">
+          {info.owner && (
+            <Link to={`/app/quizzes/${quiz.quiz_id}/reports`}>
+              Hosting history
+            </Link>
+          )}
+          {canDuplicate && (
+            <button
+              type="button"
+              disabled={action.busy}
+              onClick={() => void duplicateQuiz(quiz)}
+            >
+              Duplicate quiz
+            </button>
+          )}
+          {canExport && (
+            <button
+              type="button"
+              disabled={action.busy}
+              onClick={() => void exportQuestions(quiz)}
+            >
+              Export questions (CSV)
+            </button>
+          )}
+          {canArchive && (
+            <button
+              type="button"
+              className="ui-danger"
+              disabled={action.busy}
+              onClick={() => void archiveQuiz(quiz)}
+            >
+              Archive quiz
+            </button>
+          )}
+        </OptionsMenu>
+      </>
     );
   }
 
@@ -812,7 +862,9 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
   if (layout === "list") {
     return (
       <>
-        <RequestError error={action.error} />
+        <div ref={errorBox}>
+          <RequestError error={action.error} />
+        </div>
         <ConfirmDialog confirmer={confirmer} />
         <ReportTable
           {...shared}
@@ -862,7 +914,9 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
 
   return (
     <>
-      <RequestError error={action.error} />
+      <div ref={errorBox}>
+        <RequestError error={action.error} />
+      </div>
       <ConfirmDialog confirmer={confirmer} />
       <CardCollection
         {...shared}

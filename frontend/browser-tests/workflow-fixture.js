@@ -66,6 +66,11 @@ const SUBMITTED_VERSION = {
  *   previewDenied the preview endpoint answers 404
  *   failDecision  PATCH answers 409 quiz_version_stale
  *   path          where to start (defaults to the right class tab)
+ *   moreQuizzes   extra member quizzes, each a set of fields that replace
+ *                 the first quiz's (give each its own quiz_id)
+ *   classArchived the class is archived
+ *   quizDetail    GET /quizzes/:id answers "ok", "empty" (no questions)
+ *                 or "error" (500)
  */
 export async function openClass(page_, options = {}) {
   const {
@@ -75,6 +80,9 @@ export async function openClass(page_, options = {}) {
     previewDenied = false,
     failDecision = false,
     path,
+    moreQuizzes = [],
+    classArchived = false,
+    quizDetail = "ok",
   } = options;
   const me = PEOPLE[as];
   const organizer = as === "organizer";
@@ -159,7 +167,7 @@ export async function openClass(page_, options = {}) {
         name: "Browser test class",
         current_role: organizer ? "ORGANIZER" : "MEMBER",
         membership_status: "ACTIVE",
-        archived_at: null,
+        archived_at: classArchived ? TIME : null,
         join_code: "TEST1234",
         joining_open: true,
       });
@@ -180,7 +188,8 @@ export async function openClass(page_, options = {}) {
 
     // Member view: their own quizzes.
     if (method === "GET" && path_ === `${base}/quizzes`) {
-      return json({ class_id: CLASS_ID, ...page(organizer ? [] : [myQuiz()]) });
+      const mine = [myQuiz(), ...moreQuizzes.map((fields) => ({ ...myQuiz(), ...fields }))];
+      return json({ class_id: CLASS_ID, ...page(organizer ? [] : mine) });
     }
 
     // Organizer view: the approval queue, filtered by ?status=.
@@ -206,6 +215,9 @@ export async function openClass(page_, options = {}) {
     // The quiz itself has moved on to a newer draft. Review screens must
     // keep showing the submitted version, never this one.
     if (method === "GET" && path_ === `/quizzes/${QUIZ_ID}`) {
+      if (quizDetail === "error") {
+        return error(500, "server_error", "Could not load the quiz.");
+      }
       return json({
         ...myQuiz(),
         status: "DRAFT",
@@ -217,7 +229,10 @@ export async function openClass(page_, options = {}) {
           quiz_version_id: 200,
           version_number: 2,
           published_at: null,
-          questions: [question("New draft question", "New draft answer")],
+          questions:
+            quizDetail === "empty"
+              ? []
+              : [question("New draft question", "New draft answer")],
         },
       });
     }
@@ -260,6 +275,10 @@ export async function openClass(page_, options = {}) {
         state.submission.status = "WITHDRAWN";
         return route.fulfill({ status: 204 });
       }
+    }
+
+    if (method === "PATCH" && path_ === `/quizzes/${QUIZ_ID}/archive`) {
+      return json({ ...myQuiz(), status: "ARCHIVED" });
     }
 
     return error(500, "unhandled_test_request", `${method} ${path_}`);
