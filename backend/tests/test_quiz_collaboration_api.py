@@ -894,13 +894,16 @@ def _share(client: TestClient, path: str) -> None:
     assert shared.status_code == 201
 
 
-def _add_organizer(client: TestClient, class_id: int) -> CurrentAccount:
+def _add_organizer(
+    client: TestClient, class_id: int, *, faculty: bool = False
+) -> CurrentAccount:
     with client.app.state.database.session_factory() as db:
         organizer = Account(
             auth0_sub="auth0|organizer",
             email="organizer@example.com",
             display_name="Organizer",
             is_active=True,
+            account_type="ADMINISTRATOR" if faculty else None,
         )
         db.add(organizer)
         db.flush()
@@ -914,7 +917,42 @@ def _add_organizer(client: TestClient, class_id: int) -> CurrentAccount:
             )
         )
         db.commit()
-        return CurrentAccount(organizer.account_id, AccountRole.USER, True)
+        role = AccountRole.ADMIN if faculty else AccountRole.USER
+        return CurrentAccount(organizer.account_id, role, True)
+
+
+@pytest.mark.parametrize("faculty", [True, False])
+def test_class_organizer_editing_requires_active_faculty(
+    collaboration_client, faculty, monkeypatch
+) -> None:
+    client, class_id, _, _, _ = collaboration_client
+    quiz = _create(client, class_id)
+    organizer = _add_organizer(client, class_id, faculty=faculty)
+    client.app.dependency_overrides[get_active_account] = lambda: organizer
+    path = f"/classes/{class_id}/quizzes/{quiz['quiz_id']}"
+    detail = client.get(path).json()
+    assert detail["visibility"] == "PRIVATE"
+    assert detail["can_edit"] is faculty
+
+    edit = client.put(path, json=_edit_payload(quiz["revision"]))
+    assert edit.status_code == (200 if faculty else 403), edit.text
+    if faculty:
+        assert client.post(
+            f"{path}/publish", json={"expected_revision": edit.json()["revision"]}
+        ).json()["error"]["code"] == "quiz_publish_denied"
+
+    socket_path = f"/ws/quizzes/{quiz['quiz_id']}"
+    monkeypatch.setattr(
+        quiz_editing_live, "authenticate_token", lambda db, settings, token: organizer
+    )
+    with client.websocket_connect(socket_path) as socket:
+        socket.send_json({"type": "auth", "token": "test-token"})
+        if faculty:
+            assert socket.receive_json()["type"] == "quiz_editor_state"
+        else:
+            with pytest.raises(WebSocketDisconnect) as error:
+                socket.receive_json()
+            assert error.value.reason == "quiz_not_found"
 
 
 def _assert_no_emails(body: dict) -> None:
@@ -1069,9 +1107,26 @@ def test_collaborator_suggestions_list_classmates_as_you_type(
     # Not the owner, and not people outside the class.
     assert _suggest(client, class_id, quiz_id, "ow").json() == []
     assert _suggest(client, class_id, quiz_id, "out").json() == []
-    # One character, or only wildcards, finds nothing.
-    assert _suggest(client, class_id, quiz_id, "e").json() == []
+    # One character searches too; only wildcards finds nothing.
+    assert _suggest(client, class_id, quiz_id, "e").json() == by_name
     assert _suggest(client, class_id, quiz_id, "%%").json() == []
+
+
+def test_collaborator_suggestions_list_the_class_a_page_at_a_time(
+    collaboration_client,
+) -> None:
+    client, class_id, owner, editor, outsider = collaboration_client
+    quiz_id = _create(client, class_id)["quiz_id"]
+    path = f"/classes/{class_id}/quizzes/{quiz_id}/collaborator-suggestions"
+
+    # An empty search lists the class (not the owner, not outsiders).
+    assert [item["account_id"] for item in _suggest(client, class_id, quiz_id, "").json()] == [
+        editor.account_id
+    ]
+    assert client.get(path, params={"limit": 1}).json()[0]["account_id"] == editor.account_id
+    assert client.get(path, params={"limit": 1, "offset": 1}).json() == []
+    for params in ({"limit": 0}, {"limit": 51}, {"offset": -1}):
+        assert client.get(path, params=params).status_code == 422, params
 
 
 def test_collaborator_suggestions_mark_current_editors(collaboration_client) -> None:
@@ -1086,6 +1141,33 @@ def test_collaborator_suggestions_mark_current_editors(collaboration_client) -> 
     suggestions = _suggest(client, class_id, quiz_id, "ed").json()
 
     assert suggestions[0]["is_collaborator"] is True
+
+
+def test_collaborator_suggestions_put_collaborators_first(collaboration_client) -> None:
+    client, class_id, owner, editor, outsider = collaboration_client
+    with client.app.state.database.session_factory() as db:
+        aaron = Account(auth0_sub="auth0|aaron", email="aaron@example.com", display_name="Aaron")
+        db.add(aaron)
+        db.flush()
+        db.add(ClassMembership(class_id=class_id, account_id=aaron.account_id))
+        db.commit()
+        aaron_id = aaron.account_id
+    quiz_id = _create(client, class_id)["quiz_id"]
+
+    def order(q=""):
+        return [(i["account_id"], i["is_collaborator"]) for i in _suggest(client, class_id, quiz_id, q).json()]
+
+    # Alphabetical while nobody is a collaborator...
+    assert order() == [(aaron_id, False), (editor.account_id, False)]
+    added = client.post(
+        f"/classes/{class_id}/quizzes/{quiz_id}/collaborators",
+        json={"email": "editor@example.com", "permission": "EDITOR"},
+    )
+    assert added.status_code == 201
+    # ...then the collaborator comes first, also when searching.
+    assert order() == [(editor.account_id, True), (aaron_id, False)]
+    assert order("e") == [(editor.account_id, True)]
+    assert order("a") == [(aaron_id, False)]
 
 
 def test_only_the_owner_gets_collaborator_suggestions(collaboration_client) -> None:

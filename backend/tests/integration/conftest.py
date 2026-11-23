@@ -90,4 +90,7 @@ def cleanup_database(app) -> None:
     ]
     with app.state.database.engine.begin() as connection:
         for table in tables:
+            if table == "class":
+                # A later semester points at its course's first class (0019).
+                connection.execute(text("UPDATE class SET parent_class_id = NULL"))
             connection.execute(text(f"DELETE FROM {table}"))

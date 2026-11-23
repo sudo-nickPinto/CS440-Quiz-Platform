@@ -187,7 +187,7 @@ Errors:
 - `500 quiz_save_failed`.
 
 ### `GET /classes/{class_id}/quizzes` → `200 ClassQuizListPage`
-The class's quizzes. Organizers get every quiz in the class; members get only the ones they own or collaborate on. `mine=true` narrows an organizer's list the same way. It takes `page`, `page_size` (1–100, default 25), `sort=created_at|updated_at|title` (default `created_at`) and `order=asc|desc` (default `desc`). Each item's `my_access` is `OWNER`, `EDITOR` (an active collaborator), or null when an organizer sees someone else's quiz. `published_version_id` is the newest published version (null for a draft-only quiz), and `approval_status` / `approval_submission_id` describe that version's newest submission to this class (`PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`, or null if it was never submitted). `approval_sent_by_me` says whether the caller sent that submission, so the class page offers Withdraw only to them.
+The class's quizzes. Organizers get every quiz in the class; members get only the ones they own or collaborate on. `mine=true` narrows an organizer's list the same way. It takes `page`, `page_size` (1–100, default 25), `sort=created_at|updated_at|title` (default `created_at`) and `order=asc|desc` (default `desc`). Each item's `my_access` is `OWNER`, `EDITOR` (an active collaborator), or null when an organizer sees someone else's quiz. `published_version_id` is the newest published version (null for a draft-only quiz), and `approval_status` / `approval_submission_id` describe that version's newest submission to this class (`PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`, or null if it was never submitted). `approval_sent_by_me` says whether the caller sent that submission, so the class page offers Withdraw only to them. A rejected submission's nullable plain-text `rejection_comment` is returned to the quiz owner and active collaborators, independent of who submitted it. The dashboard's `my_quizzes` uses the same fields. The full submission preview still follows its existing organizer and submitter access rules.
 
 ```json
 {
@@ -220,6 +220,11 @@ Errors: `404 quiz_not_found`, `500 invalid_quiz`.
 The quiz's owner only. Sets `status` to `ARCHIVED`.
 
 Errors: `403 quiz_access_denied` (an organizer who isn't the owner), `404 quiz_not_found`, `500 quiz_archive_failed`.
+
+### `POST /quizzes/{quiz_id}/trash` and `POST /quizzes/{quiz_id}/restore` → `204`
+Move the quiz to the trash, or bring it back. The quiz's owner only, while an active member of its class. A trashed quiz looks missing everywhere else (`404 quiz_not_found`), and open editors are disconnected. See [The trash](#semesters-archiving-and-the-trash).
+
+Errors: `404 quiz_not_found` (anyone but the owner), `409 quiz_has_live_session` (a session of it is in the lobby or running), `409 class_in_trash` (restore the class first).
 
 ### V3 class quiz drafts and collaborators
 
@@ -259,7 +264,7 @@ Collaborator management is owner-only:
 
 ```text
 GET    /classes/{class_id}/quizzes/{quiz_id}/collaborators
-GET    /classes/{class_id}/quizzes/{quiz_id}/collaborator-suggestions?q=...
+GET    /classes/{class_id}/quizzes/{quiz_id}/collaborator-suggestions?q=...&limit=8&offset=0
 POST   /classes/{class_id}/quizzes/{quiz_id}/collaborators
 DELETE /classes/{class_id}/quizzes/{quiz_id}/collaborators/{account_id}
 ```
@@ -273,13 +278,16 @@ revocation immediately blocks future draft reads and writes. Errors include `not
 `already_quiz_collaborator`, `quiz_owner_cannot_collaborate`,
 `collaborator_management_denied`, and `quiz_collaborator_not_found`.
 
-`collaborator-suggestions` powers the Add collaborator search, which updates
-as the owner types. It returns up to 8 active members of the quiz's class
-(never the owner, never anyone outside the class) whose email, first name,
-last name or a word of their name starts with `q`, as
-`{ account_id, email, display_name, is_collaborator }`. Fewer than two
-characters returns `[]`. Only the class's members are searchable, and only
-the quiz owner can call it.
+`collaborator-suggestions` powers the Add collaborator list, which shows the
+class as soon as the pop-up opens and filters as the owner types. It returns
+one page of active members of the quiz's class (never the owner, never anyone
+outside the class): the quiz's current collaborators first, then everyone
+else, each group alphabetically, as
+`{ account_id, email, display_name, is_collaborator }`. An empty `q` lists
+everyone; otherwise only people whose email, first name, last name or a word
+of their name starts with `q`. Page with `limit` (1–50, default 8) and
+`offset`; a page shorter than `limit` is the last one. Only the class's
+members are listed, and only the quiz owner can call it.
 
 ## Quiz submissions and approvals
 
@@ -296,8 +304,8 @@ reject pending submissions, and submitters may still withdraw their own.
 
 Body: `{ "quiz_version_id": 321 }`. The caller must own the quiz or be an
 active named collaborator. The exact version must be published, current,
-non-archived, and owned by this class. A newer draft does not make a published
-version stale; a newer published version does.
+non-archived, and owned by this class. A newer saved version makes the
+older publication stale for submission and approval, even if it is still a draft.
 
 Errors: `404 quiz_version_not_found`, `409 class_archived`,
 `409 quiz_version_not_published`, `409 quiz_version_stale`,
@@ -311,12 +319,14 @@ Newest first, without pagination. Active faculty organizers see every class
 submission; other active members see only submissions they created.
 
 `QuizSubmissionResponse`: `submission_id, class_id, quiz_version_id,
-submitted_by_id, status, decided_by_id, submitted_at, decided_at`.
+submitted_by_id, status, decided_by_id, submitted_at, decided_at, rejection_comment`.
+Rejection feedback is visible to organizers and eligible submitters.
 
 ### `PATCH /classes/{class_id}/quiz-submissions/{submission_id}` → `200 QuizSubmissionResponse`
 
-Body accepts only `{ "status": "APPROVED" }` or
-`{ "status": "REJECTED" }`. Only an active faculty `ORGANIZER` may decide;
+Body accepts `{ "status": "APPROVED" }` or `{ "status": "REJECTED" }`. Rejections may include an optional
+`rejection_comment`, trimmed plain text up to 1,000 characters. Blank comments are
+stored as null. Only an active faculty `ORGANIZER` may decide;
 self-approval is allowed. Approval rechecks the version and that the submitter
 still has an active account and class membership and still owns or actively
 collaborates on the quiz. Rejection remains available after that eligibility
@@ -356,6 +366,20 @@ Task 4 also exposes
 uses the same filtering and raises `409 quiz_version_not_approved` when the
 exact version is not currently hostable, or `409 class_archived` when the class
 itself cannot host. Session creation calls it (Task 5).
+
+## Class question bank downloads
+
+The class dashboard's **⋯ → Question bank** pop-up: an organizer downloads this class's bank questions as CSV. All three need an active faculty organizer of the class (`404 class_not_found` if the caller isn't in it, `403 not_class_organizer` if they're only a member). Questions count as this class's when their source is the class: the organizer's own, quizzes shared with them, and the class's published quizzes; members' drafts stay hidden.
+
+```text
+GET  /classes/{class_id}/question-bank/quizzes
+GET  /classes/{class_id}/question-bank/items?page=1&page_size=25
+POST /classes/{class_id}/question-bank/download.csv
+```
+
+- `quizzes` → `200 { quizzes: [{ quiz_id, title, question_count }] }`: this class's quizzes that have questions in its bank, by title.
+- `items` → `200 QuestionBankPage`: this class's questions, newest first (`page_size` up to 100). Each item has `bank_question_id`, `source_class_id`, `source_quiz_id`, `question_text`, `explanation` and `choices`.
+- `download.csv` with `{ "bank_question_ids": [...] }` (1–5000 unique ids) → `200 text/csv` in the CSV import template, multi-correct answers as e.g. `A|C`. An id that isn't one of this class's visible questions is `404 bank_question_not_found`; a question with more than four choices is `422 csv_choice_limit_exceeded`.
 
 ## Sessions
 
@@ -595,11 +619,50 @@ Approve (the person becomes an `ACTIVE` `MEMBER`) or reject (`REJECTED`) one req
 
 The older `POST /classes/{class_id}/invites` still creates an `INVITED` membership that the person accepts; the app no longer uses it.
 
-#### `GET /classes/{class_id}/student-suggestions?q=...` → `200 StudentSuggestion[]`
-For the + Add student search: up to 8 active accounts anywhere in QuizBurg whose email, first name, last name or a word of their name starts with `q` (2+ characters, otherwise `[]`). Each has `account_id`, `email`, `display_name` and their `membership_status` in this class (or `null`).
+#### `GET /classes/{class_id}/student-suggestions?q=...&limit=8&offset=0` → `200 StudentSuggestion[]`
+For the + Add student list: one page of active accounts anywhere in QuizBurg: people already in this class (active members) first, then everyone else, each group alphabetically. An empty `q` lists everyone (the pop-up shows people as soon as it opens); otherwise only accounts whose email, first name, last name or a word of their name starts with `q`. Page with `limit` (1–50, default 8) and `offset`; a page shorter than `limit` is the last one. Each has `account_id`, `email`, `display_name` and their `membership_status` in this class (or `null`).
 
 ### `DELETE /classes/{class_id}/membership` → `403`
 Self-service class departure is disabled. This route always returns `class_self_leave_disabled`; an organizer must remove the member through `DELETE /classes/{class_id}/members/{account_id}`.
+
+### Semesters, archiving and the trash
+
+- **Semester:** `POST /classes` and `PATCH /classes/{class_id}` take an optional `"semester"`. It must be a real semester: `Spring`, `Summer` or `Fall` and a year, like `"Fall 2026"` (any other text is `422`; `"fall  2026"` is saved as `"Fall 2026"`). Blank or `null` means none. `ClassResponse` includes `semester`, `parent_class_id` and `semesters`: the semesters of that course the caller organizes (always empty for students). `POST /classes/{class_id}/semesters` with `{"semester": "Spring 2027"}` starts the next semester: same course name, new code, the same organizers, and no students or quizzes.
+  - `409 semester_exists`: the course already has that semester. Semesters in the trash count, because they can be restored, and restoring a class is refused with the same error if its semester was taken in the meantime.
+  - `409 semester_missing`: the class has no semester yet. Set one with `PATCH` before starting a new semester, so every semester of a course has a label.
+  - `409 semester_required`: `PATCH` can't clear the semester of a class whose course has other semesters.
+- **Archived classes:** a student who was a member can still see the class on `GET /classes` and `GET /classes/{class_id}`, but quizzes, the dashboard, reports and other class content return `409 class_archived`, and its sessions leave their `GET /me/sessions/taken`. Organizers can still open it.
+- **`POST /classes/{class_id}/archive` → `200 ClassResponse`:** organizers only. Clears the code and closes joining; reports stay.
+- **`POST /classes/{class_id}/unarchive` → `200 ClassResponse`:** organizers only. The class gets a new code and joining opens again. Unarchiving an active class changes nothing.
+
+Moving something to the trash sets `deleted_at` (migration `0017`). Restoring clears it. After 30 days, or when someone permanently deletes it (`POST /trash/purge`), `purged_at` is set (migration `0019`): it leaves the trash and cannot be restored. The row stays, because old results still point at it. Moving and restoring are idempotent and return `204`. Each trash item includes `expires_at` and `days_left`. `POST /trash/restore` and `POST /trash/purge` take `{ "class_ids": [], "quiz_ids": [], "session_ids": [] }` and are all or nothing: if one id can't be restored or deleted (for example `404` for an unknown id), the error is returned and nothing changes. Deleting a class for good also deletes the quizzes and sessions of that class that were in the trash.
+
+| Route | Who | Errors |
+|---|---|---|
+| `POST /classes/{class_id}/trash`, `.../restore` | Active faculty organizers of the class | `404 class_not_found`, `403 not_class_organizer`, `409 class_has_live_session` |
+| `POST /quizzes/{quiz_id}/trash`, `.../restore` | The quiz's owner | See [Quizzes](#post-quizzesquiz_idtrash-and-post-quizzesquiz_idrestore--204) |
+| `POST /sessions/{session_id}/trash`, `.../restore` | The session's host, once it is `COMPLETED` or `CANCELLED` | `404 session_not_found`, `409 session_not_ended`, `409 class_in_trash` |
+
+While something is in the trash:
+
+- a class answers `404 class_not_found` to everyone, its code can't be used to join, and it leaves `GET /classes`;
+- a quiz answers `404 quiz_not_found` and leaves the class's quiz lists, approval queue and approved quizzes;
+- a session leaves `GET /quizzes/{quiz_id}/history`, `GET /me/sessions/taken`, and every class report, export and grade.
+
+A class in the trash takes its sessions out of `GET /me/sessions/taken` too, and its quizzes' `GET /quizzes/{quiz_id}/history` is `404 quiz_not_found`.
+
+#### `GET /trash` → `200 TrashResponse`
+What the caller can restore, newest first: `classes` (classes they organize), `quizzes` (quizzes they own) and `sessions` (sessions they hosted).
+
+```json
+{
+  "classes": [{ "class_id": 4, "name": "CS 440", "semester": "Fall 2026", "archived": false, "deleted_at": "…" }],
+  "quizzes": [{ "quiz_id": 9, "title": "Week 3", "class_id": 4, "class_name": "CS 440", "class_in_trash": false, "deleted_at": "…" }],
+  "sessions": [{ "session_id": 31, "quiz_id": 9, "quiz_title": "Week 3", "class_id": 4, "class_name": "CS 440", "class_in_trash": false, "status": "COMPLETED", "ended_at": "…", "deleted_at": "…" }]
+}
+```
+
+`class_in_trash` means the quiz's or session's class is in the trash too; restore the class first.
 
 ### Class reports
 Built from the class's `COMPLETED` sessions only; open sessions never count. Scores are each player's `result.total_score`.
@@ -622,13 +685,13 @@ Built from the class's `COMPLETED` sessions only; open sessions never count. Sco
   Example: `GET /classes/12/sessions?q=week%201&page=1&page_size=25&sort=started_at&order=desc` returns the first page of that class's completed sessions whose quiz titles contain `week 1`, newest first.
 - `GET /classes/{class_id}/presented-quizzes`: for any member. (It was `/quizzes` before V3; that address now lists the class's own quizzes.) Completed sessions grouped by quiz, with `presented_at, session_count, participant_count` and `average_score` (organizers only). It takes `sort=presented_at|title|participant_count`.
 - `GET /classes/{class_id}/students`: organizers only (`403 not_class_organizer`). Active `MEMBER`s, with:
-  - `session_count, average_score, total_points`;
-  - `attendance_rate` (0–1);
-  - `recent_scores`, the last five sessions newest first, with null where they were absent.
+  - `session_count, average_score, total_points`, based on stored participant results from sessions the student did not host;
+  - `attendance_rate` (0–1), excluding completed sessions the student hosted from the denominator, or null when all they did was host;
+  - `recent_scores` (null when there is no participant score) and `recent_attendance_statuses` (`HOSTED`, `PLAYED`, or `ABSENT`), aligned across up to five completed sessions, newest first.
 
   It takes `sort=name|average_score|session_count`.
 
-- `GET /classes/{class_id}/dashboard/submissions`: for any member (V3 Task 6). Organizers see every submission in the class; members see their own. It takes `status=PENDING|APPROVED|REJECTED|WITHDRAWN` (optional), `sort=submitted_at|title|submitter` (default `submitted_at`) and `order` (default `desc`). Each item has `submission_id, quiz_id, quiz_version_id, version_number, quiz_title, question_count, submitted_by_id, submitter_name, status, submitted_at, decided_at, decided_by_name`, and `is_current_version` (false once a newer version is published). Decisions still go through `PATCH`/`DELETE /classes/{class_id}/quiz-submissions/{submission_id}`. Counting, sorting and paging happen in the database.
+- `GET /classes/{class_id}/dashboard/submissions`: for any member (V3 Task 6). Organizers see every submission in the class; members see their own. It takes `status=PENDING|APPROVED|REJECTED|WITHDRAWN` (optional), `sort=submitted_at|title|submitter` (default `submitted_at`) and `order` (default `desc`). Each item has `submission_id, quiz_id, quiz_version_id, version_number, quiz_title, question_count, submitted_by_id, submitter_name, status, submitted_at, decided_at, decided_by_name`, and `is_current_version` (approved submissions compare against the newest published version; other submissions compare against the newest saved version, including drafts). Decisions still go through `PATCH`/`DELETE /classes/{class_id}/quiz-submissions/{submission_id}`. Counting, sorting and paging happen in the database.
 - `GET /classes/{class_id}/dashboard/submissions/{submission_id}/preview`: the organizer or the submitter (others get `404 submission_not_found`). Returns `{ submission, version }`: the same summary as above plus the exact submitted `QuizVersion` with its questions and choices (including `is_correct`), never the quiz's newer draft. The Approvals queue links here (`/app/classes/{class_id}/submissions/{submission_id}`) so organizers review what they approve.
 - `GET /classes/{class_id}/dashboard/approved-quizzes`: for any member (V3 Task 6). The same versions as `GET /classes/{class_id}/approved-quizzes`, paged, with `title, question_count, author_name, approved_at, approved_by_name`, and `hosting` plus `can_host`, from the same checks as starting a session (see the `hosting` reasons above), so the owner sees why an approved quiz is blocked, for example `unpublished_changes`, and other members get `not_host`. `can_view` says whether the caller may open `GET /quizzes/{quiz_id}` (owner, organizer, or active collaborator); the My quizzes tab only links the card when it's true. It takes `sort=approved_at|title` and `order`. An archived class returns its list with `can_host` false (`class_archived`) instead of `409`.
 
@@ -648,9 +711,9 @@ Organizers and Admins see everyone. Members see only their own rows, and class-w
 - `GET /classes/{class_id}/students/{account_id}/results`: one student's history in the class. Members can only ask for themselves (`403 not_class_organizer` otherwise). It returns:
   - `view`: `organizer` or `member`;
   - `display_name`, `email` (organizers only), `role` and `status`. Removed and departed students keep their history;
-  - `class_session_count`, `session_count`, `attendance_rate`, `total_points`, `average_score`, `correct_count` and `incorrect_count`;
+  - `class_session_count` (all completed sessions), `session_count` (sessions played), `attendance_session_count` (completed sessions excluding ones this student hosted), `attendance_rate` (null when the denominator is zero), `total_points`, `average_score`, `correct_count` and `incorrect_count`;
   - `class_average`, organizers only, using the same formula as the dashboard;
-  - `sessions`: every completed class session, newest first, with `played, points, rank, question_count, correct, incorrect`. The last four are null when the student missed it. Unanswered questions count as incorrect.
+  - `sessions`: every completed class session, newest first, with `attendance_status` (`HOSTED`, `PLAYED`, or `ABSENT`), plus `played, points, rank, question_count, correct, incorrect`. `PLAYED` requires a stored result, including a zero-point result. Hosted sessions have no player score, rank, or answer counts and are excluded from the student's score totals. Unanswered questions count as incorrect for players.
   - Errors: `404 student_not_found` (never in this class).
 
 ### Excel exports of the class reports → `200 .xlsx`
@@ -660,7 +723,7 @@ Each export is built from the matching report above, so the workbook shows the s
 |---|---|---|---|
 | `GET /classes/{class_id}/sessions/{session_id}/export.xlsx` | Organizers | `class-{cid}-session-{sid}-results.xlsx` | **Summary**; **Scores** (rank, participant, total points, correct); **Answers** (one row per participant per question: result, selected and correct answer, time, points) |
 | `GET /classes/{class_id}/quizzes/{quiz_id}/export.xlsx` | Organizers | `class-{cid}-quiz-{qid}-results.xlsx` | **Summary**; **Presentations** (one row per completed presentation); **Results** (every player's result in each presentation) |
-| `GET /classes/{class_id}/students/{account_id}/export.xlsx` | Organizers, or the student themselves | `class-{cid}-student-{aid}-results.xlsx` | **Summary** (totals, attendance, class average); **Sessions** (every completed class session, played or not) |
+| `GET /classes/{class_id}/students/{account_id}/export.xlsx` | Organizers, or the student themselves | `class-{cid}-student-{aid}-results.xlsx` | **Summary** (totals, attendance, class average); **Sessions** (every completed class session, with an Attendance column) |
 
 - A member who exports a session or quiz gets `403 not_class_organizer`. So does a member who exports another student.
 - A member's own student export leaves out the email and the class average, as the report does.
@@ -669,7 +732,7 @@ Each export is built from the matching report above, so the workbook shows the s
 ### `GET /classes/{class_id}/grades/export.csv` → `200 text/csv`
 Organizers only. Returns `{class-name}-grades.csv`, a gradebook (UTF-8 with BOM, `no-store`):
 - one row per student, sorted by name;
-- one column per completed session, oldest first (`Quiz title (YYYY-MM-DD)`), where an empty cell means absent;
+- one column per completed session, oldest first (`Quiz title (YYYY-MM-DD)`), where `Hosted` marks the student's own presentation, a number is their score, and an empty cell means absent;
 - then `Sessions played, Attendance %, Average points, Total points`.
 
 Cells get the same formula escaping as the session export.

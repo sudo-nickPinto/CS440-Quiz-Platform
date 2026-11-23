@@ -19,6 +19,7 @@ class QuestionBankItemResponse(BaseModel):
     bank_question_id: int
     owner_id: int
     source_class_id: int | None
+    source_quiz_id: int | None = None
     question_type: QuestionType
     question_text: str
     explanation: str | None
@@ -86,3 +87,26 @@ class CsvBankSaveResponse(BaseModel):
 
 class DuplicateQuizResponse(BaseModel):
     quiz: QuizResponse
+
+
+class ClassBankQuiz(BaseModel):
+    quiz_id: int
+    title: str
+    question_count: int
+
+
+class ClassBankQuizzesResponse(BaseModel):
+    quizzes: list[ClassBankQuiz]
+
+
+class ClassBankDownload(BaseModel):
+    """The questions to download from the class's question bank."""
+
+    bank_question_ids: list[int] = Field(min_length=1, max_length=5000)
+
+    @field_validator("bank_question_ids")
+    @classmethod
+    def unique_ids(cls, value: list[int]) -> list[int]:
+        if any(item < 1 for item in value) or len(value) != len(set(value)):
+            raise ValueError("Question IDs must be unique positive integers.")
+        return value

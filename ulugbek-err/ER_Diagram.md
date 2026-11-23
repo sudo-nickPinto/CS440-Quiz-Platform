@@ -48,6 +48,7 @@ erDiagram
         int class_id FK "V3 (0008): the class that owns the quiz"
         enum status "DRAFT, PUBLISHED, ARCHIVED"
         enum visibility "not used; new quizzes are PRIVATE"
+        datetime deleted_at "0017: empty = not in the trash"
         datetime created_at
         datetime updated_at
     }
@@ -91,6 +92,7 @@ erDiagram
         datetime created_at
         datetime started_at
         datetime ended_at
+        datetime deleted_at "0017: empty = not in the host's trash"
     }
     SESSION_PARTICIPANT {
         int session_participant_id PK
@@ -188,10 +190,12 @@ erDiagram
     "CLASS" {
         int class_id PK
         varchar name
+        varchar semester "0017: Fall 2026; empty on older classes"
         int created_by_id FK
         char join_code UK "8 characters, no dash; empty when archived"
         boolean joining_open
         datetime archived_at "empty = not archived"
+        datetime deleted_at "0017: empty = not in the trash"
         datetime created_at
         datetime updated_at
     }
@@ -218,6 +222,17 @@ erDiagram
 - **Leaving and removal:** leaving sets `status = LEFT`. An organizer removing someone sets `status = REMOVED`, and `decided_by_id` and `decided_at` record who did it and when.
 - **One row per person per class.** Joining again, being invited again or being removed all update the same row. Past results never change, because they live in the session tables.
 - **Archiving** sets `archived_at`, clears the code and closes joining. Classes are never deleted, so their history stays.
+- **Unarchiving** clears `archived_at`, gives the class a new code and opens joining again (code joins still wait for an organizer).
+
+## Semesters and the trash (0017)
+
+- **Semesters:** `class.semester` is a label like "Fall 2026". The same course in another semester is a new class (its own code, roster and grades), so names don't have to be unique. Organizers start one from the class page (More → New semester).
+- **The trash:** `class.deleted_at`, `quiz.deleted_at` and `live_session.deleted_at` are empty normally and set while the row is in the trash. Restoring empties them again. Nothing is really deleted, because results, approvals and reports point at these rows.
+- **What a trashed row does:**
+  - a class looks missing to everyone (its quizzes, sessions and reports with it);
+  - a quiz looks missing and leaves its class's quiz lists, approval queue and hostable quizzes;
+  - a session leaves hosting history, "quizzes taken", and the class's reports and grades.
+- **Who can trash and restore:** a class: its active faculty organizers. A quiz: its owner. A session: its host, once it has ended. Something running live can't be trashed.
 
 ### Class rules the backend has to check
 

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.auth import CurrentAccount
 from app.errors import APIError
-from app.models.classes import ClassMembership, ClassRole, MembershipStatus
+from app.models.classes import Class, ClassMembership, ClassRole, MembershipStatus
 from app.models.quiz import (
     AnswerChoice,
     Question,
@@ -25,6 +25,8 @@ from app.models.quiz import (
 from app.schemas.pagination import PageInfo
 from app.schemas.question_bank import (
     BankScope,
+    ClassBankQuiz,
+    ClassBankQuizzesResponse,
     CsvBankSaveRequest,
     CsvBankSaveResponse,
     CsvImportRequest,
@@ -35,6 +37,7 @@ from app.schemas.question_bank import (
     QuestionBankPage,
 )
 from app.schemas.quiz import AnswerChoiceCreate, QuestionCreate
+from app.services.quiz_submissions import commit_quiz_content_edit
 
 CSV_COLUMNS = [
     "question_text", "explanation", "choice_a", "choice_b", "choice_c",
@@ -83,6 +86,7 @@ def _collaborator_quiz_ids(account: CurrentAccount):
     return (
         select(QuizCollaborator.quiz_id)
         .join(source_quiz, source_quiz.quiz_id == QuizCollaborator.quiz_id)
+        .join(Class, Class.class_id == source_quiz.class_id)
         .join(
             ClassMembership,
             (ClassMembership.class_id == source_quiz.class_id)
@@ -92,6 +96,8 @@ def _collaborator_quiz_ids(account: CurrentAccount):
             QuizCollaborator.account_id == account.account_id,
             QuizCollaborator.revoked_at.is_(None),
             ClassMembership.status == MembershipStatus.ACTIVE,
+            source_quiz.deleted_at.is_(None),
+            Class.deleted_at.is_(None),
         )
     )
 
@@ -122,7 +128,13 @@ def _ensure_legacy_snapshots(
         select(Question, Quiz.author_id, Quiz.class_id, Quiz.quiz_id)
         .join(QuizVersion, QuizVersion.quiz_version_id == Question.quiz_version_id)
         .join(Quiz, Quiz.quiz_id == QuizVersion.quiz_id)
-        .where(or_(*conditions), Question.bank_question_id.is_(None))
+        .outerjoin(Class, Class.class_id == Quiz.class_id)
+        .where(
+            or_(*conditions),
+            Question.bank_question_id.is_(None),
+            Quiz.deleted_at.is_(None),
+            or_(Quiz.class_id.is_(None), Class.deleted_at.is_(None)),
+        )
         .options(selectinload(Question.choices))
     ).all()
     for question, owner_id, source_class_id, quiz_id in rows:
@@ -150,6 +162,7 @@ def _visible_condition(
         published_class_quiz_ids = select(Quiz.quiz_id).where(
             Quiz.class_id == class_id,
             Quiz.status == QuizStatus.PUBLISHED,
+            Quiz.deleted_at.is_(None),
         )
         conditions.append(
             QuestionBankItem.source_quiz_id.in_(published_class_quiz_ids)
@@ -160,7 +173,8 @@ def _visible_condition(
 def _response(item: QuestionBankItem) -> QuestionBankItemResponse:
     return QuestionBankItemResponse(
         bank_question_id=item.bank_question_id, owner_id=item.owner_id,
-        source_class_id=item.source_class_id, question_type=item.question_type,
+        source_class_id=item.source_class_id, source_quiz_id=item.source_quiz_id,
+        question_type=item.question_type,
         question_text=item.question_text, explanation=item.explanation,
         choices=[AnswerChoiceCreate.model_validate(choice) for choice in item.choices_json],
         updated_at=item.updated_at,
@@ -220,13 +234,9 @@ def _lock_import_destination(
     quiz_id: int,
 ) -> Quiz:
     """Serialize imports with publishing before choosing a destination version."""
-    from app.services.quizzes import (
-        _lock_class_quiz_for_update,
-        _require_quiz_editor,
-    )
+    from app.services.quizzes import _lock_class_quiz_for_content_write
 
-    quiz = _lock_class_quiz_for_update(db, class_id, quiz_id)
-    _require_quiz_editor(db, account, quiz, lock_access=True)
+    quiz = _lock_class_quiz_for_content_write(db, account, class_id, quiz_id)
     if quiz.status != QuizStatus.DRAFT:
         raise APIError(
             409,
@@ -290,9 +300,10 @@ def add_from_bank(db: Session, account: CurrentAccount, class_id: int, quiz_id: 
         version.questions.append(question)
         db.flush()
         snapshot_question(db, question, owner_id=quiz.author_id, class_id=class_id, quiz_id=quiz_id)
-    quiz.revision += 1
-    quiz.updated_at = datetime.now(UTC).replace(tzinfo=None)
-    db.commit()
+    if pending_questions:
+        quiz.revision += 1
+        quiz.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        commit_quiz_content_edit(db, quiz, account.account_id, quiz.updated_at)
     db.expire_all()
     return _to_response(db, account, _load_readable_quiz(db, account, quiz_id))
 
@@ -395,8 +406,10 @@ def import_csv(db: Session, account: CurrentAccount, class_id: int, quiz_id: int
                 explanation=row.question.explanation,
                 choices_json=[c.model_dump() for c in row.question.choices]))
             saved_only += 1
-    quiz.revision += 1; quiz.updated_at = datetime.now(UTC).replace(tzinfo=None)
-    db.commit(); db.expire_all()
+    quiz.revision += 1
+    quiz.updated_at = datetime.now(UTC).replace(tzinfo=None)
+    commit_quiz_content_edit(db, quiz, account.account_id, quiz.updated_at)
+    db.expire_all()
     return CsvImportResponse(quiz=_to_response(db, account, _load_readable_quiz(db, account, quiz_id)),
         added_to_quiz=len(payload.rows), saved_to_bank_only=saved_only)
 
@@ -440,6 +453,10 @@ def export_csv(db: Session, account: CurrentAccount, class_id: int, scope: BankS
     ) & QuestionBankItem.is_current.is_(True)
     if ids: condition = condition & QuestionBankItem.bank_question_id.in_(ids)
     items = list(db.scalars(select(QuestionBankItem).where(condition).order_by(QuestionBankItem.bank_question_id)))
+    return _csv_text(items)
+
+
+def _csv_text(items: list[QuestionBankItem]) -> str:
     unsupported = [
         item.bank_question_id for item in items if len(item.choices_json) > 4
     ]
@@ -462,3 +479,84 @@ def export_csv(db: Session, account: CurrentAccount, class_id: int, scope: BankS
             row[f"choice_{key}"] = safe(choices[index]["choice_text"]) if index < len(choices) else ""
         writer.writerow(row)
     return out.getvalue()
+
+
+# The class dashboard's question bank: an organizer downloads this class's
+# questions as CSV.
+
+
+def _class_bank_condition(db: Session, account: CurrentAccount, class_id: int):
+    """Current questions from this class that its organizer may see.
+
+    404 if the caller isn't in the class, 403 if they don't organize it. The
+    class bank's organizer rule, limited to questions whose source is this
+    class: the caller's own, quizzes shared with them, and the class's
+    published quizzes.
+    """
+    from app.services.class_authorization import require_class_organizer
+
+    require_class_organizer(db, account, class_id)
+    _ensure_legacy_snapshots(db, account, class_id, is_organizer=True)
+    return (
+        (QuestionBankItem.source_class_id == class_id)
+        & QuestionBankItem.is_current.is_(True)
+        & _visible_condition(account, class_id, BankScope.CLASS, is_organizer=True)
+    )
+
+
+def list_class_bank_quizzes(
+    db: Session, account: CurrentAccount, class_id: int
+) -> ClassBankQuizzesResponse:
+    """This class's quizzes that have questions in its bank, with counts."""
+    condition = _class_bank_condition(db, account, class_id)
+    counts = dict(db.execute(
+        select(QuestionBankItem.source_quiz_id, func.count())
+        .where(condition, QuestionBankItem.source_quiz_id.is_not(None))
+        .group_by(QuestionBankItem.source_quiz_id)
+    ).all())
+    quizzes = db.scalars(
+        select(Quiz).where(Quiz.quiz_id.in_(counts)).options(selectinload(Quiz.versions))
+    ).all() if counts else []
+    entries = [
+        ClassBankQuiz(
+            quiz_id=quiz.quiz_id,
+            title=quiz.versions[-1].title,
+            question_count=counts[quiz.quiz_id],
+        )
+        for quiz in quizzes
+        if quiz.versions
+    ]
+    entries.sort(key=lambda quiz: (quiz.title.lower(), quiz.quiz_id))
+    return ClassBankQuizzesResponse(quizzes=entries)
+
+
+def list_class_bank_items(
+    db: Session, account: CurrentAccount, class_id: int, *, page: int, page_size: int
+) -> QuestionBankPage:
+    """This class's bank questions, a page at a time, newest first."""
+    condition = _class_bank_condition(db, account, class_id)
+    total = db.scalar(select(func.count()).select_from(QuestionBankItem).where(condition)) or 0
+    items = list(db.scalars(
+        select(QuestionBankItem).where(condition)
+        .order_by(QuestionBankItem.updated_at.desc(), QuestionBankItem.bank_question_id.desc())
+        .limit(page_size).offset((page - 1) * page_size)
+    ))
+    return QuestionBankPage(items=[_response(item) for item in items], pagination=PageInfo(
+        page=page, page_size=page_size, total_items=total,
+        total_pages=ceil(total / page_size) if total else 0,
+    ))
+
+
+def download_class_csv(
+    db: Session, account: CurrentAccount, class_id: int, bank_question_ids: list[int]
+) -> str:
+    """The chosen questions of this class as CSV, in the import template."""
+    condition = _class_bank_condition(db, account, class_id)
+    items = list(db.scalars(
+        select(QuestionBankItem)
+        .where(condition, QuestionBankItem.bank_question_id.in_(bank_question_ids))
+        .order_by(QuestionBankItem.bank_question_id)
+    ))
+    if len(items) != len(bank_question_ids):
+        raise APIError(404, "bank_question_not_found", "A selected question is unavailable.")
+    return _csv_text(items)

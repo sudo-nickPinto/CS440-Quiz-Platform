@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 from app.models import (
+    Class,
     ClassMembership,
     MembershipStatus,
     QuestionBankItem,
@@ -391,3 +392,101 @@ def test_nonmembers_cannot_use_question_bank_or_duplication(classes) -> None:
     assert client.post(
         f"/classes/{data['main']}/quizzes/{source['quiz_id']}/duplicate"
     ).status_code == 404
+
+
+def test_trashed_quiz_questions_leave_collaborator_and_organizer_bank_views(classes) -> None:
+    client, identities, data = classes
+    quiz = create(client, data["main"], "Trash leaves the bank")
+    published = client.post(
+        f"/classes/{data['main']}/quizzes/{quiz['quiz_id']}/publish",
+        json={"expected_revision": quiz["revision"]},
+    )
+    assert published.status_code == 200, published.json()
+
+    with client.app.state.database.session_factory() as db:
+        db.add(
+            QuizCollaborator(
+                quiz_id=quiz["quiz_id"],
+                account_id=identities["zoe"].account_id,
+                shared_by_id=identities["amy"].account_id,
+            )
+        )
+        db.commit()
+
+    act_as(client, identities["zoe"])
+    before_collab = client.get(
+        f"/classes/{data['main']}/question-bank", params={"scope": "mine"}
+    ).json()
+    assert {item["question_text"] for item in before_collab["items"]} == {
+        "Which number is even?",
+        "Select a vowel.",
+    }
+
+    act_as(client, identities["prof"])
+    before_org = client.get(f"/classes/{data['main']}/question-bank").json()
+    assert {item["question_text"] for item in before_org["items"]} == {
+        "Which number is even?",
+        "Select a vowel.",
+    }
+
+    act_as(client, identities["amy"])
+    assert client.post(f"/quizzes/{quiz['quiz_id']}/trash").status_code == 204
+    owner_view = client.get(
+        f"/classes/{data['main']}/question-bank", params={"scope": "mine"}
+    ).json()
+    assert {item["question_text"] for item in owner_view["items"]} == {
+        "Which number is even?",
+        "Select a vowel.",
+    }
+
+    act_as(client, identities["zoe"])
+    after_collab = client.get(
+        f"/classes/{data['main']}/question-bank", params={"scope": "mine"}
+    ).json()
+    assert after_collab["items"] == []
+
+    act_as(client, identities["prof"])
+    after_org = client.get(f"/classes/{data['main']}/question-bank").json()
+    assert after_org["items"] == []
+
+
+
+def test_trashed_class_source_quiz_leaves_collaborator_bank_elsewhere(classes) -> None:
+    """A shared quiz in a trashed class must not stay visible in another class bank."""
+    client, identities, data = classes
+    quiz = create(client, data["main"], "Shared then class trashed")
+    with client.app.state.database.session_factory() as db:
+        db.add_all(
+            [
+                QuizCollaborator(
+                    quiz_id=quiz["quiz_id"],
+                    account_id=identities["zoe"].account_id,
+                    shared_by_id=identities["amy"].account_id,
+                ),
+                ClassMembership(
+                    class_id=data["other"],
+                    account_id=identities["zoe"].account_id,
+                ),
+            ]
+        )
+        db.commit()
+
+    act_as(client, identities["zoe"])
+    visible = client.get(
+        f"/classes/{data['other']}/question-bank", params={"scope": "mine"}
+    ).json()
+    assert {item["question_text"] for item in visible["items"]} == {
+        "Which number is even?",
+        "Select a vowel.",
+    }
+
+    with client.app.state.database.session_factory() as db:
+        db.get(Class, data["main"]).deleted_at = datetime.now(UTC).replace(tzinfo=None)
+        db.commit()
+
+    act_as(client, identities["zoe"])
+    hidden = client.get(
+        f"/classes/{data['other']}/question-bank", params={"scope": "mine"}
+    ).json()
+    assert hidden["items"] == []
+

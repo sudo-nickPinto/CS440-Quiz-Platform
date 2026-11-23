@@ -14,6 +14,8 @@ from app.schemas.class_roster import (
 )
 from app.services.class_roster import (
     MAX_ROSTER_BYTES,
+    SUGGESTION_LIMIT,
+    SUGGESTION_MAX_LIMIT,
     decide_join_requests,
     import_roster,
     list_join_requests,
@@ -179,7 +181,10 @@ def reject_join_request_route(
 def student_suggestions_route(
     class_id: int,
     q: str = Query(default="", max_length=100),
+    limit: int = Query(default=SUGGESTION_LIMIT, ge=1, le=SUGGESTION_MAX_LIMIT),
+    offset: int = Query(default=0, ge=0, le=100_000),
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> list[StudentSuggestion]:
-    return suggest_students(db, account, class_id, q)
+    """A page of accounts for + Add student; an empty `q` lists everyone."""
+    return suggest_students(db, account, class_id, q, limit=limit, offset=offset)

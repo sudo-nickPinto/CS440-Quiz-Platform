@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import Float, cast, func, select
+from sqlalchemy import Float, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentAccount
@@ -16,7 +16,7 @@ from app.models import (
     SessionQuestion,
     SessionQuestionStatus,
 )
-from app.models.classes import ClassMembership, MembershipStatus
+from app.models.classes import Class, ClassMembership, ClassRole, MembershipStatus
 
 
 def _date(value: datetime | None) -> str | None:
@@ -81,12 +81,24 @@ def _page(db: Session, statement, limit: int, offset: int) -> dict:
 
 
 def _visible_session_class(account: CurrentAccount):
+    """Sessions whose class the caller may still open.
+
+    The same rule as require_class_content: an active member of a class
+    that isn't in the trash, and, while the class is archived, only its
+    faculty organizers.
+    """
+    open_class = Class.archived_at.is_(None)
+    if account.is_admin:
+        open_class = or_(open_class, ClassMembership.role == ClassRole.ORGANIZER)
     active_membership = (
         select(ClassMembership.membership_id)
+        .join(Class, Class.class_id == ClassMembership.class_id)
         .where(
             ClassMembership.class_id == LiveSession.class_id,
             ClassMembership.account_id == account.account_id,
             ClassMembership.status == MembershipStatus.ACTIVE,
+            Class.deleted_at.is_(None),
+            open_class,
         )
         .exists()
     )
@@ -163,6 +175,7 @@ def list_taken_sessions(
         .where(
             SessionParticipant.account_id == account.account_id,
             LiveSession.status == LiveSessionStatus.COMPLETED,
+            LiveSession.deleted_at.is_(None),
             _visible_session_class(account),
         )
     )
@@ -230,7 +243,16 @@ def list_quiz_hosting_history(
 ) -> dict:
     quiz = db.get(Quiz, quiz_id)
 
-    if quiz is None or quiz.author_id != account.account_id:
+    if (
+        quiz is None
+        or quiz.author_id != account.account_id
+        or quiz.deleted_at is not None
+        # A quiz in a trashed class looks missing, like the class itself.
+        or (
+            quiz.class_id is not None
+            and db.get(Class, quiz.class_id).deleted_at is not None
+        )
+    ):
         raise APIError(
             404,
             "quiz_not_found",
@@ -246,6 +268,8 @@ def list_quiz_hosting_history(
                 LiveSessionStatus.CANCELLED,
             ]
         ),
+        # Sessions the host moved to the trash are listed by GET /trash.
+        LiveSession.deleted_at.is_(None),
         _visible_session_class(account),
     )
 

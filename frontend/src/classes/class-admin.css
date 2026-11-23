@@ -578,31 +578,6 @@
   background: var(--orange-deep);
 }
 
-.qp .cl-dlg-head {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 18px 18px 16px;
-  border-bottom: var(--b);
-  background: var(--sky-soft);
-}
-
-.qp .cl-page .cl-dlg-head h2 {
-  font-family: "Archivo Black", sans-serif;
-  font-size: 24px;
-  font-weight: 400;
-}
-
-.qp .cl-dlg-head p {
-  color: var(--navy);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.qp .cl-dlg-head .cl-dlg-error {
-  color: var(--color-danger);
-}
-
 .qp .cl-dlg-row {
   display: flex;
   gap: 12px;
@@ -731,10 +706,6 @@
 .qp .cl-page .cl-gl td,
 .qp .cl-page .cl-table tr:has(> td.cl-status) > td {
   vertical-align: middle;
-}
-
-.qp .cl-page .cl-dlg-head {
-  margin: 0;
 }
 
 @media (max-width: 760px) {
@@ -1508,6 +1479,13 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* App.css gives every form and label a margin; here the search should
+     sit right under the tabs (or the title bar). */
+  margin-top: 0;
+}
+
+.qp .cl-add-search .cl-search {
+  margin: 0;
 }
 
 .qp .cl-add-note {
@@ -1606,14 +1584,45 @@
   color: var(--ink);
 }
 
+/* + Add student / Add collaborator people list: about four rows show, the
+   rest load as you scroll (SuggestionList). */
+.qp .cl-suggest-box {
+  flex: none;
+  height: 274px;
+  overflow-y: auto;
+  border: var(--b-thin);
+  background: var(--paper);
+}
+
 .qp .cl-suggest {
   margin: 0;
   padding: 0;
   list-style: none;
-  border: var(--b-thin);
-  background: var(--paper);
-  max-height: 220px;
-  overflow-y: auto;
+}
+
+/* One line per email, ending in "…" when it doesn't fit (phones). */
+.qp .cl-suggest .cl-pwho {
+  min-width: 0;
+}
+
+.qp .cl-suggest .cl-pmail {
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qp .cl-suggest .cl-pname .cl-tag {
+  margin-left: 8px;
+  vertical-align: 2px;
+}
+
+.qp .cl-suggest-note {
+  padding: 12px;
+  color: var(--gray);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
 }
 
 .qp .cl-suggest li {
@@ -1702,5 +1711,300 @@
 
   .qp .cl-suggest li .cl-pav {
     display: none;
+  }
+}
+
+/* ---------- Question bank pop-up (QuestionBankExportDialog) ----------
+   The Add student pop-up's frame (cl-dlg) with the square ✓ boxes and
+   bordered question rows the quiz editor's question bank uses. */
+/* App.css gives every label a margin; the search box and ✓ boxes here
+   are labels, so line them up without it. */
+.qp .qbx label {
+  margin: 0;
+}
+
+/* position: relative keeps each visually hidden checkbox inside its own
+   box. Otherwise it sits against the whole pop-up, and focusing it on a
+   click scrolls the pop-up to "show" it, sliding the courses out of view. */
+.qp .qbx .qbx-check {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.qp .qbx .qbx-check:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.qp .qbx .qbx-box {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--ink);
+  background: #fff;
+  color: transparent;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.qp .qbx .qbx-check.is-on .qbx-box,
+.qp .qbx .qbx-box.is-mixed {
+  background: var(--navy);
+  color: #fff;
+}
+
+.qp .qbx .qbx-check input:focus-visible + .qbx-box {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 3px;
+}
+
+.qp .qbx .qbx-text,
+.qp .qbx .qbx-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.qp .qbx .qbx-copy strong {
+  overflow-wrap: anywhere;
+}
+
+.qp .qbx .qbx-copy small.qbx-tag {
+  width: fit-content;
+  margin-top: 3px;
+  padding: 1px 7px;
+  border: 1.5px solid var(--navy);
+  background: var(--paper);
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.qp .qbx .qbx-text small,
+.qp .qbx .qbx-copy small {
+  color: var(--gray);
+  font-weight: 700;
+}
+
+.qp .qbx .qbx-row.is-selected {
+  border-color: var(--navy);
+  background: var(--sky-soft);
+  box-shadow: 3px 3px 0 var(--navy);
+}
+
+.qp .qbx .qbx-filters .cl-search input {
+  width: 100%;
+}
+
+.qp .qbx .qbx-list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.qp .qbx .qbx-count {
+  color: var(--gray);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* The pop-up keeps one height, and the question list takes whatever the
+   search row and the footer leave, so a phone still shows several rows. */
+.qp .qbx.cl-dlg[open] {
+  height: min(780px, calc(100dvh - 32px));
+}
+
+.qp .qbx .cl-add-body {
+  overflow: hidden;
+}
+
+.qp .qbx .qbx-list {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px 12px 10px;
+  border: 2px solid var(--ink);
+  background: var(--sand);
+}
+
+.qp .qbx .qbx-row {
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.qp .qbx .qbx-pick {
+  min-height: 64px;
+  padding: 8px 12px;
+}
+
+.qp .qbx .qbx-empty {
+  padding: 24px 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Quiz picker: the blue "ALL QUIZZES ▾" button and its pop-up list. */
+.qp .qbx .qbx-pick-quiz {
+  position: relative;
+  flex: 0 1 260px;
+  min-width: 0;
+}
+
+.qp .qbx .qbx-pick-quiz > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border: var(--b);
+  background: var(--sky-soft);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  list-style: none;
+  cursor: pointer;
+}
+
+.qp .qbx .qbx-pick-quiz > summary::-webkit-details-marker {
+  display: none;
+}
+
+.qp .qbx .qbx-pick-quiz > summary[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.qp .qbx .qbx-pick-quiz[open] > summary {
+  background: var(--ink);
+  color: var(--paper);
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+.qp .qbx .qbx-pick-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qp .qbx .qbx-pick-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 5;
+  display: grid;
+  gap: 6px;
+  width: min(320px, calc(100vw - 48px));
+  max-height: 280px;
+  overflow: auto;
+  padding: 10px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  animation: qb-drop 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.qp .qbx .qbx-pick-panel .ui-opt {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+.qp .qbx .qbx-pick-panel .ui-opt small {
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+@media (max-width: 640px) {
+  .qp .qbx .qbx-pick-quiz {
+    flex-basis: 150px;
+  }
+
+  .qp .qbx .cl-dlg-foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Admin class header: + Add student and Export grades as buttons, and
+   Question bank and Archive class in a ⋯ menu, so the title isn't squeezed. */
+.qp .cl-classbar .cl-actions {
+  align-items: center;
+}
+
+.qp .cl-classbar .cl-class-options,
+.qp .cl-classbar .cl-class-options[open] {
+  position: relative;
+  align-self: stretch;
+}
+
+.qp .cl-classbar .cl-class-options > summary {
+  height: 100%;
+  min-height: 40px;
+}
+
+.qp .cl-classbar .cl-class-options .ui-row-options {
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(240px, 80vw);
+}
+
+/* The buttons always sit right beside the Admin | User switch. On wide
+   screens that's on the title's line; otherwise the title gets its own row
+   and the buttons and switch share the row under it, on the right, so the
+   title isn't squeezed onto several lines. */
+@media (min-width: 1400px) {
+  .qp .cl-classbar:has(> .cl-actions) {
+    flex-wrap: nowrap;
+  }
+
+  .qp .cl-classbar:has(> .cl-actions) > .cl-class-title {
+    flex: 1 1 auto;
+  }
+
+  .qp .cl-classbar:has(> .cl-actions) > .cl-actions {
+    flex: none;
+    flex-wrap: nowrap;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1399px) {
+  .qp .cl-classbar:has(> .cl-actions) > .cl-class-title {
+    flex-basis: calc(100% - 190px);
+  }
+
+  .qp .cl-classbar:has(> .cl-actions) > .cl-actions {
+    margin-left: auto;
+  }
+}
+
+/* Phones: the ⋯ often wraps to the start of a line, so open its menu to
+   the right, where there's room. */
+@media (max-width: 760px) {
+  .qp .cl-classbar .cl-class-options .ui-row-options {
+    right: auto;
+    left: 0;
   }
 }

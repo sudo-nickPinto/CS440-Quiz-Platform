@@ -75,7 +75,7 @@ test("a collaborator can be added, removed and added again from the search", asy
 
   await page.getByRole("button", { name: "Add collaborator" }).first().click();
   // By name: the remove confirmation is a second dialog.
-  const dialog = page.getByRole("dialog", { name: "Who else can edit this quiz?" });
+  const dialog = page.getByRole("dialog", { name: /^Add collaborator/ });
   await dialog
     .getByPlaceholder("Search this class by name or email…")
     .fill("riv");
@@ -91,7 +91,10 @@ test("a collaborator can be added, removed and added again from the search", asy
   await addMaya.click();
   await expect(maya.getByText("Editor", { exact: true })).toBeVisible();
   await expect(addMaya).toHaveCount(0);
-  const removeMaya = dialog.getByRole("button", { name: "Remove", exact: true });
+  // One list: the collaborator's own row has Remove; there's no separate
+  // Editors box.
+  await expect(dialog.locator(".cl-people, .cl-dlg-sub")).toHaveCount(0);
+  const removeMaya = maya.getByRole("button", { name: "Remove", exact: true });
   await expect(removeMaya).toBeVisible();
 
   // Remove: the result goes back to "Add" right away, not a stale "Editor".

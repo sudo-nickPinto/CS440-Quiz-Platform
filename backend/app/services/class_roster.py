@@ -30,7 +30,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
@@ -64,7 +64,8 @@ MAX_ROSTER_BYTES = 2 * 1024 * 1024
 MAX_ROSTER_ROWS = 2000
 # How far down the file the header row may be (exports sometimes add a title).
 HEADER_SEARCH_ROWS = 10
-SUGGESTION_LIMIT = 8
+SUGGESTION_LIMIT = 8  # default page size
+SUGGESTION_MAX_LIMIT = 50
 XLSX_MAGIC = b"PK\x03\x04"
 
 # Header names we understand, after lowercasing and dropping everything that
@@ -913,50 +914,71 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def suggest_students(
-    db: Session, account: CurrentAccount, class_id: int, query: str
-) -> list[StudentSuggestion]:
-    """Accounts anywhere in QuizBurg whose name or email starts with the query.
-
-    Organizer only, because it shows other people's emails. Needs at least two
-    characters and returns a handful of results.
-    """
-    _require_organizer(db, account, class_id)
+def name_or_email_starts_with(query: str):
+    """Filter for accounts whose email, first or last name, or a word of their
+    name starts with the query. None for an empty query (everyone)."""
     needle = " ".join(query.split()).lower()
-    if len(needle) < 2:
-        return []
+    if not needle:
+        return None
     prefix = _escape_like(needle) + "%"
     word = "% " + prefix
-    matches = db.scalars(
-        select(Account)
-        .where(
-            Account.is_active.is_(True),
-            or_(
-                func.lower(Account.email).like(prefix, escape="\\"),
-                func.lower(Account.display_name).like(prefix, escape="\\"),
-                func.lower(Account.display_name).like(word, escape="\\"),
-                func.lower(Account.first_name).like(prefix, escape="\\"),
-                func.lower(Account.last_name).like(prefix, escape="\\"),
+    return or_(
+        func.lower(Account.email).like(prefix, escape="\\"),
+        func.lower(Account.display_name).like(prefix, escape="\\"),
+        func.lower(Account.display_name).like(word, escape="\\"),
+        func.lower(Account.first_name).like(prefix, escape="\\"),
+        func.lower(Account.last_name).like(prefix, escape="\\"),
+    )
+
+
+def suggest_students(
+    db: Session,
+    account: CurrentAccount,
+    class_id: int,
+    query: str,
+    *,
+    limit: int = SUGGESTION_LIMIT,
+    offset: int = 0,
+) -> list[StudentSuggestion]:
+    """Active accounts anywhere in QuizBurg, a page at a time.
+
+    People already in this class (active members) come first, then everyone
+    else, each group alphabetically, so the pop-up opens on who belongs and
+    you scroll down to who you can add. An empty query lists everyone;
+    otherwise only names and emails starting with the query, in the same
+    order. A page shorter than ``limit`` is the last one. Organizer only,
+    because it shows other people's emails.
+    """
+    _require_organizer(db, account, class_id)
+    in_class = case(
+        (ClassMembership.status == MembershipStatus.ACTIVE, 0), else_=1
+    )
+    statement = (
+        select(Account, ClassMembership.status)
+        .outerjoin(
+            ClassMembership,
+            and_(
+                ClassMembership.account_id == Account.account_id,
+                ClassMembership.class_id == class_id,
             ),
         )
-        .order_by(Account.display_name, Account.account_id)
-        .limit(SUGGESTION_LIMIT)
+        .where(Account.is_active.is_(True))
+    )
+    matching = name_or_email_starts_with(query)
+    if matching is not None:
+        statement = statement.where(matching)
+    rows = db.execute(
+        statement
+        .order_by(in_class, Account.display_name, Account.account_id)
+        .limit(limit)
+        .offset(offset)
     ).all()
-    statuses = {
-        membership.account_id: membership.status
-        for membership in db.scalars(
-            select(ClassMembership).where(
-                ClassMembership.class_id == class_id,
-                ClassMembership.account_id.in_([match.account_id for match in matches]),
-            )
-        )
-    } if matches else {}
     return [
         StudentSuggestion(
             account_id=match.account_id,
             email=match.email,
             display_name=match.display_name,
-            membership_status=statuses.get(match.account_id),
+            membership_status=status,
         )
-        for match in matches
+        for match, status in rows
     ]

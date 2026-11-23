@@ -1,8 +1,9 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
+from app.api.quiz_edit_notifications import run_quiz_edit_with_notifications
 from app.auth import CurrentAccount, get_active_account
 from app.database import get_db
 from app.schemas.pagination import SortOrder
@@ -22,7 +23,9 @@ from app.schemas.quiz import (
     QuizResponse,
     QuizUpdate,
 )
+from app.services.class_roster import SUGGESTION_MAX_LIMIT
 from app.services.quizzes import (
+    COLLABORATOR_SUGGESTION_LIMIT,
     add_class_quiz_question,
     add_quiz_collaborator,
     create_quiz,
@@ -91,11 +94,18 @@ async def update_class_quiz_route(
     quiz_id: int,
     payload: QuizUpdate,
     request: Request,
+    background_tasks: BackgroundTasks,
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizResponse:
     hub = request.app.state.quiz_edit_hub
-    result = await hub.run_db(
-        update_class_quiz, account, class_id, quiz_id, payload
+    result = await run_quiz_edit_with_notifications(
+        request.app.state.notification_hub,
+        background_tasks,
+        update_class_quiz,
+        account,
+        class_id,
+        quiz_id,
+        payload,
     )
     await hub.broadcast(
         quiz_id,
@@ -119,10 +129,13 @@ async def update_class_quiz_question_route(
     question_id: int,
     payload: QuestionUpdate,
     request: Request,
+    background_tasks: BackgroundTasks,
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuestionUpdateResponse:
     hub = request.app.state.quiz_edit_hub
-    result = await hub.run_db(
+    result = await run_quiz_edit_with_notifications(
+        request.app.state.notification_hub,
+        background_tasks,
         update_class_quiz_question,
         account,
         class_id,
@@ -152,10 +165,13 @@ async def update_class_quiz_default_time_route(
     quiz_id: int,
     payload: QuizDefaultTimeUpdate,
     request: Request,
+    background_tasks: BackgroundTasks,
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuizDefaultTimeUpdateResponse:
     hub = request.app.state.quiz_edit_hub
-    result = await hub.run_db(
+    result = await run_quiz_edit_with_notifications(
+        request.app.state.notification_hub,
+        background_tasks,
         update_class_quiz_default_time,
         account,
         class_id,
@@ -186,11 +202,18 @@ async def add_class_quiz_question_route(
     quiz_id: int,
     payload: QuestionCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     account: CurrentAccount = Depends(get_active_account),
 ) -> QuestionUpdateResponse:
     hub = request.app.state.quiz_edit_hub
-    result = await hub.run_db(
-        add_class_quiz_question, account, class_id, quiz_id, payload
+    result = await run_quiz_edit_with_notifications(
+        request.app.state.notification_hub,
+        background_tasks,
+        add_class_quiz_question,
+        account,
+        class_id,
+        quiz_id,
+        payload,
     )
     await hub.broadcast(
         quiz_id,
@@ -250,11 +273,16 @@ def suggest_quiz_collaborators_route(
     class_id: int,
     quiz_id: int,
     q: str = Query(default="", max_length=100),
+    limit: int = Query(default=COLLABORATOR_SUGGESTION_LIMIT, ge=1, le=SUGGESTION_MAX_LIMIT),
+    offset: int = Query(default=0, ge=0, le=100_000),
     db: Session = Depends(get_db),
     account: CurrentAccount = Depends(get_active_account),
 ) -> list[CollaboratorSuggestion]:
-    """Add collaborator search: people in this class matching the query."""
-    return suggest_quiz_collaborators(db, account, class_id, quiz_id, q)
+    """Add collaborator search: a page of people in this class; an empty `q`
+    lists everyone."""
+    return suggest_quiz_collaborators(
+        db, account, class_id, quiz_id, q, limit=limit, offset=offset
+    )
 
 
 @router.post(

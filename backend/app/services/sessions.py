@@ -8,6 +8,7 @@ from app.auth import CurrentAccount
 from app.errors import APIError
 from app.models import (
     Account,
+    Class,
     LiveSession,
     LiveSessionStatus,
     Quiz,
@@ -22,7 +23,7 @@ from app.schemas.session import (
     SessionResponse,
 )
 from app.services.class_access import may_play, require_session_class_member
-from app.services.class_authorization import require_class_member
+from app.services.class_authorization import require_class_content
 from app.services.hosting import PROBLEMS, check_hosting
 from app.services.quiz_submissions import require_approved_quiz_version
 
@@ -38,7 +39,7 @@ def _generate_join_code() -> str:
 
 def _load_session(db: Session, session_id: int) -> LiveSession:
     session = db.get(LiveSession, session_id)
-    if session is None:
+    if session is None or session.deleted_at is not None:
         raise APIError(404, "session_not_found", "Session not found.")
     return session
 
@@ -102,6 +103,42 @@ def _participant_response(
     )
 
 
+def _lock_hostable_class(db: Session, class_id: int) -> None:
+    """Lock the class like trash_class does, then check it can still host.
+
+    Moving a class to the trash and hosting in it then wait for each other,
+    so trash_class always sees the new session. The class is locked before
+    the quiz, so this can't deadlock with trash_quiz.
+    """
+    class_ = db.scalar(
+        select(Class)
+        .where(Class.class_id == class_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if class_ is None or class_.deleted_at is not None:
+        raise APIError(404, "class_not_found", "Class not found.")
+    if class_.archived_at is not None:
+        raise PROBLEMS["class_archived"].error()
+
+
+def _lock_hostable_quiz(db: Session, class_id: int, quiz_id: int) -> Quiz:
+    """Lock the quiz like trash_quiz does.
+
+    Moving a quiz to the trash and hosting it then wait for each other, so a
+    live session never starts on a trashed quiz.
+    """
+    quiz = db.scalar(
+        select(Quiz)
+        .where(Quiz.quiz_id == quiz_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if quiz is None or quiz.class_id != class_id or quiz.deleted_at is not None:
+        raise APIError(404, "quiz_not_found", "Quiz not found.")
+    return quiz
+
+
 def create_session(
     db: Session,
     account: CurrentAccount,
@@ -115,13 +152,12 @@ def create_session(
     of the class may host it; being a collaborator is not enough.
     """
     # People outside the class get the same 404 as a missing class.
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     if access.class_.archived_at is not None:
         raise PROBLEMS["class_archived"].error()
 
-    quiz = db.get(Quiz, quiz_id)
-    if quiz is None or quiz.class_id != class_id:
-        raise APIError(404, "quiz_not_found", "Quiz not found.")
+    _lock_hostable_class(db, class_id)
+    quiz = _lock_hostable_quiz(db, class_id, quiz_id)
 
     # The same checks drive the Host button (QuizResponse.hosting), so the
     # button and this endpoint never disagree. Pending, rejected, withdrawn
@@ -134,7 +170,12 @@ def create_session(
         db, class_id, check.version.quiz_version_id
     )
 
-    for _ in range(JOIN_CODE_ATTEMPTS):
+    for attempt in range(JOIN_CODE_ATTEMPTS):
+        if attempt:
+            # The rollback after a join-code clash released both locks, and
+            # the class or quiz may have gone to the trash since.
+            _lock_hostable_class(db, class_id)
+            _lock_hostable_quiz(db, class_id, quiz_id)
         join_code = _generate_join_code()
         if _active_session_for_code(db, join_code) is not None:
             continue
@@ -291,7 +332,7 @@ def get_session(
 ) -> SessionResponse:
     session = _load_session(db, session_id)
     if session.class_id is not None:
-        require_class_member(db, account, session.class_id)
+        require_class_content(db, account, session.class_id)
     permitted = session.host_id == account.account_id
     if not permitted:
         permitted = (
@@ -321,7 +362,7 @@ def list_session_participants(
     session = _load_session(db, session_id)
 
     if session.class_id is not None:
-        require_class_member(db, account, session.class_id)
+        require_class_content(db, account, session.class_id)
 
     if session.host_id != account.account_id:
         raise APIError(
@@ -351,7 +392,7 @@ def list_class_active_sessions(
 ) -> list[ClassActiveSessionResponse]:
     """Sessions in the lobby or running for a class, for its Live button."""
     # Outsiders get the same 404 as a missing class, so ids reveal nothing.
-    require_class_member(db, account, class_id)
+    require_class_content(db, account, class_id)
 
     question_count = (
         select(func.count(Question.question_id))

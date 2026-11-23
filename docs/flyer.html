@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QuizBurg · CS Capstone Presentation Flyer</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* Shared base for all flyer variants. Tokens match frontend/src/styles/theme.css */
+:root {
+  --paper: #fcf9f4;
+  --sand: #ecdfd0;
+  --sky-soft: #c2e6f8;
+  --sky: #8fdbff;
+  --sky-wash: #e6eef7;
+  --apricot: #f6d2b6;
+  --navy: #043371;
+  --navy-deep: #021f47;
+  --orange: #bf4c0c;
+  --ink: #222222;
+  --gray: #595959;
+}
+
+@page { size: letter; margin: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: #8a8178;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+body {
+  font: 500 10.5pt/1.45 'Space Grotesk', system-ui, sans-serif;
+  color: var(--ink);
+  display: flex;
+  justify-content: center;
+  padding: 0.4in 0;
+}
+.page {
+  width: 8.5in;
+  height: 11in;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 0.15in 0.5in rgba(0,0,0,.35);
+}
+@media print {
+  html, body { background: none; }
+  body { padding: 0; display: block; }
+  .page { box-shadow: none; }
+}
+
+/* QuizBurg split-block logo */
+.qb {
+  display: inline-flex;
+  gap: 0.03in;
+  background: var(--ink);
+  border: 0.03in solid var(--ink);
+  font: 400 1em/1.05 'Archivo Black', sans-serif;
+  white-space: nowrap;
+}
+.qb span { color: var(--paper); padding: 0.06em 0.16em; }
+.qb .q { background: var(--navy); }
+.qb .b { background: var(--orange); }
+
+/* Screenshot frame */
+.shot { display: block; width: 100%; height: auto; }
+
+/* Photo placeholder: replace the initials with <img src="..."> */
+.photo {
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 400 14pt/1 'Archivo Black', sans-serif;
+  color: var(--navy);
+  background: var(--sky-wash);
+}
+.photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+</style>
+<style>
+  .page { background: var(--sand); display: flex; flex-direction: column; }
+
+  .sky {
+    background: var(--navy);
+    color: var(--paper);
+    padding: 0.45in 0.55in 1.9in;
+    position: relative;
+  }
+  .sky .eyebrow { display: flex; justify-content: space-between; font: 700 9pt/1.3 'Space Grotesk', sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--sky); }
+  .sky h1 { margin-top: 0.3in; font: 400 64pt/0.9 'Archivo Black', sans-serif; letter-spacing: -.01em; }
+  .sky h1 span { color: #ff8a3d; }
+  .sky .tag { margin-top: 0.14in; font: 500 15pt/1.3 'Space Grotesk', sans-serif; max-width: 5in; color: var(--sky-soft); }
+
+  .when {
+    position: absolute; right: 0.55in; top: 1.15in;
+    background: var(--orange); color: var(--paper);
+    border: 2px solid var(--paper);
+    padding: 0.14in 0.2in; text-align: center; transform: rotate(3deg);
+  }
+  .when .d { font: 400 30pt/0.95 'Archivo Black', sans-serif; }
+  .when .m { font: 700 10pt/1.2 'Space Grotesk', sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+
+  .stage { position: relative; margin: -1.65in 0.95in 0; }
+  .stage .main { border: 2px solid var(--ink); box-shadow: 0.08in 0.08in 0 var(--ink); }
+  .stage .phone {
+    position: absolute; right: -0.4in; bottom: -0.5in; width: 1.35in;
+    border: 0.07in solid var(--ink); border-radius: 0.16in; overflow: hidden; background: var(--ink);
+    transform: rotate(4deg);
+  }
+
+  /* Rebuilt host "live question" screen (same look as LiveSessionPage), sized like the old screenshot */
+  .host { height: 3.5in; background: var(--sand); padding: 0.1in 0.13in 0.12in; display: flex; flex-direction: column; font-family: 'Space Grotesk', sans-serif; }
+  .host-top { display: flex; justify-content: space-between; align-items: center; height: 0.34in; }
+  .host-top .qb { font-size: 10pt; transform: rotate(-2deg); box-shadow: 0.03in 0.03in 0 var(--ink); }
+  .host-top .who { display: flex; align-items: center; gap: 0.06in; font: 700 7pt 'Space Grotesk', sans-serif; }
+  .host-top .who i { width: 0.22in; height: 0.22in; border: 1.5px solid var(--ink); background: var(--sky-soft); }
+  .host-card { flex: 1; display: flex; flex-direction: column; border: 2px solid var(--ink); background: var(--paper); box-shadow: 0.03in 0.03in 0 var(--ink); }
+  .host-bar { background: var(--ink); color: var(--paper); display: flex; justify-content: space-between; align-items: center; padding: 0.09in 0.14in; font: 700 9pt 'Space Grotesk', sans-serif; }
+  .host-bar span { font-size: 6pt; letter-spacing: .1em; text-transform: uppercase; color: var(--apricot); }
+  .host-q { display: grid; grid-template-columns: 0.55in 1fr 0.62in; gap: 0.14in; align-items: center; padding: 0.12in 0.16in; border-bottom: 2px solid var(--ink); position: relative; }
+  .host-q::after { content: ''; position: absolute; left: 0; bottom: -2px; width: 68%; height: 2px; background: var(--orange); }
+  .host-q .t { height: 0.52in; background: var(--orange); color: var(--paper); border: 2px solid var(--ink); box-shadow: 0.03in 0.03in 0 var(--ink); display: grid; place-items: center; font: 400 20pt 'Archivo Black', sans-serif; }
+  .host-q h4 { text-align: center; font: 400 17pt/1.15 'Archivo Black', sans-serif; }
+  .host-q .c { height: 0.52in; background: var(--sky-soft); border: 2px solid var(--ink); box-shadow: 0.03in 0.03in 0 var(--ink); display: grid; place-content: center; text-align: center; font: 400 15pt/1 'Archivo Black', sans-serif; color: var(--navy); }
+  .host-q .c small { font: 700 5pt 'Space Grotesk', sans-serif; letter-spacing: .1em; }
+  .host-tiles { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 0.08in; padding: 0.09in; background: var(--sand); }
+  .host-tiles div { border: 2px solid var(--ink); box-shadow: 0.03in 0.03in 0 var(--ink); color: #fff; display: flex; align-items: center; gap: 0.14in; padding: 0 0.18in; font: 700 15pt/1.1 'Space Grotesk', sans-serif; }
+  .host-tiles i { font-style: normal; font-size: 17pt; }
+  .host-tiles .t0 { background: var(--navy); } .host-tiles .t1 { background: var(--orange); }
+  .host-tiles .t2 { background: #427e45; } .host-tiles .t3 { background: #8f6b00; }
+  .host-foot { display: flex; justify-content: space-between; align-items: center; padding: 0.07in 0.14in; border-top: 2px solid var(--ink);
+    background: repeating-linear-gradient(-45deg, var(--paper) 0 0.05in, var(--sand) 0.05in 0.1in); }
+  .host-foot span { background: var(--paper); border: 1px solid var(--ink); padding: 0.03in 0.07in; font: 600 6pt 'Space Grotesk', sans-serif; }
+  .host-foot b { background: var(--orange); color: var(--paper); border: 1.5px solid var(--ink); box-shadow: 0.03in 0.03in 0 var(--ink); padding: 0.05in 0.12in; font: 700 7pt 'Space Grotesk', sans-serif; letter-spacing: .04em; }
+
+  .info { margin: 0.7in 0.55in 0; display: grid; grid-template-columns: 3in 1fr; gap: 0.2in; align-items: center; }
+  .info { align-items: stretch; }
+  .details { border-left: 4px solid var(--orange); padding: 0.06in 0 0.06in 0.16in; display: flex; flex-direction: column; justify-content: space-between; }
+  .details div + div { margin-top: 0.1in; }
+  .details small { display: block; font: 700 8.5pt 'Space Grotesk', sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--gray); }
+  .details b { font: 700 14pt/1.25 'Space Grotesk', sans-serif; }
+  .info p { font-size: 13pt; line-height: 1.45; }
+
+  .team { margin: auto 0.55in 0.45in; }
+  .team h3 { font: 400 11pt/1 'Archivo Black', sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+  .team .row { margin-top: 0.12in; display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.1in; }
+  .team .photo { aspect-ratio: 1; border: 2px solid var(--ink); background: var(--paper); }
+  .team .row > div:nth-child(even) .photo { background: var(--apricot); }
+  .team .n { margin-top: 0.05in; font: 700 8.5pt/1.2 'Space Grotesk', sans-serif; text-align: center; }
+
+  .foot { background: var(--ink); color: var(--paper); padding: 0.1in 0.55in; display: flex; justify-content: space-between; font: 700 8pt 'Space Grotesk', sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<main class="page">
+  <section class="sky">
+    <div class="eyebrow"><span>Gettysburg College · Computer Science</span><span>Capstone · CS 440</span></div>
+    <h1>QUIZ<span>BURG</span></h1>
+    <p class="tag">A live quiz platform for Gettysburg College classrooms.</p>
+    <div class="when"><div class="m">Tuesday</div><div class="d">DEC 1</div><div class="m">11:30 AM</div></div>
+  </section>
+
+  <div class="stage">
+    <div class="main host" role="img" aria-label="Host screen showing a live question">
+      <div class="host-top">
+        <span class="qb"><span class="q">QUIZ</span><span class="b">BURG</span></span>
+        <span class="who">Prof Test <i></i></span>
+      </div>
+      <div class="host-card">
+        <div class="host-bar">Gettysburg History<span>Code 059 396 · Question 2 of 5</span></div>
+        <div class="host-q">
+          <div class="t">8</div>
+          <h4>When was the Battle of Gettysburg fought?</h4>
+          <div class="c">12<small>ANSWERS</small></div>
+        </div>
+        <div class="host-tiles">
+          <div class="t0"><i>♠</i>April 1861</div>
+          <div class="t1"><i>♥</i>July 1863</div>
+          <div class="t2"><i>♦</i>May 1864</div>
+          <div class="t3"><i>♣</i>June 1862</div>
+        </div>
+        <div class="host-foot"><span>The question closes when time runs out or everyone answers.</span><b>CLOSE QUESTION</b></div>
+      </div>
+    </div>
+    <div class="phone"><img class="shot" src="flyer-assets/phone-answer.png" alt="Student answer pad"></div>
+  </div>
+
+  <section class="info">
+    <div class="details">
+      <div><small>When</small><b>Tuesday, December 1, 2026<br>11:30 AM – 12:30 PM</b></div>
+      <div><small>Where</small><b>Room TBA</b></div>
+    </div>
+    <p>Students join from any phone or laptop with a six-digit code, and every answer lands on the host's screen in real time. Instructors build quizzes and question banks, organize them by class, import and export CSV, and review per-question results after every session.</p>
+  </section>
+
+  <section class="team">
+    <h3>Meet the team</h3>
+    <div class="row">
+      <div><div class="photo">AN</div><div class="n">Anh Nguyen</div></div>
+      <div><div class="photo">AM</div><div class="n">Anindo Majumder</div></div>
+      <div><div class="photo">NP</div><div class="n">Nicholas Pinto</div></div>
+      <div><div class="photo">PS</div><div class="n">Pronob Sarker</div></div>
+      <div><div class="photo">TS</div><div class="n">Taha Sabir</div></div>
+      <div><div class="photo">UK</div><div class="n">Ulugbek Khairulla</div></div>
+    </div>
+  </section>
+
+  <footer class="foot"><span>Computer Science Capstone Presentation</span><span>Fall 2026</span></footer>
+</main>
+</body>
+</html>

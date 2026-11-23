@@ -16,7 +16,11 @@ from app.schemas.quiz_submission import (
     QuizSubmissionDecision,
     QuizSubmissionResponse,
 )
-from app.services.class_authorization import ClassAccess, require_class_member
+from app.services.class_authorization import (
+    ClassAccess,
+    require_class_content,
+    require_class_member,
+)
 
 
 def _now() -> datetime:
@@ -62,7 +66,10 @@ def _version_and_quiz(
     row = db.execute(
         select(QuizVersion, Quiz)
         .join(Quiz, Quiz.quiz_id == QuizVersion.quiz_id)
-        .where(QuizVersion.quiz_version_id == quiz_version_id)
+        .where(
+            QuizVersion.quiz_version_id == quiz_version_id,
+            Quiz.deleted_at.is_(None),
+        )
     ).one_or_none()
     if row is None:
         return None
@@ -100,18 +107,22 @@ def _require_published_current_version(
             "quiz_version_not_published",
             "Only a published, non-archived quiz version can be submitted.",
         )
-    newer_published = db.scalar(
-        select(QuizVersion.quiz_version_id).where(
+    # The quiz row is already locked. Use a locking read so MySQL sees edits
+    # that committed while this transaction was waiting for that row.
+    newer_version = db.scalar(
+        select(QuizVersion.quiz_version_id)
+        .where(
             QuizVersion.quiz_id == version.quiz_id,
-            QuizVersion.published_at.is_not(None),
             QuizVersion.version_number > version.version_number,
         )
+        .limit(1)
+        .with_for_update(read=True)
     )
-    if newer_published is not None:
+    if newer_version is not None:
         raise APIError(
             409,
             "quiz_version_stale",
-            "A newer published version of this quiz is available.",
+            "A newer version of this quiz has been saved.",
         )
 
 
@@ -125,11 +136,15 @@ def create_quiz_submission(
     class_id: int,
     payload: QuizSubmissionCreate,
 ) -> QuizSubmissionResponse:
-    access = require_class_member(db, account, class_id)
+    from app.services.quizzes import _lock_class_quiz_for_update
+
+    access = require_class_content(db, account, class_id)
     _require_unarchived_class(access.class_)
     version, quiz = _load_visible_version(
         db, account, class_id, payload.quiz_version_id
     )
+    quiz = _lock_class_quiz_for_update(db, class_id, quiz.quiz_id)
+    db.refresh(version, with_for_update=True)
     _require_published_current_version(db, class_id, version, quiz)
 
     submission = QuizSubmission(
@@ -165,7 +180,7 @@ def list_quiz_submissions(
     account: CurrentAccount,
     class_id: int,
 ) -> list[QuizSubmissionResponse]:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     statement = select(QuizSubmission).where(QuizSubmission.class_id == class_id)
     if not access.is_organizer:
         statement = statement.where(
@@ -174,10 +189,17 @@ def list_quiz_submissions(
     statement = statement.order_by(
         QuizSubmission.submitted_at.desc(), QuizSubmission.submission_id.desc()
     )
-    return [
-        _submission_response(submission)
-        for submission in db.scalars(statement).all()
-    ]
+    responses = []
+    for submission in db.scalars(statement).all():
+        response = _submission_response(submission)
+        if response.rejection_comment is not None and not access.is_organizer:
+            version_and_quiz = _version_and_quiz(db, submission.quiz_version_id)
+            if version_and_quiz is None or not _has_quiz_access(
+                db, version_and_quiz[1], account.account_id
+            ):
+                response.rejection_comment = None
+        responses.append(response)
+    return responses
 
 
 def _load_visible_submission(
@@ -199,6 +221,21 @@ def _load_visible_submission(
     ):
         raise APIError(404, "submission_not_found", "Submission not found.")
     return submission
+
+
+def _lock_submission_quiz(db: Session, submission: QuizSubmission) -> Quiz:
+    from app.services.quizzes import _lock_class_quiz_for_update
+
+    quiz_id = db.scalar(
+        select(QuizVersion.quiz_id).where(
+            QuizVersion.quiz_version_id == submission.quiz_version_id
+        )
+    )
+    if quiz_id is None:
+        raise APIError(404, "quiz_version_not_found", "Quiz version not found.")
+    quiz = _lock_class_quiz_for_update(db, submission.class_id, quiz_id)
+    db.refresh(submission, with_for_update=True)
+    return quiz
 
 
 def _submitter_remains_eligible(
@@ -230,7 +267,7 @@ def decide_quiz_submission(
     submission_id: int,
     payload: QuizSubmissionDecision,
 ) -> QuizSubmissionResponse:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     submission = _load_visible_submission(
         db, account, access, class_id, submission_id
     )
@@ -240,6 +277,7 @@ def decide_quiz_submission(
             "not_class_organizer",
             "Only an active faculty organizer can decide submissions.",
         )
+    quiz = _lock_submission_quiz(db, submission)
     if submission.status != SubmissionStatus.PENDING:
         raise APIError(
             409,
@@ -249,10 +287,9 @@ def decide_quiz_submission(
 
     if payload.status == SubmissionStatus.APPROVED:
         _require_unarchived_class(access.class_)
-        row = _version_and_quiz(db, submission.quiz_version_id)
-        if row is None:
+        version = db.get(QuizVersion, submission.quiz_version_id, with_for_update=True)
+        if version is None:
             raise APIError(404, "quiz_version_not_found", "Quiz version not found.")
-        version, quiz = row
         _require_published_current_version(db, class_id, version, quiz)
         if not _submitter_remains_eligible(db, submission, quiz):
             raise APIError(
@@ -274,6 +311,7 @@ def decide_quiz_submission(
                 status=payload.status,
                 decided_by_id=account.account_id,
                 decided_at=decided_at,
+                rejection_comment=payload.rejection_comment,
             )
         )
         if changed.rowcount != 1:
@@ -315,6 +353,7 @@ def withdraw_quiz_submission(
             "not_submission_owner",
             "Only the original submitter can withdraw this submission.",
         )
+    _lock_submission_quiz(db, submission)
     if submission.status != SubmissionStatus.PENDING:
         raise APIError(
             409,
@@ -356,6 +395,34 @@ def withdraw_quiz_submission(
         ) from exc
 
 
+COMMITTED_QUIZ_WITHDRAWALS = "committed_quiz_withdrawals"
+
+
+def commit_quiz_content_edit(
+    db: Session, quiz: Quiz, editor_id: int, edited_at: datetime
+) -> None:
+    """Commit the edit and withdrawals while holding the quiz row lock."""
+    submissions = db.scalars(
+        select(QuizSubmission)
+        .join(QuizVersion, QuizVersion.quiz_version_id == QuizSubmission.quiz_version_id)
+        .where(
+            QuizVersion.quiz_id == quiz.quiz_id,
+            QuizSubmission.class_id == quiz.class_id,
+            QuizSubmission.status == SubmissionStatus.PENDING,
+        )
+        .with_for_update()
+    ).all()
+    for submission in submissions:
+        submission.status = SubmissionStatus.WITHDRAWN
+        submission.decided_by_id = editor_id
+        submission.decided_at = edited_at
+    db.commit()
+    if submissions:
+        db.info.setdefault(COMMITTED_QUIZ_WITHDRAWALS, []).extend(
+            submission.submission_id for submission in submissions
+        )
+
+
 def _approved_versions_statement(class_id: int):
     newer = aliased(QuizVersion)
     newer_published = exists(
@@ -378,6 +445,7 @@ def _approved_versions_statement(class_id: int):
             QuizVersion.published_at.is_not(None),
             Quiz.class_id == class_id,
             Quiz.status != QuizStatus.ARCHIVED,
+            Quiz.deleted_at.is_(None),
             ~newer_published,
         )
     )
@@ -388,7 +456,7 @@ def list_approved_quizzes(
     account: CurrentAccount,
     class_id: int,
 ) -> list[ApprovedQuizResponse]:
-    access = require_class_member(db, account, class_id)
+    access = require_class_content(db, account, class_id)
     _require_unarchived_class(access.class_)
     rows = db.execute(
         _approved_versions_statement(class_id).order_by(

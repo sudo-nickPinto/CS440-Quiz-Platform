@@ -46,7 +46,7 @@ def test_submission_decision_rejects_extra_fields() -> None:
         )
 
 
-def test_submission_response_has_only_the_eight_public_task_fields() -> None:
+def test_submission_response_has_only_public_fields() -> None:
     now = datetime(2026, 11, 3, 20, 0, 0)
     response = QuizSubmissionResponse.model_validate(
         SimpleNamespace(
@@ -71,6 +71,7 @@ def test_submission_response_has_only_the_eight_public_task_fields() -> None:
         "decided_by_id": None,
         "submitted_at": now,
         "decided_at": None,
+        "rejection_comment": None,
     }
 
     with pytest.raises(ValidationError):

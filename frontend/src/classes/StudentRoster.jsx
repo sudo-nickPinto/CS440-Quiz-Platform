@@ -14,6 +14,7 @@ import {
   rosterSummary,
   suggestionStatus,
 } from "./rosterHelpers";
+import SuggestionList from "./SuggestionList";
 import { useSuggestions } from "./useSuggestions";
 
 function personName(person) {
@@ -136,13 +137,14 @@ export function AddStudentDialog({ classInfo, onClose, onChange }) {
   );
 }
 
-// Add student tab: the search box, and only the results under it.
+// Add student tab: the search box over a scrolling list of everyone, which
+// the search filters.
 function StudentSearch({ classInfo, onAdded }) {
   const api = useApi();
   const action = useAction();
   const [text, setText] = useState("");
   const [justAdded, setJustAdded] = useState({});
-  // Names and emails from every QuizBurg account, as the organizer types.
+  // Every QuizBurg account, a page at a time; the search filters it.
   const suggestions = useSuggestions(
     `/classes/${classInfo.id}/student-suggestions`,
     text,
@@ -182,7 +184,7 @@ function StudentSearch({ classInfo, onAdded }) {
             autoFocus
             autoComplete="off"
             role="combobox"
-            aria-expanded={suggestions.length > 0}
+            aria-expanded={suggestions.items.length > 0}
             aria-controls={listId}
             aria-autocomplete="list"
             disabled={action.busy}
@@ -202,43 +204,40 @@ function StudentSearch({ classInfo, onAdded }) {
         </p>
       )}
 
-      {suggestions.length > 0 && (
-        <ul
-          className="cl-suggest"
-          id={listId}
-          role="listbox"
-          aria-label="Matching accounts"
-        >
-          {suggestions.map((person) => {
-            const status = justAdded[person.account_id]
-              ? { label: "Added", canAdd: false }
-              : suggestionStatus(person.membership_status);
-            return (
-              <li key={person.account_id} role="option" aria-selected="false">
-                <span className="cl-pav" aria-hidden="true">
-                  {initials(personName(person))}
-                </span>
-                <span>
-                  <strong className="cl-pname">{personName(person)}</strong>
-                  <small className="cl-pmail">{person.email}</small>
-                </span>
-                {status.canAdd ? (
-                  <button
-                    type="button"
-                    className="cl-secondary"
-                    disabled={action.busy}
-                    onClick={() => void add(person.email)}
-                  >
-                    Add
-                  </button>
-                ) : (
-                  <span className="cl-tag is-me">{status.label}</span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <SuggestionList
+        id={listId}
+        label="Matching accounts"
+        suggestions={suggestions}
+        emptyText={text.trim() ? "No one matches that search." : "No accounts yet."}
+        renderPerson={(person) => {
+          const status = justAdded[person.account_id]
+            ? { label: "Added", canAdd: false }
+            : suggestionStatus(person.membership_status);
+          return (
+            <li key={person.account_id} role="option" aria-selected="false">
+              <span className="cl-pav" aria-hidden="true">
+                {initials(personName(person))}
+              </span>
+              <span className="cl-pwho">
+                <strong className="cl-pname">{personName(person)}</strong>
+                <small className="cl-pmail">{person.email}</small>
+              </span>
+              {status.canAdd ? (
+                <button
+                  type="button"
+                  className="cl-secondary"
+                  disabled={action.busy}
+                  onClick={() => void add(person.email)}
+                >
+                  Add
+                </button>
+              ) : (
+                <span className="cl-tag is-me">{status.label}</span>
+              )}
+            </li>
+          );
+        }}
+      />
     </form>
   );
 }
