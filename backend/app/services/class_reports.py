@@ -183,11 +183,11 @@ def get_class_student_results(
 ) -> dict:
     access = require_class_member(db, account, class_id)
     organizer = _is_organizer(access)
-    if not organizer and account_id != account.account_id:
+    if not organizer:
         raise APIError(
             403,
             "not_class_organizer",
-            "Only an active faculty organizer of this class can view other students.",
+            "Only an active faculty organizer of this class can view student reports.",
         )
 
     # Removed and departed students keep their history, so any membership
@@ -292,9 +292,9 @@ def get_class_student_results(
     return {
         "class_id": class_id,
         "account_id": student.account_id,
-        "view": "organizer" if organizer else "member",
+        "view": "organizer",
         "display_name": student.display_name,
-        "email": student.email if organizer else None,
+        "email": student.email,
         "role": student.role.value,
         "status": student.status.value,
         "class_session_count": len(sessions),
@@ -307,6 +307,6 @@ def get_class_student_results(
         "average_score": round(total / len(played), 1) if played else None,
         "correct_count": sum(s["correct"] for s in played),
         "incorrect_count": sum(s["incorrect"] for s in played),
-        "class_average": _class_average(db, class_id) if organizer else None,
+        "class_average": _class_average(db, class_id),
         "sessions": sessions,
     }

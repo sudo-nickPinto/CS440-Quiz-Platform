@@ -170,14 +170,20 @@ for (const entry of ["queue", "preview"]) {
   });
 }
 
-test("another collaborator can read feedback in My quizzes even if the preview is private", async ({ page }) => {
+test("a collaborator sees rejection feedback on the quiz page without preview access", async ({ page }) => {
   const comment = "Replace <b>the diagram</b> and add an explanation.";
   await openClass(page, { as: "collaborator", submission: "REJECTED", comment, previewDenied: true });
 
-  await expect(page.getByText("Rejection feedback")).toBeVisible();
-  await expect(page.getByText(comment, { exact: true })).toBeVisible();
+  await button(page, "Cards").click();
+  await expect(page.getByRole("article").getByText("Rejected", { exact: true })).toBeVisible();
+  await expect(page.getByText(comment, { exact: true })).toHaveCount(0);
   await button(page, "Rows").click();
-  await expect(page.getByRole("table", { name: "My quizzes" }).getByText(comment, { exact: true })).toBeVisible();
+  const quizzes = page.getByRole("table", { name: "My quizzes" });
+  await expect(quizzes.getByRole("cell", { name: "Rejected", exact: true })).toHaveClass(/is-rejected/);
+  await expect(quizzes.getByText(comment, { exact: true })).toHaveCount(0);
+  await quizzes.getByRole("link", { name: "Original submitted quiz", exact: true }).click();
+  const banner = page.getByRole("status").filter({ hasText: "Rejected by Professor" });
+  await expect(banner.getByText(comment, { exact: true })).toBeVisible();
 
   await page.goto(PREVIEW);
   await expect(page.getByText("Submission not found.")).toBeVisible();
@@ -206,7 +212,7 @@ test("a saved edit refreshes the pending queue when the request is withdrawn", a
   await expect(page.getByRole("cell", { name: "Withdrawn", exact: true })).toBeVisible();
 });
 
-test("a collaborator sees new feedback after refocusing My quizzes", async ({ page }) => {
+test("a collaborator sees Rejected after refocusing My quizzes", async ({ page }) => {
   const now = Date.now();
   await page.clock.setFixedTime(now);
   const state = await openClass(page, { as: "collaborator", submission: "PENDING" });
@@ -218,23 +224,21 @@ test("a collaborator sees new feedback after refocusing My quizzes", async ({ pa
   await page.clock.setFixedTime(now + 11_000);
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
 
+  await expect(page.getByText("Rejected", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Original submitted quiz", exact: true }).click();
   await expect(page.getByText(comment, { exact: true })).toBeVisible();
 });
 
 for (const width of [375, 1280]) {
-  test(`long feedback stays readable in rows and cards at ${width}px`, async ({ page }) => {
+  test(`long feedback fits the quiz page at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 812 });
     const comment = `<img src=x alt="literal feedback"> ${"longword".repeat(108)}`;
-    await openClass(page, { as: "collaborator", submission: "REJECTED", comment });
-    await button(page, "Cards").click();
-    await expect(page.getByRole("article").getByText(comment, { exact: true })).toBeVisible();
+    await openClass(page, {
+      as: "collaborator", submission: "REJECTED", comment, path: `/app/quizzes/${QUIZ_ID}`,
+    });
+    const banner = page.getByRole("status").filter({ hasText: "Rejected by Professor" });
+    await expect(banner.getByText(comment, { exact: true })).toBeVisible();
     await expect(page.getByRole("img", { name: "literal feedback" })).toHaveCount(0);
-    await noHorizontalScroll(page);
-
-    await button(page, "Rows").click();
-    const quizzes = page.getByRole("table", { name: "My quizzes" });
-    await expect(quizzes.getByText(comment, { exact: true })).toBeVisible();
-    await expect(quizzes.getByRole("link", { name: "Original submitted quiz", exact: true })).toBeVisible();
     await noHorizontalScroll(page);
   });
 
@@ -324,29 +328,13 @@ const STUDENT_REPORT = {
 };
 const STUDENT_REPORT_PATH = `/app/classes/${CLASS_ID}/students/2/report`;
 
-test("a student report uses eligible attendance and links only to the student's reports", async ({ page }) => {
-  await openClass(page, {
-    path: STUDENT_REPORT_PATH,
-    studentReport: { ...STUDENT_REPORT, view: "member" },
-  });
-
-  const summary = page.getByRole("region", { name: "Report summary" });
-  await expect(summary.getByText("50%")).toBeVisible();
-  await expect(summary.getByText("Eligible sessions")).toBeVisible();
-  await expect(summary.getByText("2", { exact: true })).toBeVisible();
-
-  const hosted = page.getByRole("row").filter({ hasText: "My hosted quiz" });
-  await expect(hosted.getByRole("cell", { name: "Hosted", exact: true })).toBeVisible();
-  await expect(hosted.getByRole("link", { name: /Host results/ })).toHaveAttribute("href", "/app/results/host/20");
-  const played = page.getByRole("row").filter({ hasText: "Quiz I played" });
-  await expect(played.getByRole("cell", { name: "Played", exact: true })).toBeVisible();
-  await expect(played.getByRole("cell", { name: "0", exact: true })).toHaveCount(2);
-  await expect(played.getByRole("link")).toHaveAttribute("href", `/app/classes/${CLASS_ID}/sessions/21/report`);
-  const absent = page.getByRole("row").filter({ hasText: "Quiz I missed" });
-  await expect(absent.getByRole("cell", { name: "Absent", exact: true })).toBeVisible();
-  await expect(absent.getByRole("link")).toHaveCount(0);
-  await absent.getByText("Quiz I missed").click();
-  await expect(page).toHaveURL(new RegExp(`${STUDENT_REPORT_PATH}$`));
+test("a student report URL redirects students to their class Reports tab", async ({ page }) => {
+  const state = await openClass(page, { path: STUDENT_REPORT_PATH });
+  await expect(page).toHaveURL((url) =>
+    url.pathname === `/app/classes/${CLASS_ID}` && url.searchParams.get("section") === "Reports"
+  );
+  expect(state.calls.some(({ path }) => path.includes("/students/2/results"))).toBe(false);
+  await expect(page.getByRole("region", { name: "Report summary" })).toHaveCount(0);
 });
 
 test("the organizer roster aligns recent statuses and opens class reports", async ({ page }) => {
@@ -361,26 +349,47 @@ test("the organizer roster aligns recent statuses and opens class reports", asyn
     }],
   });
   const recent = page.getByRole("group", { name: "Recent attendance, oldest to newest" });
-  await expect(recent.locator("span")).toHaveText(["Absent", "Played · 0", "Hosted"]);
+  await expect(recent.locator("span")).toHaveText(["–", "0", "–"]);
   await button(page, "Show Student's details").click();
   await expect(page.getByText(/50% attendance · 2 eligible sessions/)).toBeVisible();
 
   const hosted = page.getByRole("table", { name: "Student's presentations" })
     .getByRole("row").filter({ hasText: "My hosted quiz" });
   await expect(hosted.getByRole("cell", { name: "Hosted", exact: true })).toBeVisible();
-  await expect(hosted.getByRole("link")).toHaveAttribute("href", `/app/classes/${CLASS_ID}/sessions/20/report`);
+  await expect(hosted.getByRole("link")).toHaveCount(0);
+  const expanded = page.getByRole("table", { name: "Student's presentations" });
+  await expect(expanded.getByRole("row", { name: /Quiz I missed/ }).getByRole("link")).toHaveCount(0);
+  await expect(expanded.getByRole("row", { name: /Quiz I played/ }).getByRole("link"))
+    .toHaveAttribute("href", `/app/classes/${CLASS_ID}/sessions/21/report`);
 
   await page.getByRole("link", { name: /Full report/ }).click();
-  await expect(page.getByRole("table", { name: "Student session history" })
-    .getByRole("row").filter({ hasText: "My hosted quiz" }).getByRole("link"))
-    .toHaveAttribute("href", `/app/classes/${CLASS_ID}/sessions/20/report`);
+  const fullReport = page.getByRole("table", { name: "Student session history" });
+  await expect(fullReport.getByRole("row", { name: /My hosted quiz/ }).getByRole("link")).toHaveCount(0);
 });
 
-test("a student report with only hosting explains the null attendance rate", async ({ page }) => {
+test("the professor can scroll to Results in the expanded student panel on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
   await openClass(page, {
+    as: "organizer",
+    path: `/app/classes/${CLASS_ID}?view=admin&section=Students`,
+    studentReport: { ...STUDENT_REPORT, view: "organizer" },
+  });
+  await button(page, "Show Student's details").click();
+  const panel = page.getByRole("region", { name: "Student presentations" });
+  const results = panel.getByRole("link", { name: /Results/ });
+  await expect(results).toBeVisible();
+  await results.scrollIntoViewIfNeeded();
+  await expect(results).toBeInViewport();
+  await expect.poll(() => panel.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+  await noHorizontalScroll(page);
+});
+
+test("a professor sees null attendance for a student who only hosted", async ({ page }) => {
+  await openClass(page, {
+    as: "organizer",
     path: STUDENT_REPORT_PATH,
     studentReport: {
-      ...STUDENT_REPORT, view: "member", attendance_rate: null,
+      ...STUDENT_REPORT, view: "organizer", attendance_rate: null,
       attendance_session_count: 0, session_count: 0, sessions: [STUDENT_REPORT.sessions[0]],
     },
   });

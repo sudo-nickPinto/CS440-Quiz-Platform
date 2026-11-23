@@ -30,6 +30,7 @@ from app.schemas.quiz import (
     ClassQuizListPage,
     ClassQuizSort,
     QuizAccess,
+    QuizApprovalFeedback,
     QuizCollaboratorCreate,
     QuizCollaboratorResponse,
     QuizContributor,
@@ -47,7 +48,11 @@ from app.schemas.quiz import (
     QuizUpdate,
     QuizVersionResponse,
 )
-from app.services.class_authorization import get_class, get_class_membership
+from app.services.class_authorization import (
+    get_class,
+    get_class_membership,
+    require_class_organizer,
+)
 from app.services.hosting import quiz_hosting, quiz_hosting_many
 from app.services.question_bank import snapshot_question
 from app.services.quiz_submissions import commit_quiz_content_edit
@@ -293,6 +298,12 @@ def _to_response(
     response.hosting = quiz_hosting(db, account, quiz)
     for field, value in _attribution(db, quiz).items():
         setattr(response, field, value)
+    if account.account_id == quiz.author_id or any(
+        editor.account_id == account.account_id for editor in response.collaborators
+    ):
+        response.approval_feedback = _quiz_approval_feedback(db, [quiz.quiz_id]).get(
+            quiz.quiz_id
+        )
     return response
 
 
@@ -523,6 +534,50 @@ def get_quiz(
     return _to_response(db, account, _load_readable_quiz(db, account, quiz_id))
 
 
+def _quiz_approval_feedback(
+    db: Session, quiz_ids: list[int]
+) -> dict[int, QuizApprovalFeedback]:
+    if not quiz_ids:
+        return {}
+
+    # Find the latest request across published versions. Publishing and
+    # submitting are separate, so feedback survives until the new request.
+    latest_request = (
+        select(QuizSubmission.submission_id)
+        .join(QuizVersion, QuizVersion.quiz_version_id == QuizSubmission.quiz_version_id)
+        .where(QuizVersion.quiz_id == Quiz.quiz_id, QuizSubmission.class_id == Quiz.class_id)
+        .order_by(QuizSubmission.submitted_at.desc(), QuizSubmission.submission_id.desc())
+        .limit(1)
+        .correlate(Quiz)
+        .scalar_subquery()
+    )
+    rows = db.execute(
+        select(
+            Quiz.quiz_id,
+            QuizSubmission.status,
+            QuizSubmission.rejection_comment,
+            Account.display_name,
+        )
+        .select_from(Quiz)
+        .join(QuizSubmission, QuizSubmission.submission_id == latest_request)
+        .outerjoin(Account, Account.account_id == QuizSubmission.decided_by_id)
+        .where(
+            Quiz.quiz_id.in_(quiz_ids),
+            or_(
+                QuizSubmission.status == SubmissionStatus.REJECTED,
+                and_(
+                    QuizSubmission.status == SubmissionStatus.WITHDRAWN,
+                    QuizSubmission.returned_for_revision.is_(True),
+                ),
+            ),
+        )
+    )
+    return {
+        quiz_id: QuizApprovalFeedback(status=status, decided_by_name=name, rejection_comment=comment)
+        for quiz_id, status, comment, name in rows
+    }
+
+
 def _latest_submissions(
     db: Session, class_id: int, version_ids: list[int]
 ) -> dict[int, QuizSubmission]:
@@ -668,6 +723,14 @@ def list_class_quizzes(
         [version.quiz_version_id for version in newest_published.values()],
     )
 
+    feedback = _quiz_approval_feedback(
+        db,
+        [
+            quiz.quiz_id
+            for quiz, _ in rows
+            if quiz.author_id == account.account_id or quiz.quiz_id in editing
+        ],
+    )
     hosting = quiz_hosting_many(db, account, [quiz for quiz, _ in rows])
     items = []
     for quiz, author_name in rows:
@@ -708,6 +771,7 @@ def list_class_quizzes(
                     and submission.status == SubmissionStatus.REJECTED
                     else None
                 ),
+                approval_feedback=feedback.get(quiz.quiz_id),
                 collaborator_names=collaborator_names.get(quiz.quiz_id, []),
             )
         )
@@ -1298,6 +1362,13 @@ def update_class_quiz(
     if quiz.status == QuizStatus.ARCHIVED:
         raise APIError(409, "quiz_not_editable", "An archived quiz cannot be edited.")
 
+    if payload.return_submission_id is not None:
+        require_class_organizer(db, account, quiz.class_id)
+        if quiz.author_id == account.account_id:
+            raise APIError(
+                409, "invalid_quiz_return", "Use Save changes for a quiz you own."
+            )
+
     if payload.expected_revision != quiz.revision:
         raise APIError(
             409,
@@ -1318,6 +1389,10 @@ def update_class_quiz(
             for saved, incoming in zip(editor_version.questions, questions)
         )
     ):
+        if payload.return_submission_id is not None:
+            raise APIError(
+                409, "quiz_content_unchanged", "Make a change before sending the quiz back."
+            )
         return _to_response(db, account, quiz)
 
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -1363,7 +1438,13 @@ def update_class_quiz(
             hosting=quiz_hosting(db, account, quiz),
             **_attribution(db, quiz),
         )
-        commit_quiz_content_edit(db, quiz, account.account_id, now)
+        commit_quiz_content_edit(
+            db,
+            quiz,
+            account.account_id,
+            now,
+            return_submission_id=payload.return_submission_id,
+        )
         return response
     except APIError:
         db.rollback()

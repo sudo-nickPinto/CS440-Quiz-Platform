@@ -143,6 +143,11 @@ export async function openClass(page_, options = {}) {
       approval_submission_id: item ? SUBMISSION_ID : null,
       approval_sent_by_me: item?.submitted_by_id === me.account_id,
       rejection_comment: item?.rejection_comment ?? null,
+      approval_feedback: item?.status === "REJECTED" ? {
+        status: item.status,
+        decided_by_name: item.decided_by_name ?? "Professor",
+        rejection_comment: item.rejection_comment,
+      } : null,
     };
   }
 

@@ -71,8 +71,13 @@ test("an organizer edit withdraws a submitted snapshot and the owner can resubmi
   await editorSocket({ type: "quiz_editor_state" });
   await expect(button(preview, /Send for approval/)).toHaveCount(0);
   await preview.getByRole("textbox", { name: "Quiz title" }).fill(editedTitle);
-  await button(preview, "Save changes").click();
-  await expect(preview.getByRole("heading", { name: editedTitle })).toBeVisible();
+  await button(preview, "Send back to student").click();
+  await expect(preview).toHaveURL((url) =>
+    url.pathname === `/app${classPath}` &&
+      url.searchParams.get("view") === "admin" &&
+      url.searchParams.get("section") === "Approvals"
+  );
+  await expect(preview.getByText("Nothing to review")).toBeVisible();
 
   await notification({ type: "submission_changed", action: "withdrawn", quiz_id: quiz.quiz_id, status: "WITHDRAWN" });
   await expect(queue.getByText("Nothing to review")).toBeVisible();
@@ -80,8 +85,9 @@ test("an organizer edit withdraws a submitted snapshot and the owner can resubmi
   await expect(preview.getByRole("heading", { name: submittedTitle })).toBeVisible();
   await expect(preview.getByText("Withdrawn by Prof")).toBeVisible();
 
+  await expect(author.getByText("Sent back by Prof", { exact: true })).toBeVisible();
   await author.goto(myQuizzes(classPath));
-  await expect(author.getByText("Withdrawn", { exact: true })).toBeVisible();
+  await expect(author.getByText("Sent back", { exact: true })).toBeVisible();
   await button(author, "Send for approval").click();
   await queue.getByRole("link", { name: editedTitle, exact: true }).click();
   await expect(queue.getByRole("heading", { name: editedTitle })).toBeVisible();
@@ -117,8 +123,15 @@ test("rejection feedback reaches eligible readers without expanding preview acce
   await expect(reviewer.getByText("Rejected by Prof")).toBeVisible();
   await expect(reviewer.getByText(feedback, { exact: true })).toBeVisible();
 
+  await expect(author.getByText("Rejected", { exact: true })).toBeVisible();
+  await expect(author.getByText(feedback, { exact: true })).toHaveCount(0);
+  await author.getByRole("link", { name: title, exact: true }).click();
+  await expect(author.getByText("Rejected by Prof", { exact: true })).toBeVisible();
   await expect(author.getByText(feedback, { exact: true })).toBeVisible();
   await coeditor.goto(myQuizzes(classPath));
+  await expect(coeditor.getByText("Rejected", { exact: true })).toBeVisible();
+  await expect(coeditor.getByText(feedback, { exact: true })).toHaveCount(0);
+  await coeditor.getByRole("link", { name: title, exact: true }).click();
   await expect(coeditor.getByText(feedback, { exact: true })).toBeVisible();
   await coeditor.goto(previewPath);
   await expect(coeditor.getByRole("alert")).toContainText("Submission not found");
@@ -129,6 +142,10 @@ test("rejection feedback reaches eligible readers without expanding preview acce
   await expect(classmate.getByText(feedback, { exact: true })).toHaveCount(0);
   await classmate.goto(previewPath);
   await expect(classmate.getByRole("alert")).toContainText("Submission not found");
+
+  await button(author, /Send for approval/).click();
+  await expect(button(author, "Withdraw request")).toBeVisible();
+  await expect(author.getByText(feedback, { exact: true })).toHaveCount(0);
 });
 
 async function finishSession({ host, player, quiz, prompt, answer }) {
@@ -186,18 +203,25 @@ test("live results differentiate Hosted, zero-point Played, and Absent and retai
   await button(student, "Save changes").click();
   await expect(student.getByText(revisedQuestion, { exact: true })).toBeVisible();
 
-  await student.goto(`/app${classPath}/students/${accounts[owner].account_id}/report`);
-  const summary = student.getByRole("region", { name: "Report summary" });
+  const reportPath = `/app${classPath}/students/${accounts[owner].account_id}/report`;
+  await student.goto(reportPath);
+  await expect(student).toHaveURL((url) =>
+    url.pathname === `/app${classPath}` && url.searchParams.get("section") === "Reports"
+  );
+  await expect(student.getByRole("region", { name: "Report summary" })).toHaveCount(0);
+
+  await reviewer.goto(reportPath);
+  const summary = reviewer.getByRole("region", { name: "Report summary" });
   await expect(summary.getByText("50%", { exact: true })).toBeVisible();
   await expect(summary.getByText("Sessions played", { exact: true }).locator("..")).toHaveText("Sessions played1");
   await expect(summary.getByText("Eligible sessions", { exact: true }).locator("..")).toHaveText("Eligible sessions2");
 
-  const hostRow = student.getByRole("row", { name: /Student-hosted round/ });
+  const hostRow = reviewer.getByRole("row", { name: /Student-hosted round/ });
   await expect(hostRow.getByRole("cell", { name: "Hosted", exact: true })).toBeVisible();
-  const playedRow = student.getByRole("row", { name: /Zero-point round/ });
+  const playedRow = reviewer.getByRole("row", { name: /Zero-point round/ });
   await expect(playedRow.getByRole("cell", { name: "Played", exact: true })).toBeVisible();
   await expect(playedRow.getByRole("cell", { name: "0", exact: true })).toHaveCount(2);
-  const missedRow = student.getByRole("row", { name: /Missed round/ });
+  const missedRow = reviewer.getByRole("row", { name: /Missed round/ });
   await expect(missedRow.getByRole("cell", { name: "Absent", exact: true })).toBeVisible();
   await expect(missedRow.getByRole("link")).toHaveCount(0);
 

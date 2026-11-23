@@ -293,9 +293,10 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
                             <span
                               key={index}
                               className={`cl-mk ${status === "Played" ? scoreMark(score, session?.average_score) : "miss"}`}
-                              title={session?.quiz_title}
+                              title={session ? `${session.quiz_title} · ${status}` : status}
+                              aria-label={status === "Played" ? `Played, ${formatPoints(score)} points` : status}
                             >
-                              {status === "Played" ? `Played · ${formatPoints(score)}` : status}
+                              {status === "Played" ? formatPoints(score) : "–"}
                             </span>
                           ))}
                         </span>
@@ -418,50 +419,52 @@ function StudentDetail({
         ) : !report.data?.sessions?.length ? (
           <p className="cl-panel-note">No completed presentations yet.</p>
         ) : (
-          <table className="cl-gl">
-            <caption className="cl-sr">
-              {personName(member)}&apos;s presentations
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Attendance</th>
-                <th scope="col">Date</th>
-                <th scope="col">Presentation</th>
-                <th scope="col" className="cl-num">Correct</th>
-                <th scope="col" className="cl-num">Points</th>
-                <th scope="col" className="cl-num">Rank</th>
-                <th scope="col">
-                  <span className="cl-sr">Results</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.data.sessions.map((session) => {
-                const status = attendanceLabel(session.attendance_status, session.played);
-                const played = status === "Played";
-                const to = sessionResultsPath(classInfo.id, session.session_id, {
-                  canViewClassReport: classInfo.canManage,
-                });
-                return (
-                  <tr key={session.session_id} {...(to && rowLink(navigate, to))}>
-                    <td className={`cl-mk ${played ? "hi" : "miss"}`}>{status}</td>
-                    <td className="cl-gl-date">{shortDate(session.started_at)}</td>
-                    <td className="cl-gl-quiz">{session.quiz_title}</td>
-                    <td className="cl-num">
-                      {played ? `${session.correct}/${session.correct + session.incorrect}` : "—"}
-                    </td>
-                    <td className="cl-num cl-big">
-                      {played ? formatPoints(session.points) : "—"}
-                    </td>
-                    <td className="cl-num">{played && session.rank ? `#${session.rank}` : "—"}</td>
-                    <td className="cl-gl-go">
-                      {to && <Link className="cl-lnk" to={to}>Results →</Link>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="cl-panel-presentations" role="region" aria-label="Student presentations" tabIndex={0}>
+            <table className="cl-gl">
+              <caption className="cl-sr">
+                {personName(member)}&apos;s presentations
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Attendance</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Presentation</th>
+                  <th scope="col" className="cl-num">Correct</th>
+                  <th scope="col" className="cl-num">Points</th>
+                  <th scope="col" className="cl-num">Rank</th>
+                  <th scope="col">
+                    <span className="cl-sr">Results</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.data.sessions.map((session) => {
+                  const status = attendanceLabel(session.attendance_status, session.played);
+                  const played = status === "Played";
+                  const to = played ? sessionResultsPath(classInfo.id, session.session_id, {
+                    canViewClassReport: classInfo.canManage,
+                  }) : null;
+                  return (
+                    <tr key={session.session_id} {...(to ? rowLink(navigate, to) : { className: "is-unplayed" })}>
+                      <td className={`cl-mk ${played ? "hi" : "miss"}`}>{status}</td>
+                      <td className="cl-gl-date">{shortDate(session.started_at)}</td>
+                      <td className="cl-gl-quiz">{session.quiz_title}</td>
+                      <td className="cl-num">
+                        {played ? `${session.correct}/${session.correct + session.incorrect}` : "—"}
+                      </td>
+                      <td className="cl-num cl-big">
+                        {played ? formatPoints(session.points) : "—"}
+                      </td>
+                      <td className="cl-num">{played && session.rank ? `#${session.rank}` : "—"}</td>
+                      <td className="cl-gl-go">
+                        {to && <Link className="cl-lnk" to={to}>Results →</Link>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ))}
 
       <div className="cl-panel-foot">

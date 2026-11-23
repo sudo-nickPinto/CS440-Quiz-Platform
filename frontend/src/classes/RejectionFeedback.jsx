@@ -1,9 +1,9 @@
-export default function RejectionFeedback({ comment }) {
-  if (!comment) return null;
+export default function RejectionFeedback({ comment, heading }) {
+  if (!comment && !heading) return null;
   return (
     <span className="cl-rejection-feedback">
-      <strong>Rejection feedback</strong>
-      <span>{comment}</span>
+      <strong>{heading ?? "Rejection feedback"}</strong>
+      {comment && <span>{comment}</span>}
     </span>
   );
 }

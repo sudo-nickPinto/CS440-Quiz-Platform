@@ -353,6 +353,25 @@
   font-weight: 700;
 }
 
+.qp .cl-panel-presentations {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.qp .cl-gl .is-unplayed > td {
+  color: var(--gray);
+}
+
+@media (max-width: 760px) {
+  .qp .cl-panel-presentations {
+    contain: inline-size;
+  }
+
+  .qp .cl-panel-presentations .cl-gl {
+    min-width: 34rem;
+  }
+}
+
 .qp .cl-gl {
   width: 100%;
   border-collapse: collapse;
@@ -463,11 +482,16 @@
   color: var(--ink);
 }
 
-.qp .cl-table td.cl-status.is-rejected,
 .qp .cl-table td.cl-status.is-withdrawn,
 .qp .cl-table td.cl-status.is-archived {
   background: var(--sand);
   color: var(--ink);
+}
+
+.qp .cl-table td.cl-status.is-rejected,
+.qp .qc-status.is-rejected {
+  background: #a51d35;
+  color: white;
 }
 
 .qp .cl-page .cl-approval-rows tbody tr > td {
@@ -2040,4 +2064,21 @@
 
 .cl-rejection-feedback > span {
   white-space: pre-wrap;
+}
+
+.qp .qv-review-feedback {
+  padding: 12px 18px;
+  border-bottom: var(--b);
+  background: var(--apricot);
+  overflow-wrap: anywhere;
+}
+
+.qp .qv-review-feedback.is-rejected {
+  border-left: 5px solid #a51d35;
+  background: #fff2f2;
+  color: #75152a;
+}
+
+.qp .qv-review-feedback p {
+  margin: 4px 0 0;
 }

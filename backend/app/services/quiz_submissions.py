@@ -392,7 +392,12 @@ COMMITTED_QUIZ_WITHDRAWALS = "committed_quiz_withdrawals"
 
 
 def commit_quiz_content_edit(
-    db: Session, quiz: Quiz, editor_id: int, edited_at: datetime
+    db: Session,
+    quiz: Quiz,
+    editor_id: int,
+    edited_at: datetime,
+    *,
+    return_submission_id: int | None = None,
 ) -> None:
     """Commit the edit and withdrawals while holding the quiz row lock."""
     submissions = db.scalars(
@@ -405,10 +410,19 @@ def commit_quiz_content_edit(
         )
         .with_for_update()
     ).all()
+    if return_submission_id is not None and not any(
+        submission.submission_id == return_submission_id for submission in submissions
+    ):
+        raise APIError(
+            409,
+            "invalid_submission_transition",
+            "This request is no longer pending. Open the approval queue to review its status.",
+        )
     for submission in submissions:
         submission.status = SubmissionStatus.WITHDRAWN
         submission.decided_by_id = editor_id
         submission.decided_at = edited_at
+        submission.returned_for_revision = submission.submission_id == return_submission_id
     db.commit()
     if submissions:
         db.info.setdefault(COMMITTED_QUIZ_WITHDRAWALS, []).extend(

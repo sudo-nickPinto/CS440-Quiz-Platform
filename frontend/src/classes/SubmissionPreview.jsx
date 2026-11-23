@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
+import { useAccount } from "../authenticated-demo/account";
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import RequestError from "../authenticated-demo/RequestError";
 import { canEditQuiz } from "../authenticated-demo/quizEditing";
@@ -42,6 +43,11 @@ export default function SubmissionPreviewPage() {
   const action = useAction();
   const [rejecting, setRejecting] = useState(false);
   const organizer = classInfo.status === "ready" && classInfo.data.canManage;
+  const account = useAccount();
+  const canSendBack = organizer && !classInfo.data.archived &&
+    quiz.data?.author_id !== account.account_id &&
+    preview.data?.submission.status === "PENDING" &&
+    preview.data.submission.is_current_version;
   const backTo = organizer
     ? `/app/classes/${classId}?section=Approvals`
     : `/app/classes/${classId}?view=user&section=My%20quizzes`;
@@ -68,7 +74,11 @@ export default function SubmissionPreviewPage() {
           <h1>{preview.data ? preview.data.version.title : "Submission"}</h1>
         </div>
         {canEdit && (
-          <Link className="cl-button" to={`/app/quizzes/${quizId}/edit`}>
+          <Link
+            className="cl-button"
+            to={`/app/quizzes/${quizId}/edit`}
+            state={canSendBack ? { returnSubmissionId: Number(submissionId) } : undefined}
+          >
             Edit quiz
           </Link>
         )}

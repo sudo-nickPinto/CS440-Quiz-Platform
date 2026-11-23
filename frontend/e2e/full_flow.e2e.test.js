@@ -831,12 +831,9 @@ describe('full flow: one class from sign-in to grade export', () => {
       [s2, false],
       [s1, true],
     ])
-    expect(await rest('ben', 'GET', `${base}/students/${me.ben.account_id}/results`)).toMatchObject({
-      view: 'member',
-      email: null,
-      correct_count: 3,
-      incorrect_count: 3,
-      class_average: null,
+    expect(await refused('ben', 'GET', `${base}/students/${me.ben.account_id}/results`)).toMatchObject({
+      status: 403,
+      code: 'not_class_organizer',
     })
     expect(await refused('ana', 'GET', `${base}/students/${me.ben.account_id}/results`)).toMatchObject({
       status: 403,
@@ -874,11 +871,10 @@ describe('full flow: one class from sign-in to grade export', () => {
       [s2, 'No'],
       [s1, 'Yes'],
     ])
-    const ownBook = await download('ana', `${base}/students/${me.ana.account_id}/export.xlsx`)
-    expect(ownBook.sheets.Summary.map((r) => r[0])).not.toContain('Email')
     for (const path of [
       `${base}/sessions/${s1}/export.xlsx`,
       `${base}/quizzes/${quizA.quiz_id}/export.xlsx`,
+      `${base}/students/${me.ana.account_id}/export.xlsx`,
       `${base}/students/${me.ben.account_id}/export.xlsx`,
     ]) {
       expect(await refused('ana', 'GET', path)).toMatchObject({ status: 403, code: 'not_class_organizer' })

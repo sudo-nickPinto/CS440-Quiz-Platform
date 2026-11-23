@@ -1,6 +1,5 @@
 import { Link, Navigate, useNavigate, useParams } from "react-router";
 import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
-import { useAccount } from "../authenticated-demo/account";
 import { useAction, useApi, useResource } from "../authenticated-demo/rest";
 import { useConfirm } from "../authenticated-demo/useConfirm";
 import RequestError from "../authenticated-demo/RequestError";
@@ -199,8 +198,6 @@ export function ClassQuizReportRedirect() {
 
 function StudentReport({ report, classId }) {
   const navigate = useNavigate();
-  const account = useAccount();
-  const ownReport = Number(report.account_id) === Number(account.account_id);
 
   return (
     <>
@@ -249,11 +246,9 @@ function StudentReport({ report, classId }) {
             {report.sessions.map((session) => {
               const status = attendanceLabel(session.attendance_status, session.played);
               const played = status === "Played";
-              const hosted = ownReport && status === "Hosted";
-              const to = sessionResultsPath(classId, session.session_id, {
-                hosted,
-                canViewClassReport: report.view === "organizer" || (ownReport && played),
-              });
+              const to = played ? sessionResultsPath(classId, session.session_id, {
+                canViewClassReport: true,
+              }) : null;
               return (
                 <tr key={session.session_id} {...(to && rowLink(navigate, to))}>
                   <td>{date(session.started_at)}</td>
@@ -265,7 +260,7 @@ function StudentReport({ report, classId }) {
                   <td>{played ? number(session.rank) : "—"}</td>
                   <td>
                     {to ? (
-                      <Link to={to}>{hosted ? "Host results →" : "Session report →"}</Link>
+                      <Link to={to}>Session report →</Link>
                     ) : (
                       "—"
                     )}
@@ -344,15 +339,20 @@ export function ClassStudentReportPage() {
   const { classId, accountId } = useParams();
   const valid = validId(classId) && validId(accountId);
 
-  const resource = useResource(
-    valid ? `/classes/${classId}/students/${accountId}/results` : null,
-  );
   const classInfo = useClassResource(classId);
+  const canManage = classInfo.status === "ready" && classInfo.data.canManage;
+  const resource = useResource(
+    valid && canManage ? `/classes/${classId}/students/${accountId}/results` : null,
+  );
   const file = useFileDownload();
-  const canRemove =
-    classInfo.status === "ready" &&
-    classInfo.data.canManage &&
-    !classInfo.data.archived;
+  const canRemove = canManage && !classInfo.data.archived;
+
+  if (valid && (
+    (classInfo.status === "ready" && !canManage) ||
+    resource.error?.code === "not_class_organizer"
+  )) {
+    return <Navigate replace to={`/app/classes/${classId}?view=user&section=Reports`} />;
+  }
 
   return (
     <ReportFrame
@@ -363,9 +363,7 @@ export function ClassStudentReportPage() {
           : "Student report"
       }
       actions={
-        // Anyone who can open this report may export it; only organizers
-        // remove students.
-        resource.data && (
+        canManage && resource.data && (
           <div className="cl-actions">
             <ExcelButton
               file={file}
@@ -384,7 +382,14 @@ export function ClassStudentReportPage() {
       }
       error={file.error}
     >
-      <ReportRequest valid={valid} resource={resource}>
+      <ReportRequest
+        valid={valid}
+        resource={canManage ? resource : {
+          loading: classInfo.status === "loading",
+          error: classInfo.error,
+          reload: classInfo.reload,
+        }}
+      >
         {(report) => <StudentReport report={report} classId={classId} />}
       </ReportRequest>
     </ReportFrame>

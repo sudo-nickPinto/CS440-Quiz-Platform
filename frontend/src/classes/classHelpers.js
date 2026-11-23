@@ -198,6 +198,12 @@ export function resolveUserSection(requested) {
 // Publishing (freezing a version) happens inside "Send for approval".
 export function presentStatus(quiz) {
   if (quiz.status === "ARCHIVED") return { key: "archived", label: "Archived" };
+  if (quiz.approval_feedback?.status === "REJECTED" || quiz.approval_status === "REJECTED") {
+    return { key: "rejected", label: "Rejected" };
+  }
+  if (quiz.approval_feedback?.status === "WITHDRAWN") {
+    return { key: "withdrawn", label: "Sent back" };
+  }
   if (quiz.approval_status === "WITHDRAWN") return { key: "withdrawn", label: "Withdrawn" };
   if (quiz.status === "PUBLISHED" && quiz.approval_status === "APPROVED") {
     return { key: "approved", label: "Approved" };

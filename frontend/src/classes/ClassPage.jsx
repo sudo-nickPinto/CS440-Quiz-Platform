@@ -40,7 +40,6 @@ import {
 } from "./ReportTable";
 import { ClassStudents } from "./ClassManagement";
 import RejectSubmissionDialog from "./RejectSubmissionDialog";
-import RejectionFeedback from "./RejectionFeedback";
 import { AddStudentDialog, JoinRequestsTable } from "./StudentRoster";
 import QuestionBankExportDialog from "../authenticated-demo/QuestionBankExportDialog";
 import OptionsMenu from "../authenticated-demo/OptionsMenu";
@@ -766,7 +765,6 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
                     edited {formatDate(quiz.updated_at)}
                     {info.owner ? "" : ` · shared by ${quiz.author_name}`}
                   </small>
-                  <RejectionFeedback comment={quiz.rejection_comment} />
                 </span>,
                 approvalControl(quiz, info, "cl-approval-cell") ?? (
                   <span className="cl-dim">—</span>
@@ -802,13 +800,13 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
               state={{ classId: classInfo.id }}
               wholeCard
               status={status.label}
+              statusKey={status.key}
               archived={archived}
               headline={`${quiz.question_count} ${
                 quiz.question_count === 1 ? "question" : "questions"
               }`}
             >
               <PeopleTags quiz={quiz} owner={owner} long />
-              <RejectionFeedback comment={quiz.rejection_comment} />
               <p>Edited {formatDate(quiz.updated_at)}</p>
               {approvalControl(quiz, info, "qc-approval")}
             </QuizCard>
