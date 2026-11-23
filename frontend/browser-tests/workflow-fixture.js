@@ -66,6 +66,8 @@ const SUBMITTED_VERSION = {
  *   previewDenied the preview endpoint answers 404
  *   failDecision  PATCH answers 409 quiz_version_stale
  *   path          where to start (defaults to the right class tab)
+ *   quiz          fields to override on the member's quiz
+ *   classArchived the class is archived
  */
 export async function openClass(page_, options = {}) {
   const {
@@ -75,6 +77,8 @@ export async function openClass(page_, options = {}) {
     previewDenied = false,
     failDecision = false,
     path,
+    quiz = {},
+    classArchived = false,
   } = options;
   const me = PEOPLE[as];
   const organizer = as === "organizer";
@@ -133,6 +137,7 @@ export async function openClass(page_, options = {}) {
       approval_status: item?.status ?? null,
       approval_submission_id: item ? SUBMISSION_ID : null,
       approval_sent_by_me: Boolean(item),
+      ...quiz,
     };
   }
 
@@ -159,7 +164,7 @@ export async function openClass(page_, options = {}) {
         name: "Browser test class",
         current_role: organizer ? "ORGANIZER" : "MEMBER",
         membership_status: "ACTIVE",
-        archived_at: null,
+        archived_at: classArchived ? TIME : null,
         join_code: "TEST1234",
         joining_open: true,
       });

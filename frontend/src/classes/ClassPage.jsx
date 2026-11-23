@@ -675,46 +675,49 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
     refresh(done);
   }
 
-  // The same options as the ⋯ menu on the quiz page.
+  // The same options as the ⋯ menu on the quiz page; no menu if none apply.
   function quizOptions(quiz, info) {
-    return (
-      <OptionsMenu className="cl-quiz-options">
-        {info.owner && (
-          <Link to={`/app/quizzes/${quiz.quiz_id}/reports`}>
-            Hosting history
-          </Link>
-        )}
-        {/* The server only duplicates for active members of a live class. */}
-        {canSubmit && (
-          <button
-            type="button"
-            disabled={action.busy}
-            onClick={() => void duplicateQuiz(quiz)}
-          >
-            Duplicate quiz
-          </button>
-        )}
-        {quiz.question_count > 0 && (
-          <button
-            type="button"
-            disabled={action.busy}
-            onClick={() => void exportQuestions(quiz)}
-          >
-            Export questions (CSV)
-          </button>
-        )}
-        {info.owner && !info.archived && (
-          <button
-            type="button"
-            className="ui-danger"
-            disabled={action.busy}
-            onClick={() => void archiveQuiz(quiz)}
-          >
-            Archive quiz
-          </button>
-        )}
-      </OptionsMenu>
-    );
+    const options = [
+      info.owner && (
+        <Link key="history" to={`/app/quizzes/${quiz.quiz_id}/reports`}>
+          Hosting history
+        </Link>
+      ),
+      // The server only duplicates for active members of a live class.
+      canSubmit && (
+        <button
+          key="duplicate"
+          type="button"
+          disabled={action.busy}
+          onClick={() => void duplicateQuiz(quiz)}
+        >
+          Duplicate quiz
+        </button>
+      ),
+      quiz.question_count > 0 && (
+        <button
+          key="export"
+          type="button"
+          disabled={action.busy}
+          onClick={() => void exportQuestions(quiz)}
+        >
+          Export questions (CSV)
+        </button>
+      ),
+      info.owner && !info.archived && (
+        <button
+          key="archive"
+          type="button"
+          className="ui-danger"
+          disabled={action.busy}
+          onClick={() => void archiveQuiz(quiz)}
+        >
+          Archive quiz
+        </button>
+      ),
+    ].filter(Boolean);
+    if (options.length === 0) return null;
+    return <OptionsMenu className="cl-quiz-options">{options}</OptionsMenu>;
   }
 
   function describe(quiz) {
@@ -851,10 +854,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
                 <PeopleTags quiz={quiz} owner={info.owner} />,
                 <span className="cl-dim">{formatScore(quiz.question_count)}</span>,
                 <span className="cl-dim">{formatDate(quiz.updated_at)}</span>,
-                <div className="cl-quiz-actions">
-                  {quizOptions(quiz, info)}
-                  <GoLink to={info.to} label={`Open ${quiz.title}`} />
-                </div>,
+                <div className="cl-quiz-actions">{quizOptions(quiz, info)}</div>,
               ],
             };
           })}

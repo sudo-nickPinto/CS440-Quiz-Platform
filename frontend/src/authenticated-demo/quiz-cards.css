@@ -167,6 +167,35 @@
   right: 0;
   width: min(260px, 76vw);
 }
+/* Table links are navy; menu items all match the buttons. */
+.qp .cl-quiz-actions .ui-row-options > a {
+  color: var(--ink);
+  white-space: normal;
+}
+/* Leave room under a menu opened on the last row or card. */
+.qp .cl-quiz-actions .ui-row-options::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  width: 1px;
+  height: 24px;
+}
+/* With no arrow in the row, the title is the way in: show it on keyboard
+   focus, and always on touch screens, which have no hover. */
+.qp .cl-member-rows a.cl-quiz-name:focus-visible {
+  text-decoration: underline;
+  text-decoration-color: var(--orange-deep);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
+@media (hover: none) {
+  .qp .cl-member-rows a.cl-quiz-name {
+    text-decoration: underline;
+    text-decoration-color: var(--orange-deep);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 4px;
+  }
+}
 .qp .qc-card a:focus-visible,
 .qp .qc-card button:focus-visible,
 .qp .qc-card summary:focus-visible {
