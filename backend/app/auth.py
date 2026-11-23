@@ -86,12 +86,22 @@ def get_account_record(
 ) -> dict:
     if creds is None:
         raise APIError(401, "missing_token", "Missing bearer token")
-    return get_or_create_account(
-        db,
-        request.app.state.settings.auth0_domain,
-        claims["sub"],
-        creds.credentials,
-    )
+    try:
+        account = get_or_create_account(
+            db,
+            request.app.state.settings.auth0_domain,
+            claims["sub"],
+            creds.credentials,
+        )
+    except BaseException:
+        db.rollback()
+        raise
+    # End the transaction so the connection goes back to the pool now. The
+    # route runs in a separate threadpool turn; holding the connection until
+    # then deadlocked bursts (a class joining at once): every thread waited
+    # for a connection while every connection waited for a thread.
+    db.commit()
+    return account
 
 
 def get_current_account(
