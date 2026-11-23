@@ -1,9 +1,15 @@
 # Optional overlay for hosting MySQL in the same Docker environment.
 # Use a persistent named volume; initialization scripts run only when that
 # volume is first created.
+#
+# Data is encrypted at rest (docs/DEPLOYMENT.md, "Database encryption at
+# rest"): tables, redo/undo logs and binary logs are encrypted with a master
+# key kept in the separate mysql-keyring volume. Back that volume up apart
+# from the data; without it the data can't be read, even by you.
 services:
   db:
-    image: mysql:8.0
+    build: ./deploy/mysql
+    image: quizburg-mysql:8.0-encrypted
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -13,8 +19,16 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+      # Encryption at rest. New tables are encrypted by default, and creating
+      # an unencrypted one is refused.
+      - --default-table-encryption=ON
+      - --table-encryption-privilege-check=ON
+      - --innodb-redo-log-encrypt=ON
+      - --innodb-undo-log-encrypt=ON
+      - --binlog-encryption=ON
     volumes:
       - mysql-data:/var/lib/mysql
+      - mysql-keyring:/var/lib/mysql-keyring
       # Every ulugbek-err/migrations/*.up.sql file, in order. Add a line here
       # whenever a migration is added.
       - ./ulugbek-err/migrations/0001_accounts_and_groups.up.sql:/docker-entrypoint-initdb.d/0001.sql:ro
@@ -29,6 +43,14 @@ services:
       - ./ulugbek-err/migrations/0010_quiz_submission.up.sql:/docker-entrypoint-initdb.d/0010.sql:ro
       - ./ulugbek-err/migrations/0011_account_profile.up.sql:/docker-entrypoint-initdb.d/0011.sql:ro
       - ./ulugbek-err/migrations/0012_question_revision.up.sql:/docker-entrypoint-initdb.d/0012.sql:ro
+      - ./ulugbek-err/migrations/0013_session_answer_correction.up.sql:/docker-entrypoint-initdb.d/0013.sql:ro
+      - ./ulugbek-err/migrations/0014_faculty_access.up.sql:/docker-entrypoint-initdb.d/0014.sql:ro
+      - ./ulugbek-err/migrations/0015_question_bank.up.sql:/docker-entrypoint-initdb.d/0015.sql:ro
+      - ./ulugbek-err/migrations/0016_class_roster.up.sql:/docker-entrypoint-initdb.d/0016.sql:ro
+      - ./ulugbek-err/migrations/0017_trash_and_semester.up.sql:/docker-entrypoint-initdb.d/0017.sql:ro
+      - ./ulugbek-err/migrations/0018_roster_membership_source.up.sql:/docker-entrypoint-initdb.d/0018.sql:ro
+      - ./ulugbek-err/migrations/0019_trash_expiry_and_semester_family.up.sql:/docker-entrypoint-initdb.d/0019.sql:ro
+      - ./ulugbek-err/migrations/0020_quiz_submission_rejection_comment.up.sql:/docker-entrypoint-initdb.d/0020.sql:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -51,3 +73,5 @@ services:
 
 volumes:
   mysql-data:
+  # The encryption master key. Keep a copy somewhere other than this server.
+  mysql-keyring:

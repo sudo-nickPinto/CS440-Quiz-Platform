@@ -119,6 +119,11 @@ Set `APP_PORT=80`, `APP_HTTPS_PORT=443`, and `APP_SITE_ADDRESS` to the Reclaim
 hostname. Keep the `mysql-data` and `caddy-data` volumes and arrange database
 backups before entering real course data.
 
+The database is encrypted at rest, with its key in the `mysql-keyring` volume.
+Back up that key and use `deploy/backup-db.sh` for backups; see
+[DATABASE_ENCRYPTION.md](DATABASE_ENCRYPTION.md), which also covers encrypting
+a database created before this.
+
 Reclaim accepts environment variables, private container networking, volumes,
 and exposed ports for custom Docker deployments. Its shared load balancer can
 serve common web ports; other public ports require an endpoint or public IP.
