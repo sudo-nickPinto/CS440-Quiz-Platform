@@ -466,3 +466,54 @@ test("class page and preview fit a phone screen", async ({ page }) => {
   await expect(page.getByText("Original submitted question")).toBeVisible();
   await noHorizontalScroll(page);
 });
+
+test("each quiz row and card has an options menu that exports its questions", async ({
+  page,
+}) => {
+  await openClass(page, { as: "member" });
+  // The title opens the quiz, so the row has no separate arrow.
+  await expect(page.locator(".cl-member-rows a.cl-go")).toHaveCount(0);
+
+  for (const layout of ["Rows", "Cards"]) {
+    if (layout === "Cards") await button(page, "Cards").click();
+    const menu = page.locator(".cl-quiz-options");
+    await expect(menu).toHaveCount(1);
+    const pageHeight = await page.evaluate(() => document.body.offsetHeight);
+    await menu.locator("summary").click();
+    // It opens downward without stretching the page to make room.
+    const options = menu.locator(".ui-row-options");
+    await expect(options).toBeVisible();
+    expect((await options.boundingBox()).y).toBeGreaterThan(
+      (await menu.locator("summary").boundingBox()).y,
+    );
+    expect(await page.evaluate(() => document.body.offsetHeight)).toBe(pageHeight);
+    const history = page.getByRole("link", { name: "Hosting history" });
+    await expect(history).toBeVisible();
+    // The link looks like the buttons beside it.
+    const color = (item) => item.evaluate((el) => getComputedStyle(el).color);
+    expect(await color(history)).toBe(await color(button(page, "Duplicate quiz")));
+    await expect(button(page, "Duplicate quiz")).toBeVisible();
+    await expect(button(page, "Archive quiz")).toBeVisible();
+
+    const download = page.waitForEvent("download");
+    await button(page, "Export questions (CSV)").click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(/-questions\.csv$/);
+    const text = await (await file.createReadStream()).toArray();
+    expect(Buffer.concat(text).toString()).toContain("New draft question");
+  }
+});
+
+test("a quiz with no options gets no options menu", async ({ page }) => {
+  await openClass(page, {
+    as: "member",
+    classArchived: true,
+    quiz: { my_access: "EDITOR", question_count: 0 },
+  });
+
+  await expect(page.getByRole("link", { name: "Original submitted quiz", exact: true })).toBeVisible();
+  await expect(page.locator(".cl-quiz-options")).toHaveCount(0);
+  await button(page, "Cards").click();
+  await expect(page.locator(".qc-card")).toHaveCount(1);
+  await expect(page.locator(".cl-quiz-options")).toHaveCount(0);
+});
