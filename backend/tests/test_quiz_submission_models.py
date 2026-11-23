@@ -46,6 +46,7 @@ def test_quiz_submission_table_matches_migrations_0010_and_0020() -> None:
         "decided_at",
         "active_version_id",
         "rejection_comment",
+        "returned_for_revision",
     ]
     assert table.c.rejection_comment.nullable
     assert table.c.rejection_comment.type.length == 1000

@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Computed,
     Enum as SqlEnum,
@@ -12,6 +13,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.mysql import DATETIME, INTEGER
 from sqlalchemy.orm import Mapped, mapped_column
@@ -111,3 +113,6 @@ class QuizSubmission(Base):
         nullable=True,
     )
     rejection_comment: Mapped[str | None] = mapped_column(String(1000))
+    returned_for_revision: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )

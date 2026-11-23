@@ -6,79 +6,34 @@
 // backend/.venv/bin/python. Set E2E_DATABASE_URL to run against a migrated
 // MySQL database instead of a throwaway SQLite file (see e2e_server.py).
 
-import { spawn } from 'node:child_process'
-import { once } from 'node:events'
-import { existsSync } from 'node:fs'
-import { createInterface } from 'node:readline'
-import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll } from 'vitest'
 import { livePhase } from '../src/live/liveReducer.js'
 import { createLiveSession } from '../src/live/liveSession.js'
 
-const backendDir = fileURLToPath(new URL('../../backend', import.meta.url))
-const python = process.env.BACKEND_PYTHON || `${backendDir}/.venv/bin/python`
+import { callApi, restApi, startE2EServer } from './server.js'
 
 export const server = { baseUrl: null, tokens: null }
-let child
 const liveSessions = []
 
 // Starts the server before the file's tests and stops it (and every socket
 // opened through connect()) after them.
 export function runE2EServer() {
   beforeAll(async () => {
-    if (!existsSync(python)) {
-      throw new Error(`No backend Python at ${python}; set BACKEND_PYTHON.`)
-    }
-    child = spawn(python, ['-m', 'tests.e2e_server'], {
-      cwd: backendDir,
-      stdio: ['ignore', 'pipe', 'inherit'],
-    })
-    const [line] = await once(createInterface({ input: child.stdout }), 'line')
-    ;({ base_url: server.baseUrl, tokens: server.tokens } = JSON.parse(line))
-    for (let i = 0; i < 100; i += 1) {
-      try {
-        if ((await fetch(`${server.baseUrl}/health`)).ok) return
-      } catch {
-        // not listening yet
-      }
-      await new Promise((r) => setTimeout(r, 100))
-    }
-    throw new Error('e2e server did not start')
+    Object.assign(server, await startE2EServer())
   }, 30_000)
 
-  afterAll(() => {
+  afterAll(async () => {
     for (const live of liveSessions) live.close()
-    child?.kill()
+    await server.stop?.()
   })
 }
 
-// One HTTP request as `person` (null for no token). Never throws on a status.
 export async function call(person, method, path, body) {
-  const headers = {}
-  if (person) headers.Authorization = `Bearer ${server.tokens[person]}`
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
-  const res = await fetch(`${server.baseUrl}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  const bytes = Buffer.from(await res.arrayBuffer())
-  const type = res.headers.get('content-type') || ''
-  return {
-    status: res.status,
-    headers: res.headers,
-    bytes,
-    json: type.includes('application/json') && bytes.length ? JSON.parse(bytes) : null,
-  }
+  return callApi(server, person, method, path, body)
 }
 
-// The JSON body of a successful request; throws with the error otherwise.
 export async function rest(person, method, path, body) {
-  const res = await call(person, method, path, body)
-  if (res.status >= 400) {
-    throw new Error(`${person} ${method} ${path} -> ${res.status} ${res.bytes}`)
-  }
-  return res.json
+  return restApi(server, person, method, path, body)
 }
 
 // { status, code, details } of a request that must fail.

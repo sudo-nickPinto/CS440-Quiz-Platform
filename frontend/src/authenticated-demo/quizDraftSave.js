@@ -81,12 +81,14 @@ export function aggregateQuizUpdatePayload(editor, revision) {
   };
 }
 
-export function saveAggregateQuiz({ editor, revision, existingQuiz, api }) {
+export function saveAggregateQuiz({ editor, revision, existingQuiz, api, returnSubmissionId }) {
+  const payload = aggregateQuizUpdatePayload(editor, revision);
+  if (returnSubmissionId != null) payload.return_submission_id = returnSubmissionId;
   return api(
     `/classes/${existingQuiz.class_id}/quizzes/${existingQuiz.quiz_id}`,
     {
       method: "PUT",
-      body: JSON.stringify(aggregateQuizUpdatePayload(editor, revision)),
+      body: JSON.stringify(payload),
     },
   );
 }

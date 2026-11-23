@@ -12,6 +12,7 @@
     "test:e2e": "vitest run e2e",
     "dev:browser-test": "vite --config browser-tests/vite.config.js",
     "test:browser": "playwright test",
+    "test:browser:full-stack": "playwright test --config playwright.full-stack.config.js",
     "test:browser:ui": "playwright test --ui"
   },
   "dependencies": {

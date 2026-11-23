@@ -31,10 +31,12 @@ async function newGame() {
   await rest('host', 'GET', '/me')
   await rest('host', 'POST', '/e2e/faculty/host')
   const course = await rest('host', 'POST', '/classes', { name: 'E2E class' })
-  for (const person of ['alice', 'bob']) {
-    await rest(person, 'POST', '/classes/join', { code: course.join_code })
-  }
   const base = `/classes/${course.class_id}`
+  for (const person of ['alice', 'bob']) {
+    const account = await rest(person, 'GET', '/me')
+    await rest(person, 'POST', '/classes/join', { code: course.join_code })
+    await rest('host', 'POST', `${base}/join-requests/${account.account_id}/approve`)
+  }
   const draft = await rest('host', 'POST', `${base}/quizzes`, QUIZ)
   const quiz = await rest('host', 'POST', `${base}/quizzes/${draft.quiz_id}/publish`, {
     expected_revision: draft.revision,

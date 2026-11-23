@@ -169,18 +169,15 @@ def test_student_export_labels_hosted_sessions(reports) -> None:
     assert [row[-1] for row in rows(book["Sessions"])] == ["Hosted", "Played"]
 
 
-def test_member_can_export_only_their_own_results(reports) -> None:
+def test_members_cannot_export_their_own_or_another_student_report(reports) -> None:
     client, identities, data = reports
     act_as(client, identities["amy"])
 
-    info = summary(workbook(client.get(export_url(student_url(data, "amy")))))
-    assert info["Student"] == "Amy Student"
-    assert "Email" not in info
-    assert "Class average" not in info
+    for name in ("amy", "zoe"):
+        response = client.get(export_url(student_url(data, name)))
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "not_class_organizer"
 
-    response = client.get(export_url(student_url(data, "zoe")))
-    assert response.status_code == 403
-    assert response.json()["error"]["code"] == "not_class_organizer"
 
 
 # Access
