@@ -196,10 +196,9 @@ function quizRow(page, title) {
 
 async function menuOptions(scope) {
   await scope.locator(".cl-quiz-options summary").click();
-  return scope
-    .locator(".cl-quiz-options .ui-row-options")
-    .locator("a, button")
-    .allInnerTexts();
+  const options = scope.locator(".cl-quiz-options .ui-row-options");
+  await expect(options).toBeVisible();
+  return options.locator("a, button").allInnerTexts();
 }
 
 test("the options menu only offers what the member can do with each quiz", async ({
@@ -290,7 +289,7 @@ test("a failed export shows why and downloads nothing", async ({ page }) => {
   }
 });
 
-test("a menu on the last row of a sideways-scrolling table stays in reach", async ({
+test("a menu on the last row of a sideways-scrolling table floats over the page", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 900, height: 800 });
@@ -311,16 +310,22 @@ test("a menu on the last row of a sideways-scrolling table stays in reach", asyn
   expect(scrolled).toBeGreaterThan(0);
 
   const row = quizRow(page, "Supercalifragilistic");
+  const heightBefore = (await wrap.boundingBox()).height;
   await row.locator(".cl-quiz-options summary").click();
   // The table keeps its scroll instead of spilling past the page...
   expect(await wrap.evaluate((el) => el.scrollLeft)).toBe(scrolled);
   await noHorizontalScroll(page);
-  // ...and the whole menu fits inside it, so nothing is cut off.
-  const box = await wrap.boundingBox();
+  // ...the menu floats over the page, whole and on screen...
+  await expect(row.locator(".ui-row-options")).toBeVisible();
   const menu = await row.locator(".ui-row-options").boundingBox();
-  expect(menu.y + menu.height).toBeLessThanOrEqual(box.y + box.height);
-  expect(menu.x).toBeGreaterThanOrEqual(box.x);
-  expect(menu.x + menu.width).toBeLessThanOrEqual(box.x + box.width);
+  const viewport = page.viewportSize();
+  expect(menu.y).toBeGreaterThanOrEqual(0);
+  expect(menu.y + menu.height).toBeLessThanOrEqual(viewport.height);
+  expect(menu.x).toBeGreaterThanOrEqual(0);
+  expect(menu.x + menu.width).toBeLessThanOrEqual(viewport.width);
+  await expect(button(page, "Archive quiz")).toBeVisible();
+  // ...and the table doesn't grow to make room for it.
+  expect((await wrap.boundingBox()).height).toBe(heightBefore);
 });
 
 test("the row says what a slow menu option is doing after the menu closes", async ({

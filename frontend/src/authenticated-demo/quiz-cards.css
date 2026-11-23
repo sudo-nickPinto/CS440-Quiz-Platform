@@ -152,13 +152,6 @@
   position: relative;
   z-index: 20;
 }
-/* The table scrolls sideways on narrow screens, so its box also cuts off
-   anything below it, such as a menu opened on one of the last rows. Turning
-   the scroll off would let the whole table spill past the page, so instead
-   make room under the table while one of those menus is open. */
-.qp .cl-table-wrap:has(tbody tr:nth-last-child(-n + 3) .cl-quiz-options[open]) {
-  padding-bottom: 230px;
-}
 /* What a menu option is doing, shown beside the ⋯ because the menu closes
    as soon as an option is picked. */
 .qp .cl-quiz-working {
