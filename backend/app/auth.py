@@ -89,6 +89,7 @@ def get_account_record(
 
     if creds is not None and is_guest_token(creds.credentials):
         record = guest_account_record(db, creds.credentials)
+        db.commit()  # hand the connection back now (see check_code_route)
         if record is None:
             raise APIError(401, "invalid_token", "Invalid token")
         return record

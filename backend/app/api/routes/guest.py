@@ -47,7 +47,12 @@ def check_code_route(
     payload: SessionJoinRequest,
     db: Session = Depends(get_db),
 ) -> dict:
-    return check_join_code(db, payload.join_code)
+    result = check_join_code(db, payload.join_code)
+    # Hand the connection back now. The request's session is only closed
+    # afterwards in a worker thread, and when a whole room checks the code at
+    # once every thread can be waiting for a connection, so none frees up.
+    db.commit()
+    return result
 
 
 @router.post(
@@ -62,6 +67,7 @@ def guest_join_route(
     db: Session = Depends(get_db),
 ) -> GuestJoinResponse:
     token, joined = join_as_guest(db, payload.join_code, payload.nickname)
+    db.commit()  # hand the connection back before the announcement
     _announce_join(request, background_tasks, joined)
     return GuestJoinResponse(
         session=joined.session,
