@@ -712,7 +712,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
   // The same options as the ⋯ menu on the quiz page. Duplicate needs an
   // active membership in a class that isn't archived, like sending for
   // approval. A quiz with none of the options gets no menu.
-  function quizOptions(quiz, info, floating = false) {
+  function quizOptions(quiz, info, inScroller = false) {
     const canDuplicate = canSubmit;
     const canExport = quiz.question_count > 0;
     const canArchive = info.owner && !info.archived;
@@ -725,7 +725,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
             {working.label}
           </span>
         )}
-        <OptionsMenu className="cl-quiz-options" floating={floating}>
+        <OptionsMenu className="cl-quiz-options" inScroller={inScroller}>
           {info.owner && (
             <Link to={`/app/quizzes/${quiz.quiz_id}/reports`}>
               Hosting history

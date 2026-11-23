@@ -350,3 +350,27 @@ test("the row says what a slow menu option is doing after the menu closes", asyn
   await download;
   await expect(row.getByRole("status")).toHaveCount(0);
 });
+
+test("a row menu opens downward and the table doesn't grow for it", async ({ page }) => {
+  // Short enough that the first row has little room below it.
+  await page.setViewportSize({ width: 494, height: 690 });
+  await openClass(page, {
+    as: "member",
+    moreQuizzes: [
+      { quiz_id: 11, title: "Second quiz" },
+      { quiz_id: 12, title: "Third quiz" },
+    ],
+  });
+  const wrap = page.locator(".cl-table-wrap");
+  const height = (await wrap.boundingBox()).height;
+  for (const title of ["Original submitted quiz", "Third quiz"]) {
+    const row = quizRow(page, title);
+    await row.locator(".cl-quiz-options summary").click();
+    const options = row.locator(".ui-row-options");
+    await expect(options).toBeVisible();
+    const summary = await row.locator(".cl-quiz-options summary").boundingBox();
+    expect((await options.boundingBox()).y).toBeGreaterThan(summary.y);
+    expect((await wrap.boundingBox()).height).toBe(height);
+    await page.keyboard.press("Escape");
+  }
+});

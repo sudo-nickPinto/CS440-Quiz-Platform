@@ -160,6 +160,12 @@
   color: var(--ink);
   white-space: nowrap;
 }
+/* A sideways-scrolling table would also cut off a menu opened on its last
+   rows. OptionsMenu marks the table while one is open (only when it isn't
+   scrolled sideways), so the menu can hang out below it. */
+.qp .cl-table-wrap[data-menu-open] {
+  overflow: visible;
+}
 .qp .cl-quiz-actions .ui-row-menu,
 .qp .cl-quiz-actions .ui-row-menu[open] {
   position: relative;
