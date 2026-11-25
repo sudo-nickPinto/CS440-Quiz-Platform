@@ -6,8 +6,9 @@ import SelectMenu from "./SelectMenu";
 import { matchesTyped } from "./trashHelpers";
 import {
   compareSemesters,
+  defaultSemester,
+  labelSemesterChoices,
   newSemesterChoices,
-  semesterChoices,
 } from "./semesters";
 import "./class-lifecycle.css";
 
@@ -274,8 +275,8 @@ export function SemesterDialog({ classInfo, onClose, onChanged }) {
   const labels = semesters.map((item) => item.semester);
   const newChoices = newSemesterChoices(labels);
   const [newSemester, setNewSemester] = useState(newChoices[0]);
-  const labelChoices = semesterChoices({ before: 2, after: 2 });
-  const [label, setLabel] = useState(labelChoices[2]);
+  const labelChoices = labelSemesterChoices(labels);
+  const [label, setLabel] = useState(defaultSemester(labelChoices));
 
   function go(classId) {
     onClose();
@@ -332,7 +333,11 @@ export function SemesterDialog({ classInfo, onClose, onChanged }) {
                 onChange={setLabel}
                 disabled={action.busy}
               />
-              <button type="submit" className="qb-btn" disabled={action.busy}>
+              <button
+                type="submit"
+                className="qb-btn"
+                disabled={action.busy || !label}
+              >
                 {action.busy ? "Saving…" : "Save semester"}
               </button>
             </div>
@@ -349,7 +354,13 @@ export function SemesterDialog({ classInfo, onClose, onChanged }) {
                 const current = item.class_id === classInfo.id;
                 return (
                   <li key={item.class_id} className={current ? "is-current" : ""}>
-                    <span className="cl-sem-name">{item.semester}</span>
+                    {/* A semester made before labels existed has none yet;
+                        opening it and choosing ⋯ → Semester labels it. */}
+                    <span
+                      className={"cl-sem-name" + (item.semester ? "" : " is-none")}
+                    >
+                      {item.semester ?? "No semester"}
+                    </span>
                     {item.archived && <span className="cl-sem-tag">Archived</span>}
                     {current ? (
                       <span className="cl-sem-tag is-current">Current</span>

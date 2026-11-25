@@ -83,6 +83,25 @@ export function newSemesterChoices(existing, today = new Date()) {
   );
 }
 
+// What labeling a class with no semester offers: two semesters either side
+// of today's, leaving out any this course already has (the server refuses
+// those), like newSemesterChoices does.
+export function labelSemesterChoices(existing, today = new Date()) {
+  const taken = new Set(
+    existing.filter(Boolean).map((label) => label.toLowerCase()),
+  );
+  return semesterChoices({ before: 2, after: 2, today }).filter(
+    (label) => !taken.has(label.toLowerCase()),
+  );
+}
+
+// The picker's starting value: today's semester when it's still free,
+// otherwise the first choice left.
+export function defaultSemester(choices, today = new Date()) {
+  const current = semesterFor(today);
+  return choices.includes(current) ? current : choices[0];
+}
+
 // "CS 440 · Fall 2026", or just the name for classes with no semester.
 export function classLabel(item) {
   return item.semester ? `${item.name} · ${item.semester}` : item.name;

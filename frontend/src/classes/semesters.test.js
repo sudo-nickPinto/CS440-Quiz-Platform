@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   classLabel,
   compareSemesters,
+  defaultSemester,
   groupCourses,
+  labelSemesterChoices,
   newSemesterChoices,
   nextSemester,
   previousSemester,
@@ -75,6 +77,41 @@ describe("newSemesterChoices", () => {
 
   it("starts from today when the course has no semester yet", () => {
     expect(newSemesterChoices([], NOV_2026)[0]).toBe("Fall 2026");
+  });
+});
+
+describe("labelSemesterChoices", () => {
+  it("offers two semesters either side of today's", () => {
+    expect(labelSemesterChoices([], NOV_2026)).toEqual([
+      "Fall 2025",
+      "Spring 2026",
+      "Fall 2026",
+      "Spring 2027",
+      "Fall 2027",
+    ]);
+  });
+
+  it("leaves out semesters the course already has, ignoring case and unlabeled ones", () => {
+    expect(
+      labelSemesterChoices([null, "Fall 2026", "spring 2026"], NOV_2026),
+    ).toEqual(["Fall 2025", "Spring 2027", "Fall 2027"]);
+  });
+});
+
+describe("defaultSemester", () => {
+  it("picks today's semester while it's free", () => {
+    expect(
+      defaultSemester(labelSemesterChoices([], NOV_2026), NOV_2026),
+    ).toBe("Fall 2026");
+  });
+
+  it("falls back to the first free choice when today's is taken", () => {
+    const choices = labelSemesterChoices(["Fall 2026"], NOV_2026);
+    expect(defaultSemester(choices, NOV_2026)).toBe("Fall 2025");
+  });
+
+  it("is undefined when nothing is left", () => {
+    expect(defaultSemester([], NOV_2026)).toBeUndefined();
   });
 });
 

@@ -391,6 +391,11 @@
   font-size: 16px;
 }
 
+/* A semester with no label yet. */
+.qb-confirm .cl-sem-name.is-none {
+  color: var(--gray);
+}
+
 /* The class header's chips (.cl-chip): 11px uppercase on a thin border. */
 .qb-confirm .cl-sem-tag {
   padding: 4px 8px;
