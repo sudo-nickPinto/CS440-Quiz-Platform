@@ -1180,6 +1180,16 @@
   padding: 14px 22px;
 }
 
+.qp .qe-credits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 4px 0 0;
+  color: var(--gray);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .qp .qe-titlebox:focus-within {
   box-shadow: inset 0 -4px 0 var(--orange-deep);
 }

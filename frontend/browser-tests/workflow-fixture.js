@@ -14,6 +14,7 @@ const TIME = "2026-11-10T12:00:00Z";
 const PEOPLE = {
   organizer: { account_id: 1, role: "ADMIN", display_name: "Professor" },
   member: { account_id: 2, role: "USER", display_name: "Student" },
+  collaborator: { account_id: 3, role: "USER", display_name: "Co-editor" },
 };
 
 function page(items) {
@@ -56,34 +57,45 @@ const SUBMITTED_VERSION = {
 };
 
 /**
- * Opens the class page as the organizer or a member.
+ * Opens the class page as an organizer, quiz owner, or collaborator.
  *
  * options:
- *   as            "organizer" | "member"
+ *   as            "organizer" | "member" | "collaborator"
  *   submission    null, or the initial status of submission 50
  *                 ("PENDING", "APPROVED", ...)
+ *   comment       the initial rejection feedback
  *   stale         the submitted version is no longer the newest published
  *   previewDenied the preview endpoint answers 404
  *   failDecision  PATCH answers 409 quiz_version_stale
  *   path          where to start (defaults to the right class tab)
+ *   quiz          fields to override on the member's quiz
+ *   classArchived the class is archived
  */
 export async function openClass(page_, options = {}) {
   const {
     as = "member",
     submission = null,
     stale = false,
+    comment = null,
+    sessions = [],
+    studentReport = null,
+    studentStats = [],
     previewDenied = false,
     failDecision = false,
     path,
+    quiz = {},
+    classArchived = false,
   } = options;
   const me = PEOPLE[as];
   const organizer = as === "organizer";
 
   const state = {
     calls: [],
+    quizRevision: 2,
     submission: submission
       ? {
           status: submission,
+          rejection_comment: comment,
           submitted_by_id: PEOPLE.member.account_id,
           decided_by_name: submission === "PENDING" ? null : "Professor",
         }
@@ -102,6 +114,7 @@ export async function openClass(page_, options = {}) {
       submitted_by_id: item.submitted_by_id,
       submitter_name: "Student",
       status: item.status,
+      rejection_comment: item.rejection_comment ?? null,
       submitted_at: TIME,
       decided_at: item.status === "PENDING" ? null : TIME,
       decided_by_name: item.decided_by_name,
@@ -128,11 +141,18 @@ export async function openClass(page_, options = {}) {
       author_name: "Student",
       version_number: 1,
       updated_at: TIME,
-      my_access: "OWNER",
+      my_access: as === "collaborator" ? "EDITOR" : "OWNER",
       published_version_id: SUBMITTED_VERSION_ID,
       approval_status: item?.status ?? null,
       approval_submission_id: item ? SUBMISSION_ID : null,
-      approval_sent_by_me: Boolean(item),
+      approval_sent_by_me: item?.submitted_by_id === me.account_id,
+      rejection_comment: item?.rejection_comment ?? null,
+      approval_feedback: item?.status === "REJECTED" ? {
+        status: item.status,
+        decided_by_name: item.decided_by_name ?? "Professor",
+        rejection_comment: item.rejection_comment,
+      } : null,
+      ...quiz,
     };
   }
 
@@ -159,7 +179,7 @@ export async function openClass(page_, options = {}) {
         name: "Browser test class",
         current_role: organizer ? "ORGANIZER" : "MEMBER",
         membership_status: "ACTIVE",
-        archived_at: null,
+        archived_at: classArchived ? TIME : null,
         join_code: "TEST1234",
         joining_open: true,
       });
@@ -176,6 +196,24 @@ export async function openClass(page_, options = {}) {
 
     if (method === "GET" && path_ === `${base}/active-sessions`) {
       return error(404, "not_found", "No live sessions.");
+    }
+
+    if (method === "GET" && path_ === `${base}/sessions`) {
+      return json({ class_id: CLASS_ID, ...page(sessions) });
+    }
+
+    if (method === "GET" && path_ === `${base}/students/${PEOPLE.member.account_id}/results`) {
+      return json(studentReport);
+    }
+
+    if (method === "GET" && path_ === `${base}/students`) {
+      return json({ class_id: CLASS_ID, ...page(studentStats) });
+    }
+
+    if (method === "GET" && path_ === `${base}/members`) {
+      return json([{
+        ...PEOPLE.member, role: "MEMBER", status: "ACTIVE", email: "student@example.test",
+      }]);
     }
 
     // Member view: their own quizzes.
@@ -209,7 +247,7 @@ export async function openClass(page_, options = {}) {
       return json({
         ...myQuiz(),
         status: "DRAFT",
-        revision: 2,
+        revision: state.quizRevision,
         visibility: "PRIVATE",
         can_edit: !organizer,
         version: {
@@ -253,6 +291,7 @@ export async function openClass(page_, options = {}) {
           );
         }
         state.submission.status = body.status;
+        state.submission.rejection_comment = body.rejection_comment ?? null;
         state.submission.decided_by_name = "Professor";
         return json({ submission_id: SUBMISSION_ID, status: body.status });
       }
@@ -274,4 +313,4 @@ export async function openClass(page_, options = {}) {
   return state;
 }
 
-export const IDS = { CLASS_ID, SUBMISSION_ID, SUBMITTED_VERSION_ID };
+export const IDS = { CLASS_ID, QUIZ_ID, SUBMISSION_ID, SUBMITTED_VERSION_ID };

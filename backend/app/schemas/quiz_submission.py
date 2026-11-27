@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.quiz_submission import SubmissionStatus
 
@@ -16,6 +16,18 @@ class QuizSubmissionCreate(QuizSubmissionRequest):
 
 class QuizSubmissionDecision(QuizSubmissionRequest):
     status: Literal[SubmissionStatus.APPROVED, SubmissionStatus.REJECTED]
+    rejection_comment: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("rejection_comment", mode="before")
+    @classmethod
+    def normalize_rejection_comment(cls, value: object) -> object:
+        return (value.strip() or None) if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def validate_rejection_comment(self) -> "QuizSubmissionDecision":
+        if self.rejection_comment is not None and self.status != SubmissionStatus.REJECTED:
+            raise ValueError("Only rejections can include a comment.")
+        return self
 
 
 class QuizSubmissionResponse(BaseModel):
@@ -29,6 +41,7 @@ class QuizSubmissionResponse(BaseModel):
     decided_by_id: int | None = Field(default=None, gt=0, strict=True)
     submitted_at: datetime
     decided_at: datetime | None = None
+    rejection_comment: str | None = None
 
 
 class ApprovedQuizResponse(BaseModel):

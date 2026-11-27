@@ -12,7 +12,7 @@ import pytest
 from openpyxl import load_workbook
 from sqlalchemy import select
 
-from app.models import Account, Question, QuizVersion
+from app.models import Account, LiveSession, Question, QuizVersion
 from tests.test_class_reports_api import (  # noqa: F401 (reports is a fixture)
     act_as,
     quiz_url,
@@ -154,20 +154,30 @@ def test_organizer_student_export_includes_email_and_class_average(reports) -> N
     ]
     # Zoe missed the second session and played the first.
     assert [row[3] for row in sessions] == ["No", "Yes"]
+    assert [row[-1] for row in sessions] == ["Absent", "Played"]
 
 
-def test_member_can_export_only_their_own_results(reports) -> None:
+def test_student_export_labels_hosted_sessions(reports) -> None:
+    client, _, data = reports
+    with client.app.state.database.session_factory() as db:
+        db.get(LiveSession, data["second"]).host_id = data["ids"]["zoe"]
+        db.commit()
+
+    book = workbook(client.get(export_url(student_url(data, "zoe"))))
+    assert summary(book)["Attendance sessions"] == 1
+    assert summary(book)["Attendance %"] == 100.0
+    assert [row[-1] for row in rows(book["Sessions"])] == ["Hosted", "Played"]
+
+
+def test_members_cannot_export_their_own_or_another_student_report(reports) -> None:
     client, identities, data = reports
     act_as(client, identities["amy"])
 
-    info = summary(workbook(client.get(export_url(student_url(data, "amy")))))
-    assert info["Student"] == "Amy Student"
-    assert "Email" not in info
-    assert "Class average" not in info
+    for name in ("amy", "zoe"):
+        response = client.get(export_url(student_url(data, name)))
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "not_class_organizer"
 
-    response = client.get(export_url(student_url(data, "zoe")))
-    assert response.status_code == 403
-    assert response.json()["error"]["code"] == "not_class_organizer"
 
 
 # Access

@@ -108,7 +108,7 @@ def resolve_submission_changed(
 
     recipients = class_organizer_ids(db, class_.class_id)
     involved = {submission.submitted_by_id}
-    if action in _DECISIONS:
+    if action in _DECISIONS or (action == "withdrawn" and submission.returned_for_revision):
         involved.add(quiz.author_id)
     # Only people who can still open the class may hear about it.
     recipients |= involved & active_member_ids(db, class_.class_id)

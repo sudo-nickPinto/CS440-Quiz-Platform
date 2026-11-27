@@ -25,6 +25,7 @@ These SQL files create our database tables. The tables match the diagram in [`..
 | `0017_trash_and_semester` | Adds `deleted_at` to `class`, `quiz` and `live_session` for the trash (set while something is in the trash; nothing is really deleted), and `class.semester` ("Fall 2026") so the same course can run again each semester as its own class |
 | `0018_roster_membership_source` | Adds `ROSTER` to `class_membership.joined_via` for students a roster import added, so a corrected roster email only removes access the roster gave (not an accepted invitation) |
 | `0019_trash_expiry_and_semester_family` | Adds `purged_at` so a trashed class, quiz or session can be retired (by hand, or 30 days after `deleted_at`) and `class.parent_class_id` so later semesters of a course stay linked |
+| `0020_quiz_submission_rejection_comment` | Adds nullable `quiz_submission.rejection_comment` for organizer feedback on rejected quizzes |
 
 Each migration comes in two files:
 
@@ -126,3 +127,10 @@ Since V3, every quiz belongs to a class. Migration `0008` fills in `quiz.class_i
 3. Once the first query returns no rows, a later migration can make `quiz.class_id` required.
 
 Until then, a quiz without a class is visible only to its author.
+
+## Returning a quiz for revision
+
+`0021_quiz_submission_returned_for_revision` adds
+`quiz_submission.returned_for_revision`. Existing withdrawals default to
+false. Apply it after the rejection-comment migration before running the new
+backend.

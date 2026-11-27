@@ -8,10 +8,13 @@ import ConfirmDialog from "../authenticated-demo/ConfirmDialog";
 import { useConfirm } from "../authenticated-demo/useConfirm";
 import { ResourceMessage } from "./ClassUI";
 import {
+  attendanceLabel,
+  formatAttendanceRate,
   MEMBER_SORTS,
   membersWithStats,
   rowLink,
   scoreMark,
+  sessionResultsPath,
   studentRanks,
 } from "./classHelpers";
 import { useClassSessions, useClassStudentStats } from "./classResources";
@@ -21,12 +24,6 @@ function formatPoints(value) {
   return value === null || value === undefined
     ? "—"
     : Math.round(Number(value)).toLocaleString();
-}
-
-function formatRate(value) {
-  return value === null || value === undefined
-    ? "—"
-    : `${Math.round(value * 100)}%`;
 }
 
 const SHORT_DATE = new Intl.DateTimeFormat(undefined, {
@@ -67,8 +64,8 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
 
   const resource = useResource(`/classes/${classInfo.id}/members`);
   const stats = useClassStudentStats(classInfo.id);
-  // The newest page of presentations labels the recent-score chips; the
-  // students report lists recent scores newest first, in the same order.
+  // Recent attendance and scores use the same newest-first order as these
+  // sessions. Match them by index before reversing for display.
   const sessions = useClassSessions(classInfo.id, 1);
 
   const memory = `class:${classInfo.id}:students`;
@@ -187,7 +184,7 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
           </div>
           <div>
             <dt>Attendance</dt>
-            <dd>{summary ? formatRate(summary.attendance_rate) : "—"}</dd>
+            <dd>{summary ? formatAttendanceRate(summary.attendance_rate) : "—"}</dd>
           </div>
         </dl>
 
@@ -223,7 +220,7 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
                 Recent
               </th>
               <th scope="col" className="cl-num">Avg</th>
-              <th scope="col" className="cl-num cl-stu-att">Attended</th>
+              <th scope="col" className="cl-num cl-stu-att">Attendance</th>
               <th scope="col">
                 <span className="cl-sr">Details</span>
               </th>
@@ -236,7 +233,13 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
               const organizer = member.role === "ORGANIZER";
               const open = openId === id;
               const rank = ranks.get(id);
-              const recent = member.stats?.recent_scores ?? [];
+              const scores = member.stats?.recent_scores ?? [];
+              const statuses = member.stats?.recent_attendance_statuses ?? [];
+              const recent = scores.map((score, index) => ({
+                score,
+                status: attendanceLabel(statuses[index], score != null),
+                session: recentSessions[index],
+              })).reverse();
               const detailId = `cl-stu-detail-${id}`;
 
               return (
@@ -283,27 +286,19 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
                       ) : (
                         <span
                           className="cl-stu-strip"
-                          aria-label={`Recent scores, oldest to newest: ${[...recent]
-                            .reverse()
-                            .map((score) => (score === null ? "absent" : score))
-                            .join(", ")}`}
+                          role="group"
+                          aria-label="Recent attendance, oldest to newest"
                         >
-                          {[...recent].reverse().map((score, index) => {
-                            const session =
-                              recentSessions[recent.length - 1 - index];
-                            return (
-                              <i
-                                key={index}
-                                className={`cl-mk ${scoreMark(
-                                  score,
-                                  session?.average_score,
-                                )}`}
-                                title={session?.quiz_title}
-                              >
-                                {score === null ? "–" : formatPoints(score)}
-                              </i>
-                            );
-                          })}
+                          {recent.map(({ score, status, session }, index) => (
+                            <span
+                              key={index}
+                              className={`cl-mk ${status === "Played" ? scoreMark(score, session?.average_score) : "miss"}`}
+                              title={session ? `${session.quiz_title} · ${status}` : status}
+                              aria-label={status === "Played" ? `Played, ${formatPoints(score)} points` : status}
+                            >
+                              {status === "Played" ? formatPoints(score) : "–"}
+                            </span>
+                          ))}
                         </span>
                       )}
                     </td>
@@ -311,14 +306,7 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
                       {organizer ? "" : formatPoints(member.stats?.average_score)}
                     </td>
                     <td className="cl-num cl-big cl-stu-att">
-                      {organizer || !member.stats ? (
-                        ""
-                      ) : (
-                        <span className="cl-fraction">
-                          <b>{member.stats.session_count}</b>
-                          <small> / {completed}</small>
-                        </span>
-                      )}
+                      {!organizer && member.stats && formatAttendanceRate(member.stats.attendance_rate)}
                     </td>
                     <td className="cl-stu-tog-cell">
                       <button
@@ -341,7 +329,6 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
                         <StudentDetail
                           classInfo={classInfo}
                           member={member}
-                          completed={completed}
                           busy={action.busy}
                           onRemove={() => void removeOrganizer(member)}
                         />
@@ -384,7 +371,6 @@ export function ClassStudents({ classInfo, dashboard, onChange }) {
 function StudentDetail({
   classInfo,
   member,
-  completed,
   busy,
   onRemove,
 }) {
@@ -404,10 +390,16 @@ function StudentDetail({
           {personName(member)} ·{" "}
           {organizer ? "organizer" : "every presentation"}
         </span>
-        {!organizer && member.stats && (
+        {report.data && (
           <span>
-            Avg {formatPoints(member.stats.average_score)} ·{" "}
-            {member.stats.session_count}/{completed} attended
+            Avg {formatPoints(report.data.average_score)} ·{" "}
+            {report.data.attendance_rate == null ? "No eligible sessions" : (
+              <>
+                {formatAttendanceRate(report.data.attendance_rate)} attendance ·{" "}
+                {report.data.attendance_session_count} eligible{" "}
+                {report.data.attendance_session_count === 1 ? "session" : "sessions"}
+              </>
+            )}
           </span>
         )}
       </div>
@@ -427,68 +419,52 @@ function StudentDetail({
         ) : !report.data?.sessions?.length ? (
           <p className="cl-panel-note">No completed presentations yet.</p>
         ) : (
-          <table className="cl-gl">
-            <caption className="cl-sr">
-              {personName(member)}&apos;s presentations
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">
-                  <span className="cl-sr">Played</span>
-                </th>
-                <th scope="col">Date</th>
-                <th scope="col">Presentation</th>
-                <th scope="col" className="cl-num">Correct</th>
-                <th scope="col" className="cl-num">Points</th>
-                <th scope="col" className="cl-num">Rank</th>
-                <th scope="col">
-                  <span className="cl-sr">Results</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.data.sessions.map((session) => (
-                <tr
-                  key={session.session_id}
-                  // A played presentation opens its results from anywhere
-                  // on the row; "Results →" stays the keyboard path.
-                  {...(session.played
-                    ? rowLink(
-                        navigate,
-                        `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`,
-                      )
-                    : { className: "is-missed" })}
-                >
-                  <td className={`cl-mk ${session.played ? "hi" : "miss"}`}>
-                    {session.played ? "✓" : "–"}
-                  </td>
-                  <td className="cl-gl-date">{shortDate(session.started_at)}</td>
-                  <td className="cl-gl-quiz">{session.quiz_title}</td>
-                  <td className="cl-num">
-                    {session.played
-                      ? `${session.correct}/${session.correct + session.incorrect}`
-                      : "Absent"}
-                  </td>
-                  <td className="cl-num cl-big">
-                    {session.played ? formatPoints(session.points) : "—"}
-                  </td>
-                  <td className="cl-num">
-                    {session.rank ? `#${session.rank}` : "—"}
-                  </td>
-                  <td className="cl-gl-go">
-                    {session.played && (
-                      <Link
-                        className="cl-lnk"
-                        to={`/app/classes/${classInfo.id}/sessions/${session.session_id}/report`}
-                      >
-                        Results →
-                      </Link>
-                    )}
-                  </td>
+          <div className="cl-panel-presentations" role="region" aria-label="Student presentations" tabIndex={0}>
+            <table className="cl-gl">
+              <caption className="cl-sr">
+                {personName(member)}&apos;s presentations
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Attendance</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Presentation</th>
+                  <th scope="col" className="cl-num">Correct</th>
+                  <th scope="col" className="cl-num">Points</th>
+                  <th scope="col" className="cl-num">Rank</th>
+                  <th scope="col">
+                    <span className="cl-sr">Results</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {report.data.sessions.map((session) => {
+                  const status = attendanceLabel(session.attendance_status, session.played);
+                  const played = status === "Played";
+                  const to = played ? sessionResultsPath(classInfo.id, session.session_id, {
+                    canViewClassReport: classInfo.canManage,
+                  }) : null;
+                  return (
+                    <tr key={session.session_id} {...(to ? rowLink(navigate, to) : { className: "is-unplayed" })}>
+                      <td className={`cl-mk ${played ? "hi" : "miss"}`}>{status}</td>
+                      <td className="cl-gl-date">{shortDate(session.started_at)}</td>
+                      <td className="cl-gl-quiz">{session.quiz_title}</td>
+                      <td className="cl-num">
+                        {played ? `${session.correct}/${session.correct + session.incorrect}` : "—"}
+                      </td>
+                      <td className="cl-num cl-big">
+                        {played ? formatPoints(session.points) : "—"}
+                      </td>
+                      <td className="cl-num">{played && session.rank ? `#${session.rank}` : "—"}</td>
+                      <td className="cl-gl-go">
+                        {to && <Link className="cl-lnk" to={to}>Results →</Link>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ))}
 
       <div className="cl-panel-foot">

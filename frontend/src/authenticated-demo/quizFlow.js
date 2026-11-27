@@ -29,6 +29,18 @@ export function showsQuizFlow(quiz) {
   return hosting.can_host || !NO_FLOW_REASONS.has(hosting.reason);
 }
 
+// Publishing a draft is owner-only. Active collaborators can submit a
+// published version, and the quiz detail response lists those collaborators.
+export function canSendQuiz(quiz, accountId) {
+  if (accountId == null || !quiz?.class_id) return false;
+  if (quiz.status === "DRAFT") return quiz.author_id === accountId;
+  if (quiz.status !== "PUBLISHED") return false;
+  return (
+    quiz.author_id === accountId ||
+    quiz.collaborators?.some((person) => person.account_id === accountId) === true
+  );
+}
+
 // The newest pending submission for this quiz, from the class's submission
 // list (organizers see every submission, members only their own).
 export function pendingSubmissionFor(items, quizId) {
@@ -46,7 +58,7 @@ const DRAFT_NOTES = {
   rejected: "An organizer rejected the last version. Edit it, then send it again.",
   withdrawn: "The last request was withdrawn. Send it again when it's ready.",
   approval_outdated: "It changed since it was approved, so it needs approval again.",
-  unpublished_changes: "It changed since it was approved, so it needs approval again.",
+  unpublished_changes: "Publish the saved edits and send a new request for approval.",
 };
 
 /**
@@ -70,9 +82,10 @@ export function quizFlowState({ quiz, accountId, pending }) {
     };
   }
 
-  if (pending) {
+  // A content edit withdraws the request. The detail response and the
+  // queue can briefly describe different versions while they refresh.
+  if (pending && quiz.status === "PUBLISHED" && pending.is_current_version !== false) {
     const mine = pending.submitted_by_id === accountId;
-    const edited = quiz.status === "DRAFT";
     return {
       step: 2,
       label: "Waiting for approval",
@@ -80,23 +93,20 @@ export function quizFlowState({ quiz, accountId, pending }) {
       // isn't yours means you're an organizer of the class.
       action: mine ? "withdraw" : "review",
       note: mine
-        ? edited
-          ? "Waiting for an organizer. Your newer edits aren't part of this request; send them once it's decided."
-          : "Waiting for an organizer to approve it."
+        ? "Waiting for an organizer to approve it. Saving changes to the quiz withdraws this request."
         : `${pending.submitter_name ?? "A student"} sent this for approval.`,
     };
   }
 
-  const owner = quiz.author_id === accountId;
-  // Sending a draft publishes it first, and only the owner can publish.
-  // An already-published version can be sent by any editor.
-  const canSend = owner || (quiz.can_edit && quiz.status === "PUBLISHED");
+  const canSend = canSendQuiz(quiz, accountId);
   return {
     step: 1,
     label: "Draft",
     action: canSend ? "send" : null,
     note: !canSend
-      ? "Only the quiz owner can send these edits for approval."
+      ? quiz.status === "DRAFT"
+        ? "The quiz owner can publish and send these edits for approval."
+        : "The quiz owner or an active collaborator can send it for approval."
       : DRAFT_NOTES[quiz.hosting.reason] ??
         "Send it to your class organizers. Once it's approved, you can host it.",
   };
@@ -104,8 +114,11 @@ export function quizFlowState({ quiz, accountId, pending }) {
 
 // Publishes the latest edits if needed, then submits that version to the
 // class. A version that's already waiting or approved counts as sent.
-export async function sendQuizForApproval(api, classId, quizId) {
+export async function sendQuizForApproval(api, classId, quizId, accountId) {
   const current = await api(`/quizzes/${quizId}`);
+  if (!canSendQuiz(current, accountId)) {
+    throw new Error("Only the quiz owner or an eligible collaborator can send this version for approval.");
+  }
   try {
     return await sendForApproval(api, classId, {
       quiz_id: quizId,

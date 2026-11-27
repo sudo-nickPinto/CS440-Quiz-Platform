@@ -8,6 +8,7 @@ import {
 } from "react-router";
 import { useAccount } from "./account";
 import { QuizCredits } from "./QuizCollaborators";
+import RejectionFeedback from "../classes/RejectionFeedback";
 
 import {
   ANSWER_LIMIT,
@@ -44,13 +45,13 @@ import {
 } from "./EditorParts";
 import { useQuizCollaboration } from "./useQuizCollaboration";
 import {
+  useCatchUp,
   useNotifications,
-  useNotificationsReconnect,
 } from "./notifications";
 import { classPagePath } from "../classes/classPaths";
 import NewQuizClassPicker from "../classes/NewQuizClassPicker";
 import HostQuizButton from "./HostQuizButton";
-import { sendQuizForApproval, useQuizFlow } from "./quizFlow";
+import { canSendQuiz, sendQuizForApproval, useQuizFlow } from "./quizFlow";
 import QuizCollaboratorDialog, {
   AddCollaboratorCell,
 } from "./QuizCollaboratorDialog";
@@ -134,6 +135,7 @@ function JumpChips({ ids, current }) {
 export function QuizEditor({
   initialEditor = null,
   existingQuiz = null,
+  returnSubmissionId = null,
   onReload,
 }) {
   const [initial] = useState(() => initialEditor ?? blankEditor());
@@ -161,6 +163,10 @@ export function QuizEditor({
   const [searchParams] = useSearchParams();
 
   const editing = existingQuiz !== null;
+  const returning = editing && returnSubmissionId !== null;
+  const approvalQueue = returning
+    ? `/app/classes/${existingQuiz.class_id}?view=admin&section=Approvals`
+    : null;
   // Sharing and archiving are the owner's, on a saved quiz in a class.
   const ownsQuiz =
     editing &&
@@ -168,7 +174,7 @@ export function QuizEditor({
     Boolean(existingQuiz.class_id);
   // Sending publishes the draft first, and only the owner can publish.
   const canSendFromEditor =
-    !editing || existingQuiz.author_id === account.account_id;
+    !returning && (!editing || existingQuiz.author_id === account.account_id);
   // Which save button was pressed, for its "Saving…" / "Sending…" label.
   const [savingKind, setSavingKind] = useState(null);
   const [sharing, setSharing] = useState(false);
@@ -420,7 +426,7 @@ export function QuizEditor({
   );
 
   const backTo = editing
-    ? `/app/quizzes/${existingQuiz.quiz_id}`
+    ? approvalQueue ?? `/app/quizzes/${existingQuiz.quiz_id}`
     : validClass
       ? `/app/classes/${classId}`
       : "/app/classes";
@@ -569,7 +575,7 @@ export function QuizEditor({
   }
 
   function scheduleDefaultTimeAutosave(delay = 350) {
-    if (!editing || existingQuiz.status !== "DRAFT" || conflict) return;
+    if (!editing || returning || existingQuiz.status !== "DRAFT" || conflict) return;
     if (defaultTimeTimer.current) {
       window.clearTimeout(defaultTimeTimer.current);
     }
@@ -738,6 +744,7 @@ export function QuizEditor({
   function scheduleQuestionAutosave(question, index, delay = 800) {
     if (
       !editing ||
+      returning ||
       existingQuiz.status !== "DRAFT" ||
       !question.questionId ||
       conflict
@@ -882,7 +889,7 @@ export function QuizEditor({
     ) {
       return;
     }
-    if (!validate()) return;
+    if ((returning && !dirty) || !validate()) return;
     setSavingKind(send ? "send" : "draft");
     try {
       await saveAndContinue(send);
@@ -909,6 +916,7 @@ export function QuizEditor({
         // mutations. Deleting, reordering, inserting in the middle, or renaming
         // still uses the aggregate revision until those operations are split.
         if (
+          !returning &&
           existingQuiz.status === "DRAFT" &&
           canSaveDraftIndependently(savingEditor, savingBaseline)
         ) {
@@ -935,6 +943,7 @@ export function QuizEditor({
           revision: quizRevisionRef.current,
           existingQuiz,
           api,
+          returnSubmissionId,
         });
       }
 
@@ -945,6 +954,10 @@ export function QuizEditor({
     });
 
     if (!quiz) return;
+    if (returning) {
+      navigate(approvalQueue, { replace: true });
+      return;
+    }
 
     const savedId = quiz.quiz_id ?? existingQuiz?.quiz_id;
     const quizClassId = editing ? existingQuiz.class_id : Number(classId);
@@ -956,7 +969,7 @@ export function QuizEditor({
       // The draft is already saved, so a failure here must not send people
       // back into the editor (saving again would duplicate a new quiz).
       try {
-        await sendQuizForApproval(api, quizClassId, savedId);
+        await sendQuizForApproval(api, quizClassId, savedId, account.account_id);
       } catch (error) {
         notice = {
           tone: "warning",
@@ -1038,20 +1051,17 @@ export function QuizEditor({
                 })
               }
             />
+            {editing && !ownsQuiz && existingQuiz.author_name && (
+              <p className="qe-credits">
+                <QuizCredits quiz={existingQuiz} accountId={account.account_id} />
+              </p>
+            )}
           </div>
 
           {ownsQuiz && existingQuiz.status !== "ARCHIVED" && (
             <AddCollaboratorCell onOpen={() => setSharing(true)} />
           )}
         </div>
-
-        {/* Collaborators don't get the owner's sharing panel, so credit the
-            owner and the other editors here instead. */}
-        {editing && !ownsQuiz && existingQuiz.author_name && (
-          <p className="qv-facts">
-            <QuizCredits quiz={existingQuiz} accountId={account.account_id} />
-          </p>
-        )}
 
         <div className="qe-strip">
           <JumpChips ids={ids} current={current} />
@@ -1526,7 +1536,8 @@ export function QuizEditor({
                 disabled={
                   conflict ||
                   questionSaving ||
-                  Boolean(savingKind)
+                  Boolean(savingKind) ||
+                  (returning && !dirty)
                 }
                 onClick={() => void save()}
               >
@@ -1534,9 +1545,11 @@ export function QuizEditor({
                   ? "Finishing live save…"
                   : savingKind === "draft"
                     ? "Saving…"
-                    : editing
-                      ? "Save changes"
-                      : "Save draft"}
+                    : returning
+                      ? "Send back to student"
+                      : editing
+                        ? "Save changes"
+                        : "Save draft"}
               </button>
 
               {canSendFromEditor && (
@@ -1589,8 +1602,8 @@ export function QuizViewer() {
   const resource = useResource(validId ? `/quizzes/${quizId}` : null);
   const flow = useQuizFlow(resource.data ?? null, account.account_id);
 
-  // Approval status changes made elsewhere (an organizer deciding, the
-  // owner sending or withdrawing in another tab) update the page in place.
+  // Refresh the detail and approval state here, outside the draft editor.
+  // Saving content can withdraw a request while this page is open elsewhere.
   const { refresh: refreshQuiz } = resource;
   const { refresh: refreshFlow } = flow;
   useNotifications("submission_changed", (event) => {
@@ -1599,7 +1612,7 @@ export function QuizViewer() {
       refreshFlow();
     }
   });
-  useNotificationsReconnect(() => {
+  useCatchUp(() => {
     if (validId) {
       refreshQuiz();
       refreshFlow();
@@ -1644,10 +1657,13 @@ export function QuizViewer() {
   // next step as the last button. Collaborators and other members keep a
   // Host button or a link to the class page.
   const approved = quiz.hosting?.can_host === true;
+  const feedback = quiz.approval_feedback;
   const stateLabel =
     quiz.status === "ARCHIVED"
       ? "Archived"
-      : flow.state?.label ?? (approved ? "Approved" : "Draft");
+      : feedback?.status === "REJECTED"
+        ? "Rejected"
+        : flow.state?.label ?? (approved ? "Approved" : "Draft");
   const questions = [...quiz.version.questions].sort(
     (a, b) => a.question_order - b.question_order,
   );
@@ -1707,6 +1723,20 @@ export function QuizViewer() {
   return (
     <section className="qv" aria-labelledby="quiz-title">
       <ConfirmDialog confirmer={confirmer} />
+      {feedback?.status === "REJECTED" && (
+        <div className="qv-review-feedback is-rejected" role="status">
+          <RejectionFeedback
+            heading={`Rejected by ${feedback.decided_by_name || "an instructor"}`}
+            comment={feedback.rejection_comment}
+          />
+        </div>
+      )}
+      {feedback?.status === "WITHDRAWN" && (
+        <div className="qv-review-feedback" role="status">
+          <strong>Sent back by {feedback.decided_by_name || "an instructor"}</strong>
+          <p>Your instructor edited this quiz. Review the changes before sending it for approval again.</p>
+        </div>
+      )}
       <div className="qe-bar">
         <Link
           className="qe-back"
@@ -1790,7 +1820,7 @@ export function QuizViewer() {
             quiz.class_id &&
             quiz.status !== "ARCHIVED" &&
             !approved &&
-            (mine || quiz.can_edit) && (
+            canSendQuiz(quiz, account.account_id) && (
               <div className="qv-host">
                 <Link
                   className="qb-btn"

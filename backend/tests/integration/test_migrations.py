@@ -313,3 +313,72 @@ def test_migration_0008_gives_quizzes_their_only_class(
         cursor.execute("SHOW COLUMNS FROM quiz LIKE 'class_id'")
         assert cursor.fetchall() == ()
     assert "0008_quiz_class" not in applied(connection)
+
+
+def test_migration_0020_preserves_existing_submission_rows(scratch_database) -> None:
+    connection, _ = scratch_database
+    name = "0020_quiz_submission_rejection_comment"
+    for path in UP_FILES:
+        if path.name < name:
+            run_file(connection, path)
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO account (account_id, auth0_sub, email, display_name)
+            VALUES (1, 'test|owner', 'owner@test.invalid', 'Owner'),
+                   (2, 'test|organizer', 'organizer@test.invalid', 'Organizer');
+            INSERT INTO class (class_id, name, created_by_id)
+            VALUES (1, 'Existing class', 2);
+            INSERT INTO quiz (quiz_id, author_id, class_id, status)
+            VALUES (1, 1, 1, 'PUBLISHED');
+            INSERT INTO quiz_version (quiz_version_id, quiz_id, version_number, title, published_at)
+            VALUES (1, 1, 1, 'Existing quiz', '2026-01-01 12:00:00');
+            INSERT INTO quiz_submission
+                (submission_id, class_id, quiz_version_id, submitted_by_id,
+                 status, decided_by_id, decided_at)
+            VALUES (1, 1, 1, 1, 'REJECTED', 2, '2026-01-02 12:00:00'),
+                   (2, 1, 1, 1, 'PENDING', NULL, NULL);
+            """
+        )
+        while cursor.nextset():
+            pass
+
+    select_rows = """
+        SELECT submission_id, status, decided_by_id, decided_at, active_version_id
+        FROM quiz_submission ORDER BY submission_id
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(select_rows)
+        existing = cursor.fetchall()
+        assert len(existing) == 2
+
+    run_file(connection, MIGRATIONS / f"{name}.up.sql")
+    assert name in applied(connection)
+    with connection.cursor() as cursor:
+        cursor.execute(select_rows)
+        assert cursor.fetchall() == existing
+        cursor.execute("SELECT rejection_comment FROM quiz_submission ORDER BY submission_id")
+        assert cursor.fetchall() == ((None,), (None,))
+        cursor.execute(
+            "UPDATE quiz_submission SET rejection_comment = %s WHERE submission_id = 1",
+            ("Keep this feedback until rollback.",),
+        )
+        cursor.execute("SELECT rejection_comment FROM quiz_submission WHERE submission_id = 1")
+        assert cursor.fetchone() == ("Keep this feedback until rollback.",)
+
+    run_file(connection, MIGRATIONS / f"{name}.down.sql")
+    assert name not in applied(connection)
+    with connection.cursor() as cursor:
+        cursor.execute("SHOW COLUMNS FROM quiz_submission LIKE 'rejection_comment'")
+        assert cursor.fetchone() is None
+        cursor.execute(select_rows)
+        assert cursor.fetchall() == existing
+
+    run_file(connection, MIGRATIONS / f"{name}.up.sql")
+    assert name in applied(connection)
+    with connection.cursor() as cursor:
+        cursor.execute(select_rows)
+        assert cursor.fetchall() == existing
+        cursor.execute("SELECT rejection_comment FROM quiz_submission ORDER BY submission_id")
+        assert cursor.fetchall() == ((None,), (None,))

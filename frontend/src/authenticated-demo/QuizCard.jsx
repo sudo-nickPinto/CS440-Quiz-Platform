@@ -10,6 +10,7 @@ export default function QuizCard({
   to,
   state,
   status,
+  statusKey,
   archived = false,
   headline,
   children,
@@ -30,7 +31,7 @@ export default function QuizCard({
       }
     >
       <div className="qc-banner">
-        <span className="qc-status">{status}</span>
+        <span className={statusKey ? `qc-status is-${statusKey}` : "qc-status"}>{status}</span>
         <strong className="qc-headline">{headline}</strong>
       </div>
       <div className="qc-body">

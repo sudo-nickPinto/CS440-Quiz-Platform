@@ -25,6 +25,7 @@ from app.models import (
     QuizVersion,
     SubmissionStatus,
 )
+from app.services import quizzes
 from app.services.quiz_submissions import require_approved_quiz_version
 
 
@@ -71,6 +72,7 @@ def submissions() -> Iterator[tuple[TestClient, dict, dict, dict]]:
                     "faculty",
                     "owner",
                     "collaborator",
+                    "second_editor",
                     "classmate",
                     "revoked",
                     "invited",
@@ -106,7 +108,7 @@ def submissions() -> Iterator[tuple[TestClient, dict, dict, dict]]:
                     joined_via=JoinedVia.CREATOR,
                 )
             ]
-            for name in ("owner", "collaborator", "classmate", "revoked"):
+            for name in ("owner", "collaborator", "second_editor", "classmate", "revoked"):
                 memberships.append(
                     ClassMembership(
                         class_id=main.class_id,
@@ -383,6 +385,53 @@ def test_active_duplicate_is_a_conflict_for_pending_and_approved_rows(
     )
 
 
+@pytest.mark.parametrize(
+    ("comment", "expected"),
+    [
+        ("  Please clarify <this question>.\n", "Please clarify <this question>."),
+        (" \t\n ", None),
+        (" x" + "y" * 999 + " ", "x" + "y" * 999),
+    ],
+)
+def test_rejection_comment_is_normalized_and_persisted(
+    submissions, comment, expected
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    sent = post_submission(client, class_id, data["versions"]["main"])
+    submission_id = sent.json()["submission_id"]
+    act_as(actor, identities, "faculty")
+    rejected = client.patch(
+        f"/classes/{class_id}/quiz-submissions/{submission_id}",
+        json={"status": "REJECTED", "rejection_comment": comment},
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["rejection_comment"] == expected
+    assert preview(client, class_id, submission_id).json()["submission"]["rejection_comment"] == expected
+    with client.app.state.database.session_factory() as db:
+        assert db.get(QuizSubmission, submission_id).rejection_comment == expected
+
+
+@pytest.mark.parametrize(
+    ("status", "comment"),
+    [("REJECTED", "a" * 1001), ("APPROVED", "Only a rejection may include feedback")],
+)
+def test_invalid_rejection_comments_leave_the_submission_pending(
+    submissions, status, comment
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    sent = post_submission(client, class_id, data["versions"]["main"])
+    submission_id = sent.json()["submission_id"]
+    act_as(actor, identities, "faculty")
+    response = client.patch(
+        f"/classes/{class_id}/quiz-submissions/{submission_id}",
+        json={"status": status, "rejection_comment": comment},
+    )
+    assert_error(response, 422, "request_validation_error")
+    assert client.get(f"/classes/{class_id}/quiz-submissions").json()[0]["status"] == "PENDING"
+
+
 def test_faculty_organizer_can_approve_reject_and_self_approve(
     submissions,
 ) -> None:
@@ -399,6 +448,7 @@ def test_faculty_organizer_can_approve_reject_and_self_approve(
     )
     assert approved.status_code == 200
     assert approved.json()["status"] == "APPROVED"
+    assert approved.json()["rejection_comment"] is None
     assert approved.json()["decided_by_id"] == data["ids"]["faculty"]
     assert approved.json()["decided_at"] is not None
 
@@ -718,6 +768,67 @@ def test_approved_list_and_helper_share_current_version_rules(submissions) -> No
         assert error.value.code == "quiz_version_not_approved"
 
 
+def test_my_quizzes_shares_rejection_feedback_with_current_quiz_editors(
+    submissions,
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    quiz_id = data["quizzes"]["main"]
+    quizzes = f"/classes/{class_id}/quizzes"
+    collaborator_url = f"{quizzes}/{quiz_id}/collaborators"
+    shared = client.post(
+        collaborator_url, json={"email": "second_editor@example.edu", "permission": "EDITOR"}
+    )
+    assert shared.status_code == 201, shared.text
+
+    act_as(actor, identities, "collaborator")
+    sent = post_submission(client, class_id, data["versions"]["main"])
+    assert sent.status_code == 201, sent.text
+    submission_id = sent.json()["submission_id"]
+
+    act_as(actor, identities, "faculty")
+    comment = "Explain why this choice is correct."
+    response = client.patch(
+        f"/classes/{class_id}/quiz-submissions/{submission_id}",
+        json={"status": "REJECTED", "rejection_comment": comment},
+    )
+    assert response.status_code == 200, response.text
+    assert preview(client, class_id, submission_id).json()["submission"]["rejection_comment"] == comment
+
+    for name in ("owner", "second_editor"):
+        act_as(actor, identities, name)
+        result = client.get(quizzes, params={"mine": "true"})
+        assert result.status_code == 200, result.text
+        item = next(item for item in result.json()["items"] if item["quiz_id"] == quiz_id)
+        assert item["rejection_comment"] == comment
+        assert item["approval_feedback"] == {
+            "status": "REJECTED", "decided_by_name": "Faculty", "rejection_comment": comment,
+        }
+        assert client.get(f"/quizzes/{quiz_id}").json()["approval_feedback"] == item["approval_feedback"]
+        assert item["approval_submission_id"] == submission_id
+        assert item["approval_sent_by_me"] is False
+        assert_error(preview(client, class_id, submission_id), 404, "submission_not_found")
+
+    act_as(actor, identities, "owner")
+    for name in ("collaborator", "second_editor"):
+        response = client.delete(f"{collaborator_url}/{data['ids'][name]}")
+        assert response.status_code == 204, response.text
+
+    for name in ("collaborator", "second_editor", "revoked", "classmate"):
+        act_as(actor, identities, name)
+        result = client.get(quizzes, params={"mine": "true"})
+        assert result.status_code == 200, result.text
+        assert all(item["quiz_id"] != quiz_id for item in result.json()["items"])
+        assert comment not in result.text
+        assert_error(preview(client, class_id, submission_id), 404, "submission_not_found")
+
+    # The original submitter keeps the audit row without the feedback after revocation.
+    act_as(actor, identities, "collaborator")
+    assert client.get(f"/classes/{class_id}/quiz-submissions").json()[0]["rejection_comment"] is None
+    queue = client.get(f"/classes/{class_id}/dashboard/submissions").json()
+    assert queue["items"][0]["rejection_comment"] is None
+
+
 def test_approval_grants_no_editing_or_results_permissions(submissions) -> None:
     client, data, identities, actor = submissions
     class_id = data["classes"]["main"]
@@ -738,6 +849,187 @@ def test_approval_grants_no_editing_or_results_permissions(submissions) -> None:
         f"/classes/{class_id}/students/{data['ids']['owner']}/results"
     )
     assert_error(results, 403, "not_class_organizer")
+
+
+@pytest.fixture
+def pending_quiz(submissions) -> tuple[str, dict, dict, int]:
+    client, data, _, _ = submissions
+    class_id = data["classes"]["main"]
+    base = f"/classes/{class_id}/quizzes"
+    payload = {key: value for key, value in QUIZ_UPDATE.items() if key != "expected_revision"}
+    created = client.post(base, json=payload)
+    assert created.status_code == 201, created.text
+    quiz_path = f"{base}/{created.json()['quiz_id']}"
+    published = client.post(
+        f"{quiz_path}/publish", json={"expected_revision": created.json()["revision"]}
+    )
+    assert published.status_code == 200, published.text
+    quiz = published.json()
+    sent = post_submission(client, class_id, quiz["version"]["quiz_version_id"])
+    assert sent.status_code == 201, sent.text
+    return quiz_path, payload, quiz, sent.json()["submission_id"]
+
+
+@pytest.mark.parametrize("class_route", [True, False])
+@pytest.mark.parametrize(
+    ("viewer", "status", "code"),
+    [("outsider", 404, "class_not_found"), ("classmate", 403, "quiz_edit_denied")],
+)
+def test_unauthorized_quiz_edits_never_take_the_write_lock(
+    submissions, monkeypatch, class_route, viewer, status, code
+) -> None:
+    client, data, identities, actor = submissions
+    path = f"/quizzes/{data['quizzes']['main']}"
+    if class_route:
+        path = f"/classes/{data['classes']['main']}{path}"
+
+    def unexpected_lock(*args):
+        pytest.fail("An unauthorized request reached the quiz write lock")
+
+    monkeypatch.setattr(quizzes, "_lock_class_quiz_for_update", unexpected_lock)
+    act_as(actor, identities, viewer)
+    assert_error(client.put(path, json=QUIZ_UPDATE), status, code)
+
+
+def test_aggregate_edit_withdraws_only_after_a_content_change(
+    submissions, pending_quiz
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    quiz_path, payload, published, submission_id = pending_quiz
+    version_id = published["version"]["quiz_version_id"]
+
+    act_as(actor, identities, "faculty")
+    stale = client.put(quiz_path, json={**payload, "expected_revision": 1})
+    assert_error(stale, 409, "quiz_edit_conflict")
+    unchanged = client.put(
+        quiz_path, json={**payload, "expected_revision": published["revision"]}
+    )
+    assert unchanged.status_code == 200
+    assert unchanged.json()["version"]["quiz_version_id"] == version_id
+    assert unchanged.json()["revision"] == published["revision"]
+    assert client.get(f"/classes/{class_id}/quiz-submissions").json()[0]["status"] == "PENDING"
+
+    saved = client.put(
+        quiz_path,
+        json={**payload, "title": "After review", "expected_revision": published["revision"]},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["version"]["quiz_version_id"] != version_id
+    submission = client.get(f"/classes/{class_id}/quiz-submissions").json()[0]
+    assert submission["status"] == "WITHDRAWN"
+    assert submission["decided_by_id"] == data["ids"]["faculty"]
+    assert submission["decided_at"] is not None
+    snapshot = preview(client, class_id, submission_id).json()["version"]
+    assert snapshot["title"] == payload["title"]
+    assert snapshot["quiz_version_id"] == version_id
+
+
+@pytest.fixture
+def pending_quiz_with_draft(submissions, pending_quiz) -> tuple[str, dict, int]:
+    client, _, _, _ = submissions
+    path, payload, published, submission_id = pending_quiz
+    edited = client.put(
+        path,
+        json={**payload, "title": "Working draft", "expected_revision": published["revision"]},
+    )
+    assert edited.status_code == 200, edited.text
+    # Before automatic withdrawal, a pending request could outlive draft creation.
+    with client.app.state.database.session_factory() as db:
+        submission = db.get(QuizSubmission, submission_id)
+        submission.status = SubmissionStatus.PENDING
+        submission.decided_at = submission.decided_by_id = None
+        db.commit()
+    return path, edited.json(), submission_id
+
+
+@pytest.mark.parametrize("operation", ["autosave", "append"])
+def test_question_write_withdraws_pending_review(
+    submissions, pending_quiz, operation
+) -> None:
+    client, data, _, _ = submissions
+    path, payload, published, submission_id = pending_quiz
+    question = published["version"]["questions"][0]
+    question_payload = payload["questions"][0]
+    if operation == "autosave":
+        question_path = f"{path}/questions/{question['question_id']}"
+        autosave = {**question_payload, "expected_revision": question["revision"]}
+        unchanged = client.patch(question_path, json=autosave)
+        assert unchanged.status_code == 200, unchanged.text
+        assert unchanged.json()["question"]["question_id"] == question["question_id"]
+        assert unchanged.json()["quiz_revision"] == published["revision"]
+        with client.app.state.database.session_factory() as db:
+            assert db.get(QuizSubmission, submission_id).status == SubmissionStatus.PENDING
+        saved = client.patch(question_path, json={**autosave, "question_text": "Edited question?"})
+    else:
+        saved = client.post(f"{path}/questions", json=question_payload)
+    assert saved.status_code == (200 if operation == "autosave" else 201), saved.text
+    with client.app.state.database.session_factory() as db:
+        submission = db.get(QuizSubmission, submission_id)
+        assert submission.status == SubmissionStatus.WITHDRAWN
+        assert submission.decided_by_id == data["ids"]["owner"]
+        assert submission.decided_at is not None
+
+
+def test_timer_change_withdraws_pending_review_but_an_unchanged_timer_does_not(
+    submissions, pending_quiz_with_draft
+) -> None:
+    client, _, _, _ = submissions
+    path, draft, submission_id = pending_quiz_with_draft
+    question = draft["version"]["questions"][0]
+    payload = {
+        "time_limit_seconds": question["time_limit_seconds"],
+        "question_ids": [question["question_id"]],
+    }
+    unchanged = client.patch(f"{path}/default-time", json=payload)
+    assert unchanged.status_code == 200, unchanged.text
+    assert unchanged.json()["quiz_revision"] == draft["revision"]
+    with client.app.state.database.session_factory() as db:
+        assert db.get(QuizSubmission, submission_id).status == SubmissionStatus.PENDING
+
+    changed = client.patch(f"{path}/default-time", json={**payload, "time_limit_seconds": 30})
+    assert changed.status_code == 200, changed.text
+    with client.app.state.database.session_factory() as db:
+        assert db.get(QuizSubmission, submission_id).status == SubmissionStatus.WITHDRAWN
+
+
+@pytest.mark.parametrize("source", ["bank", "csv"])
+def test_import_withdraws_only_when_questions_are_added_to_the_quiz(
+    submissions, pending_quiz_with_draft, source
+) -> None:
+    client, data, _, _ = submissions
+    class_id = data["classes"]["main"]
+    quiz_path, draft, submission_id = pending_quiz_with_draft
+    bank_path = f"/classes/{class_id}/question-bank"
+    csv_text = (
+        "question_text,explanation,choice_a,choice_b,choice_c,choice_d,correct_choices\n"
+        "New question?,,Yes,No,,,A"
+    )
+    previewed = client.post(f"{bank_path}/csv/preview", json={"csv_text": csv_text})
+    assert previewed.status_code == 200, previewed.text
+    assert previewed.json()["valid_count"] == 1
+    row = previewed.json()["rows"][0]
+    rows = [{"row_number": row["row_number"], "question": row["question"]}]
+    saved = client.post(f"{bank_path}/csv", json={"rows": rows})
+    assert saved.status_code == 201, saved.text
+    with client.app.state.database.session_factory() as db:
+        assert db.get(QuizSubmission, submission_id).status == SubmissionStatus.PENDING
+    assert client.get(quiz_path).json()["revision"] == draft["revision"]
+
+    if source == "bank":
+        bank = client.get(bank_path).json()["items"]
+        bank_id = next(item["bank_question_id"] for item in bank
+                       if item["question_text"] == "New question?")
+        imported = client.post(
+            f"{quiz_path}/questions/from-bank", json={"bank_question_ids": [bank_id]}
+        )
+    else:
+        imported = client.post(f"{quiz_path}/questions/csv", json={"rows": rows})
+    assert imported.status_code == 200, imported.text
+    latest = client.get(quiz_path).json()
+    assert latest["version"]["questions"][-1]["question_text"] == "New question?"
+    with client.app.state.database.session_factory() as db:
+        assert db.get(QuizSubmission, submission_id).status == SubmissionStatus.WITHDRAWN
 
 
 # Submission preview (GET /classes/{id}/dashboard/submissions/{id}/preview).
@@ -783,15 +1075,66 @@ def test_preview_returns_the_submitted_version_not_a_newer_one(
     assert body["version"]["quiz_version_id"] == version_id
     assert body["version"]["title"] == "Main published quiz"
     assert body["version"]["version_number"] == 1
-    # A newer unpublished draft doesn't make the submission stale; a newer
-    # published version does, and then it can only be rejected.
-    assert body["submission"]["is_current_version"] is (not newer_published)
-    if newer_published:
-        assert_error(
-            decide(client, class_id, submission_id, "APPROVED"),
-            409,
-            "quiz_version_stale",
-        )
+    assert body["submission"]["is_current_version"] is False
+    assert_error(
+        decide(client, class_id, submission_id, "APPROVED"),
+        409,
+        "quiz_version_stale",
+    )
+
+
+def test_approved_publication_stays_current_until_a_new_version_is_published(
+    submissions, pending_quiz
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    class_path = f"/classes/{class_id}"
+    quiz_path, payload, published, submission_id = pending_quiz
+    original_id = published["version"]["quiz_version_id"]
+
+    act_as(actor, identities, "faculty")
+    assert decide(client, class_id, submission_id, "APPROVED").status_code == 200
+    saved = client.put(
+        quiz_path,
+        json={**payload, "title": "New draft", "expected_revision": published["revision"]},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["hosting"]["reason"] == "unpublished_changes"
+
+    def assert_current(expected):
+        summary = client.get(f"{class_path}/dashboard/submissions").json()["items"][0]
+        assert summary["submission_id"] == submission_id
+        assert summary["is_current_version"] is expected
+        assert preview(client, class_id, submission_id).json()["submission"]["is_current_version"] is expected
+
+    assert_current(True)
+    [approval] = client.get(f"{class_path}/approved-quizzes").json()
+    assert approval["quiz_version_id"] == original_id
+
+    act_as(actor, identities, "owner")
+    updated = client.post(
+        f"{quiz_path}/publish", json={"expected_revision": saved.json()["revision"]}
+    )
+    assert updated.status_code == 200, updated.text
+    assert_current(False)
+    assert client.get(f"{class_path}/approved-quizzes").json() == []
+
+
+def test_a_saved_draft_makes_the_old_publication_ineligible_for_submission(
+    submissions,
+) -> None:
+    client, data, _, _ = submissions
+    class_id = data["classes"]["main"]
+    quiz_id = data["quizzes"]["main"]
+    response = client.put(f"/classes/{class_id}/quizzes/{quiz_id}", json=QUIZ_UPDATE)
+    assert response.status_code == 200
+    assert response.json()["version"]["version_number"] == 2
+
+    assert_error(
+        post_submission(client, class_id, data["versions"]["main"]),
+        409,
+        "quiz_version_stale",
+    )
 
 
 @pytest.mark.parametrize(
@@ -898,3 +1241,44 @@ def test_archived_quiz_preview_stays_readable_but_cannot_be_approved(
         "quiz_version_not_published",
     )
     assert decide(client, class_id, submission_id, "REJECTED").status_code == 200
+
+
+def test_organizer_sends_back_an_edited_quiz_and_the_next_request_clears_feedback(
+    submissions, pending_quiz
+) -> None:
+    client, data, identities, actor = submissions
+    class_id = data["classes"]["main"]
+    quiz_path, payload, published, submission_id = pending_quiz
+    detail_path = f"/quizzes/{published['quiz_id']}"
+    review = {**payload, "expected_revision": published["revision"], "return_submission_id": submission_id}
+
+    assert_error(client.put(quiz_path, json={**review, "title": "Owner edit"}), 403, "not_class_organizer")
+    act_as(actor, identities, "faculty")
+    assert_error(client.put(quiz_path, json=review), 409, "quiz_content_unchanged")
+    assert_error(
+        client.put(quiz_path, json={**review, "title": "Wrong request", "return_submission_id": submission_id + 1}),
+        409,
+        "invalid_submission_transition",
+    )
+    assert client.get(detail_path).json()["revision"] == published["revision"]
+    assert preview(client, class_id, submission_id).json()["submission"]["status"] == "PENDING"
+
+    draft = client.put(quiz_path, json={**review, "title": "Corrected by the professor"})
+    assert draft.status_code == 200, draft.text
+    snapshot = preview(client, class_id, submission_id).json()
+    assert snapshot["submission"]["status"] == "WITHDRAWN"
+    assert snapshot["version"]["title"] == published["version"]["title"]
+
+    act_as(actor, identities, "owner")
+    feedback = {
+        "status": "WITHDRAWN",
+        "decided_by_name": "Faculty",
+        "rejection_comment": None,
+    }
+    assert client.get(detail_path).json()["approval_feedback"] == feedback
+    new_version = client.post(
+        f"{quiz_path}/publish", json={"expected_revision": draft.json()["revision"]}
+    ).json()["version"]
+    assert client.get(detail_path).json()["approval_feedback"] == feedback
+    assert post_submission(client, class_id, new_version["quiz_version_id"]).status_code == 201
+    assert client.get(detail_path).json()["approval_feedback"] is None

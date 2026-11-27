@@ -31,6 +31,7 @@ import {
   resolveUserSection,
   rowLink,
   sendForApproval,
+  sessionResultsPath,
   SUBMISSION_FILTERS,
   SUBMISSION_SORTS,
   USER_SECTIONS,
@@ -44,9 +45,11 @@ import {
   ScoreMeter,
 } from "./ReportTable";
 import { ClassStudents } from "./ClassManagement";
+import RejectSubmissionDialog from "./RejectSubmissionDialog";
 import { AddStudentDialog, JoinRequestsTable } from "./StudentRoster";
 import QuestionBankExportDialog from "../authenticated-demo/QuestionBankExportDialog";
 import OptionsMenu from "../authenticated-demo/OptionsMenu";
+import { downloadQuizQuestionsCsv } from "../authenticated-demo/questionBankModel";
 import {
   CLASS_EVENTS,
   SUBMISSION_EVENTS,
@@ -420,7 +423,7 @@ function LayoutToggle({ layout, onChange }) {
 
 const PARTICIPATE_COLUMNS = ["", "", "cl-mid", "cl-wide", "cl-wide", "cl-go-cell"];
 
-// Member view: completed and missed sessions, as cards or list rows.
+// Member view: hosted, played, and missed sessions, as cards or rows.
 function ParticipateTable({ classInfo, layout, onLayoutChange }) {
   const memory = `class:${classInfo.id}:participate`;
   const [page, setPage] = useRemembered(`${memory}:page`, 1);
@@ -436,6 +439,16 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
   );
   const toggle = <LayoutToggle layout={layout} onChange={onLayoutChange} />;
 
+  function participation(session) {
+    const hosted = session.is_host === true;
+    const played = !hosted && session.my_score != null;
+    const report = sessionResultsPath(classInfo.id, session.session_id, {
+      hosted,
+      canViewClassReport: classInfo.canManage || played,
+    });
+    return { hosted, played, report };
+  }
+
   if (layout === "list") {
     return (
       <ReportTable
@@ -444,7 +457,7 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
         noun="session"
         tableClass="cl-rows cl-member-rows"
         columnClasses={PARTICIPATE_COLUMNS}
-        headers={["Rank", "Quiz", "Score", "Host", "Date", ""]}
+        headers={["Rank / Status", "Quiz", "Score", "Host", "Date", ""]}
         emptyTitle="No sessions yet"
         emptyText={
           "When an organizer hosts a quiz here, a Live button appears at " +
@@ -454,11 +467,10 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
         onPageChange={setPage}
         controls={toggle}
         rows={resource.data.items.map((session) => {
-          const played = session.my_score != null;
-          const report =
-            classInfo.canManage || played
-              ? `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`
-              : null;
+          const { hosted, played, report } = participation(session);
+          const reportLabel = hosted
+            ? "Host results"
+            : classInfo.canManage ? "Session report" : "My results";
           return {
             key: session.session_id,
             text: `${session.quiz_title} ${session.host_name}`,
@@ -471,7 +483,7 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
                   <small>of {formatScore(session.participant_count)}</small>
                 </span>
               ) : (
-                "Absent"
+                hosted ? "Hosted" : "Absent"
               ),
               <span className="cl-quiz-cell">
                 {report ? (
@@ -504,7 +516,7 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
               report ? (
                 <GoLink
                   to={report}
-                  label={`${classInfo.canManage ? "Session report" : "My results"} for ${session.quiz_title}`}
+                  label={`${reportLabel} for ${session.quiz_title}`}
                 />
               ) : null,
             ],
@@ -530,11 +542,7 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
       items={resource.data.items}
       getText={(session) => `${session.quiz_title} ${session.host_name}`}
       renderCard={(session) => {
-        const played = session.my_score != null;
-        const report =
-          classInfo.canManage || played
-            ? `/app/classes/${classInfo.id}/sessions/${session.session_id}/report`
-            : null;
+        const { hosted, played, report } = participation(session);
         const maxScore = session.top_score ?? best;
         const percentage =
           played && maxScore > 0
@@ -546,9 +554,9 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
             key={session.session_id}
             title={session.quiz_title}
             to={report}
-            status={played ? "Completed" : "Absent"}
+            status={hosted ? "Hosted" : played ? "Completed" : "Absent"}
             headline={
-              played
+              hosted ? "You hosted this session" : played
                 ? `Rank #${session.my_rank} of ${formatScore(session.participant_count)}`
                 : "Did not participate"
             }
@@ -556,13 +564,15 @@ function ParticipateTable({ classInfo, layout, onLayoutChange }) {
           >
             <p>Hosted by {session.host_name}</p>
             <p>{formatDate(session.started_at)}</p>
-            <p>
-              <strong>
-                {played
-                  ? `${formatScore(session.my_score)} points`
-                  : "No score recorded"}
-              </strong>
-            </p>
+            {!hosted && (
+              <p>
+                <strong>
+                  {played
+                    ? `${formatScore(session.my_score)} points`
+                    : "No score recorded"}
+                </strong>
+              </p>
+            )}
             {played && (
               <span className="qc-progress" aria-hidden="true">
                 <span style={{ width: `${percentage}%` }} />
@@ -600,6 +610,8 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
   const api = useApi();
   const account = useAccount();
   const action = useAction();
+  const navigate = useNavigate();
+  const confirmer = useConfirm();
   const memory = `class:${classInfo.id}:present`;
   const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "recent", {
@@ -634,6 +646,93 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
         return true;
       }),
     );
+  }
+
+  async function duplicateQuiz(quiz) {
+    const copied = await action.run(() =>
+      api(`/classes/${classInfo.id}/quizzes/${quiz.quiz_id}/duplicate`, {
+        method: "POST",
+      }),
+    );
+    if (copied?.quiz) {
+      navigate(`/app/quizzes/${copied.quiz.quiz_id}/edit`, {
+        state: { classId: classInfo.id },
+      });
+    }
+  }
+
+  // The list only has counts, so load the quiz's questions first.
+  async function exportQuestions(quiz) {
+    await action.run(async () => {
+      const detail = await api(`/quizzes/${quiz.quiz_id}`);
+      const questions = [...detail.version.questions].sort(
+        (a, b) => a.question_order - b.question_order,
+      );
+      downloadQuizQuestionsCsv(detail.version.title, questions);
+      return true;
+    });
+  }
+
+  async function archiveQuiz(quiz) {
+    const sure = await confirmer.confirm({
+      label: "Archive quiz",
+      title: `Archive “${quiz.title}”?`,
+      message:
+        "It will no longer be available to edit or host. Past sessions and results stay saved.",
+      confirmLabel: "Archive quiz",
+      cancelLabel: "Keep it",
+    });
+    if (!sure) return;
+    const done = await action.run(async () => {
+      await api(`/quizzes/${quiz.quiz_id}/archive`, { method: "PATCH" });
+      return true;
+    });
+    refresh(done);
+  }
+
+  // The same options as the ⋯ menu on the quiz page; no menu if none apply.
+  function quizOptions(quiz, info) {
+    const options = [
+      info.owner && (
+        <Link key="history" to={`/app/quizzes/${quiz.quiz_id}/reports`}>
+          Hosting history
+        </Link>
+      ),
+      // The server only duplicates for active members of a live class.
+      canSubmit && (
+        <button
+          key="duplicate"
+          type="button"
+          disabled={action.busy}
+          onClick={() => void duplicateQuiz(quiz)}
+        >
+          Duplicate quiz
+        </button>
+      ),
+      quiz.question_count > 0 && (
+        <button
+          key="export"
+          type="button"
+          disabled={action.busy}
+          onClick={() => void exportQuestions(quiz)}
+        >
+          Export questions (CSV)
+        </button>
+      ),
+      info.owner && !info.archived && (
+        <button
+          key="archive"
+          type="button"
+          className="ui-danger"
+          disabled={action.busy}
+          onClick={() => void archiveQuiz(quiz)}
+        >
+          Archive quiz
+        </button>
+      ),
+    ].filter(Boolean);
+    if (options.length === 0) return null;
+    return <OptionsMenu className="cl-quiz-options">{options}</OptionsMenu>;
   }
 
   function describe(quiz) {
@@ -735,6 +834,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
     return (
       <>
         <RequestError error={action.error} />
+        <ConfirmDialog confirmer={confirmer} />
         <ReportTable
           {...shared}
           tableClass="cl-rows cl-member-rows"
@@ -769,7 +869,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
                 <PeopleTags quiz={quiz} owner={info.owner} />,
                 <span className="cl-dim">{formatScore(quiz.question_count)}</span>,
                 <span className="cl-dim">{formatDate(quiz.updated_at)}</span>,
-                <GoLink to={info.to} label={`Open ${quiz.title}`} />,
+                <div className="cl-quiz-actions">{quizOptions(quiz, info)}</div>,
               ],
             };
           })}
@@ -781,6 +881,7 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
   return (
     <>
       <RequestError error={action.error} />
+      <ConfirmDialog confirmer={confirmer} />
       <CardCollection
         {...shared}
         items={resource.data.items}
@@ -797,10 +898,14 @@ function PresentTable({ classInfo, onApprovalChange, layout, onLayoutChange }) {
               state={{ classId: classInfo.id }}
               wholeCard
               status={status.label}
+              statusKey={status.key}
               archived={archived}
               headline={`${quiz.question_count} ${
                 quiz.question_count === 1 ? "question" : "questions"
               }`}
+              actions={
+                <div className="cl-quiz-actions">{quizOptions(quiz, info)}</div>
+              }
             >
               <PeopleTags quiz={quiz} owner={owner} long />
               <p>Edited {formatDate(quiz.updated_at)}</p>
@@ -820,6 +925,7 @@ const APPROVAL_COLUMNS = ["", "", "cl-wide", "cl-wide", "", "cl-go-cell"];
 function SubmissionsTable({ classInfo, onChange, switcher = null }) {
   const api = useApi();
   const action = useAction();
+  const [rejectingId, setRejectingId] = useState(null);
   const memory = `class:${classInfo.id}:approvals`;
   const [page, setPage] = useRemembered(`${memory}:page`, 1);
   const [sortKey, setSortKey] = useRemembered(`${memory}:sort`, "oldest", {
@@ -929,7 +1035,7 @@ function SubmissionsTable({ classInfo, onChange, switcher = null }) {
                   type="button"
                   className="cl-decide"
                   disabled={action.busy}
-                  onClick={() => void decide(item, "REJECTED")}
+                  onClick={() => setRejectingId(item.submission_id)}
                 >
                   Reject
                 </button>
@@ -960,6 +1066,17 @@ function SubmissionsTable({ classInfo, onChange, switcher = null }) {
           };
         })}
       />
+      {rejectingId != null && (
+        <RejectSubmissionDialog
+          classId={classInfo.id}
+          submissionId={rejectingId}
+          onClose={() => setRejectingId(null)}
+          onRejected={() => {
+            resource.reload();
+            onChange?.();
+          }}
+        />
+      )}
     </>
   );
 }
