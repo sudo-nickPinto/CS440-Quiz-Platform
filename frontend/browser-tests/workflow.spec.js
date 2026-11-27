@@ -504,16 +504,18 @@ test("each quiz row and card has an options menu that exports its questions", as
   }
 });
 
-test("a quiz with no options gets no options menu", async ({ page }) => {
+test("a member of an archived class sees no quizzes and no options menu", async ({
+  page,
+}) => {
   await openClass(page, {
     as: "member",
     classArchived: true,
     quiz: { my_access: "EDITOR", question_count: 0 },
   });
 
-  await expect(page.getByRole("link", { name: "Original submitted quiz", exact: true })).toBeVisible();
+  // Only organizers can open an archived class's quizzes.
+  await expect(page.getByText("This class is archived.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Original submitted quiz", exact: true })).toHaveCount(0);
   await expect(page.locator(".cl-quiz-options")).toHaveCount(0);
-  await button(page, "Cards").click();
-  await expect(page.locator(".qc-card")).toHaveCount(1);
-  await expect(page.locator(".cl-quiz-options")).toHaveCount(0);
+  await expect(button(page, "Cards")).toHaveCount(0);
 });
