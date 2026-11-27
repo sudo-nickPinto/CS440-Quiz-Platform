@@ -73,12 +73,18 @@ export function ClassCard({ item }) {
     <article
       className={`cl-card ${
         managesClass ? "cl-card-managed" : "cl-card-member"
-      }`}
+      }${item.archived ? " cl-card-archived" : ""}`}
     >
       <div className="cl-card-banner">
         <span className="cl-role">{item.roleLabel || "Student"}</span>
 
         <span className="cl-card-code">{shortName(item.name)}</span>
+
+        {item.archived && (
+          <span className="cl-card-flag" aria-hidden="true">
+            Archived
+          </span>
+        )}
       </div>
 
       <div className="cl-card-body">
@@ -87,6 +93,13 @@ export function ClassCard({ item }) {
             {item.name}
           </Link>
         </h2>
+
+        {item.semester && (
+          <p className="cl-card-semester">
+            {item.semester}
+            {item.semesterCount > 1 && ` · ${item.semesterCount} semesters`}
+          </p>
+        )}
 
         {item.ownerName && <p className="cl-owner">{item.ownerName}</p>}
 

@@ -1,0 +1,630 @@
+/* Class lifecycle: semesters, archived classes (grayed out), the archive,
+   trash and semester dialogs, the Trash page, and SelectMenu.
+   (ClassLifecycle.jsx, TrashPage.jsx, SelectMenu.jsx)
+
+   Built only from theme.css tokens and the existing class-page pieces:
+   - SelectMenu's button is the "FILTER ▾" select from quizburg-polish.css
+     (sky-soft, navy, 13px uppercase), and its list is the ⋯ menu's list
+     (.ui-row-options): bordered paper, rows that darken on hover.
+   - Selected things use --color-selected-bg and navy; destructive text and
+     the permanent delete use --color-danger; orange stays for main actions.
+   Dialogs render inside .qp .cl-page, so the .qp rules reach them. */
+
+/* ---------- SelectMenu ---------- */
+.qp .cl-select {
+  position: relative;
+  flex: none;
+}
+
+.qp .cl-select > summary {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 46px;
+  min-width: 170px;
+  padding: 0 36px 0 14px;
+  border: var(--b);
+  background: var(--sky-soft)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0h10L5 6z' fill='%23043371'/%3E%3C/svg%3E")
+    no-repeat right 14px center;
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  transition: var(--hover-transition);
+}
+
+.qp .cl-select > summary::-webkit-details-marker {
+  display: none;
+}
+
+.qp .cl-select > summary:hover {
+  filter: var(--hover-shade);
+}
+
+.qp .cl-select[open] > summary {
+  transform: var(--press);
+  box-shadow: var(--press-shadow);
+}
+
+.qp .cl-select > summary:focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: 2px;
+}
+
+.qp .cl-select > summary[aria-disabled="true"] {
+  opacity: 0.6;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.qp .cl-select-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  animation: qb-drop 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.qp .cl-select-menu.is-right {
+  left: auto;
+  right: 0;
+}
+
+.qp .cl-select-menu.is-up {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+/* The extra classes outrank the class pages' general button rules (the
+   new-class panel, for one, turns every button orange). */
+.qp .cl-page .cl-select .cl-select-menu > button[role="option"],
+.qp .cl-select .cl-select-menu > button[role="option"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 0;
+  padding: 11px 14px;
+  border: 0;
+  border-bottom: var(--b-thin);
+  background: var(--paper);
+  box-shadow: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.qp .cl-page .cl-select .cl-select-menu > button[role="option"]:last-child,
+.qp .cl-select .cl-select-menu > button[role="option"]:last-child {
+  border-bottom: 0;
+}
+
+.qp .cl-page .cl-select .cl-select-menu > button[role="option"]:hover:not(:disabled),
+.qp .cl-select .cl-select-menu > button[role="option"]:hover:not(:disabled) {
+  background: var(--paper);
+  filter: var(--hover-shade);
+}
+
+.qp .cl-page .cl-select .cl-select-menu > button[aria-selected="true"],
+.qp .cl-page .cl-select .cl-select-menu > button[aria-selected="true"]:hover:not(:disabled),
+.qp .cl-select .cl-select-menu > button[aria-selected="true"] {
+  background: var(--color-selected-bg);
+  color: var(--navy);
+}
+
+.qp .cl-select .cl-select-menu > button[role="option"]:focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: -5px;
+}
+
+.qp .cl-select .cl-select-menu > button > span {
+  width: 18px;
+  color: var(--navy);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .qp .cl-select > summary {
+    min-width: 0;
+    padding: 0 28px 0 10px;
+    background-position: right 10px center;
+    font-size: 11px;
+  }
+}
+
+/* ---------- Classes page: semester in the new-class panel, Trash ---------- */
+.qp .cl-page .cl-inline-panel .cl-semester-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* A link that looks like the toolbar's buttons (.cl-toolbar > button). */
+.qp .cl-page .cl-toolbar > a.cl-trash-link {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 46px;
+  padding: 0 16px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: var(--hover-transition);
+}
+
+.qp .cl-page .cl-toolbar > a.cl-trash-link:hover {
+  filter: var(--hover-shade);
+}
+
+.qp .cl-page .cl-toolbar > a.cl-trash-link:active {
+  transform: var(--press);
+  box-shadow: var(--press-shadow);
+}
+
+.qp .cl-card-semester {
+  color: var(--navy);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.qp .cl-chip.cl-chip-semester {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* ---------- Archived classes: their own grayed-out look ---------- */
+.qp .cl-card.cl-card-archived {
+  background: var(--sand);
+  filter: grayscale(1);
+}
+
+.qp .cl-card-archived .cl-card-banner {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--sand),
+    var(--sand) 10px,
+    var(--paper) 10px,
+    var(--paper) 20px
+  );
+}
+
+.qp .cl-card-flag {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 5px 9px;
+  border-bottom: var(--b-thin);
+  border-left: var(--b-thin);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* The class page: the header and banner keep their color (Unarchive and
+   the ⋯ menu live there); everything under them goes gray. */
+.qp .cl-page.is-archived .cl-classbar {
+  background: var(--sand);
+}
+
+.qp .cl-page.is-archived > :not(.cl-classbar, .cl-archived-banner, dialog) {
+  filter: grayscale(1);
+}
+
+.qp .cl-archived-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 14px 20px;
+  border-bottom: var(--b);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--paper),
+    var(--paper) 10px,
+    var(--sand) 10px,
+    var(--sand) 20px
+  );
+}
+
+.qp .cl-archived-banner p {
+  max-width: 70ch;
+  font-weight: 600;
+}
+
+.qp .cl-archived-banner b {
+  margin-right: 6px;
+  padding: 3px 9px;
+  border: var(--b-thin);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qp .cl-archived-banner button {
+  padding: 8px 18px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.qp .cl-archived-banner button:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+/* ---------- Dialogs (archive, trash, delete, semester) ---------- */
+.qb-confirm .cl-confirm-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.qb-confirm .cl-confirm-field input {
+  min-height: 46px;
+  padding: 10px 12px;
+  border: var(--b);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+}
+
+.qb-confirm .cl-feedback {
+  margin-top: 14px;
+}
+
+/* Only the permanent delete is red: it can't be undone. Moving to the
+   trash keeps ConfirmDialog's normal button, like the quiz and session
+   trash confirms. */
+.qb-confirm .qb-btn.cl-btn-danger:not(:disabled) {
+  background: var(--color-danger);
+  color: var(--color-on-primary);
+}
+
+.qb-confirm .qb-btn.cl-btn-danger:hover:not(:disabled) {
+  background: var(--color-danger);
+  filter: var(--hover-shade);
+}
+
+.qb-confirm .cl-purge-list {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 0;
+  list-style: none;
+  font-weight: 700;
+}
+
+.qb-confirm .cl-purge-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-wrap: anywhere;
+}
+
+/* The same small tag as the class cards' .cl-role. */
+.qp .cl-kind {
+  flex: none;
+  padding: 5px 9px;
+  border: var(--b-thin);
+  background: var(--navy);
+  color: var(--paper);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* The semester panel: which semester you're in, the others, and a new one. */
+.qb-confirm.cl-semester-dialog {
+  width: min(560px, calc(100vw - 32px));
+  /* Let the semester dropdown's list show past the dialog's edge. */
+  overflow: visible;
+}
+
+.qb-confirm .cl-sem-current b {
+  color: var(--navy);
+}
+
+.qb-confirm .cl-sem-list {
+  margin: 16px 0;
+  padding: 0;
+  border: var(--b);
+  list-style: none;
+}
+
+.qb-confirm .cl-sem-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 14px;
+  border-bottom: var(--b-thin);
+  background: var(--paper);
+}
+
+.qb-confirm .cl-sem-list li:last-child {
+  border-bottom: 0;
+}
+
+.qb-confirm .cl-sem-list li.is-current {
+  background: var(--color-selected-bg);
+}
+
+.qb-confirm .cl-sem-name {
+  flex: 1;
+  font-family: "Archivo Black", sans-serif;
+  font-size: 16px;
+}
+
+/* A semester with no label yet. */
+.qb-confirm .cl-sem-name.is-none {
+  color: var(--gray);
+}
+
+/* The class header's chips (.cl-chip): 11px uppercase on a thin border. */
+.qb-confirm .cl-sem-tag {
+  padding: 4px 8px;
+  border: var(--b-thin);
+  background: var(--sand);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qb-confirm .cl-sem-tag.is-current {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+/* Like the class header's buttons (.cl-classbar .cl-actions button). */
+.qp .qb-confirm .cl-sem-switch {
+  min-height: 38px;
+  padding: 6px 16px;
+  background: var(--paper);
+  color: var(--navy);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.qp .qb-confirm .cl-sem-switch:hover:not(:disabled) {
+  filter: var(--hover-shade);
+}
+
+.qp .qb-confirm .cl-sem-switch:active:not(:disabled) {
+  transform: var(--press);
+  box-shadow: var(--press-shadow);
+}
+
+.qb-confirm .cl-sem-new {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: var(--b);
+  background: var(--sky-wash);
+}
+
+.qb-confirm .cl-sem-new h3 {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.qb-confirm .cl-sem-new p {
+  margin: 0;
+}
+
+.qb-confirm .cl-sem-new-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+/* ---------- The Trash page: the classes dashboard, for deleted items ---------- */
+.qp .cl-titlebar.cl-trash-titlebar {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+/* A cell of the title bar, like .cl-titlebar's buttons but on paper. */
+.qp .cl-titlebar-back {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 34px;
+  border-right: var(--b);
+  background: var(--paper);
+  color: var(--navy);
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(15px, 1.6vw, 22px);
+  letter-spacing: 1px;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.qp .cl-titlebar-back:hover {
+  filter: var(--hover-shade);
+}
+
+.qp .cl-titlebar-back:focus-visible {
+  outline: 3px solid var(--orange-deep);
+  outline-offset: -6px;
+}
+
+/* "Select all" sits in the toolbar as one of its 46px boxes. */
+.qp .cl-page .cl-toolbar > label.cl-check-all {
+  gap: 10px;
+  box-sizing: border-box;
+  min-height: 46px;
+  padding: 0 14px;
+  border: var(--b);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.qp .cl-page .cl-toolbar > label.cl-check-all > input,
+.qp .cl-page .cl-trash-card input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  accent-color: var(--navy);
+  cursor: pointer;
+}
+
+.qp .cl-trash-toolbar .cl-picked {
+  margin-right: auto;
+  color: var(--gray);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Destructive buttons keep the toolbar look, with danger-colored text. */
+.qp .cl-page button.cl-danger:not(:disabled) {
+  color: var(--color-danger);
+}
+
+/* Cards in the trash don't open anything, so they don't lift on hover. */
+.qp .cl-trash-card,
+.qp .cl-trash-card:hover,
+.qp .cl-trash-card:active {
+  transform: none;
+  box-shadow: var(--shadow);
+  cursor: default;
+}
+
+.qp .cl-trash-card .cl-card-banner {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--sand),
+    var(--sand) 10px,
+    var(--paper) 10px,
+    var(--paper) 20px
+  );
+}
+
+.qp .cl-trash-card.is-picked {
+  outline: 3px solid var(--navy);
+  outline-offset: 3px;
+}
+
+.qp .cl-trash-card.is-picked .cl-card-banner {
+  background: var(--color-selected-bg);
+}
+
+.qp .cl-card-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: var(--b-thin);
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.qp .cl-days {
+  color: var(--gray);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Gone within three days. */
+.qp .cl-days.is-soon {
+  color: var(--color-danger);
+}
+
+.qp .cl-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* Like the class header's buttons (.cl-classbar .cl-actions button). */
+.qp .cl-page .cl-card-actions > button {
+  flex: 1 1 auto;
+  min-height: 40px;
+  padding: 6px 14px;
+  background: var(--paper);
+  color: var(--navy);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.qp .cl-page .cl-card-actions > button:hover:not(:disabled) {
+  filter: var(--hover-shade);
+}
+
+.qp .cl-page .cl-card-actions > button:active:not(:disabled) {
+  transform: var(--press);
+  box-shadow: var(--press-shadow);
+}
+
+@media (max-width: 640px) {
+  .qp .cl-titlebar-back {
+    padding: 16px;
+  }
+
+  .qp .cl-trash-toolbar .cl-picked {
+    flex-basis: 100%;
+    order: -1;
+  }
+}

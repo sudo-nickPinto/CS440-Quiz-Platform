@@ -90,6 +90,80 @@
   outline-offset: 2px;
 }
 
+/* The last column holds the report arrow and, on Hosting history, the ⋯
+   menu beside it (Move to trash). The base grid is in quizburg-polish.css. */
+.qp .qh.is-host .qh-head,
+.qp .qh.is-host .qh-row {
+  grid-template-columns: 96px minmax(0, 1fr) 160px 160px;
+}
+
+.qp .qh-row {
+  position: relative;
+}
+
+/* Two slots: the → (or "No results") centered in the first, the ⋯ in a
+   fixed slot on the right, so the ⋯ lines up on every row whatever sits
+   next to it. */
+.qp .qh-end {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  justify-items: center;
+  column-gap: 12px;
+  padding-right: 14px;
+}
+
+.qp .qh-end .qh-go,
+.qp .qh-end .qh-note {
+  align-self: auto;
+  justify-self: auto;
+}
+
+/* A one-slot cell (Quizzes taken has no ⋯) keeps the → centered. */
+.qp .qh-end:not(:has(.ui-row-menu)) {
+  grid-template-columns: minmax(0, 1fr);
+  padding-right: 0;
+}
+
+/* The ⋯ button matches the → button next to it; its menu opens under the
+   row's right edge, above the rows below. The row menu's usual side
+   padding is dropped here: the cell's own padding spaces it instead. */
+.qp .qh-end .ui-row-menu,
+.qp .qh-end .ui-row-menu[open] {
+  display: block;
+  grid-column: 2;
+  align-self: auto;
+  padding: 0;
+}
+
+.qp .qh-end .ui-row-options {
+  top: calc(100% - 8px);
+  right: 12px;
+  min-width: 200px;
+}
+
+@media (max-width: 640px) {
+  .qp .qh.is-host .qh-row {
+    grid-template-columns: 70px minmax(0, 1fr) 116px;
+  }
+
+  .qp .qh-end {
+    column-gap: 8px;
+    padding-right: 10px;
+  }
+
+  /* "No results" wraps onto two lines here; tighter letters keep
+     "RESULTS" inside its slot. */
+  .qp .qh-end .qh-note {
+    letter-spacing: 0.5px;
+  }
+
+  .qp .qh-end .ui-row-menu > summary {
+    width: 40px;
+    height: 34px;
+  }
+}
+
 @media (max-width: 640px) {
   .qp .qh-heading,
   .qp .qh-card {

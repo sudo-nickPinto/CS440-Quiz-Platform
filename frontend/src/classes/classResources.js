@@ -34,6 +34,9 @@ function normalizeClass(record, account) {
     code: record.join_code,
     joiningOpen: record.joining_open === true,
     archived: Boolean(record.archived_at),
+    semester: record.semester ?? null,
+    parentClassId: record.parent_class_id ?? null,
+    semesters: Array.isArray(record.semesters) ? record.semesters : [],
     membershipStatus: record.membership_status,
     canManage: isOrganizer,
     roleLabel: isOrganizer

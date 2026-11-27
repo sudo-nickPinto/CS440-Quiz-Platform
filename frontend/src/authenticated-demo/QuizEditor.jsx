@@ -1672,6 +1672,24 @@ export function QuizViewer() {
     0,
   );
 
+  async function trashQuiz() {
+    const sure = await confirmer.confirm({
+      label: "Move to trash",
+      title: `Move “${quiz.version.title}” to the trash?`,
+      message:
+        "It leaves the class and can't be edited or hosted. Past sessions " +
+        "and results stay saved. You can restore it from Classes → Trash for 30 days.",
+      confirmLabel: "Move to trash",
+      cancelLabel: "Keep it",
+    });
+    if (!sure) return;
+    const done = await action.run(async () => {
+      await api(`/quizzes/${quiz.quiz_id}/trash`, { method: "POST" });
+      return true;
+    });
+    if (done) navigate(classPagePath(quiz.class_id), { replace: true });
+  }
+
   async function archiveQuiz() {
     const sure = await confirmer.confirm({
       label: "Archive quiz",
@@ -1850,6 +1868,17 @@ export function QuizViewer() {
                   onClick={() => void archiveQuiz()}
                 >
                   Archive quiz
+                </button>
+              )}
+              {/* Only faculty have the Trash page to restore it from. */}
+              {mine && quiz.class_id && account.role === "ADMIN" && (
+                <button
+                  type="button"
+                  className="ui-danger"
+                  disabled={action.busy}
+                  onClick={() => void trashQuiz()}
+                >
+                  Move to trash
                 </button>
               )}
             </OptionsMenu>

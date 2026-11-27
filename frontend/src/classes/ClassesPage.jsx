@@ -1,11 +1,22 @@
 import { useState } from "react";
 import { useRemembered } from "../authenticated-demo/remember";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { useAction, useApi } from "../authenticated-demo/rest";
 import { useClassesResource } from "./classResources";
 import { ClassCard, ResourceMessage } from "./ClassUI";
+import SelectMenu from "./SelectMenu";
+import { groupCourses, semesterChoices, semesterFor } from "./semesters";
+import "./class-lifecycle.css";
 import { useAccount } from "../authenticated-demo/account";
+
+const FILTERS = [
+  { value: "all", label: "All classes" },
+  { value: "active", label: "Active classes" },
+  { value: "managed", label: "Classes I manage" },
+  { value: "member", label: "Classes I participate in" },
+  { value: "archived", label: "Archived classes" },
+];
 
 export default function ClassesPage() {
   const api = useApi();
@@ -22,6 +33,7 @@ export default function ClassesPage() {
 
   const account = useAccount();
   const canCreateClass = account.is_active === true && account.role === "ADMIN";
+  const [semester, setSemester] = useState(() => semesterFor());
 
   const ready = resource.status === "ready";
   const records = ready ? resource.data : [];
@@ -34,10 +46,14 @@ export default function ClassesPage() {
     (item) => item.membershipStatus === "REQUESTED",
   );
 
-  const classes = records.filter(
-    (item) =>
-      item.membershipStatus !== "INVITED" &&
-      item.membershipStatus !== "REQUESTED",
+  // One card per course: the semesters of a course you organize share a
+  // card, which opens the newest active semester.
+  const classes = groupCourses(
+    records.filter(
+      (item) =>
+        item.membershipStatus !== "INVITED" &&
+        item.membershipStatus !== "REQUESTED",
+    ),
   );
 
   const visible = classes
@@ -45,9 +61,10 @@ export default function ClassesPage() {
       item.name.toLowerCase().includes(query.trim().toLowerCase()),
     )
     .filter((item) => {
-      if (filter === "managed") return item.canManage;
-      if (filter === "member") return !item.canManage;
       if (filter === "archived") return item.archived;
+      if (filter === "active") return !item.archived;
+      if (filter === "managed") return item.canManage && !item.archived;
+      if (filter === "member") return !item.canManage && !item.archived;
       return true;
     })
     // Always alphabetical; the list is short and people scan it by name.
@@ -68,7 +85,7 @@ export default function ClassesPage() {
     const created = await action.run(() =>
       api("/classes", {
         method: "POST",
-        body: JSON.stringify({ name: trimmedName }),
+        body: JSON.stringify({ name: trimmedName, semester }),
       }),
     );
 
@@ -188,6 +205,20 @@ export default function ClassesPage() {
               disabled={action.busy}
             />
           </label>
+
+          <div className="cl-semester-field">
+            <span aria-hidden="true">Semester</span>
+            <SelectMenu
+              label="Semester"
+              value={semester}
+              options={semesterChoices().map((item) => ({
+                value: item,
+                label: item,
+              }))}
+              onChange={setSemester}
+              disabled={action.busy}
+            />
+          </div>
 
           <button type="submit" disabled={action.busy || !name.trim()}>
             {action.busy ? "Saving…" : "Create class →"}
@@ -313,19 +344,20 @@ export default function ClassesPage() {
           />
         </label>
 
-        <label>
-          <span className="cl-sr">Filter classes</span>
-          <select
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            disabled={!ready}
-          >
-            <option value="all">All classes</option>
-            <option value="managed">Classes I manage</option>
-            <option value="member">Classes I participate in</option>
-            <option value="archived">Archived classes</option>
-          </select>
-        </label>
+        <SelectMenu
+          label="Show"
+          className="cl-filter"
+          value={filter}
+          options={FILTERS}
+          onChange={setFilter}
+          disabled={!ready}
+        />
+
+        {canCreateClass && (
+          <Link className="cl-button cl-secondary cl-trash-link" to="/app/classes/trash">
+            Trash
+          </Link>
+        )}
 
         {/* Not shown, but read out when a search or filter changes the list. */}
         <span className="cl-sr" aria-live="polite">
